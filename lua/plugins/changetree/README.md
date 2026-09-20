@@ -199,6 +199,12 @@ is running, so reopening looks like you left it; a restart starts expanded.
   attach to it exactly as they would to a file you opened. The filetype has to be named
   explicitly: previews happen in a `CursorMoved` callback, autocommands do not nest, and
   the read therefore skips the `BufRead` chain that would otherwise detect one.
+- **`?` documents the sidebar, not its buffer.** A buffer collects mappings from whoever
+  wants one — a blanket `FileType` autocmd elsewhere in the config is all it takes — and
+  those keys are not this sidebar's interface. The keys it sets are recorded as it sets
+  them, and which-key is handed a throwaway buffer carrying only those, since it describes
+  whatever a buffer maps and takes no say in which. The callbacks travel across with the
+  keys, so pressing one from inside the popup still works.
 - **Refresh re-anchors by identity, not line.** A rebuild keyed on `GitSignsUpdate` must
   restore the cursor to the same row *identity* and preserve collapse state, including an
   `l`-expanded chain. One key scheme serves all three.

@@ -257,7 +257,11 @@ end
 
 ---@param buf integer
 local function set_keymaps(buf)
+  -- What `?` documents. Collected rather than re-read off the buffer, which by
+  -- then holds whatever else has mapped into it.
+  local own = {}
   local function map(lhs, fn, desc)
+    own[#own + 1] = lhs
     vim.keymap.set("n", lhs, fn, { buffer = buf, nowait = true, desc = desc })
   end
 
@@ -307,7 +311,7 @@ local function set_keymaps(buf)
     end
   end, "Yank path:line")
   map("?", function()
-    require("plugins.changetree.help").show(buf)
+    require("plugins.changetree.help").show(buf, own)
   end, "Show these keymaps")
   map("/", function()
     local previous = session.query
