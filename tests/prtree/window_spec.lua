@@ -169,6 +169,49 @@ describe("prtree.window", function()
       assert.equal(vim.fn.resolve(one), showing(right))
     end)
 
+    it("marks the window a preview lands in", function()
+      local _, right, one = staged()
+
+      window.preview(one, 2)
+
+      assert.is_true(vim.wo[right].winbar:find("preview", 1, true) ~= nil)
+    end)
+
+    -- Previewing the file the window already shows, which is where the mark
+    -- would otherwise outlive the sidebar: Neovim puts window options back with
+    -- the buffer they belonged to, and here the buffer never changes.
+    it("gives a borrowed window back the winbar it had", function()
+      local _, right, _, two = staged()
+      vim.wo[right].winbar = "mine"
+
+      window.preview(two, 2)
+      window.close()
+
+      assert.equal("mine", vim.wo[right].winbar)
+    end)
+
+    it("gives back the winbar even when the buffer it displaced is gone", function()
+      local _, right, one = staged()
+      local displaced = vim.api.nvim_win_get_buf(right)
+      vim.wo[right].winbar = "mine"
+
+      window.preview(one, 2)
+      vim.api.nvim_buf_delete(displaced, { force = true })
+      window.close()
+
+      assert.equal("mine", vim.wo[right].winbar)
+    end)
+
+    it("takes the mark off the window a commit claims", function()
+      local _, right, one = staged()
+      window.preview(one, 2)
+      window.focus()
+
+      window.commit(one, 2, "reuse")
+
+      assert.equal("", vim.wo[right].winbar)
+    end)
+
     it("puts back every window it previewed into", function()
       local left, right, one, two = staged()
       window.preview(one, 2)

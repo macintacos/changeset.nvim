@@ -380,6 +380,16 @@ describe("prtree.render", function()
     end)
   end)
 
+  describe("preview_winbar", function()
+    it("names the file being previewed", function()
+      assert.is_true(render.preview_winbar("lua/init.lua"):find("lua/init.lua", 1, true) ~= nil)
+    end)
+
+    it("escapes % in the path so the statusline does not read it as an item", function()
+      assert.is_true(render.preview_winbar("a/50%off.md"):find("50%%off", 1, true) ~= nil)
+    end)
+  end)
+
   describe("empty_message", function()
     it("tells you to switch branches when you are on the default branch", function()
       local info = { on_default_branch = true, branch = "main", ref = "origin/main" }

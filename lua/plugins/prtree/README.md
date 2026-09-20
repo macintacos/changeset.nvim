@@ -91,6 +91,21 @@ a bar — a bar would be decoration competing with the rail, and the rail alread
 Sentence case, no separators-as-ornament, no all-caps label. It states the comparison
 because "changed relative to what" is the one question the rows themselves cannot answer.
 
+### A borrowed window says so
+
+A preview swaps a real window's buffer out from under you, so that window wears a band
+across its top for as long as the sidebar holds it:
+
+```text
+  preview  lua/plugins/prtree/tree.lua
+```
+
+Full width, in `Visual` — the one group every colorscheme gives a background that reads
+against `Normal`, in light themes and dark ones alike. It is the same winbar device the
+sidebar itself uses, which is why a band rather than a border: a split cannot have one.
+The band goes the moment the window stops previewing — `q` puts it back with the buffer,
+and `<CR>` clears it, because a file you chose is not on loan.
+
 ### Empty and failed states direct, never apologise
 
 | Situation | Text |
@@ -120,6 +135,14 @@ touches, so it stays the size of a branch rather than growing with every branch 
 reviewed, and losing it costs one slow open. Folds are remembered for as long as Neovim
 is running, so reopening looks like you left it; a restart starts expanded.
 
+## Settings
+
+`plugin/prtree.lua` calls `setup()`:
+
+| Option | Default | Does |
+| --- | --- | --- |
+| `gitsigns_base` | `true` | Point gitsigns' base at the fork point when the sidebar opens, so `<leader>gp`'s gutter marks the whole branch. One-way: closing the sidebar leaves the signs up, and `:PRReview` is what takes them down. |
+
 ## Keymaps
 
 | Key | Where | Does |
@@ -148,6 +171,11 @@ is running, so reopening looks like you left it; a restart starts expanded.
   been closed, and 0 is an alias for the current window wherever it would then be passed,
   so it has to be dropped rather than carried through. Nothing usable at all: the rest of
   the tabpage, then a split of its own.
+- **A previewed file is highlighted, not opened.** Its buffer stays unlisted until `<CR>`
+  promotes it, but it carries a filetype, so treesitter, syntax and any language server
+  attach to it exactly as they would to a file you opened. The filetype has to be named
+  explicitly: previews happen in a `CursorMoved` callback, autocommands do not nest, and
+  the read therefore skips the `BufRead` chain that would otherwise detect one.
 - **Refresh re-anchors by identity, not line.** A rebuild keyed on `GitSignsUpdate` must
   restore the cursor to the same row *identity* and preserve collapse state, including an
   `l`-expanded chain. One key scheme serves all three.

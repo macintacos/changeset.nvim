@@ -2,6 +2,7 @@
 ---that window is put back when the sidebar is dismissed without committing.
 
 local buffers = require("plugins.prtree.buffers")
+local render = require("plugins.prtree.render")
 
 local M = {}
 
@@ -19,6 +20,7 @@ local SPLIT_CMD = { vsplit = "vsplit", split = "split", tab = "tabnew" }
 ---@class prtree.Snapshot What a window held before the sidebar borrowed it.
 ---@field buf integer
 ---@field cursor integer[]
+---@field winbar string
 
 ---@type { win: integer?, buf: integer?, borrowed: table<integer, prtree.Snapshot> }
 local sidebar = { borrowed = {} }
@@ -118,6 +120,7 @@ local function remember(win)
   sidebar.borrowed[win] = {
     buf = vim.api.nvim_win_get_buf(win),
     cursor = vim.api.nvim_win_get_cursor(win),
+    winbar = vim.wo[win].winbar,
   }
 end
 
@@ -200,6 +203,7 @@ function M.preview(path, lnum)
   local win = target()
   remember(win)
   vim.api.nvim_win_set_buf(win, buf)
+  vim.wo[win].winbar = render.preview_winbar(vim.fn.fnamemodify(path, ":."))
   if lnum then
     local last = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
     vim.api.nvim_win_set_cursor(win, { M._clamp(lnum, last), 0 })
@@ -221,9 +225,17 @@ function M.commit(path, lnum, how)
   -- Listed from here on: the user chose this file, so it is theirs now.
   vim.bo[buf].buflisted = true
 
-  vim.api.nvim_set_current_win(target())
+  local win = target()
+  local borrowed = sidebar.borrowed[win]
+  vim.api.nvim_set_current_win(win)
   if how ~= "reuse" then
     vim.cmd(SPLIT_CMD[how])
+  end
+  -- A window showing a file you chose is not previewing it, and a new window
+  -- copies its options from the one it was split off: either way the band stops
+  -- here rather than following the file out.
+  if borrowed then
+    vim.wo[0].winbar = borrowed.winbar
   end
   -- `m'` before moving is what makes <C-o> come back here, and it is the one
   -- place the sidebar is allowed to touch the jumplist.
@@ -251,10 +263,16 @@ function M.close()
   end
 
   for borrower, snapshot in pairs(borrowed) do
-    if vim.api.nvim_win_is_valid(borrower) and vim.api.nvim_buf_is_valid(snapshot.buf) then
-      vim.api.nvim_win_set_buf(borrower, snapshot.buf)
-      local last = vim.api.nvim_buf_line_count(snapshot.buf)
-      vim.api.nvim_win_set_cursor(borrower, { M._clamp(snapshot.cursor[1], last), snapshot.cursor[2] })
+    if vim.api.nvim_win_is_valid(borrower) then
+      if vim.api.nvim_buf_is_valid(snapshot.buf) then
+        vim.api.nvim_win_set_buf(borrower, snapshot.buf)
+        local last = vim.api.nvim_buf_line_count(snapshot.buf)
+        vim.api.nvim_win_set_cursor(borrower, { M._clamp(snapshot.cursor[1], last), snapshot.cursor[2] })
+      end
+      -- After the buffer, which brings its own remembered window options with
+      -- it, and unconditionally: a window that has outlived what it was holding
+      -- must still stop saying it is previewing.
+      vim.wo[borrower].winbar = snapshot.winbar
     end
   end
 

@@ -39,6 +39,10 @@ local M = {}
 ---@type string
 M.META_HL = "PrtreeMeta"
 
+---Group for the band over a window the sidebar is previewing into. Created by `define_highlights`.
+---@type string
+M.PREVIEW_HL = "PrtreePreview"
+
 local RAIL = "▎"
 
 local RAIL_HL = {
@@ -216,6 +220,14 @@ function M.winbar(summary)
   return (" vs %s      %d %s  +%d -%d"):format(base, summary.files, noun, summary.added, summary.removed)
 end
 
+---The winbar over a window the sidebar is borrowing: a band across the top
+---saying the file under it is on loan, and which one it is.
+---@param path string Display path of the previewed file.
+---@return string
+function M.preview_winbar(path)
+  return ("%%#%s#  preview  %s%%="):format(M.PREVIEW_HL, (path:gsub("%%", "%%%%")))
+end
+
 ---The sentence shown in place of the tree when there is nothing to list.
 ---@param info prtree.Empty
 ---@return string
@@ -226,10 +238,14 @@ function M.empty_message(info)
   return ("%s matches %s. Nothing changed yet."):format(info.branch, info.ref)
 end
 
----Create the `META_HL` group from `Comment`'s colour. A `link` would drop the italics.
+---Create the groups the sidebar draws with. `META_HL` is mixed from `Comment`
+---rather than linked to it, which would drop the italics.
 function M.define_highlights()
   local comment = vim.api.nvim_get_hl(0, { name = "Comment", link = false })
   vim.api.nvim_set_hl(0, M.META_HL, { fg = comment.fg, italic = true })
+  -- Whatever the colorscheme uses to say "this is the thing you are on" — the
+  -- one group every colorscheme gives a background that reads against Normal.
+  vim.api.nvim_set_hl(0, M.PREVIEW_HL, { link = "Visual" })
 end
 
 return M

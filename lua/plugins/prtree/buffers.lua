@@ -32,7 +32,19 @@ function M.load(path)
   vim.opt.shortmess:append("A")
   local ok = pcall(vim.fn.bufload, buf)
   vim.o.shortmess = saved
-  return ok and buf or nil
+  if not ok then
+    return nil
+  end
+
+  -- Autocommands do not nest, and the sidebar previews from a `CursorMoved`
+  -- callback: the read above then skips the `BufRead` chain that names a
+  -- filetype, and a buffer without one gets no treesitter, no syntax, and no
+  -- language server. Naming it here fires `FileType` itself, which is what all
+  -- three attach to.
+  if vim.bo[buf].filetype == "" then
+    vim.bo[buf].filetype = vim.filetype.match({ buf = buf }) or vim.bo[buf].filetype
+  end
+  return buf
 end
 
 return M
