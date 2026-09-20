@@ -6,6 +6,7 @@
 local symbols = require("plugins.mini-pickers.symbols")
 
 ---@class changetree.Mark
+---@field priority? integer    Draw order against the row's other marks; the caller's default stands when absent.
 ---@field col integer          0-based byte column the mark starts at.
 ---@field end_col? integer     0-based exclusive byte column; absent on virtual-text marks.
 ---@field hl? string           Group over `col`..`end_col`; absent on virtual-text marks, whose chunks carry their own.
@@ -21,6 +22,7 @@ local symbols = require("plugins.mini-pickers.symbols")
 ---@field icon fun(row: changetree.Row): string, string Glyph and its highlight group; the caller wraps `MiniIcons.get`.
 ---@field collapsed fun(id: string): boolean         Whether the row with this id hides its children.
 ---@field width integer                              Window width in cells; long names are trimmed so stats stay visible.
+---@field query? string                               Filter text; every occurrence of it in a line is marked.
 
 ---@class changetree.Summary
 ---@field base_ref string  What the branch is compared against, e.g. "origin/trunk".
@@ -50,6 +52,14 @@ M.PREVIEW_LABEL_HL = "ChangeTreePreviewLabel"
 ---Group for the affordance at the tail of that band. Created by `define_highlights`.
 ---@type string
 M.PREVIEW_HINT_HL = "ChangeTreePreviewHint"
+
+---Group for the run of characters a filter query matched. Created by `define_highlights`.
+---@type string
+M.MATCH_HL = "ChangeTreeMatch"
+
+-- Above the marks a row already carries, so a match reads over a dimmed
+-- ancestor and a coloured symbol name alike.
+local MATCH_PRIORITY = 200
 
 -- Stands in at the tail of the preview band when the row names no destination.
 local HINT = "<CR> to open"
@@ -217,6 +227,31 @@ local function append_file(out, file, opts)
   end
 end
 
+---Byte ranges of every occurrence of `query` in `text`, case-insensitively.
+---
+---Read off the rendered line rather than the row's name: a name is trimmed to
+---fit, and the point is to mark the characters that are actually on screen.
+---@param text string
+---@param query string
+---@return { [1]: integer, [2]: integer }[] 0-based, end exclusive.
+function M._matches(text, query)
+  if query == "" then
+    return {}
+  end
+  -- `string.lower` leaves every byte above ASCII alone, so folding both sides
+  -- keeps the offsets it finds valid in the original.
+  local haystack, needle = text:lower(), query:lower()
+  local found, from = {}, 1
+  while true do
+    local first, last = haystack:find(needle, from, true)
+    if not first then
+      return found
+    end
+    found[#found + 1] = { first - 1, last }
+    from = last + 1
+  end
+end
+
 ---Render file rows and everything visible under them, one buffer line per row.
 ---@param rows changetree.Row[] File rows, children nested.
 ---@param opts changetree.RenderOpts
@@ -225,6 +260,11 @@ function M.lines(rows, opts)
   local out = {}
   for _, file in ipairs(rows) do
     append_file(out, file, opts)
+  end
+  for _, line in ipairs(out) do
+    for _, span in ipairs(M._matches(line.text, opts.query or "")) do
+      line.marks[#line.marks + 1] = { col = span[1], end_col = span[2], hl = M.MATCH_HL, priority = MATCH_PRIORITY }
+    end
   end
   return out
 end
@@ -285,6 +325,8 @@ function M.define_highlights()
   -- theme that leaves `Normal` transparent.
   vim.api.nvim_set_hl(0, M.PREVIEW_LABEL_HL, { fg = warn.fg or comment.fg, reverse = true, bold = true })
   vim.api.nvim_set_hl(0, M.PREVIEW_HINT_HL, { fg = comment.fg, bg = band, italic = true })
+  -- What the editor already paints over the text you searched for.
+  vim.api.nvim_set_hl(0, M.MATCH_HL, { link = "Search" })
 end
 
 return M

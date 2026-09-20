@@ -137,6 +137,7 @@ local function draw()
       return state.is_collapsed(session.st, id)
     end,
     width = vim.api.nvim_win_get_width(win),
+    query = session.query,
   })
 
   session.visible = vim.tbl_map(function(line)
@@ -168,7 +169,7 @@ local function draw()
         hl_group = mark.hl,
         virt_text = mark.virt_text,
         virt_text_pos = mark.pos,
-        priority = 199,
+        priority = mark.priority or 199,
       })
     end
   end

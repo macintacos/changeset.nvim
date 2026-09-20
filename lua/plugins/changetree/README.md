@@ -78,6 +78,15 @@ Nothing is bold: the outline picker uses no bold, and adding it would break the 
 
 Ancestor-only rows carry no stat. They did not change; only their descendants did.
 
+### A filter leaves its matches lit
+
+While a filter is in force every occurrence of it is painted in `Search` — the group the
+editor already uses for "the text you went looking for" — above whatever colour the row
+already carries, so a match reads over a dimmed ancestor as clearly as over a symbol name.
+The runs are found in the rendered line rather than in the row's name, so a path trimmed
+to `…a/plugins/changetree/window.lua` still lights the part you can actually see. They
+last as long as the filter does, not as long as the prompt.
+
 ### Stats
 
 Right-aligned virtual text, `+N` in `GitSignsAdd`, `-N` in `GitSignsDelete`. Numbers, not
@@ -167,7 +176,7 @@ is running, so reopening looks like you left it; a restart starts expanded.
 | `q` | sidebar | close, restore focus and put back whatever the previews borrowed |
 | `h` / `l` | sidebar | collapse / expand; `l` on a compressed chain expands it to full nesting |
 | `zM` / `zR` | sidebar | collapse / expand every file |
-| `/` | sidebar | filter as you type, keeping ancestors so matches stay placed; `<Esc>` restores the last filter |
+| `/` | sidebar | filter as you type, keeping ancestors so matches stay placed and lighting every match until the filter goes; `<Esc>` restores the last filter |
 | `R` | sidebar | rebuild now |
 | `y` | sidebar | yank the row's `path:line` via `helpers.yank` |
 | `<C-v>` `<C-x>` `<C-t>` | sidebar | commit into a vsplit / split / new tab instead |

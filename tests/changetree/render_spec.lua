@@ -360,6 +360,38 @@ describe("changetree.render", function()
     end)
   end)
 
+  describe("filter highlighting", function()
+    it("marks the characters a filter query matched", function()
+      local lines = render.lines({ file() }, opts({ query = "a.lua" }))
+
+      local mark = mark_over(lines[1], "a.lua")
+
+      assert.is_not_nil(mark)
+      assert.equal(render.MATCH_HL, mark.hl)
+    end)
+
+    -- An ancestor row, which is the case with a colour of its own to sit under:
+    -- it is dimmed to `Comment`, and a match on it still has to read.
+    it("draws the match over the colour the row already carries", function()
+      local rows = { file({ children = { symbol({ name = "Alpha", ancestor = true }) } }) }
+
+      local lines = render.lines(rows, opts({ query = "lph" }))
+
+      local match = mark_over(lines[2], "lph")
+      local name = mark_over(lines[2], "Alpha")
+
+      assert.is_true((match.priority or 0) > (name.priority or 0))
+    end)
+
+    it("leaves the rows unmarked when nothing is being filtered", function()
+      local lines = render.lines({ file() }, opts())
+
+      for _, mark in ipairs(lines[1].marks) do
+        assert.not_equal(render.MATCH_HL, mark.hl)
+      end
+    end)
+  end)
+
   describe("winbar", function()
     it("states what the tree is compared against, then the file count and line totals", function()
       local summary = { base_ref = "origin/trunk", files = 7, added = 142, removed = 38 }
@@ -386,6 +418,20 @@ describe("changetree.render", function()
 
       assert.equal("+142 -38 ", shown:sub(-9))
       assert.equal(60, vim.fn.strdisplaywidth(shown))
+    end)
+  end)
+
+  describe("_matches", function()
+    it("gives every occurrence as a byte range over the text", function()
+      assert.same({ { 0, 2 }, { 6, 8 } }, render._matches("ab xy ab", "ab"))
+    end)
+
+    it("ignores case, as the filter that produced the query does", function()
+      assert.same({ { 4, 7 } }, render._matches("src/Foo.lua", "foo"))
+    end)
+
+    it("finds nothing when nothing is being filtered", function()
+      assert.same({}, render._matches("src/Foo.lua", ""))
     end)
   end)
 
