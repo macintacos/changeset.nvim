@@ -7,6 +7,12 @@ local M = {}
 
 local SIDEBAR_WIDTH = 44
 
+-- A session records the layout but not a scratch buffer's contents, so a
+-- restored session brings the sidebar's window back empty. The buffer's name is
+-- the one thing that survives, which makes it what tells that leftover window
+-- apart from one the user opened.
+local NAME = "prtree://"
+
 ---@type table<string, string>
 local SPLIT_CMD = { vsplit = "vsplit", split = "split", tab = "tabnew" }
 
@@ -100,28 +106,56 @@ function M.win()
   return sidebar.win
 end
 
+---The window a restored session left standing where the sidebar was.
+---@return integer?
+function M.placeholder()
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win))
+    if win ~= sidebar.win and name:find(NAME, 1, true) then
+      return win
+    end
+  end
+  return nil
+end
+
 ---Open the sidebar, pinning the window that had focus as the preview target.
 ---@param buf integer Scratch buffer holding the tree.
 ---@return integer win
 function M.open(buf)
-  sidebar.pinned = vim.api.nvim_get_current_win()
-  sidebar.snapshot = {
-    win = sidebar.pinned,
-    buf = vim.api.nvim_win_get_buf(sidebar.pinned),
-    cursor = vim.api.nvim_win_get_cursor(sidebar.pinned),
-  }
+  local placeholder = M.placeholder()
+  local current = vim.api.nvim_get_current_win()
+  if current ~= placeholder then
+    sidebar.pinned = current
+    sidebar.snapshot = {
+      win = current,
+      buf = vim.api.nvim_win_get_buf(current),
+      cursor = vim.api.nvim_win_get_cursor(current),
+    }
+  end
 
-  vim.cmd("botright vsplit")
-  sidebar.win = vim.api.nvim_get_current_win()
+  if placeholder then
+    local stale = vim.api.nvim_win_get_buf(placeholder)
+    sidebar.win = placeholder
+    vim.api.nvim_win_set_buf(placeholder, buf)
+    pcall(vim.api.nvim_buf_delete, stale, { force = true })
+  else
+    sidebar.win = vim.api.nvim_open_win(buf, false, { split = "right", win = -1, width = SIDEBAR_WIDTH })
+  end
   sidebar.buf = buf
-  vim.api.nvim_win_set_buf(sidebar.win, buf)
-  vim.api.nvim_win_set_width(sidebar.win, SIDEBAR_WIDTH)
+  vim.api.nvim_buf_set_name(buf, NAME .. buf)
 
   local wo = vim.wo[sidebar.win]
   wo.number, wo.relativenumber, wo.signcolumn = false, false, "no"
   wo.wrap, wo.cursorline, wo.foldcolumn = false, true, "0"
   wo.winfixwidth = true
   wo.list = false
+
+  -- Opening a window is the editor's business to settle, and 'equalalways' is
+  -- where the user said how. `winfixwidth` is already set, so the sidebar keeps
+  -- its width and only the windows that were there share out what is left.
+  if not placeholder and vim.o.equalalways then
+    vim.cmd("wincmd =")
+  end
   return sidebar.win
 end
 

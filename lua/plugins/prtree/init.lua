@@ -18,6 +18,9 @@ local window = require("plugins.prtree.window")
 -- re-anchoring exists to survive.
 local REFRESH_DEBOUNCE_MS = 250
 
+-- input() reads a line, so it can never hand one back: free to mean "cancelled".
+local CANCELLED = "\r"
+
 local M = {}
 
 local ns = vim.api.nvim_create_namespace("prtree")
@@ -269,12 +272,29 @@ local function set_keymaps(buf)
     require("plugins.prtree.help").show(buf)
   end, "Show these keymaps")
   map("/", function()
-    vim.ui.input({ prompt = "Filter changes: ", default = session.query }, function(query)
-      if query ~= nil then
-        session.query = query
+    local previous = session.query
+    local group = vim.api.nvim_create_augroup("prtree.filter", { clear = true })
+    -- input() edits on the command line, so every keystroke is a CmdlineChanged
+    -- — which is what lets the tree narrow as it is typed rather than at <CR>.
+    vim.api.nvim_create_autocmd("CmdlineChanged", {
+      group = group,
+      desc = "prtree: filter the tree on each keystroke of the filter prompt",
+      callback = function()
+        session.query = vim.fn.getcmdline()
         draw()
-      end
-    end)
+        vim.cmd("redraw")
+      end,
+    })
+
+    local ok, typed = pcall(vim.fn.input, {
+      prompt = "Filter changes: ",
+      default = previous,
+      cancelreturn = CANCELLED,
+    })
+    vim.api.nvim_del_augroup_by_id(group)
+
+    session.query = (ok and typed ~= CANCELLED) and typed or previous
+    draw()
   end, "Filter the tree")
 end
 
@@ -312,6 +332,9 @@ function M.refresh()
 end
 
 function M.open()
+  if session then
+    M.close()
+  end
   local base, _, ref = Git.merge_base()
   if not base then
     return vim.notify("PR Review Tree: no merge base with the default branch", vim.log.levels.WARN)
@@ -375,6 +398,22 @@ function M.close()
   pcall(vim.keymap.del, "n", "[h")
   vim.api.nvim_clear_autocmds({ group = augroup })
   window.close()
+end
+
+---Fill the window a restored session left standing where the sidebar was.
+---
+---A session records the layout but not a scratch buffer's contents, so the
+---sidebar comes back empty. Filling that window is also what keeps the next
+---`<leader>gP` from opening a second one beside it.
+function M.restore()
+  local placeholder = window.placeholder()
+  if not placeholder then
+    return
+  end
+  M.open()
+  if not window.is_visible() then
+    vim.api.nvim_win_close(placeholder, true)
+  end
 end
 
 ---What `<leader>gP` does next, given where the sidebar and the cursor are.

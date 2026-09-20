@@ -9,3 +9,11 @@
 vim.keymap.set("n", "<leader>gP", function()
   require("plugins.prtree").toggle()
 end, { desc = "PR Review Tree (changed files & symbols)" })
+
+-- Fires: after a session is restored, which brings the sidebar's window back
+-- without its contents. Refills it rather than leaving an empty window behind.
+vim.api.nvim_create_autocmd("SessionLoadPost", {
+  callback = function()
+    require("plugins.prtree").restore()
+  end,
+})

@@ -116,7 +116,7 @@ binary change.
 | `q` | sidebar | close, restore focus and the pinned window's original buffer |
 | `h` / `l` | sidebar | collapse / expand; `l` on a compressed chain expands it to full nesting |
 | `zM` / `zR` | sidebar | collapse / expand every file |
-| `/` | sidebar | filter rows, keeping ancestors so matches stay placed |
+| `/` | sidebar | filter as you type, keeping ancestors so matches stay placed; `<Esc>` restores the last filter |
 | `R` | sidebar | rebuild now |
 | `y` | sidebar | yank the row's `path:line` via `helpers.yank` |
 | `<C-v>` `<C-x>` `<C-t>` | sidebar | commit into a vsplit / split / new tab instead |
@@ -135,5 +135,12 @@ binary change.
 - **Refresh re-anchors by identity, not line.** A rebuild keyed on `GitSignsUpdate` must
   restore the cursor to the same row *identity* and preserve collapse state, including an
   `l`-expanded chain. One key scheme serves all three.
+- **Opening the sidebar is an ordinary split.** It takes its width with `winfixwidth`
+  already set and then lets `'equalalways'` settle the rest, so the windows that were
+  already open share out what is left instead of one of them being squashed.
+- **A session restores the window, not the tree.** `:mksession` records the layout but
+  not a scratch buffer's contents, so the sidebar comes back as an empty window. Its
+  name is what survives, and it is how the tree finds that window and fills it rather
+  than splitting a second sidebar beside it.
 - **Compression is view state, not data shape.** The row model always holds the full
   nesting; compression is applied at render and reversed by `l`.

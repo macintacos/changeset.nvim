@@ -45,4 +45,65 @@ describe("prtree.window", function()
       assert.is_nil(window._pick_target(7, { 3, 9 }, only({})))
     end)
   end)
+
+  describe("open", function()
+    local columns
+
+    before_each(function()
+      columns = vim.o.columns
+      vim.o.columns = 200
+      vim.cmd("only")
+    end)
+
+    after_each(function()
+      window.close()
+      vim.cmd("only")
+      vim.o.columns = columns
+    end)
+
+    ---Widths of every window the sidebar does not occupy.
+    ---@return integer[]
+    local function others()
+      local out = {}
+      for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        if win ~= window.win() then
+          out[#out + 1] = vim.api.nvim_win_get_width(win)
+        end
+      end
+      table.sort(out)
+      return out
+    end
+
+    it("takes its width out of the layout and leaves the other windows even", function()
+      vim.cmd("vsplit")
+      vim.cmd("vsplit")
+
+      local win = window.open(vim.api.nvim_create_buf(false, true))
+
+      assert.equal(44, vim.api.nvim_win_get_width(win))
+      local widths = others()
+      assert.equal(3, #widths)
+      assert.is_true(widths[3] - widths[1] <= 1)
+    end)
+
+    it("takes over the window a restored session left, instead of opening another", function()
+      local stale = vim.api.nvim_create_buf(true, false)
+      vim.api.nvim_buf_set_name(stale, "prtree://tree")
+      local placeholder = vim.api.nvim_open_win(stale, false, { split = "right", win = -1, width = 44 })
+      local before = #vim.api.nvim_tabpage_list_wins(0)
+      local buf = vim.api.nvim_create_buf(false, true)
+
+      window.open(buf)
+
+      assert.equal(before, #vim.api.nvim_tabpage_list_wins(0))
+      assert.equal(placeholder, window.win())
+      assert.equal(buf, vim.api.nvim_win_get_buf(placeholder))
+    end)
+
+    it("does not take the sidebar it just opened for a leftover", function()
+      window.open(vim.api.nvim_create_buf(false, true))
+
+      assert.is_nil(window.placeholder())
+    end)
+  end)
 end)
