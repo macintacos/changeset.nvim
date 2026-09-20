@@ -195,7 +195,8 @@ end
 ---holding `j` in the sidebar cannot fill `<C-o>` with one entry per keypress.
 ---@param path string
 ---@param lnum integer? A deletion hunk at the top of a file reports 0, so this is clamped.
-function M.preview(path, lnum)
+---@param destination string? What `<CR>` would land on, for the band over the window.
+function M.preview(path, lnum, destination)
   local buf = buffers.load(path)
   if not buf then
     return
@@ -203,7 +204,7 @@ function M.preview(path, lnum)
   local win = target()
   remember(win)
   vim.api.nvim_win_set_buf(win, buf)
-  vim.wo[win].winbar = render.preview_winbar(vim.fn.fnamemodify(path, ":."))
+  vim.wo[win].winbar = render.preview_winbar(vim.fn.fnamemodify(path, ":."), destination)
   if lnum then
     local last = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
     vim.api.nvim_win_set_cursor(win, { M._clamp(lnum, last), 0 })

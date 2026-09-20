@@ -100,11 +100,16 @@ A preview swaps a real window's buffer out from under you, so that window wears 
 across its top for as long as the sidebar holds it:
 
 ```text
- Preview   lua/plugins/prtree/tree.lua                        <CR> to open
+ Preview   session.ts                       SessionStore › refresh › deadline
 ```
 
 Three runs answering the three questions a borrowed window raises, in the order they are
-asked: what is this, what am I looking at, how do I keep it. The badge is `reverse`d
+asked: what is this, what am I looking at, where does `<CR>` put me. The right edge
+carries the destination rather than the file, because the file is on the left and the row
+under the cursor is not: a chain is shown the way the tree shows it, joined by ` › `. A
+row that names no destination — a file, an orphan hunk — reads `<CR> to open` instead.
+`%<` sits before the path, so a window too narrow for all three gives up the part the
+sidebar is already showing. The badge is `reverse`d
 rather than given a looked-up background, so it pairs the theme's warning colour with
 whatever the window is actually drawn on and survives a theme that leaves `Normal`
 transparent. The band behind it is `Visual`'s background — the one tint every colorscheme

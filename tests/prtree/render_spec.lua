@@ -398,6 +398,32 @@ describe("prtree.render", function()
       assert.is_true(render.preview_winbar("a/50%off.md"):find("50%%off", 1, true) ~= nil)
     end)
 
+    it("names what <CR> lands on at the right edge", function()
+      local shown = vim.api.nvim_eval_statusline(
+        render.preview_winbar("lua/init.lua", "SessionStore › refresh"),
+        { use_winbar = true, maxwidth = 70 }
+      ).str
+
+      assert.is_true(vim.endswith(shown, "SessionStore › refresh "))
+    end)
+
+    it("offers the way out instead when the row names nothing to land on", function()
+      local shown =
+        vim.api.nvim_eval_statusline(render.preview_winbar("lua/init.lua"), { use_winbar = true, maxwidth = 70 }).str
+
+      assert.is_true(vim.endswith(shown, "<CR> to open "))
+    end)
+
+    it("gives up the path first when the window is too narrow for all three", function()
+      local shown = vim.api.nvim_eval_statusline(
+        render.preview_winbar("a/very/long/path/that/will/never/fit.lua", "refresh"),
+        { use_winbar = true, maxwidth = 26 }
+      ).str
+
+      assert.is_true(shown:find(" Preview ", 1, true) ~= nil)
+      assert.is_true(vim.endswith(shown, "refresh "))
+    end)
+
     it("draws the badge, the path and the way out as separate runs", function()
       local shown = vim.api.nvim_eval_statusline(
         render.preview_winbar("lua/init.lua"),

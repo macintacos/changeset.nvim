@@ -51,8 +51,15 @@ M.PREVIEW_LABEL_HL = "PrtreePreviewLabel"
 ---@type string
 M.PREVIEW_HINT_HL = "PrtreePreviewHint"
 
--- What `<CR>` does, on the band that exists because the window is not yours yet.
+-- Stands in at the tail of the preview band when the row names no destination.
 local HINT = "<CR> to open"
+
+---`%` introduces an item in a statusline, so anything interpolated into one is doubled.
+---@param text string
+---@return string
+local function escaped(text)
+  return (text:gsub("%%", "%%%%"))
+end
 
 local RAIL = "▎"
 
@@ -226,7 +233,7 @@ end
 ---@param summary prtree.Summary
 ---@return string
 function M.winbar(summary)
-  local base = summary.base_ref:gsub("%%", "%%%%")
+  local base = escaped(summary.base_ref)
   local noun = summary.files == 1 and "file" or "files"
   return (" vs %s%%=%d %s  +%d -%d "):format(base, summary.files, noun, summary.added, summary.removed)
 end
@@ -234,16 +241,21 @@ end
 ---The winbar over a window the sidebar is borrowing: a band across the top
 ---saying the file under it is on loan, and which one it is.
 ---
----Reversed badge, then the path, then the way out — the three things a borrowed
----window has to answer, in the order they are asked.
+---Reversed badge, then the path, then where `<CR>` would land — the three things
+---a borrowed window has to answer, in the order they are asked.
+---
+---`%<` sits before the path because the path is the one part the sidebar is
+---already showing: when the window is too narrow for all three, it is what a
+---reader can most afford to lose.
 ---@param path string Display path of the previewed file.
+---@param target string? What `<CR>` lands on; absent for a row that names nothing.
 ---@return string
-function M.preview_winbar(path)
+function M.preview_winbar(path, target)
   return table.concat({
     ("%%#%s# Preview "):format(M.PREVIEW_LABEL_HL),
-    ("%%#%s#  %s"):format(M.PREVIEW_HL, (path:gsub("%%", "%%%%"))),
+    ("%%#%s#  %%<%s"):format(M.PREVIEW_HL, escaped(path)),
     "%=",
-    ("%%#%s#%s "):format(M.PREVIEW_HINT_HL, HINT),
+    ("%%#%s#%s "):format(M.PREVIEW_HINT_HL, escaped(target or HINT)),
   })
 end
 

@@ -107,7 +107,9 @@ end
 local function preview_current()
   local row = row_at_cursor()
   if row and row.lnum and row.kind ~= "file" then
-    window.preview(session.root .. "/" .. row.path, row.lnum)
+    -- Only a symbol row names its destination. An orphan hunk's own text is the
+    -- changed line, which is not a place and does not read as one.
+    window.preview(session.root .. "/" .. row.path, row.lnum, row.kind == "symbol" and row.name or nil)
   elseif row and row.kind == "file" and row.status ~= "deleted" then
     window.preview(session.root .. "/" .. row.path, 1)
   end
