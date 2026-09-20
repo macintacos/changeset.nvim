@@ -125,9 +125,9 @@ is running, so reopening looks like you left it; a restart starts expanded.
 | Key | Where | Does |
 | --- | --- | --- |
 | `<leader>gP` | anywhere | closed → open+focus; open+unfocused → focus; open+focused → close, restore focus |
-| `j` / `k` | sidebar | move, previewing into the pinned window without leaving the sidebar |
-| `<CR>` | sidebar | commit: focus the pinned window at the row's position, keep the jump |
-| `q` | sidebar | close, restore focus and the pinned window's original buffer |
+| `j` / `k` | sidebar | move, previewing into the window you were last in, without leaving the sidebar |
+| `<CR>` | sidebar | commit: focus that window at the row's position, keep the jump |
+| `q` | sidebar | close, restore focus and put back whatever the previews borrowed |
 | `h` / `l` | sidebar | collapse / expand; `l` on a compressed chain expands it to full nesting |
 | `zM` / `zR` | sidebar | collapse / expand every file |
 | `/` | sidebar | filter as you type, keeping ancestors so matches stay placed; `<Esc>` restores the last filter |
@@ -139,13 +139,15 @@ is running, so reopening looks like you left it; a restart starts expanded.
 
 ## Behaviour that is easy to get wrong
 
-- **Preview is non-destructive.** `j`/`k` swap the pinned window's buffer and cursor for
-  real, but `q` or `<leader>gP` restores the buffer *and* cursor it had at open. Only
+- **Preview is non-destructive.** `j`/`k` swap a window's buffer and cursor for real, but
+  `q` or `<leader>gP` puts back every window a preview borrowed, buffer *and* cursor. Only
   `<CR>` relocates you, and only `<CR>` writes a jumplist entry — previewing must not, or
   `<C-o>` becomes one entry per keypress.
-- **The pinned window is captured at open** and used for the sidebar's lifetime, even for
-  rows whose file another window already shows. Fallback when it dies: most recent normal
-  window, else a new split.
+- **Previews follow the window you were last in** — the focused one, or, while the cursor
+  is in the sidebar, the one it came from. `winnr("#")` answers 0 once that window has
+  been closed, and 0 is an alias for the current window wherever it would then be passed,
+  so it has to be dropped rather than carried through. Nothing usable at all: the rest of
+  the tabpage, then a split of its own.
 - **Refresh re-anchors by identity, not line.** A rebuild keyed on `GitSignsUpdate` must
   restore the cursor to the same row *identity* and preserve collapse state, including an
   `l`-expanded chain. One key scheme serves all three.

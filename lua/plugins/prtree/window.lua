@@ -16,26 +16,41 @@ local NAME = "prtree://"
 ---@type table<string, string>
 local SPLIT_CMD = { vsplit = "vsplit", split = "split", tab = "tabnew" }
 
----@class prtree.Snapshot
----@field win integer
+---@class prtree.Snapshot What a window held before the sidebar borrowed it.
 ---@field buf integer
 ---@field cursor integer[]
 
----@type { win: integer?, buf: integer?, pinned: integer?, snapshot: prtree.Snapshot? }
-local sidebar = {}
+---@type { win: integer?, buf: integer?, borrowed: table<integer, prtree.Snapshot> }
+local sidebar = { borrowed = {} }
 
----The window a preview should go to.
+---Windows a preview could go to, most recently used first.
 ---
----The window pinned at open wins for the sidebar's whole lifetime, so previews
----never wander between windows (and so the restore only has one window to undo).
----@param pinned integer? Window captured when the sidebar opened.
----@param candidates integer[] Fallbacks, most recently used first.
+---The window with focus is the one being read — except while the cursor is in
+---the sidebar, when it is the window it came from. Offering both ahead of the
+---rest is what makes a preview follow the user instead of staying wherever the
+---sidebar happened to be opened from.
+---@param current integer The focused window.
+---@param previous integer The window focused before it, 0 when there is none.
+---@param all integer[] Every window in the tabpage.
+---@return integer[]
+function M._candidates(current, previous, all)
+  local out, seen = {}, {}
+  for _, win in ipairs(vim.list_extend({ current, previous }, all)) do
+    -- `winnr("#")` answers 0 once the window it named is closed, and 0 is an
+    -- alias for the current window everywhere it would then be passed.
+    if win > 0 and not seen[win] then
+      seen[win] = true
+      out[#out + 1] = win
+    end
+  end
+  return out
+end
+
+---The first of `candidates` that can hold a file.
+---@param candidates integer[] Windows, most recently used first.
 ---@param usable fun(win: integer): boolean
 ---@return integer? win nil when nothing can hold a preview and a split is needed.
-function M._pick_target(pinned, candidates, usable)
-  if pinned and usable(pinned) then
-    return pinned
-  end
+function M._pick_target(candidates, usable)
   for _, win in ipairs(candidates) do
     if usable(win) then
       return win
@@ -70,20 +85,40 @@ local function usable(win)
   return vim.bo[vim.api.nvim_win_get_buf(win)].buftype == ""
 end
 
+---@return integer[]
+local function reachable()
+  return M._candidates(
+    vim.api.nvim_get_current_win(),
+    vim.fn.win_getid(vim.fn.winnr("#")),
+    vim.api.nvim_tabpage_list_wins(0)
+  )
+end
+
 ---@return integer
 local function target()
-  local win = M._pick_target(sidebar.pinned, vim.api.nvim_tabpage_list_wins(0), usable)
+  local win = M._pick_target(reachable(), usable)
   if win then
-    sidebar.pinned = win
     return win
   end
   -- Nothing left to preview into: the sidebar is the only window, so give the
   -- file a split of its own rather than borrowing the sidebar.
   vim.api.nvim_set_current_win(sidebar.win)
   vim.cmd("leftabove vsplit")
-  sidebar.pinned = vim.api.nvim_get_current_win()
+  local fresh = vim.api.nvim_get_current_win()
   vim.api.nvim_set_current_win(sidebar.win)
-  return sidebar.pinned
+  return fresh
+end
+
+---Note what `win` held, the first time the sidebar borrows it.
+---@param win integer
+local function remember(win)
+  if sidebar.borrowed[win] then
+    return
+  end
+  sidebar.borrowed[win] = {
+    buf = vim.api.nvim_win_get_buf(win),
+    cursor = vim.api.nvim_win_get_cursor(win),
+  }
 end
 
 ---@return boolean
@@ -118,20 +153,12 @@ function M.placeholder()
   return nil
 end
 
----Open the sidebar, pinning the window that had focus as the preview target.
+---Open the sidebar.
 ---@param buf integer Scratch buffer holding the tree.
 ---@return integer win
 function M.open(buf)
   local placeholder = M.placeholder()
-  local current = vim.api.nvim_get_current_win()
-  if current ~= placeholder then
-    sidebar.pinned = current
-    sidebar.snapshot = {
-      win = current,
-      buf = vim.api.nvim_win_get_buf(current),
-      cursor = vim.api.nvim_win_get_cursor(current),
-    }
-  end
+  sidebar.borrowed = {}
 
   if placeholder then
     local stale = vim.api.nvim_win_get_buf(placeholder)
@@ -171,6 +198,7 @@ function M.preview(path, lnum)
     return
   end
   local win = target()
+  remember(win)
   vim.api.nvim_win_set_buf(win, buf)
   if lnum then
     local last = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
@@ -184,7 +212,7 @@ end
 ---Commit the previewed location: focus it, keep the jump, and list the buffer.
 ---@param path string
 ---@param lnum integer?
----@param how "pinned"|"vsplit"|"split"|"tab"
+---@param how "reuse"|"vsplit"|"split"|"tab"
 function M.commit(path, lnum, how)
   local buf = buffers.load(path)
   if not buf then
@@ -194,7 +222,7 @@ function M.commit(path, lnum, how)
   vim.bo[buf].buflisted = true
 
   vim.api.nvim_set_current_win(target())
-  if how ~= "pinned" then
+  if how ~= "reuse" then
     vim.cmd(SPLIT_CMD[how])
   end
   -- `m'` before moving is what makes <C-o> come back here, and it is the one
@@ -205,29 +233,34 @@ function M.commit(path, lnum, how)
     vim.api.nvim_win_set_cursor(0, { M._clamp(lnum, vim.api.nvim_buf_line_count(buf)), 0 })
     require("helpers.windows").reveal_cursor()
   end
-  sidebar.snapshot = nil
+  -- Chosen, not borrowed: this window keeps what it is showing.
+  sidebar.borrowed[vim.api.nvim_get_current_win()] = nil
 end
 
----Close the sidebar. Unless a commit already claimed the jump, the pinned window
----goes back to the buffer and cursor it held when the sidebar opened.
+---Close the sidebar. Every window it previewed into goes back to the buffer and
+---cursor it held first; the one a commit claimed keeps what it was given.
 function M.close()
-  local snapshot = sidebar.snapshot
-  local win = sidebar.win
-  sidebar.win, sidebar.buf, sidebar.snapshot = nil, nil, nil
+  -- Resolved before the sidebar goes, while `winnr("#")` still names the window
+  -- the cursor in it came from.
+  local focus = M._pick_target(reachable(), usable)
+  local borrowed, win = sidebar.borrowed, sidebar.win
+  sidebar.win, sidebar.buf, sidebar.borrowed = nil, nil, {}
 
   if win and vim.api.nvim_win_is_valid(win) and #vim.api.nvim_tabpage_list_wins(0) > 1 then
     vim.api.nvim_win_close(win, true)
   end
 
-  if snapshot and vim.api.nvim_win_is_valid(snapshot.win) then
-    if vim.api.nvim_buf_is_valid(snapshot.buf) then
-      vim.api.nvim_win_set_buf(snapshot.win, snapshot.buf)
+  for borrower, snapshot in pairs(borrowed) do
+    if vim.api.nvim_win_is_valid(borrower) and vim.api.nvim_buf_is_valid(snapshot.buf) then
+      vim.api.nvim_win_set_buf(borrower, snapshot.buf)
       local last = vim.api.nvim_buf_line_count(snapshot.buf)
-      vim.api.nvim_win_set_cursor(snapshot.win, { M._clamp(snapshot.cursor[1], last), snapshot.cursor[2] })
+      vim.api.nvim_win_set_cursor(borrower, { M._clamp(snapshot.cursor[1], last), snapshot.cursor[2] })
     end
-    vim.api.nvim_set_current_win(snapshot.win)
   end
-  sidebar.pinned = nil
+
+  if focus and vim.api.nvim_win_is_valid(focus) then
+    vim.api.nvim_set_current_win(focus)
+  end
 end
 
 ---Move focus into the sidebar.

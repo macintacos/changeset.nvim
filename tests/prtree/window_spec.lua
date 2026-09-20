@@ -28,21 +28,27 @@ describe("prtree.window", function()
     end)
   end)
 
-  describe("_pick_target", function()
-    it("keeps previewing into the window pinned at open", function()
-      assert.equal(7, window._pick_target(7, { 3, 7 }, only({ 3, 7 })))
+  describe("_candidates", function()
+    it("offers the window with focus first, then the one focused before it", function()
+      assert.same({ 7, 9, 3 }, window._candidates(7, 9, { 3, 7, 9 }))
     end)
 
-    it("falls back to the most recent usable window once the pinned one is gone", function()
-      assert.equal(3, window._pick_target(7, { 3, 9 }, only({ 3, 9 })))
+    it("leaves out a previous window that is no longer there", function()
+      assert.same({ 7, 3, 9 }, window._candidates(7, 0, { 3, 7, 9 }))
+    end)
+  end)
+
+  describe("_pick_target", function()
+    it("takes the first window that can hold a file", function()
+      assert.equal(7, window._pick_target({ 7, 3 }, only({ 7, 3 })))
     end)
 
     it("skips candidates holding a special buffer", function()
-      assert.equal(9, window._pick_target(7, { 3, 9 }, only({ 9 })))
+      assert.equal(9, window._pick_target({ 7, 3, 9 }, only({ 9 })))
     end)
 
     it("asks for a new split when no window can hold a preview", function()
-      assert.is_nil(window._pick_target(7, { 3, 9 }, only({})))
+      assert.is_nil(window._pick_target({ 3, 9 }, only({})))
     end)
   end)
 
@@ -104,6 +110,76 @@ describe("prtree.window", function()
       window.open(vim.api.nvim_create_buf(false, true))
 
       assert.is_nil(window.placeholder())
+    end)
+  end)
+
+  describe("previewing", function()
+    local files
+
+    before_each(function()
+      files = {}
+      vim.cmd("only")
+    end)
+
+    after_each(function()
+      window.close()
+      vim.cmd("only")
+      for _, path in ipairs(files) do
+        vim.fn.delete(path)
+      end
+    end)
+
+    ---@return string path
+    local function fixture(text)
+      local path = vim.fn.tempname()
+      vim.fn.writefile({ text, text, text }, path)
+      files[#files + 1] = path
+      return path
+    end
+
+    ---The file a window is showing. Resolved, since opening a file by a path
+    ---under a symlinked $TMPDIR names the buffer by its real location.
+    ---@param win integer
+    ---@return string
+    local function showing(win)
+      return vim.fn.resolve(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win)))
+    end
+
+    ---Two side-by-side windows, focus in the right one, sidebar open.
+    ---@return integer left, integer right, string shown_left, string shown_right
+    local function staged()
+      local one, two = fixture("one"), fixture("two")
+      vim.cmd("edit " .. one)
+      local left = vim.api.nvim_get_current_win()
+      vim.cmd("vsplit " .. two)
+      local right = vim.api.nvim_get_current_win()
+      window.open(vim.api.nvim_create_buf(false, true))
+      return left, right, one, two
+    end
+
+    it("follows the window the user moved to", function()
+      local left, right, one, two = staged()
+      window.preview(one, 2)
+
+      vim.api.nvim_set_current_win(left)
+      window.focus()
+      window.preview(two, 3)
+
+      assert.equal(vim.fn.resolve(two), showing(left))
+      assert.equal(vim.fn.resolve(one), showing(right))
+    end)
+
+    it("puts back every window it previewed into", function()
+      local left, right, one, two = staged()
+      window.preview(one, 2)
+      vim.api.nvim_set_current_win(left)
+      window.focus()
+      window.preview(two, 3)
+
+      window.close()
+
+      assert.equal(vim.fn.resolve(one), showing(left))
+      assert.equal(vim.fn.resolve(two), showing(right))
     end)
   end)
 end)

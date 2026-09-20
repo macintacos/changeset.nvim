@@ -223,7 +223,7 @@ local function set_open(row, open)
   draw()
 end
 
----@param how "pinned"|"vsplit"|"split"|"tab"
+---@param how "reuse"|"vsplit"|"split"|"tab"
 local function commit(how)
   local row = row_at_cursor()
   if not row then
@@ -253,7 +253,7 @@ local function set_keymaps(buf)
   end
 
   map("<CR>", function()
-    commit("pinned")
+    commit("reuse")
   end, "Go to this change")
   map("<C-v>", function()
     commit("vsplit")
