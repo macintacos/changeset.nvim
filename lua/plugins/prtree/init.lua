@@ -1,0 +1,429 @@
+---A read-only sidebar mapping what this branch changed, nested by symbol.
+---
+---See README.md for the design. This file is the glue: it gathers the diff and
+---the symbols, hands them to `tree` and `render`, and owns the window state
+---machine. The thinking happens in the pure modules it calls.
+
+local Git = require("helpers.git")
+local Paths = require("helpers.paths")
+local render = require("plugins.prtree.render")
+local resolve = require("plugins.prtree.resolve")
+local state = require("plugins.prtree.state")
+local tree = require("plugins.prtree.tree")
+local view = require("plugins.prtree.view")
+local window = require("plugins.prtree.window")
+
+-- gitsigns republishes on every sign refresh, several times per write. One
+-- rebuild per burst is enough, and a rebuild mid-keypress is what the identity
+-- re-anchoring exists to survive.
+local REFRESH_DEBOUNCE_MS = 250
+
+local M = {}
+
+local ns = vim.api.nvim_create_namespace("prtree")
+local augroup = vim.api.nvim_create_augroup("prtree", { clear = true })
+
+---@class prtree.Session
+---@field root string
+---@field base string
+---@field ref string Ref the fork point was measured against, e.g. "origin/trunk".
+---@field branch string
+---@field default_branch string
+---@field files prtree.File[]
+---@field symbols table<string, MiniPickers.Symbol[]> Absent key means "still resolving".
+---@field rows prtree.Row[]
+---@field visible prtree.Row[]
+---@field st prtree.State
+---@field query string
+---@field cancel fun()?
+---@field timer uv.uv_timer_t?
+
+---@type prtree.Session?
+local session
+
+---@param row prtree.Row
+---@return string glyph, string hl
+local function icon_for(row)
+  local category, name = "lsp", "Text"
+  if row.kind == "file" then
+    category, name = "file", row.path
+  elseif row.kind == "symbol" then
+    name = row.symbol_kind or "Text"
+  end
+  local ok, glyph, hl = pcall(MiniIcons.get, category, name)
+  if ok then
+    return glyph, hl
+  end
+  return " ", "Normal"
+end
+
+---@return prtree.Row?
+local function row_at_cursor()
+  if not session then
+    return nil
+  end
+  local win = window.win()
+  if not win then
+    return nil
+  end
+  return session.visible[vim.api.nvim_win_get_cursor(win)[1]]
+end
+
+local function preview_current()
+  local row = row_at_cursor()
+  if row and row.lnum and row.kind ~= "file" then
+    window.preview(session.root .. "/" .. row.path, row.lnum)
+  elseif row and row.kind == "file" and row.status ~= "deleted" then
+    window.preview(session.root .. "/" .. row.path, 1)
+  end
+end
+
+local function draw()
+  local buf, win = window.buf(), window.win()
+  if not (buf and win and vim.api.nvim_buf_is_valid(buf)) then
+    return
+  end
+
+  local wanted = (row_at_cursor() or {}).id
+  local previous_line = vim.api.nvim_win_get_cursor(win)[1]
+
+  local shown = tree.compress(view.filter(session.rows, session.query), function(id)
+    return state.is_chain_open(session.st, id)
+  end)
+
+  -- `render.lines` walks the tree for its guides, so it is the one place that
+  -- decides which rows are on screen; each line carries its row back, which is
+  -- how a cursor line maps to a row without re-deriving that walk here.
+  local lines = render.lines(shown, {
+    icon = icon_for,
+    collapsed = function(id)
+      return state.is_collapsed(session.st, id)
+    end,
+    width = vim.api.nvim_win_get_width(win),
+  })
+
+  session.visible = vim.tbl_map(function(line)
+    return line.row
+  end, lines)
+
+  local text = vim.tbl_map(function(line)
+    return line.text
+  end, lines)
+  if #text == 0 then
+    text = {
+      render.empty_message({
+        on_default_branch = session.branch == session.default_branch,
+        branch = session.branch,
+        ref = session.ref,
+      }),
+    }
+  end
+
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, text)
+  vim.bo[buf].modifiable = false
+
+  vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+  for i, line in ipairs(lines) do
+    for _, mark in ipairs(line.marks or {}) do
+      vim.api.nvim_buf_set_extmark(buf, ns, i - 1, mark.col or 0, {
+        end_col = mark.end_col,
+        hl_group = mark.hl,
+        virt_text = mark.virt_text,
+        virt_text_pos = mark.pos,
+        priority = 199,
+      })
+    end
+  end
+
+  local ids = vim.tbl_map(function(row)
+    return row.id
+  end, session.visible)
+  vim.api.nvim_win_set_cursor(win, { state._reanchor(ids, wanted, previous_line), 0 })
+
+  local added, removed = 0, 0
+  for _, file in ipairs(session.files) do
+    added, removed = added + (file.added or 0), removed + (file.removed or 0)
+  end
+  vim.wo[win].winbar = render.winbar({
+    base_ref = session.ref,
+    files = #session.files,
+    added = added,
+    removed = removed,
+  })
+end
+
+---Text of a changed line, for captioning an orphan hunk.
+---
+---Read from the buffer rather than from disk: the file is already loaded by the
+---time orphan rows exist, because resolving its symbols is what loaded it.
+---@param path string
+---@param lnum integer
+---@return string?
+local function line_text(path, lnum)
+  if lnum < 1 then
+    return nil
+  end
+  local buf = vim.fn.bufnr(session.root .. "/" .. path)
+  if buf == -1 or not vim.api.nvim_buf_is_loaded(buf) then
+    return nil
+  end
+  return vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1]
+end
+
+local function rebuild()
+  session.rows = tree.build(session.files, session.symbols, line_text)
+  draw()
+end
+
+---@param row prtree.Row
+---@param open boolean
+local function set_open(row, open)
+  -- A compressed chain hides intermediate rows; a folded row hides its children.
+  -- `l` on a compressed row means the first, so it wins while the chain is shut.
+  if row.chain and not state.is_chain_open(session.st, row.id) and open then
+    state.set_chain_open(session.st, row.id, true)
+  elseif row.chain and state.is_chain_open(session.st, row.id) and not open then
+    state.set_chain_open(session.st, row.id, false)
+  else
+    state.set_collapsed(session.st, row.id, not open)
+  end
+  draw()
+end
+
+---@param how "pinned"|"vsplit"|"split"|"tab"
+local function commit(how)
+  local row = row_at_cursor()
+  if not row then
+    return
+  end
+  if row.kind == "file" and row.status == "deleted" then
+    return vim.notify(row.path .. " was deleted on this branch — :CodeDiff to read it", vim.log.levels.INFO)
+  end
+  window.commit(session.root .. "/" .. row.path, row.lnum or 1, how)
+end
+
+---@param delta integer
+local function step(delta)
+  local win = window.win()
+  if not (session and win) then
+    return
+  end
+  local lnum = math.max(1, math.min(vim.api.nvim_win_get_cursor(win)[1] + delta, #session.visible))
+  vim.api.nvim_win_set_cursor(win, { lnum, 0 })
+  preview_current()
+end
+
+---@param buf integer
+local function set_keymaps(buf)
+  local function map(lhs, fn, desc)
+    vim.keymap.set("n", lhs, fn, { buffer = buf, nowait = true, desc = desc })
+  end
+
+  map("<CR>", function()
+    commit("pinned")
+  end, "Go to this change")
+  map("<C-v>", function()
+    commit("vsplit")
+  end, "Go to this change in a vertical split")
+  map("<C-x>", function()
+    commit("split")
+  end, "Go to this change in a split")
+  map("<C-t>", function()
+    commit("tab")
+  end, "Go to this change in a new tab")
+  map("q", M.close, "Close the tree")
+  map("l", function()
+    local row = row_at_cursor()
+    if row then
+      set_open(row, true)
+    end
+  end, "Expand")
+  map("h", function()
+    local row = row_at_cursor()
+    if row then
+      set_open(row, false)
+    end
+  end, "Collapse")
+  map("zR", function()
+    state.expand_all(session.st)
+    draw()
+  end, "Expand every file")
+  map("zM", function()
+    state.collapse_all(
+      session.st,
+      vim.tbl_map(function(row)
+        return row.id
+      end, session.rows)
+    )
+    draw()
+  end, "Collapse every file")
+  map("R", M.refresh, "Rebuild the tree")
+  map("y", function()
+    local row = row_at_cursor()
+    if row then
+      Paths.copy(row.lnum and ("%s:%d"):format(row.path, row.lnum) or row.path, "relative path:line")
+    end
+  end, "Yank path:line")
+  map("/", function()
+    vim.ui.input({ prompt = "Filter changes: ", default = session.query }, function(query)
+      if query ~= nil then
+        session.query = query
+        draw()
+      end
+    end)
+  end, "Filter the tree")
+end
+
+---Gather the diff, then let symbols fill in behind it.
+function M.refresh()
+  if not session then
+    return
+  end
+  if session.cancel then
+    session.cancel()
+    session.cancel = nil
+  end
+
+  local diff = require("plugins.prtree.diff")
+  diff.collect(session.base, session.root, function(files, err)
+    if not session then
+      return
+    end
+    if not files then
+      return vim.notify("PR Review Tree: " .. (err or "git failed"), vim.log.levels.ERROR)
+    end
+    session.files = files
+    session.symbols = {}
+    rebuild()
+    -- A server that answers nothing is "resolved with no symbols", which is what
+    -- turns every hunk in an unsupported file into an orphan row. Leaving the key
+    -- absent would instead read as "still resolving", forever.
+    session.cancel = resolve.start(session.root, files, function(path, items)
+      if session then
+        session.symbols[path] = items or {}
+        rebuild()
+      end
+    end)
+  end)
+end
+
+function M.open()
+  local base, _, ref = Git.merge_base()
+  if not base then
+    return vim.notify("PR Review Tree: no merge base with the default branch", vim.log.levels.WARN)
+  end
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].filetype = "prtree"
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].modifiable = false
+
+  local default_branch = Git.default_base()
+  session = {
+    root = Paths.root(0),
+    base = base,
+    ref = ref or default_branch,
+    branch = Git.lines({ "git", "rev-parse", "--abbrev-ref", "HEAD" })[1] or "HEAD",
+    default_branch = default_branch,
+    files = {},
+    symbols = {},
+    rows = {},
+    visible = {},
+    st = state.new(),
+    query = "",
+  }
+
+  render.define_highlights()
+  window.open(buf)
+  set_keymaps(buf)
+
+  vim.api.nvim_create_autocmd("CursorMoved", {
+    group = augroup,
+    buffer = buf,
+    desc = "prtree: preview the row under the cursor without leaving the sidebar",
+    callback = preview_current,
+  })
+  -- Advance the selection from the file you are reading, so a whole branch can be
+  -- reviewed without ever putting the cursor in the sidebar. Not <C-n>/<C-p>:
+  -- plugin/multicursor.lua owns those, and shadowing them would mean deleting a
+  -- user mapping on close. `h` is free across mini.bracketed's targets.
+  vim.keymap.set("n", "]h", function()
+    step(1)
+  end, { desc = "Next change (PR Review Tree)" })
+  vim.keymap.set("n", "[h", function()
+    step(-1)
+  end, { desc = "Previous change (PR Review Tree)" })
+
+  M.refresh()
+end
+
+function M.close()
+  if session then
+    if session.cancel then
+      session.cancel()
+    end
+    if session.timer then
+      session.timer:stop()
+    end
+  end
+  session = nil
+  pcall(vim.keymap.del, "n", "]h")
+  pcall(vim.keymap.del, "n", "[h")
+  vim.api.nvim_clear_autocmds({ group = augroup })
+  window.close()
+end
+
+---What `<leader>gP` does next, given where the sidebar and the cursor are.
+---@param st { visible: boolean, focused: boolean }
+---@return "open"|"focus"|"close"
+function M._next_action(st)
+  if not st.visible then
+    return "open"
+  end
+  return st.focused and "close" or "focus"
+end
+
+---Open, focus, or dismiss the sidebar, depending on where the cursor is.
+function M.toggle()
+  local action = M._next_action({ visible = window.is_visible(), focused = window.is_focused() })
+  if action == "open" then
+    M.open()
+    window.focus()
+  elseif action == "focus" then
+    window.focus()
+  else
+    M.close()
+  end
+end
+
+-- The meta highlight is mixed from Comment's foreground, which a new colorscheme
+-- replaces. Same idiom as lua/config/highlights.lua.
+vim.api.nvim_create_autocmd("ColorScheme", {
+  group = vim.api.nvim_create_augroup("prtree.highlights", { clear = true }),
+  desc = "prtree: rebuild the dim label colour against the new palette",
+  callback = render.define_highlights,
+})
+
+-- gitsigns publishes this on every sign refresh, so it doubles as a "the diff
+-- may have moved" hook — a commit, a write, or a checkout made outside Neovim.
+vim.api.nvim_create_autocmd("User", {
+  pattern = "GitSignsUpdate",
+  group = vim.api.nvim_create_augroup("prtree.watch", { clear = true }),
+  desc = "prtree: rebuild the tree after the working tree or branch changes",
+  callback = function()
+    if not session then
+      return
+    end
+    if session.timer then
+      session.timer:stop()
+    end
+    session.timer = vim.defer_fn(function()
+      if session then
+        M.refresh()
+      end
+    end, REFRESH_DEBOUNCE_MS)
+  end,
+})
+
+return M
