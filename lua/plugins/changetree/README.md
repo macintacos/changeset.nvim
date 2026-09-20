@@ -87,6 +87,57 @@ The runs are found in the rendered line rather than in the row's name, so a path
 to `…a/plugins/changetree/window.lua` still lights the part you can actually see. They
 last as long as the filter does, not as long as the prompt.
 
+### The kind menu docks against the sidebar, and reuses its rail
+
+`f` opens the list of symbol kinds this branch touched, as a float whose right border
+sits on the cell the sidebar starts after:
+
+```text
+╭─ Symbol kinds ─────────────╮
+│ ▎󰀫 Variable          1052  │
+│ ▎󰊕 Function           523  │
+│  󰏿 C̶o̶n̶s̶t̶a̶n̶t̶            242  │
+│ ▎󰀬 String              17  │
+╰─ unsaved changes ──────────╯
+```
+
+Docked rather than centred, and beside the tree rather than over it, because `x` redraws
+the tree immediately — watching 242 rows leave is how the choice gets made, so the thing
+being changed has to stay on screen.
+
+Column 0 is the same `▎` rail the file rows use, carrying kind colour here where they
+carry change type, so the menu reads as part of the tree rather than as a checkbox list.
+A hidden kind loses the rail *and* is struck through: the rail's absence alone is a
+negative signal, and dimming alone already means "ancestor row". The count is the tree's
+own right edge, and it is what makes the list a decision rather than a form — `Variable
+1052` is the reason the tree was unreadable.
+
+Rows are ordered by weight, not alphabetically: the kind filling the tree is the one the
+cursor starts nearest. Only kinds this branch actually touched are listed, so the menu is
+four rows rather than the twenty-six LSP defines.
+
+The border does the labelling. The title names the list; the footer says where the set on
+screen is remembered — `set everywhere`, `set for this repo`, `set for this branch`, or
+`showing every kind` when nothing has been saved. Once a toggle has drifted from what is
+on disk it reads `unsaved changes` instead, because `q` throws that drift away and a
+footer naming a scope would read as though it were safe. Keys are not listed there: `?`
+answers that, the same way it does in the sidebar.
+
+### A hidden kind is admitted under the tree
+
+```text
+▎ Makefile                            +2 -0
+  └─󰘦 Other changes                   +2 -0
+
+ Hiding variables and fields. f to change.
+```
+
+A virtual line, so the cursor cannot land on it and it needs no place among the rows. It
+names the kinds while they fit, because *which* ones are missing is what stops a reader
+hunting for a symbol that is there; past the width it counts them instead, since a clipped
+list answers nothing. Only kinds the tree actually has are named — a set carried in from
+another branch can hide things this one never had.
+
 ### Stats
 
 Right-aligned virtual text, `+N` in `GitSignsAdd`, `-N` in `GitSignsDelete`. Numbers, not
@@ -166,6 +217,17 @@ is running, so reopening looks like you left it; a restart starts expanded.
 | --- | --- | --- |
 | `gitsigns_base` | `true` | Point gitsigns' base at the fork point when the sidebar opens, so `<leader>gP`'s gutter marks the whole branch. One-way: closing the sidebar leaves the signs up, and `:PRReview` is what takes them down. |
 
+Which symbol kinds are hidden is not a setting: it is a choice made in the menu and
+written to `stdpath("state")/changetree/filters.json`. Three scopes, narrowest first —
+this branch, this repository, everywhere — and a scope counts as set by *having* a record,
+not by that record hiding anything, so a branch that hides nothing overrides a repository
+that hides something. That is the only way "show me everything, just here" can be said.
+
+Saving at a scope clears the narrower records that would shadow it: saving everywhere from
+a repository with its own record would otherwise change nothing in front of you, and the
+word would be a lie. Only records shadowing *this* repo and branch go — another
+repository's deliberate choice is none of that save's business.
+
 ## Keymaps
 
 | Key | Where | Does |
@@ -176,6 +238,10 @@ is running, so reopening looks like you left it; a restart starts expanded.
 | `q` | sidebar | close, restore focus and put back whatever the previews borrowed |
 | `h` / `l` | sidebar | collapse / expand; `l` on a compressed chain expands it to full nesting |
 | `zM` / `zR` | sidebar | collapse / expand every file |
+| `f` | sidebar | open the symbol-kind menu |
+| `x` | kind menu | hide or show the kind under the cursor, redrawing the tree at once |
+| `<CR>` / `r` / `b` | kind menu | remember this set everywhere / for this repository / for this branch, then close |
+| `q` / `<Esc>` | kind menu | close, putting the tree back to the set on disk |
 | `/` | sidebar | filter as you type, keeping ancestors so matches stay placed and lighting every match until the filter goes; `<Esc>` restores the last filter |
 | `R` | sidebar | rebuild now |
 | `y` | sidebar | yank the row's `path:line` via `helpers.yank` |
@@ -221,5 +287,16 @@ is running, so reopening looks like you left it; a restart starts expanded.
 - **Stamp a file before asking about it, not after.** A file edited while its symbols are
   being read has to fail the freshness check next time; stamping afterwards would file
   the answer under the content that replaced it.
+- **Hiding a kind promotes its children.** Dropping `Class` still shows the methods that
+  changed inside one — the kind you hid is not the thing you were looking for. Same rule
+  `symbols.flatten` applies to its own kind filter, for the same reason.
+- **Counts come off the unfiltered tree.** A hidden kind still has to report its size, or
+  the menu could not tell you what putting it back would cost.
+- **A float's border is drawn outside the size it is given.** Anchoring the menu by its
+  own north-east corner against the sidebar leaves the border unaccounted for and three
+  dead cells with it; the position is computed in editor cells instead, so the right
+  border lands on the cell the sidebar starts after.
+- **The menu reads the row under its own cursor, not the current one.** `?` hands the keys
+  to a which-key float, and they have to keep acting on the menu.
 - **Compression is view state, not data shape.** The row model always holds the full
   nesting; compression is applied at render and reversed by `l`.

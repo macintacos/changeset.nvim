@@ -57,6 +57,10 @@ M.PREVIEW_HINT_HL = "ChangeTreePreviewHint"
 ---@type string
 M.MATCH_HL = "ChangeTreeMatch"
 
+---Group for a symbol kind the tree is not showing. Created by `define_highlights`.
+---@type string
+M.HIDDEN_HL = "ChangeTreeHidden"
+
 -- Above the marks a row already carries, so a match reads over a dimmed
 -- ancestor and a coloured symbol name alike.
 local MATCH_PRIORITY = 200
@@ -73,6 +77,25 @@ end
 
 local RAIL = "▎"
 
+-- The two kinds whose plural is not just an `s`. The rest split on the camel hump
+-- ("EnumMember" reads as two words) and take one.
+local PLURAL = { Class = "classes", Property = "properties" }
+
+---@param kind string
+---@return string
+local function plural(kind)
+  return PLURAL[kind] or ((kind:gsub("(%l)(%u)", "%1 %2")):lower() .. "s")
+end
+
+---@param names string[]
+---@return string
+local function sentence_list(names)
+  if #names < 2 then
+    return names[1] or ""
+  end
+  return table.concat(names, ", ", 1, #names - 1) .. " and " .. names[#names]
+end
+
 local RAIL_HL = {
   added = "GitSignsAdd",
   modified = "GitSignsChange",
@@ -86,7 +109,7 @@ local STATUS_MARKER = { deleted = " deleted", renamed = " renamed" }
 local META_KINDS = { orphans = true, orphan = true }
 
 ---Joins highlighted chunks into a line, recording each chunk's byte range as a mark.
----@param row changetree.Row The row the line draws.
+---@param row changetree.Row? The row the line draws; absent on a line that draws no row.
 ---@param chunks { [1]: string, [2]: string? }[] Text and, optionally, the group that colours it.
 ---@param stat? table[] Virtual-text chunks to right-align on the line.
 ---@return changetree.Line
@@ -269,6 +292,79 @@ function M.lines(rows, opts)
   return out
 end
 
+---@class changetree.KindRow One symbol kind's standing in the tree.
+---@field kind string    LSP kind name, e.g. "Method".
+---@field count integer  Symbol rows of this kind, whether hidden or not.
+---@field hidden boolean
+
+---@class changetree.KindLine
+---@field text string
+---@field marks changetree.Mark[]
+---@field kind string The kind this line stands for.
+
+---@class changetree.KindOpts
+---@field icon fun(kind: string): string, string Glyph and its highlight group.
+---@field width integer Cells the menu is wide.
+
+---One line per symbol kind: a rail while it is showing, its count at the right edge.
+---
+---Column 0 is the rail the file rows already use, carrying kind colour here where
+---they carry change type — so the menu reads as part of the tree rather than as a
+---checkbox list. A hidden kind loses the rail *and* is struck through: the rail's
+---absence alone is a negative signal, and dimming alone is what ancestor rows
+---already mean.
+---@param rows changetree.KindRow[]
+---@param opts changetree.KindOpts
+---@return changetree.KindLine[]
+function M.kind_lines(rows, opts)
+  local out = {}
+  for i, row in ipairs(rows) do
+    local glyph, icon_hl = opts.icon(row.kind)
+    local count, lead = tostring(row.count), row.hidden and " " or RAIL
+    local gap = opts.width
+      - vim.fn.strdisplaywidth(lead .. " " .. glyph .. " " .. row.kind)
+      - vim.fn.strdisplaywidth(count)
+    local line = compose(nil, {
+      { lead, not row.hidden and icon_hl or nil },
+      { " " },
+      { glyph, row.hidden and M.HIDDEN_HL or icon_hl },
+      { " " },
+      { row.kind, row.hidden and M.HIDDEN_HL or nil },
+      { (" "):rep(math.max(gap, 1)) },
+      { count, M.META_HL },
+    })
+    line.kind = row.kind
+    out[i] = line
+  end
+  return out
+end
+
+---Hidden kind names as prose: pluralised, lowercased, joined for a sentence.
+---@param kinds string[]
+---@return string
+function M.kind_list(kinds)
+  return sentence_list(vim.tbl_map(plural, kinds))
+end
+
+---The footnote under the tree when part of it is not being shown.
+---
+---Names the kinds while they fit, because which ones are missing is what stops a
+---reader hunting for a symbol that is present. Past the width it counts them
+---instead: a clipped list answers nothing.
+---@param kinds string[] Hidden kinds the tree actually has.
+---@param width integer Cells available under the tree.
+---@return string? nil when nothing is hidden.
+function M.hidden_note(kinds, width)
+  if #kinds == 0 then
+    return nil
+  end
+  local named = ("Hiding %s. f to change."):format(M.kind_list(kinds))
+  if vim.fn.strdisplaywidth(named) <= width then
+    return named
+  end
+  return ("Hiding %d kinds of symbol. f to change."):format(#kinds)
+end
+
 ---The winbar text: what the tree is compared against, then the file count and line totals.
 ---@param summary changetree.Summary
 ---@return string
@@ -327,6 +423,9 @@ function M.define_highlights()
   vim.api.nvim_set_hl(0, M.PREVIEW_HINT_HL, { fg = comment.fg, bg = band, italic = true })
   -- What the editor already paints over the text you searched for.
   vim.api.nvim_set_hl(0, M.MATCH_HL, { link = "Search" })
+  -- Struck through as well as dimmed: dim on its own is what ancestor rows mean,
+  -- and it reads as faint rather than as switched off in a light colourscheme.
+  vim.api.nvim_set_hl(0, M.HIDDEN_HL, { fg = comment.fg, strikethrough = true })
 end
 
 return M

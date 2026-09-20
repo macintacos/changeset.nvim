@@ -23,6 +23,15 @@ local function names(rows)
   return out
 end
 
+---@param id string
+---@param name string
+---@param kind string LSP kind name.
+---@param children changetree.Row[]?
+---@return changetree.Row
+local function sym(id, name, kind, children)
+  return { id = id, kind = "symbol", name = name, symbol_kind = kind, children = children or {} }
+end
+
 describe("changetree.view", function()
   describe("filter", function()
     it("returns the whole tree for an empty query", function()
@@ -59,6 +68,71 @@ describe("changetree.view", function()
       }
 
       assert.same({ "session.ts", "refresh" }, names(view.filter(rows, "refresh")))
+    end)
+  end)
+  describe("by_kind", function()
+    it("returns the whole tree when nothing is hidden", function()
+      local rows = { row("f1", "session.ts", { sym("s1", "refresh", "Method") }) }
+
+      assert.same({ "session.ts", "refresh" }, names(view.by_kind(rows, {})))
+    end)
+
+    it("drops a symbol of a hidden kind", function()
+      local rows = {
+        row("f1", "session.ts", { sym("s1", "refresh", "Method"), sym("s2", "TTL", "Variable") }),
+      }
+
+      assert.same({ "session.ts", "refresh" }, names(view.by_kind(rows, { Variable = true })))
+    end)
+
+    it("promotes a hidden symbol's children rather than taking them down with it", function()
+      local rows = {
+        row("f1", "session.ts", { sym("s1", "Store", "Class", { sym("s2", "refresh", "Method") }) }),
+      }
+
+      assert.same({ "session.ts", "refresh" }, names(view.by_kind(rows, { Class = true })))
+    end)
+
+    it("keeps a file row, which has no symbol kind to hide", function()
+      local rows = { row("f1", "session.ts", { sym("s1", "TTL", "Variable") }) }
+
+      assert.same({ "session.ts" }, names(view.by_kind(rows, { Variable = true })))
+    end)
+
+    it("keeps an orphan-hunk group, which names no symbol", function()
+      local rows = {
+        row("f1", "Makefile", { { id = "o", kind = "orphans", name = "Other changes", children = {} } }),
+      }
+
+      assert.same({ "Makefile", "Other changes" }, names(view.by_kind(rows, { Variable = true })))
+    end)
+  end)
+
+  describe("kind_counts", function()
+    it("counts nothing in a tree of files alone", function()
+      assert.same({}, view.kind_counts({ row("f1", "Makefile") }))
+    end)
+
+    it("counts every symbol row of each kind, however deep", function()
+      local rows = {
+        row("f1", "session.ts", {
+          sym("s1", "Store", "Class", { sym("s2", "refresh", "Method"), sym("s3", "TTL", "Variable") }),
+        }),
+        row("f2", "auth.ts", { sym("s4", "verify", "Method") }),
+      }
+
+      assert.same({ Class = 1, Method = 2, Variable = 1 }, view.kind_counts(rows))
+    end)
+  end)
+  describe("hiding", function()
+    it("names nothing when the hidden kinds are not in this tree", function()
+      assert.same({}, view.hiding({ Method = 2 }, { Variable = true }))
+    end)
+
+    it("names the hidden kinds this tree actually has, in order", function()
+      local counts = { Variable = 31, Method = 2, Field = 9 }
+
+      assert.same({ "Field", "Variable" }, view.hiding(counts, { Variable = true, Field = true, Class = true }))
     end)
   end)
 end)

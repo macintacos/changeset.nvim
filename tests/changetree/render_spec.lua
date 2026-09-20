@@ -522,4 +522,81 @@ describe("changetree.render", function()
       assert.is_true(meta.italic)
     end)
   end)
+  describe("kind_lines", function()
+    local menu_opts = {
+      icon = function()
+        return "K", "Special"
+      end,
+      width = 24,
+    }
+
+    it("rails a kind that is showing and leaves the rail off one that is not", function()
+      local lines = render.kind_lines({
+        { kind = "Method", count = 11, hidden = false },
+        { kind = "Variable", count = 31, hidden = true },
+      }, menu_opts)
+
+      assert.equal("▎ K Method", lines[1].text:gsub("%s+%d+$", ""))
+      assert.equal("  K Variable", lines[2].text:gsub("%s+%d+$", ""))
+    end)
+
+    it("puts each count against the right edge", function()
+      local lines = render.kind_lines({ { kind = "Method", count = 11, hidden = false } }, menu_opts)
+
+      assert.equal(24, vim.fn.strdisplaywidth(lines[1].text))
+      assert.truthy(lines[1].text:find("11$"))
+    end)
+
+    it("strikes through a hidden kind, so it reads as switched off", function()
+      local lines = render.kind_lines({ { kind = "Variable", count = 31, hidden = true } }, menu_opts)
+
+      local groups = vim.tbl_map(function(mark)
+        return mark.hl
+      end, lines[1].marks)
+      assert.truthy(vim.tbl_contains(groups, render.HIDDEN_HL))
+    end)
+
+    it("colours a showing kind's name with the theme rather than the hidden group", function()
+      local lines = render.kind_lines({ { kind = "Method", count = 11, hidden = false } }, menu_opts)
+
+      local groups = vim.tbl_map(function(mark)
+        return mark.hl
+      end, lines[1].marks)
+      assert.is_false(vim.tbl_contains(groups, render.HIDDEN_HL))
+    end)
+
+    it("carries each kind back on its line, so a cursor line names one", function()
+      local lines = render.kind_lines({ { kind = "Method", count = 11, hidden = false } }, menu_opts)
+
+      assert.equal("Method", lines[1].kind)
+    end)
+  end)
+
+  describe("hidden_note", function()
+    it("says nothing when every kind is showing", function()
+      assert.is_nil(render.hidden_note({}, 44))
+    end)
+
+    it("names the one kind it is hiding", function()
+      assert.equal("Hiding variables. f to change.", render.hidden_note({ "Variable" }, 44))
+    end)
+
+    it("joins two kinds with and", function()
+      assert.equal("Hiding fields and variables. f to change.", render.hidden_note({ "Field", "Variable" }, 44))
+    end)
+
+    it("pluralises a kind that does not just take an s", function()
+      assert.equal("Hiding classes. f to change.", render.hidden_note({ "Class" }, 44))
+    end)
+
+    it("splits a two-word kind into words", function()
+      assert.equal("Hiding enum members. f to change.", render.hidden_note({ "EnumMember" }, 44))
+    end)
+
+    it("counts the kinds instead once naming them would not fit", function()
+      local note = render.hidden_note({ "Constructor", "Interface", "Property", "Variable" }, 44)
+
+      assert.equal("Hiding 4 kinds of symbol. f to change.", note)
+    end)
+  end)
 end)

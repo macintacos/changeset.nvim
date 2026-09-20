@@ -7,6 +7,7 @@
 local Git = require("helpers.git")
 local Paths = require("helpers.paths")
 local cache = require("plugins.changetree.cache")
+local prefs = require("plugins.changetree.prefs")
 local render = require("plugins.changetree.render")
 local resolve = require("plugins.changetree.resolve")
 local state = require("plugins.changetree.state")
@@ -48,6 +49,7 @@ local augroup = vim.api.nvim_create_augroup("changetree", { clear = true })
 ---@field visible changetree.Row[]
 ---@field st changetree.State
 ---@field query string
+---@field hidden table<string, true> Symbol kinds the tree is not showing.
 ---@field cancel fun()?
 ---@field timer uv.uv_timer_t?
 
@@ -76,20 +78,24 @@ local function save_soon()
   end, SAVE_DEBOUNCE_MS)
 end
 
----@param row changetree.Row
+---@param category string MiniIcons category.
+---@param name string
 ---@return string glyph, string hl
-local function icon_for(row)
-  local category, name = "lsp", "Text"
-  if row.kind == "file" then
-    category, name = "file", row.path
-  elseif row.kind == "symbol" then
-    name = row.symbol_kind or "Text"
-  end
+local function icon(category, name)
   local ok, glyph, hl = pcall(MiniIcons.get, category, name)
   if ok then
     return glyph, hl
   end
   return " ", "Normal"
+end
+
+---@param row changetree.Row
+---@return string glyph, string hl
+local function icon_for(row)
+  if row.kind == "file" then
+    return icon("file", row.path)
+  end
+  return icon("lsp", row.kind == "symbol" and row.symbol_kind or "Text")
 end
 
 ---@return changetree.Row?
@@ -124,7 +130,7 @@ local function draw()
   local wanted = (row_at_cursor() or {}).id
   local previous_line = vim.api.nvim_win_get_cursor(win)[1]
 
-  local shown = tree.compress(view.filter(session.rows, session.query), function(id)
+  local shown = tree.compress(view.by_kind(view.filter(session.rows, session.query), session.hidden), function(id)
     return state.is_chain_open(session.st, id)
   end)
 
@@ -172,6 +178,16 @@ local function draw()
         priority = mark.priority or 199,
       })
     end
+  end
+
+  local note =
+    render.hidden_note(view.hiding(view.kind_counts(session.rows), session.hidden), vim.api.nvim_win_get_width(win) - 1)
+  if note then
+    -- A virtual line rather than a row: the cursor cannot reach it, so it needs no
+    -- place in `visible` and no guard in everything that reads a row off a line.
+    vim.api.nvim_buf_set_extmark(buf, ns, #text - 1, 0, {
+      virt_lines = { { { "" } }, { { " " .. note, render.META_HL } } },
+    })
   end
 
   local ids = vim.tbl_map(function(row)
@@ -313,6 +329,22 @@ local function set_keymaps(buf)
   map("?", function()
     require("plugins.changetree.help").show(buf, own)
   end, "Show these keymaps")
+  map("f", function()
+    require("plugins.changetree.menu").open({
+      root = session.root,
+      branch = session.branch,
+      counts = view.kind_counts(session.rows),
+      hidden = session.hidden,
+      icon = function(kind)
+        return icon("lsp", kind)
+      end,
+      sidebar = window.win(),
+      on_change = function(hidden)
+        session.hidden = hidden
+        draw()
+      end,
+    })
+  end, "Filter by symbol kind")
   map("/", function()
     local previous = session.query
     local group = vim.api.nvim_create_augroup("changetree.filter", { clear = true })
@@ -431,11 +463,12 @@ function M.open()
   end
 
   local default_branch = Git.default_base()
+  local branch = Git.lines({ "git", "rev-parse", "--abbrev-ref", "HEAD" })[1] or "HEAD"
   session = {
     root = root,
     base = base,
     ref = ref or default_branch,
-    branch = Git.lines({ "git", "rev-parse", "--abbrev-ref", "HEAD" })[1] or "HEAD",
+    branch = branch,
     default_branch = default_branch,
     files = {},
     symbols = {},
@@ -443,6 +476,7 @@ function M.open()
     visible = {},
     st = folds,
     query = "",
+    hidden = prefs.resolve(prefs.load(prefs.path()), root, branch),
   }
 
   render.define_highlights()
@@ -479,6 +513,7 @@ function M.close()
     end
   end
   session = nil
+  require("plugins.changetree.menu").close()
   pcall(vim.keymap.del, "n", "]h")
   pcall(vim.keymap.del, "n", "[h")
   vim.api.nvim_clear_autocmds({ group = augroup })
