@@ -174,7 +174,7 @@ describe("prtree.window", function()
 
       window.preview(one, 2)
 
-      assert.is_true(vim.wo[right].winbar:find("preview", 1, true) ~= nil)
+      assert.is_true(vim.wo[right].winbar:find(vim.fn.fnamemodify(one, ":."), 1, true) ~= nil)
     end)
 
     -- Previewing the file the window already shows, which is where the mark

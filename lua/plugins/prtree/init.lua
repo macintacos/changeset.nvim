@@ -28,7 +28,7 @@ local SAVE_DEBOUNCE_MS = 1000
 local M = {}
 
 ---@class prtree.Config
----@field gitsigns_base boolean Point gitsigns' base at the fork point while the sidebar is open, so `<leader>gp`'s gutter marks the whole branch.
+---@field gitsigns_base boolean Point gitsigns' base at the fork point while the sidebar is open, so `<leader>gP`'s gutter marks the whole branch.
 
 ---@type prtree.Config
 local config = { gitsigns_base = true }
@@ -482,7 +482,7 @@ end
 ---
 ---A session records the layout but not a scratch buffer's contents, so the
 ---sidebar comes back empty. Filling that window is also what keeps the next
----`<leader>gP` from opening a second one beside it.
+---`<leader>gp` from opening a second one beside it.
 function M.restore()
   local placeholder = window.placeholder()
   if not placeholder then
@@ -499,7 +499,7 @@ function M.setup(opts)
   config = vim.tbl_extend("force", config, opts or {})
 end
 
----What `<leader>gP` does next, given where the sidebar and the cursor are.
+---What `<leader>gp` does next, given where the sidebar and the cursor are.
 ---@param st { visible: boolean, focused: boolean }
 ---@return "open"|"focus"|"close"
 function M._next_action(st)

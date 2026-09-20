@@ -2,8 +2,9 @@
 
 A read-only sidebar mapping what this branch changed, nested by symbol.
 
-`<leader>gp` puts the *gutter* in PR Review Mode. `<leader>gP` opens the *map* of the
-same range. They are siblings and read the same base, but neither drives the other.
+`<leader>gp` opens the *map* of what this branch changed. `<leader>gP` puts the *gutter*
+in PR Review Mode over the same range. They are siblings and read the same base, but
+neither drives the other.
 
 ## What it shows
 
@@ -85,11 +86,13 @@ a bar — a bar would be decoration competing with the rail, and the rail alread
 ### Winbar
 
 ```text
- vs origin/trunk      7 files  +142 -38
+ vs origin/trunk                         7 files  +142 -38
 ```
 
 Sentence case, no separators-as-ornament, no all-caps label. It states the comparison
 because "changed relative to what" is the one question the rows themselves cannot answer.
+The totals hang off the right edge, in the column the per-row stats already occupy, so
+the branch's numbers and each file's numbers read down one edge instead of two.
 
 ### A borrowed window says so
 
@@ -97,12 +100,18 @@ A preview swaps a real window's buffer out from under you, so that window wears 
 across its top for as long as the sidebar holds it:
 
 ```text
-  preview  lua/plugins/prtree/tree.lua
+ Preview   lua/plugins/prtree/tree.lua                        <CR> to open
 ```
 
-Full width, in `Visual` — the one group every colorscheme gives a background that reads
-against `Normal`, in light themes and dark ones alike. It is the same winbar device the
-sidebar itself uses, which is why a band rather than a border: a split cannot have one.
+Three runs answering the three questions a borrowed window raises, in the order they are
+asked: what is this, what am I looking at, how do I keep it. The badge is `reverse`d
+rather than given a looked-up background, so it pairs the theme's warning colour with
+whatever the window is actually drawn on and survives a theme that leaves `Normal`
+transparent. The band behind it is `Visual`'s background — the one tint every colorscheme
+gives a window to say "this is the thing you are on" — and it runs the full width, which
+is why a band rather than a border: a split cannot have one, and the sidebar already
+speaks winbar.
+
 The band goes the moment the window stops previewing — `q` puts it back with the buffer,
 and `<CR>` clears it, because a file you chose is not on loan.
 
@@ -141,13 +150,13 @@ is running, so reopening looks like you left it; a restart starts expanded.
 
 | Option | Default | Does |
 | --- | --- | --- |
-| `gitsigns_base` | `true` | Point gitsigns' base at the fork point when the sidebar opens, so `<leader>gp`'s gutter marks the whole branch. One-way: closing the sidebar leaves the signs up, and `:PRReview` is what takes them down. |
+| `gitsigns_base` | `true` | Point gitsigns' base at the fork point when the sidebar opens, so `<leader>gP`'s gutter marks the whole branch. One-way: closing the sidebar leaves the signs up, and `:PRReview` is what takes them down. |
 
 ## Keymaps
 
 | Key | Where | Does |
 | --- | --- | --- |
-| `<leader>gP` | anywhere | closed → open+focus; open+unfocused → focus; open+focused → close, restore focus |
+| `<leader>gp` | anywhere | closed → open+focus; open+unfocused → focus; open+focused → close, restore focus |
 | `j` / `k` | sidebar | move, previewing into the window you were last in, without leaving the sidebar |
 | `<CR>` | sidebar | commit: focus that window at the row's position, keep the jump |
 | `q` | sidebar | close, restore focus and put back whatever the previews borrowed |
@@ -163,7 +172,7 @@ is running, so reopening looks like you left it; a restart starts expanded.
 ## Behaviour that is easy to get wrong
 
 - **Preview is non-destructive.** `j`/`k` swap a window's buffer and cursor for real, but
-  `q` or `<leader>gP` puts back every window a preview borrowed, buffer *and* cursor. Only
+  `q` or `<leader>gp` puts back every window a preview borrowed, buffer *and* cursor. Only
   `<CR>` relocates you, and only `<CR>` writes a jumplist entry — previewing must not, or
   `<C-o>` becomes one entry per keypress.
 - **Previews follow the window you were last in** — the focused one, or, while the cursor

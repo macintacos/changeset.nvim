@@ -43,6 +43,17 @@ M.META_HL = "PrtreeMeta"
 ---@type string
 M.PREVIEW_HL = "PrtreePreview"
 
+---Group for the badge at the head of that band. Created by `define_highlights`.
+---@type string
+M.PREVIEW_LABEL_HL = "PrtreePreviewLabel"
+
+---Group for the affordance at the tail of that band. Created by `define_highlights`.
+---@type string
+M.PREVIEW_HINT_HL = "PrtreePreviewHint"
+
+-- What `<CR>` does, on the band that exists because the window is not yours yet.
+local HINT = "<CR> to open"
+
 local RAIL = "▎"
 
 local RAIL_HL = {
@@ -217,15 +228,23 @@ end
 function M.winbar(summary)
   local base = summary.base_ref:gsub("%%", "%%%%")
   local noun = summary.files == 1 and "file" or "files"
-  return (" vs %s      %d %s  +%d -%d"):format(base, summary.files, noun, summary.added, summary.removed)
+  return (" vs %s%%=%d %s  +%d -%d "):format(base, summary.files, noun, summary.added, summary.removed)
 end
 
 ---The winbar over a window the sidebar is borrowing: a band across the top
 ---saying the file under it is on loan, and which one it is.
+---
+---Reversed badge, then the path, then the way out — the three things a borrowed
+---window has to answer, in the order they are asked.
 ---@param path string Display path of the previewed file.
 ---@return string
 function M.preview_winbar(path)
-  return ("%%#%s#  preview  %s%%="):format(M.PREVIEW_HL, (path:gsub("%%", "%%%%")))
+  return table.concat({
+    ("%%#%s# Preview "):format(M.PREVIEW_LABEL_HL),
+    ("%%#%s#  %s"):format(M.PREVIEW_HL, (path:gsub("%%", "%%%%"))),
+    "%=",
+    ("%%#%s#%s "):format(M.PREVIEW_HINT_HL, HINT),
+  })
 end
 
 ---The sentence shown in place of the tree when there is nothing to list.
@@ -243,9 +262,17 @@ end
 function M.define_highlights()
   local comment = vim.api.nvim_get_hl(0, { name = "Comment", link = false })
   vim.api.nvim_set_hl(0, M.META_HL, { fg = comment.fg, italic = true })
-  -- Whatever the colorscheme uses to say "this is the thing you are on" — the
-  -- one group every colorscheme gives a background that reads against Normal.
-  vim.api.nvim_set_hl(0, M.PREVIEW_HL, { link = "Visual" })
+
+  -- Visual's background is the one tint every colorscheme gives a window to say
+  -- "this is the thing you are on", so the band reads in any theme.
+  local band = vim.api.nvim_get_hl(0, { name = "Visual", link = false }).bg
+  local warn = vim.api.nvim_get_hl(0, { name = "DiagnosticWarn", link = false })
+  vim.api.nvim_set_hl(0, M.PREVIEW_HL, { bg = band })
+  -- `reverse` rather than a background read off `Normal`: it pairs the accent
+  -- with whatever the window is actually drawn on, so the badge survives a
+  -- theme that leaves `Normal` transparent.
+  vim.api.nvim_set_hl(0, M.PREVIEW_LABEL_HL, { fg = warn.fg or comment.fg, reverse = true, bold = true })
+  vim.api.nvim_set_hl(0, M.PREVIEW_HINT_HL, { fg = comment.fg, bg = band, italic = true })
 end
 
 return M

@@ -364,19 +364,28 @@ describe("prtree.render", function()
     it("states what the tree is compared against, then the file count and line totals", function()
       local summary = { base_ref = "origin/trunk", files = 7, added = 142, removed = 38 }
 
-      assert.equal(" vs origin/trunk      7 files  +142 -38", render.winbar(summary))
+      assert.equal(" vs origin/trunk%=7 files  +142 -38 ", render.winbar(summary))
     end)
 
     it("says '1 file', not '1 files'", function()
       local summary = { base_ref = "origin/trunk", files = 1, added = 3, removed = 0 }
 
-      assert.equal(" vs origin/trunk      1 file  +3 -0", render.winbar(summary))
+      assert.equal(" vs origin/trunk%=1 file  +3 -0 ", render.winbar(summary))
     end)
 
     it("escapes % in the base ref so the statusline does not read it as an item", function()
       local summary = { base_ref = "origin/50%off", files = 2, added = 1, removed = 1 }
 
-      assert.equal(" vs origin/50%%off      2 files  +1 -1", render.winbar(summary))
+      assert.equal(" vs origin/50%%off%=2 files  +1 -1 ", render.winbar(summary))
+    end)
+
+    it("hangs the counts off the right edge", function()
+      local summary = { base_ref = "origin/trunk", files = 7, added = 142, removed = 38 }
+
+      local shown = vim.api.nvim_eval_statusline(render.winbar(summary), { use_winbar = true, maxwidth = 60 }).str
+
+      assert.equal("+142 -38 ", shown:sub(-9))
+      assert.equal(60, vim.fn.strdisplaywidth(shown))
     end)
   end)
 
@@ -387,6 +396,22 @@ describe("prtree.render", function()
 
     it("escapes % in the path so the statusline does not read it as an item", function()
       assert.is_true(render.preview_winbar("a/50%off.md"):find("50%%off", 1, true) ~= nil)
+    end)
+
+    it("draws the badge, the path and the way out as separate runs", function()
+      local shown = vim.api.nvim_eval_statusline(
+        render.preview_winbar("lua/init.lua"),
+        { use_winbar = true, maxwidth = 60, highlights = true }
+      )
+
+      assert.equal(3, #shown.highlights)
+    end)
+
+    it("fills the width, so the band spans the window", function()
+      local shown =
+        vim.api.nvim_eval_statusline(render.preview_winbar("lua/init.lua"), { use_winbar = true, maxwidth = 60 })
+
+      assert.equal(60, vim.fn.strdisplaywidth(shown.str))
     end)
   end)
 
