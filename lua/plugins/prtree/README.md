@@ -120,6 +120,7 @@ binary change.
 | `R` | sidebar | rebuild now |
 | `y` | sidebar | yank the row's `path:line` via `helpers.yank` |
 | `<C-v>` `<C-x>` `<C-t>` | sidebar | commit into a vsplit / split / new tab instead |
+| `?` | sidebar | list these keys: which-key's popup where it is installed, a float where it is not |
 | `]h` / `[h` | anywhere, while open | advance the sidebar's selection and jump — review without focusing the sidebar |
 
 ## Behaviour that is easy to get wrong

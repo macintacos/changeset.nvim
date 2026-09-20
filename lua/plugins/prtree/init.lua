@@ -265,6 +265,9 @@ local function set_keymaps(buf)
       Paths.copy(row.lnum and ("%s:%d"):format(row.path, row.lnum) or row.path, "relative path:line")
     end
   end, "Yank path:line")
+  map("?", function()
+    require("plugins.prtree.help").show(buf)
+  end, "Show these keymaps")
   map("/", function()
     vim.ui.input({ prompt = "Filter changes: ", default = session.query }, function(query)
       if query ~= nil then
