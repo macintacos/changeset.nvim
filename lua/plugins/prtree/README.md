@@ -106,6 +106,20 @@ placeholder. That keeps three cases apart which all render childless: still wait
 `deleted` file, and a file with genuinely nothing to show inside it — a 100% rename, a
 binary change.
 
+## What it remembers
+
+Asking a language server about every changed file is what makes the first open slow: 28
+files take about nine seconds in this repo, and the tree fills a row at a time while it
+waits. Symbols are cached per file instead, stamped with the file's size and mtime, so
+reopening asks a server only about what has changed since — the same tree comes back
+complete in under 300ms, which is the `git diff` and nothing else.
+
+The cache is one JSON file per repo under `stdpath("cache")/prtree/`, holding only the
+fields the tree reads from a symbol. Every open narrows it to the files the current diff
+touches, so it stays the size of a branch rather than growing with every branch ever
+reviewed, and losing it costs one slow open. Folds are remembered for as long as Neovim
+is running, so reopening looks like you left it; a restart starts expanded.
+
 ## Keymaps
 
 | Key | Where | Does |
@@ -142,5 +156,11 @@ binary change.
   not a scratch buffer's contents, so the sidebar comes back as an empty window. Its
   name is what survives, and it is how the tree finds that window and fills it rather
   than splitting a second sidebar beside it.
+- **A cached file is never loaded.** Reading symbols is what puts a changed file in a
+  buffer, so a file answered from the cache has none, and anything the tree needs from
+  its text comes off disk instead.
+- **Stamp a file before asking about it, not after.** A file edited while its symbols are
+  being read has to fail the freshness check next time; stamping afterwards would file
+  the answer under the content that replaced it.
 - **Compression is view state, not data shape.** The row model always holds the full
   nesting; compression is applied at render and reversed by `l`.

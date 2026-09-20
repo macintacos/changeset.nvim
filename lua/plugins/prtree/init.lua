@@ -6,6 +6,7 @@
 
 local Git = require("helpers.git")
 local Paths = require("helpers.paths")
+local cache = require("plugins.prtree.cache")
 local render = require("plugins.prtree.render")
 local resolve = require("plugins.prtree.resolve")
 local state = require("plugins.prtree.state")
@@ -20,6 +21,9 @@ local REFRESH_DEBOUNCE_MS = 250
 
 -- input() reads a line, so it can never hand one back: free to mean "cancelled".
 local CANCELLED = "\r"
+
+-- One write per burst of answers rather than one per file.
+local SAVE_DEBOUNCE_MS = 1000
 
 local M = {}
 
@@ -43,6 +47,28 @@ local augroup = vim.api.nvim_create_augroup("prtree", { clear = true })
 
 ---@type prtree.Session?
 local session
+
+---Symbols read for the repo at `root`, carried between openings and to disk.
+---@type { root: string, entries: table<string, prtree.CacheEntry> }?
+local memo
+
+---@type uv.uv_timer_t?
+local save_timer
+
+---Folds outlive a close, so reopening the sidebar looks like you left it.
+---@type prtree.State
+local folds = state.new()
+
+local function save_soon()
+  if save_timer then
+    save_timer:stop()
+  end
+  save_timer = vim.defer_fn(function()
+    if memo then
+      cache.save(cache.path(memo.root), memo.entries)
+    end
+  end, SAVE_DEBOUNCE_MS)
+end
 
 ---@param row prtree.Row
 ---@return string glyph, string hl
@@ -158,8 +184,9 @@ end
 
 ---Text of a changed line, for captioning an orphan hunk.
 ---
----Read from the buffer rather than from disk: the file is already loaded by the
----time orphan rows exist, because resolving its symbols is what loaded it.
+---Prefers the buffer, which holds unwritten changes the file does not. Reading
+---symbols is what loads a file, so a file answered from the cache has no buffer
+---and is read from disk instead.
 ---@param path string
 ---@param lnum integer
 ---@return string?
@@ -167,11 +194,13 @@ local function line_text(path, lnum)
   if lnum < 1 then
     return nil
   end
-  local buf = vim.fn.bufnr(session.root .. "/" .. path)
-  if buf == -1 or not vim.api.nvim_buf_is_loaded(buf) then
-    return nil
+  local full = session.root .. "/" .. path
+  local buf = vim.fn.bufnr(full)
+  if buf ~= -1 and vim.api.nvim_buf_is_loaded(buf) then
+    return vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1]
   end
-  return vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1]
+  local ok, lines = pcall(vim.fn.readfile, full, "", lnum)
+  return ok and lines[lnum] or nil
 end
 
 local function rebuild()
@@ -317,14 +346,35 @@ function M.refresh()
       return vim.notify("PR Review Tree: " .. (err or "git failed"), vim.log.levels.ERROR)
     end
     session.files = files
-    session.symbols = {}
+
+    -- Stamped before the request rather than after: a file edited while its
+    -- symbols are being read then fails this check next time, instead of
+    -- leaving behind an answer for content that has already moved on.
+    local stamps = {}
+    local known, unknown = cache.fresh(memo.entries, files, function(path)
+      stamps[path] = cache.stamp(session.root .. "/" .. path)
+      return stamps[path]
+    end)
+    session.symbols = known
+
+    -- Down to what this diff needs: the file caches the branch being read, not
+    -- every file whose symbols have ever been asked for.
+    memo.entries = {}
+    for path, symbols in pairs(known) do
+      memo.entries[path] = { stamp = stamps[path], symbols = symbols }
+    end
     rebuild()
+
     -- A server that answers nothing is "resolved with no symbols", which is what
     -- turns every hunk in an unsupported file into an orphan row. Leaving the key
     -- absent would instead read as "still resolving", forever.
-    session.cancel = resolve.start(session.root, files, function(path, items)
+    session.cancel = resolve.start(session.root, unknown, function(path, items)
       if session then
         session.symbols[path] = items or {}
+        if stamps[path] then
+          memo.entries[path] = { stamp = stamps[path], symbols = cache.project(items or {}) }
+          save_soon()
+        end
         rebuild()
       end
     end)
@@ -345,9 +395,14 @@ function M.open()
   vim.bo[buf].buftype = "nofile"
   vim.bo[buf].modifiable = false
 
+  local root = Paths.root(0)
+  if not memo or memo.root ~= root then
+    memo = { root = root, entries = cache.load(cache.path(root)) }
+  end
+
   local default_branch = Git.default_base()
   session = {
-    root = Paths.root(0),
+    root = root,
     base = base,
     ref = ref or default_branch,
     branch = Git.lines({ "git", "rev-parse", "--abbrev-ref", "HEAD" })[1] or "HEAD",
@@ -356,7 +411,7 @@ function M.open()
     symbols = {},
     rows = {},
     visible = {},
-    st = state.new(),
+    st = folds,
     query = "",
   }
 
