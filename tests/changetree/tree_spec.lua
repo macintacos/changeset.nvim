@@ -1,4 +1,4 @@
-local tree = require("plugins.prtree.tree")
+local tree = require("plugins.changetree.tree")
 
 local PATH = "src/session.ts"
 
@@ -31,15 +31,15 @@ end
 ---@param lnum integer
 ---@param count integer
 ---@param removed integer?
----@return prtree.Hunk
+---@return changetree.Hunk
 local function hunk(lnum, count, removed)
   return { lnum = lnum, count = count, added = count, removed = removed or 0 }
 end
 
 ---@param path string
----@param hunks prtree.Hunk[]
+---@param hunks changetree.Hunk[]
 ---@param status string?
----@return prtree.File
+---@return changetree.File
 local function file(path, hunks, status)
   local added, removed = 0, 0
   for _, h in ipairs(hunks) do
@@ -49,7 +49,7 @@ local function file(path, hunks, status)
   return { path = path, status = status or "modified", added = added, removed = removed, hunks = hunks }
 end
 
----@param rows prtree.Row[]
+---@param rows changetree.Row[]
 ---@return string[]
 local function names(rows)
   local out = {}
@@ -60,7 +60,7 @@ local function names(rows)
 end
 
 ---Every row id in `rows`, depth-first.
----@param rows prtree.Row[]
+---@param rows changetree.Row[]
 ---@param out string[]?
 ---@return string[]
 local function ids(rows, out)
@@ -72,7 +72,7 @@ local function ids(rows, out)
   return out
 end
 
-describe("prtree.tree", function()
+describe("changetree.tree", function()
   describe("build", function()
     it("marks a file resolved once its symbols have arrived", function()
       local rows = tree.build({ file(PATH, { hunk(3, 1) }) }, { [PATH] = {} })
@@ -161,8 +161,8 @@ describe("prtree.tree", function()
         sym("SESSION_TTL", "Constant", 0, 22, 22),
       }
 
-      ---@param hunks prtree.Hunk[]
-      ---@return prtree.Row[]
+      ---@param hunks changetree.Hunk[]
+      ---@return changetree.Row[]
       local function build_store(hunks)
         return tree.build({ file(PATH, hunks) }, { [PATH] = STORE })[1].children
       end
@@ -258,9 +258,9 @@ describe("prtree.tree", function()
         sym("SESSION_TTL", "Constant", 0, 22, 22),
       }
 
-      ---@param hunks prtree.Hunk[]
+      ---@param hunks changetree.Hunk[]
       ---@param line_text fun(path: string, lnum: integer): string?
-      ---@return prtree.Row[]
+      ---@return changetree.Row[]
       local function build_store(hunks, line_text)
         return tree.build({ file(PATH, hunks) }, { [PATH] = STORE }, line_text)[1].children
       end
@@ -348,8 +348,8 @@ describe("prtree.tree", function()
       -- one hunk running over 2..9 spans both functions
       local FUNCTIONS = { sym("first", "Function", 0, 1, 3), sym("second", "Function", 0, 5, 9) }
 
-      ---@param hunks prtree.Hunk[]
-      ---@return prtree.Row[]
+      ---@param hunks changetree.Hunk[]
+      ---@return changetree.Row[]
       local function build_functions(hunks)
         return tree.build({ file(PATH, hunks) }, { [PATH] = FUNCTIONS })[1].children
       end
@@ -420,9 +420,9 @@ describe("prtree.tree", function()
       sym("leaf", "Function", 2, 5, 9),
     }
 
-    ---@param hunks prtree.Hunk[]
+    ---@param hunks changetree.Hunk[]
     ---@param symbols table[]?
-    ---@return prtree.Row[]
+    ---@return changetree.Row[]
     local function build_nested(hunks, symbols)
       return tree.build({ file(PATH, hunks) }, { [PATH] = symbols or NESTED })
     end

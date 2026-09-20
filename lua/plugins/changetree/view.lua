@@ -11,9 +11,9 @@ local M = {}
 ---A match keeps its ancestors, so a hit never floats free of the file it lives
 ---in, and keeps its own children, so matching a file still shows what changed
 ---inside it.
----@param rows prtree.Row[]
+---@param rows changetree.Row[]
 ---@param query string Empty returns the tree untouched.
----@return prtree.Row[]
+---@return changetree.Row[]
 function M.filter(rows, query)
   if query == "" then
     return rows

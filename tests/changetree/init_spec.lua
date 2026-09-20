@@ -1,6 +1,6 @@
-local prtree = require("plugins.prtree")
+local changetree = require("plugins.changetree")
 
-describe("prtree", function()
+describe("changetree", function()
   describe("_review_gutter", function()
     it("points the gutter at the fork point the tree is measured against", function()
       local seen
@@ -10,7 +10,7 @@ describe("prtree", function()
         end,
       }
 
-      prtree._review_gutter(gitsigns, "abc123", true)
+      changetree._review_gutter(gitsigns, "abc123", true)
 
       assert.same({ "abc123", true }, seen)
     end)
@@ -22,25 +22,25 @@ describe("prtree", function()
         end,
       }
 
-      prtree._review_gutter(gitsigns, "abc123", false)
+      changetree._review_gutter(gitsigns, "abc123", false)
     end)
 
     it("does nothing when gitsigns is not installed", function()
-      prtree._review_gutter(nil, "abc123", true)
+      changetree._review_gutter(nil, "abc123", true)
     end)
   end)
 
   describe("_next_action", function()
     it("opens and focuses when the sidebar is not showing", function()
-      assert.equal("open", prtree._next_action({ visible = false, focused = false }))
+      assert.equal("open", changetree._next_action({ visible = false, focused = false }))
     end)
 
     it("focuses the sidebar when it is showing but the cursor is elsewhere", function()
-      assert.equal("focus", prtree._next_action({ visible = true, focused = false }))
+      assert.equal("focus", changetree._next_action({ visible = true, focused = false }))
     end)
 
     it("closes the sidebar when the cursor is already in it", function()
-      assert.equal("close", prtree._next_action({ visible = true, focused = true }))
+      assert.equal("close", changetree._next_action({ visible = true, focused = true }))
     end)
   end)
 end)

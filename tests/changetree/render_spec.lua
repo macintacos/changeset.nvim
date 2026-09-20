@@ -1,7 +1,7 @@
-local render = require("plugins.prtree.render")
+local render = require("plugins.changetree.render")
 
 ---@param overrides? table
----@return prtree.Row
+---@return changetree.Row
 local function file(overrides)
   return vim.tbl_extend("force", {
     id = "src/a.lua",
@@ -19,7 +19,7 @@ local function file(overrides)
 end
 
 ---@param overrides? table
----@return prtree.Row
+---@return changetree.Row
 local function symbol(overrides)
   return vim.tbl_extend("force", {
     id = "src/a.lua\0Foo",
@@ -51,9 +51,9 @@ local function opts(overrides)
 end
 
 ---The mark whose highlight covers exactly `covered` in the line's text.
----@param line prtree.Line
+---@param line changetree.Line
 ---@param covered string
----@return prtree.Mark?
+---@return changetree.Mark?
 local function mark_over(line, covered)
   for _, mark in ipairs(line.marks) do
     if mark.end_col and line.text:sub(mark.col + 1, mark.end_col) == covered then
@@ -62,7 +62,7 @@ local function mark_over(line, covered)
   end
 end
 
----@param lines prtree.Line[]
+---@param lines changetree.Line[]
 ---@return string[]
 local function texts(lines)
   return vim.tbl_map(function(line)
@@ -71,8 +71,8 @@ local function texts(lines)
 end
 
 ---The virtual-text mark of a line, if it has one.
----@param line prtree.Line
----@return prtree.Mark?
+---@param line changetree.Line
+---@return changetree.Mark?
 local function stat_mark(line)
   for _, mark in ipairs(line.marks) do
     if mark.virt_text then
@@ -81,7 +81,7 @@ local function stat_mark(line)
   end
 end
 
-describe("prtree.render", function()
+describe("changetree.render", function()
   describe("lines", function()
     describe("file rows", function()
       local rails = {

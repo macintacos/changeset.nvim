@@ -1,6 +1,6 @@
-local help = require("plugins.prtree.help")
+local help = require("plugins.changetree.help")
 
-describe("prtree.help", function()
+describe("changetree.help", function()
   it("pads the keys into a column, ordered by key", function()
     local lines = help._lines({
       { lhs = "q", desc = "Close the tree" },

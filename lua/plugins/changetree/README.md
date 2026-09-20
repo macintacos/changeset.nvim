@@ -1,4 +1,4 @@
-# prtree
+# changetree
 
 A read-only sidebar mapping what this branch changed, nested by symbol.
 
@@ -143,7 +143,7 @@ waits. Symbols are cached per file instead, stamped with the file's size and mti
 reopening asks a server only about what has changed since — the same tree comes back
 complete in under 300ms, which is the `git diff` and nothing else.
 
-The cache is one JSON file per repo under `stdpath("cache")/prtree/`, holding only the
+The cache is one JSON file per repo under `stdpath("cache")/changetree/`, holding only the
 fields the tree reads from a symbol. Every open narrows it to the files the current diff
 touches, so it stays the size of a branch rather than growing with every branch ever
 reviewed, and losing it costs one slow open. Folds are remembered for as long as Neovim
@@ -151,7 +151,7 @@ is running, so reopening looks like you left it; a restart starts expanded.
 
 ## Settings
 
-`plugin/prtree.lua` calls `setup()`:
+`plugin/changetree.lua` calls `setup()`:
 
 | Option | Default | Does |
 | --- | --- | --- |

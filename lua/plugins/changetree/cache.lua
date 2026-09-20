@@ -7,7 +7,7 @@
 
 local M = {}
 
----@class prtree.CachedSymbol Only what `prtree.tree` reads from a symbol.
+---@class changetree.CachedSymbol Only what `changetree.tree` reads from a symbol.
 ---@field name string
 ---@field kind string
 ---@field depth integer
@@ -15,9 +15,9 @@ local M = {}
 ---@field range_lnum integer
 ---@field range_end_lnum integer
 
----@class prtree.CacheEntry
+---@class changetree.CacheEntry
 ---@field stamp string The file as it stood when its symbols were read.
----@field symbols prtree.CachedSymbol[]
+---@field symbols changetree.CachedSymbol[]
 
 ---Where the cache for the repo at `root` lives. Under `cache` rather than
 ---`state`: every entry can be read again from a server, so losing the file
@@ -25,7 +25,7 @@ local M = {}
 ---@param root string Absolute path to the repo root.
 ---@return string
 function M.path(root)
-  return vim.fs.joinpath(vim.fn.stdpath("cache"), "prtree", (root:gsub("/", "%%")) .. ".json")
+  return vim.fs.joinpath(vim.fn.stdpath("cache"), "changetree", (root:gsub("/", "%%")) .. ".json")
 end
 
 ---A file's identity: any change to it changes this.
@@ -41,11 +41,11 @@ end
 
 ---Split `files` into the symbols already known for them and the ones a server
 ---still has to answer for.
----@param entries table<string, prtree.CacheEntry>
----@param files prtree.File[]
+---@param entries table<string, changetree.CacheEntry>
+---@param files changetree.File[]
 ---@param stamp fun(path: string): string? The file's stamp now.
----@return table<string, prtree.CachedSymbol[]> known Keyed by path.
----@return prtree.File[] unknown
+---@return table<string, changetree.CachedSymbol[]> known Keyed by path.
+---@return changetree.File[] unknown
 function M.fresh(entries, files, stamp)
   local known, unknown = {}, {}
   for _, file in ipairs(files) do
@@ -62,8 +62,8 @@ end
 
 ---Only the fields the tree reads, so the file stays small and its contents stay
 ---legible.
----@param items table[] As `prtree.resolve` hands them over.
----@return prtree.CachedSymbol[]
+---@param items table[] As `changetree.resolve` hands them over.
+---@return changetree.CachedSymbol[]
 function M.project(items)
   return vim.tbl_map(function(item)
     return {
@@ -79,7 +79,7 @@ end
 
 ---Read the entries from `file`. Missing or corrupt file yields none.
 ---@param file string
----@return table<string, prtree.CacheEntry>
+---@return table<string, changetree.CacheEntry>
 function M.load(file)
   local fd = io.open(file, "r")
   if not fd then
@@ -97,7 +97,7 @@ end
 ---Overwrite `file` with `entries`. A cache that cannot be written is not worth
 ---interrupting anyone over.
 ---@param file string
----@param entries table<string, prtree.CacheEntry>
+---@param entries table<string, changetree.CacheEntry>
 function M.save(file, entries)
   vim.fn.mkdir(vim.fs.dirname(file), "p")
   local fd = io.open(file, "w")

@@ -6,13 +6,13 @@
 
 local Git = require("helpers.git")
 local Paths = require("helpers.paths")
-local cache = require("plugins.prtree.cache")
-local render = require("plugins.prtree.render")
-local resolve = require("plugins.prtree.resolve")
-local state = require("plugins.prtree.state")
-local tree = require("plugins.prtree.tree")
-local view = require("plugins.prtree.view")
-local window = require("plugins.prtree.window")
+local cache = require("plugins.changetree.cache")
+local render = require("plugins.changetree.render")
+local resolve = require("plugins.changetree.resolve")
+local state = require("plugins.changetree.state")
+local tree = require("plugins.changetree.tree")
+local view = require("plugins.changetree.view")
+local window = require("plugins.changetree.window")
 
 -- gitsigns republishes on every sign refresh, several times per write. One
 -- rebuild per burst is enough, and a rebuild mid-keypress is what the identity
@@ -27,42 +27,42 @@ local SAVE_DEBOUNCE_MS = 1000
 
 local M = {}
 
----@class prtree.Config
+---@class changetree.Config
 ---@field gitsigns_base boolean Point gitsigns' base at the fork point while the sidebar is open, so `<leader>gP`'s gutter marks the whole branch.
 
----@type prtree.Config
+---@type changetree.Config
 local config = { gitsigns_base = true }
 
-local ns = vim.api.nvim_create_namespace("prtree")
-local augroup = vim.api.nvim_create_augroup("prtree", { clear = true })
+local ns = vim.api.nvim_create_namespace("changetree")
+local augroup = vim.api.nvim_create_augroup("changetree", { clear = true })
 
----@class prtree.Session
+---@class changetree.Session
 ---@field root string
 ---@field base string
 ---@field ref string Ref the fork point was measured against, e.g. "origin/trunk".
 ---@field branch string
 ---@field default_branch string
----@field files prtree.File[]
+---@field files changetree.File[]
 ---@field symbols table<string, MiniPickers.Symbol[]> Absent key means "still resolving".
----@field rows prtree.Row[]
----@field visible prtree.Row[]
----@field st prtree.State
+---@field rows changetree.Row[]
+---@field visible changetree.Row[]
+---@field st changetree.State
 ---@field query string
 ---@field cancel fun()?
 ---@field timer uv.uv_timer_t?
 
----@type prtree.Session?
+---@type changetree.Session?
 local session
 
 ---Symbols read for the repo at `root`, carried between openings and to disk.
----@type { root: string, entries: table<string, prtree.CacheEntry> }?
+---@type { root: string, entries: table<string, changetree.CacheEntry> }?
 local memo
 
 ---@type uv.uv_timer_t?
 local save_timer
 
 ---Folds outlive a close, so reopening the sidebar looks like you left it.
----@type prtree.State
+---@type changetree.State
 local folds = state.new()
 
 local function save_soon()
@@ -76,7 +76,7 @@ local function save_soon()
   end, SAVE_DEBOUNCE_MS)
 end
 
----@param row prtree.Row
+---@param row changetree.Row
 ---@return string glyph, string hl
 local function icon_for(row)
   local category, name = "lsp", "Text"
@@ -92,7 +92,7 @@ local function icon_for(row)
   return " ", "Normal"
 end
 
----@return prtree.Row?
+---@return changetree.Row?
 local function row_at_cursor()
   if not session then
     return nil
@@ -216,7 +216,7 @@ local function rebuild()
   draw()
 end
 
----@param row prtree.Row
+---@param row changetree.Row
 ---@param open boolean
 local function set_open(row, open)
   -- A compressed chain hides intermediate rows; a folded row hides its children.
@@ -306,16 +306,16 @@ local function set_keymaps(buf)
     end
   end, "Yank path:line")
   map("?", function()
-    require("plugins.prtree.help").show(buf)
+    require("plugins.changetree.help").show(buf)
   end, "Show these keymaps")
   map("/", function()
     local previous = session.query
-    local group = vim.api.nvim_create_augroup("prtree.filter", { clear = true })
+    local group = vim.api.nvim_create_augroup("changetree.filter", { clear = true })
     -- input() edits on the command line, so every keystroke is a CmdlineChanged
     -- — which is what lets the tree narrow as it is typed rather than at <CR>.
     vim.api.nvim_create_autocmd("CmdlineChanged", {
       group = group,
-      desc = "prtree: filter the tree on each keystroke of the filter prompt",
+      desc = "changetree: filter the tree on each keystroke of the filter prompt",
       callback = function()
         session.query = vim.fn.getcmdline()
         draw()
@@ -345,13 +345,13 @@ function M.refresh()
     session.cancel = nil
   end
 
-  local diff = require("plugins.prtree.diff")
+  local diff = require("plugins.changetree.diff")
   diff.collect(session.base, session.root, function(files, err)
     if not session then
       return
     end
     if not files then
-      return vim.notify("PR Review Tree: " .. (err or "git failed"), vim.log.levels.ERROR)
+      return vim.notify("Change Tree: " .. (err or "git failed"), vim.log.levels.ERROR)
     end
     session.files = files
 
@@ -409,14 +409,14 @@ function M.open()
   end
   local base, _, ref = Git.merge_base()
   if not base then
-    return vim.notify("PR Review Tree: no merge base with the default branch", vim.log.levels.WARN)
+    return vim.notify("Change Tree: no merge base with the default branch", vim.log.levels.WARN)
   end
 
   local ok, gitsigns = pcall(require, "gitsigns")
   M._review_gutter(ok and gitsigns or nil, base, config.gitsigns_base)
 
   local buf = vim.api.nvim_create_buf(false, true)
-  vim.bo[buf].filetype = "prtree"
+  vim.bo[buf].filetype = "changetree"
   vim.bo[buf].buftype = "nofile"
   vim.bo[buf].modifiable = false
 
@@ -447,7 +447,7 @@ function M.open()
   vim.api.nvim_create_autocmd("CursorMoved", {
     group = augroup,
     buffer = buf,
-    desc = "prtree: preview the row under the cursor without leaving the sidebar",
+    desc = "changetree: preview the row under the cursor without leaving the sidebar",
     callback = preview_current,
   })
   -- Advance the selection from the file you are reading, so a whole branch can be
@@ -456,10 +456,10 @@ function M.open()
   -- user mapping on close. `h` is free across mini.bracketed's targets.
   vim.keymap.set("n", "]h", function()
     step(1)
-  end, { desc = "Next change (PR Review Tree)" })
+  end, { desc = "Next change (Change Tree)" })
   vim.keymap.set("n", "[h", function()
     step(-1)
-  end, { desc = "Previous change (PR Review Tree)" })
+  end, { desc = "Previous change (Change Tree)" })
 
   M.refresh()
 end
@@ -496,7 +496,7 @@ function M.restore()
   end
 end
 
----@param opts prtree.Config?
+---@param opts changetree.Config?
 function M.setup(opts)
   config = vim.tbl_extend("force", config, opts or {})
 end
@@ -527,8 +527,8 @@ end
 -- The meta highlight is mixed from Comment's foreground, which a new colorscheme
 -- replaces. Same idiom as lua/config/highlights.lua.
 vim.api.nvim_create_autocmd("ColorScheme", {
-  group = vim.api.nvim_create_augroup("prtree.highlights", { clear = true }),
-  desc = "prtree: rebuild the dim label colour against the new palette",
+  group = vim.api.nvim_create_augroup("changetree.highlights", { clear = true }),
+  desc = "changetree: rebuild the dim label colour against the new palette",
   callback = render.define_highlights,
 })
 
@@ -536,8 +536,8 @@ vim.api.nvim_create_autocmd("ColorScheme", {
 -- may have moved" hook — a commit, a write, or a checkout made outside Neovim.
 vim.api.nvim_create_autocmd("User", {
   pattern = "GitSignsUpdate",
-  group = vim.api.nvim_create_augroup("prtree.watch", { clear = true }),
-  desc = "prtree: rebuild the tree after the working tree or branch changes",
+  group = vim.api.nvim_create_augroup("changetree.watch", { clear = true }),
+  desc = "changetree: rebuild the tree after the working tree or branch changes",
   callback = function()
     if not session then
       return

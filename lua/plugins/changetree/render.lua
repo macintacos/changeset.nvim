@@ -1,34 +1,34 @@
----Turns the prtree row model into buffer lines and the extmarks that colour them.
+---Turns the changetree row model into buffer lines and the extmarks that colour them.
 ---
 ---Everything here is data in, data out: the caller supplies icons, collapse state
 ---and width, and applies the returned marks to a buffer itself.
 
 local symbols = require("plugins.mini-pickers.symbols")
 
----@class prtree.Mark
+---@class changetree.Mark
 ---@field col integer          0-based byte column the mark starts at.
 ---@field end_col? integer     0-based exclusive byte column; absent on virtual-text marks.
 ---@field hl? string           Group over `col`..`end_col`; absent on virtual-text marks, whose chunks carry their own.
 ---@field virt_text? table[]   `nvim_buf_set_extmark` virtual-text chunks.
 ---@field pos? "inline"|"right_align" Where the virtual text is drawn.
 
----@class prtree.Line
+---@class changetree.Line
 ---@field text string
----@field marks prtree.Mark[]
----@field row prtree.Row The row this line draws; a placeholder line carries the file it stands in for.
+---@field marks changetree.Mark[]
+---@field row changetree.Row The row this line draws; a placeholder line carries the file it stands in for.
 
----@class prtree.RenderOpts
----@field icon fun(row: prtree.Row): string, string Glyph and its highlight group; the caller wraps `MiniIcons.get`.
+---@class changetree.RenderOpts
+---@field icon fun(row: changetree.Row): string, string Glyph and its highlight group; the caller wraps `MiniIcons.get`.
 ---@field collapsed fun(id: string): boolean         Whether the row with this id hides its children.
 ---@field width integer                              Window width in cells; long names are trimmed so stats stay visible.
 
----@class prtree.Summary
+---@class changetree.Summary
 ---@field base_ref string  What the branch is compared against, e.g. "origin/trunk".
 ---@field files integer
 ---@field added integer
 ---@field removed integer
 
----@class prtree.Empty
+---@class changetree.Empty
 ---@field on_default_branch boolean
 ---@field branch string
 ---@field ref string      What the branch is compared against, e.g. "origin/trunk".
@@ -37,19 +37,19 @@ local M = {}
 
 ---Group for text that is not content: `Comment` with italics. Created by `define_highlights`.
 ---@type string
-M.META_HL = "PrtreeMeta"
+M.META_HL = "ChangeTreeMeta"
 
 ---Group for the band over a window the sidebar is previewing into. Created by `define_highlights`.
 ---@type string
-M.PREVIEW_HL = "PrtreePreview"
+M.PREVIEW_HL = "ChangeTreePreview"
 
 ---Group for the badge at the head of that band. Created by `define_highlights`.
 ---@type string
-M.PREVIEW_LABEL_HL = "PrtreePreviewLabel"
+M.PREVIEW_LABEL_HL = "ChangeTreePreviewLabel"
 
 ---Group for the affordance at the tail of that band. Created by `define_highlights`.
 ---@type string
-M.PREVIEW_HINT_HL = "PrtreePreviewHint"
+M.PREVIEW_HINT_HL = "ChangeTreePreviewHint"
 
 -- Stands in at the tail of the preview band when the row names no destination.
 local HINT = "<CR> to open"
@@ -76,10 +76,10 @@ local STATUS_MARKER = { deleted = " deleted", renamed = " renamed" }
 local META_KINDS = { orphans = true, orphan = true }
 
 ---Joins highlighted chunks into a line, recording each chunk's byte range as a mark.
----@param row prtree.Row The row the line draws.
+---@param row changetree.Row The row the line draws.
 ---@param chunks { [1]: string, [2]: string? }[] Text and, optionally, the group that colours it.
 ---@param stat? table[] Virtual-text chunks to right-align on the line.
----@return prtree.Line
+---@return changetree.Line
 local function compose(row, chunks, stat)
   local text, marks = "", {}
   for _, chunk in ipairs(chunks) do
@@ -96,7 +96,7 @@ local function compose(row, chunks, stat)
 end
 
 ---The `+N -N` virtual text for a row.
----@param row prtree.Row
+---@param row changetree.Row
 ---@return table[]? chunks `nil` when the row has no stat of its own.
 local function stat_chunks(row)
   if row.ancestor or (row.added == nil and row.removed == nil) then
@@ -134,9 +134,9 @@ local function clip_right(text, room)
   return vim.fn.strcharpart(text, 0, math.max(room - 1, 0)) .. "…"
 end
 
----@param file prtree.Row
----@param opts prtree.RenderOpts
----@return prtree.Line
+---@param file changetree.Row
+---@param opts changetree.RenderOpts
+---@return changetree.Line
 local function file_line(file, opts)
   local glyph, icon_hl = opts.icon(file)
   local marker = STATUS_MARKER[file.status]
@@ -158,10 +158,10 @@ local function file_line(file, opts)
   return compose(file, chunks, stat)
 end
 
----@param row prtree.Row
+---@param row changetree.Row
 ---@param guides string Tree connectors for the row, e.g. "│ └─".
----@param opts prtree.RenderOpts
----@return prtree.Line
+---@param opts changetree.RenderOpts
+---@return changetree.Line
 local function child_line(row, guides, opts)
   local glyph, icon_hl = opts.icon(row)
   local stat = stat_chunks(row)
@@ -179,16 +179,16 @@ local function child_line(row, guides, opts)
   }, stat)
 end
 
----@param file prtree.Row The file the placeholder waits under.
----@return prtree.Line
+---@param file changetree.Row The file the placeholder waits under.
+---@return changetree.Line
 local function placeholder_line(file)
   return compose(file, { { "  " }, { "└─", "Comment" }, { "⋯ reading symbols", M.META_HL } })
 end
 
----@param out prtree.Line[]
----@param row prtree.Row
+---@param out changetree.Line[]
+---@param row changetree.Row
 ---@param bars string Ancestor bars this level's connectors hang off.
----@param opts prtree.RenderOpts
+---@param opts changetree.RenderOpts
 local function append_children(out, row, bars, opts)
   for i, child in ipairs(row.children) do
     local is_last = i == #row.children
@@ -199,9 +199,9 @@ local function append_children(out, row, bars, opts)
   end
 end
 
----@param out prtree.Line[]
----@param file prtree.Row
----@param opts prtree.RenderOpts
+---@param out changetree.Line[]
+---@param file changetree.Row
+---@param opts changetree.RenderOpts
 local function append_file(out, file, opts)
   out[#out + 1] = file_line(file, opts)
   if opts.collapsed(file.id) then
@@ -218,9 +218,9 @@ local function append_file(out, file, opts)
 end
 
 ---Render file rows and everything visible under them, one buffer line per row.
----@param rows prtree.Row[] File rows, children nested.
----@param opts prtree.RenderOpts
----@return prtree.Line[]
+---@param rows changetree.Row[] File rows, children nested.
+---@param opts changetree.RenderOpts
+---@return changetree.Line[]
 function M.lines(rows, opts)
   local out = {}
   for _, file in ipairs(rows) do
@@ -230,7 +230,7 @@ function M.lines(rows, opts)
 end
 
 ---The winbar text: what the tree is compared against, then the file count and line totals.
----@param summary prtree.Summary
+---@param summary changetree.Summary
 ---@return string
 function M.winbar(summary)
   local base = escaped(summary.base_ref)
@@ -260,7 +260,7 @@ function M.preview_winbar(path, target)
 end
 
 ---The sentence shown in place of the tree when there is nothing to list.
----@param info prtree.Empty
+---@param info changetree.Empty
 ---@return string
 function M.empty_message(info)
   if info.on_default_branch then

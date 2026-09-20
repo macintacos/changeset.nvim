@@ -38,7 +38,7 @@ function M.show(buf)
   end
   vim.lsp.util.open_floating_preview(M._lines(vim.api.nvim_buf_get_keymap(buf, "n")), "", {
     border = "rounded",
-    title = " PR Review Tree ",
+    title = " Change Tree ",
   })
 end
 

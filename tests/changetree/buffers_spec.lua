@@ -1,6 +1,6 @@
-local buffers = require("plugins.prtree.buffers")
+local buffers = require("plugins.changetree.buffers")
 
-describe("prtree.buffers", function()
+describe("changetree.buffers", function()
   local tmp
 
   before_each(function()
@@ -34,13 +34,13 @@ describe("prtree.buffers", function()
       local buf
 
       vim.api.nvim_create_autocmd("User", {
-        pattern = "PrtreeBuffersSpec",
+        pattern = "ChangeTreeBuffersSpec",
         once = true,
         callback = function()
           buf = buffers.load(path)
         end,
       })
-      vim.api.nvim_exec_autocmds("User", { pattern = "PrtreeBuffersSpec" })
+      vim.api.nvim_exec_autocmds("User", { pattern = "ChangeTreeBuffersSpec" })
 
       assert.equal("lua", vim.bo[buf].filetype)
     end)

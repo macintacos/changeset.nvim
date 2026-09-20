@@ -1,6 +1,6 @@
-local state = require("plugins.prtree.state")
+local state = require("plugins.changetree.state")
 
-describe("prtree.state", function()
+describe("changetree.state", function()
   describe("folds", function()
     it("shows a row's children until something collapses it", function()
       local st = state.new()

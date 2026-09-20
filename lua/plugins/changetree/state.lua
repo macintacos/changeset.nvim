@@ -2,32 +2,32 @@
 ---are folded. Both are keyed by row identity rather than by line, because a
 ---refresh reorders lines whenever the file set changes.
 
----@class prtree.State
+---@class changetree.State
 ---@field collapsed table<string, true> Rows whose children are hidden.
 ---@field chains table<string, true> Compressed chains the user opened out.
 
 local M = {}
 
----@return prtree.State
+---@return changetree.State
 function M.new()
   return { collapsed = {}, chains = {} }
 end
 
----@param st prtree.State
+---@param st changetree.State
 ---@param id string
 ---@return boolean
 function M.is_collapsed(st, id)
   return st.collapsed[id] == true
 end
 
----@param st prtree.State
+---@param st changetree.State
 ---@param id string
 ---@param collapsed boolean
 function M.set_collapsed(st, id, collapsed)
   st.collapsed[id] = collapsed or nil
 end
 
----@param st prtree.State
+---@param st changetree.State
 ---@param ids string[]
 function M.collapse_all(st, ids)
   for _, id in ipairs(ids) do
@@ -35,7 +35,7 @@ function M.collapse_all(st, ids)
   end
 end
 
----@param st prtree.State
+---@param st changetree.State
 function M.expand_all(st)
   st.collapsed = {}
 end
@@ -45,14 +45,14 @@ end
 ---A separate axis from `collapsed`: compression hides a chain's *intermediate*
 ---rows, folding hides a row's children, and `l` on a compressed row means the
 ---first while `h` on a file means the second.
----@param st prtree.State
+---@param st changetree.State
 ---@param id string
 ---@return boolean
 function M.is_chain_open(st, id)
   return st.chains[id] == true
 end
 
----@param st prtree.State
+---@param st changetree.State
 ---@param id string
 ---@param open boolean
 function M.set_chain_open(st, id, open)

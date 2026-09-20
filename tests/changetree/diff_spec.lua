@@ -1,4 +1,4 @@
-local diff = require("plugins.prtree.diff")
+local diff = require("plugins.changetree.diff")
 
 -- Real `git diff --numstat -M <base>` output. Renames appear as `old => new`, or with the
 -- shared prefix/suffix folded into braces; binary files report `-` for both counts.
@@ -25,7 +25,7 @@ local NAME_STATUS = {
   "M\tsrc/session.lua",
 }
 
-describe("prtree.diff._parse_numstat", function()
+describe("changetree.diff._parse_numstat", function()
   local stats
 
   before_each(function()
@@ -60,7 +60,7 @@ describe("prtree.diff._parse_numstat", function()
   end)
 end)
 
-describe("prtree.diff._parse_name_status", function()
+describe("changetree.diff._parse_name_status", function()
   local statuses
 
   before_each(function()
@@ -169,7 +169,7 @@ local HUNKS_SPACED_PATH = {
   "+TWO",
 }
 
-describe("prtree.diff._parse_hunks", function()
+describe("changetree.diff._parse_hunks", function()
   local hunks
 
   before_each(function()
@@ -224,7 +224,7 @@ describe("prtree.diff._parse_hunks", function()
   end)
 end)
 
-describe("prtree.diff._assemble", function()
+describe("changetree.diff._assemble", function()
   local NO_PARTS = { numstat = {}, statuses = {}, hunks = {}, untracked = {} }
 
   ---@param overrides table

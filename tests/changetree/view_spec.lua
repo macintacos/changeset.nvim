@@ -1,15 +1,15 @@
-local view = require("plugins.prtree.view")
+local view = require("plugins.changetree.view")
 
 ---@param id string
 ---@param name string
----@param children prtree.Row[]?
----@return prtree.Row
+---@param children changetree.Row[]?
+---@return changetree.Row
 local function row(id, name, children)
   return { id = id, name = name, children = children or {} }
 end
 
 ---Names of a row tree, depth-first, parents before children.
----@param rows prtree.Row[]
+---@param rows changetree.Row[]
 ---@return string[]
 local function names(rows)
   local out = {}
@@ -23,7 +23,7 @@ local function names(rows)
   return out
 end
 
-describe("prtree.view", function()
+describe("changetree.view", function()
   describe("filter", function()
     it("returns the whole tree for an empty query", function()
       local rows = { row("f1", "session.ts", { row("s1", "refresh") }) }
