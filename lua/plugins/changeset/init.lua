@@ -110,14 +110,25 @@ local function row_at_cursor()
   return session.visible[vim.api.nvim_win_get_cursor(win)[1]]
 end
 
+---@param row changeset.Row
+---@return changeset.Band
+local function band_for(row)
+  local glyph, hl = icon("file", row.path)
+  return {
+    icon = glyph,
+    icon_hl = render.band_icon(hl),
+    -- Only a symbol row names its destination. An orphan hunk's own text is the
+    -- changed line, which is not a place and does not read as one.
+    destination = row.kind == "symbol" and row.name or nil,
+  }
+end
+
 local function preview_current()
   local row = row_at_cursor()
   if row and row.lnum and row.kind ~= "file" then
-    -- Only a symbol row names its destination. An orphan hunk's own text is the
-    -- changed line, which is not a place and does not read as one.
-    window.preview(session.root .. "/" .. row.path, row.lnum, row.kind == "symbol" and row.name or nil)
+    window.preview(session.root .. "/" .. row.path, row.lnum, band_for(row))
   elseif row and row.kind == "file" and row.status ~= "deleted" then
-    window.preview(session.root .. "/" .. row.path, 1)
+    window.preview(session.root .. "/" .. row.path, 1, band_for(row))
   end
 end
 

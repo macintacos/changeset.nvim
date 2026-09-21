@@ -436,17 +436,32 @@ describe("changeset.render", function()
   end)
 
   describe("preview_winbar", function()
+    ---@param destination string?
+    ---@return changeset.Band
+    local function band(destination)
+      return { icon = "󰢱", icon_hl = "MiniIconsAzure", destination = destination }
+    end
+
     it("names the file being previewed", function()
-      assert.is_true(render.preview_winbar("lua/init.lua"):find("lua/init.lua", 1, true) ~= nil)
+      assert.is_true(render.preview_winbar("lua/init.lua", band()):find("lua/init.lua", 1, true) ~= nil)
     end)
 
     it("escapes % in the path so the statusline does not read it as an item", function()
-      assert.is_true(render.preview_winbar("a/50%off.md"):find("50%%off", 1, true) ~= nil)
+      assert.is_true(render.preview_winbar("a/50%off.md", band()):find("50%%off", 1, true) ~= nil)
+    end)
+
+    it("carries the file's own icon in front of the path", function()
+      local shown = vim.api.nvim_eval_statusline(
+        render.preview_winbar("lua/init.lua", band()),
+        { use_winbar = true, maxwidth = 70 }
+      ).str
+
+      assert.is_true(shown:find("󰢱 lua/init.lua", 1, true) ~= nil)
     end)
 
     it("names what <CR> lands on at the right edge", function()
       local shown = vim.api.nvim_eval_statusline(
-        render.preview_winbar("lua/init.lua", "SessionStore › refresh"),
+        render.preview_winbar("lua/init.lua", band("SessionStore › refresh")),
         { use_winbar = true, maxwidth = 70 }
       ).str
 
@@ -454,15 +469,17 @@ describe("changeset.render", function()
     end)
 
     it("offers the way out instead when the row names nothing to land on", function()
-      local shown =
-        vim.api.nvim_eval_statusline(render.preview_winbar("lua/init.lua"), { use_winbar = true, maxwidth = 70 }).str
+      local shown = vim.api.nvim_eval_statusline(
+        render.preview_winbar("lua/init.lua", band()),
+        { use_winbar = true, maxwidth = 70 }
+      ).str
 
       assert.is_true(vim.endswith(shown, "<CR> to open "))
     end)
 
     it("gives up the path first when the window is too narrow for all three", function()
       local shown = vim.api.nvim_eval_statusline(
-        render.preview_winbar("a/very/long/path/that/will/never/fit.lua", "refresh"),
+        render.preview_winbar("a/very/long/path/that/will/never/fit.lua", band("refresh")),
         { use_winbar = true, maxwidth = 26 }
       ).str
 
@@ -470,18 +487,20 @@ describe("changeset.render", function()
       assert.is_true(vim.endswith(shown, "refresh "))
     end)
 
-    it("draws the badge, the path and the way out as separate runs", function()
+    it("draws the badge, the icon, the path and the way out as separate runs", function()
       local shown = vim.api.nvim_eval_statusline(
-        render.preview_winbar("lua/init.lua"),
+        render.preview_winbar("lua/init.lua", band()),
         { use_winbar = true, maxwidth = 60, highlights = true }
       )
 
-      assert.equal(3, #shown.highlights)
+      assert.equal(4, #shown.highlights)
     end)
 
     it("fills the width, so the band spans the window", function()
-      local shown =
-        vim.api.nvim_eval_statusline(render.preview_winbar("lua/init.lua"), { use_winbar = true, maxwidth = 60 })
+      local shown = vim.api.nvim_eval_statusline(
+        render.preview_winbar("lua/init.lua", band()),
+        { use_winbar = true, maxwidth = 60 }
+      )
 
       assert.equal(60, vim.fn.strdisplaywidth(shown.str))
     end)

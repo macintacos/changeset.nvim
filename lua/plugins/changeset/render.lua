@@ -30,6 +30,11 @@ local symbols = require("plugins.mini-pickers.symbols")
 ---@field added integer
 ---@field removed integer
 
+---@class changeset.Band The strip over a window the sidebar is previewing into.
+---@field icon string       Glyph for the previewed file's type.
+---@field icon_hl string    Group to draw it in, from `band_icon`.
+---@field destination string? What `<CR>` lands on; absent for a row that names nothing.
+
 ---@class changeset.Empty
 ---@field on_default_branch boolean
 ---@field branch string
@@ -60,6 +65,10 @@ M.MATCH_HL = "ChangesetMatch"
 ---Group for a symbol kind the tree is not showing. Created by `define_highlights`.
 ---@type string
 M.HIDDEN_HL = "ChangesetHidden"
+
+---Group for the filetype glyph on the preview band. Recoloured by `band_icon`.
+---@type string
+M.PREVIEW_ICON_HL = "ChangesetPreviewIcon"
 
 -- Above the marks a row already carries, so a match reads over a dimmed
 -- ancestor and a coloured symbol name alike.
@@ -377,22 +386,40 @@ end
 ---The winbar over a window the sidebar is borrowing: a band across the top
 ---saying the file under it is on loan, and which one it is.
 ---
----Reversed badge, then the path, then where `<CR>` would land — the three things
----a borrowed window has to answer, in the order they are asked.
+---Reversed badge, then the file's own icon and path, then where `<CR>` would
+---land — what a borrowed window has to answer, in the order it is asked.
 ---
 ---`%<` sits before the path because the path is the one part the sidebar is
 ---already showing: when the window is too narrow for all three, it is what a
 ---reader can most afford to lose.
 ---@param path string Display path of the previewed file.
----@param target string? What `<CR>` lands on; absent for a row that names nothing.
+---@param band changeset.Band
 ---@return string
-function M.preview_winbar(path, target)
+function M.preview_winbar(path, band)
   return table.concat({
     ("%%#%s# Preview "):format(M.PREVIEW_LABEL_HL),
-    ("%%#%s#  %%<%s"):format(M.PREVIEW_HL, escaped(path)),
+    -- The spaces belong to the icon's group rather than the band's, which keeps
+    -- the two one highlight run and the icon one cell off the badge either way.
+    ("%%#%s# %s "):format(band.icon_hl, band.icon),
+    ("%%#%s#%%<%s"):format(M.PREVIEW_HL, escaped(path)),
     "%=",
-    ("%%#%s#%s "):format(M.PREVIEW_HINT_HL, escaped(target or HINT)),
+    ("%%#%s#%s "):format(M.PREVIEW_HINT_HL, escaped(band.destination or HINT)),
   })
+end
+
+---Point `PREVIEW_ICON_HL` at `hl`'s colour over the band's background.
+---
+---A MiniIcons group carries a foreground only, so a glyph drawn straight in one
+---punches the window's own background through the band. One group recoloured per
+---preview rather than one per filetype: only ever one band is on screen.
+---@param hl string Group the glyph came with.
+---@return string group
+function M.band_icon(hl)
+  vim.api.nvim_set_hl(0, M.PREVIEW_ICON_HL, {
+    fg = vim.api.nvim_get_hl(0, { name = hl, link = false }).fg,
+    bg = vim.api.nvim_get_hl(0, { name = M.PREVIEW_HL, link = false }).bg,
+  })
+  return M.PREVIEW_ICON_HL
 end
 
 ---The sentence shown in place of the tree when there is nothing to list.
@@ -411,9 +438,12 @@ function M.define_highlights()
   local comment = vim.api.nvim_get_hl(0, { name = "Comment", link = false })
   vim.api.nvim_set_hl(0, M.META_HL, { fg = comment.fg, italic = true })
 
-  -- Visual's background is the one tint every colorscheme gives a window to say
-  -- "this is the thing you are on", so the band reads in any theme.
-  local band = vim.api.nvim_get_hl(0, { name = "Visual", link = false }).bg
+  -- CursorLine's background is the faintest tint every colorscheme gives a window
+  -- to say "this is the thing you are on", so the band reads in any theme without
+  -- competing with the file under it. Visual is the same idea two shades louder,
+  -- and stands in for a theme that leaves CursorLine to the number column.
+  local band = vim.api.nvim_get_hl(0, { name = "CursorLine", link = false }).bg
+    or vim.api.nvim_get_hl(0, { name = "Visual", link = false }).bg
   local warn = vim.api.nvim_get_hl(0, { name = "DiagnosticWarn", link = false })
   vim.api.nvim_set_hl(0, M.PREVIEW_HL, { bg = band })
   -- `reverse` rather than a background read off `Normal`: it pairs the accent

@@ -160,11 +160,12 @@ A preview swaps a real window's buffer out from under you, so that window wears 
 across its top for as long as the sidebar holds it:
 
 ```text
- Preview   session.ts                       SessionStore › refresh › deadline
+ Preview  󰛦 session.ts                     SessionStore › refresh › deadline
 ```
 
-Three runs answering the three questions a borrowed window raises, in the order they are
-asked: what is this, what am I looking at, where does `<CR>` put me. The right edge
+Four runs answering the three questions a borrowed window raises, in the order they are
+asked: what is this, what am I looking at, where does `<CR>` put me — the icon and the path
+answer the middle one together, under the same glyph the tree files it by. The right edge
 carries the destination rather than the file, because the file is on the left and the row
 under the cursor is not: a chain is shown the way the tree shows it, joined by ` › `. A
 row that names no destination — a file, an orphan hunk — reads `<CR> to open` instead.
@@ -172,10 +173,13 @@ row that names no destination — a file, an orphan hunk — reads `<CR> to open
 sidebar is already showing. The badge is `reverse`d
 rather than given a looked-up background, so it pairs the theme's warning colour with
 whatever the window is actually drawn on and survives a theme that leaves `Normal`
-transparent. The band behind it is `Visual`'s background — the one tint every colorscheme
-gives a window to say "this is the thing you are on" — and it runs the full width, which
-is why a band rather than a border: a split cannot have one, and the sidebar already
-speaks winbar.
+transparent. The band behind it is `CursorLine`'s background — the faintest tint every
+colorscheme gives a window to say "this is the thing you are on", quiet enough to sit over
+a file rather than in front of it — and it runs the full width, which is why a band rather
+than a border: a split cannot have one, and the sidebar already speaks winbar. The icon
+gets a group of its own recoloured onto that background, because a `MiniIcons` group
+carries a foreground only and the glyph would otherwise punch the window's own background
+through the band.
 
 The band goes the moment the window stops previewing — `q` puts it back with the buffer,
 and `<CR>` clears it, because a file you chose is not on loan.

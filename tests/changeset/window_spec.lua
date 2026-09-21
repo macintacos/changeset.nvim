@@ -1,5 +1,9 @@
 local window = require("plugins.changeset.window")
 
+---What the band says is the sidebar's business; these tests only need one to pass on.
+---@type changeset.Band
+local BAND = { icon = "󰢱", icon_hl = "MiniIconsAzure" }
+
 ---A `usable` predicate that accepts only the listed windows.
 ---@param ok integer[]
 ---@return fun(win: integer): boolean
@@ -159,11 +163,11 @@ describe("changeset.window", function()
 
     it("follows the window the user moved to", function()
       local left, right, one, two = staged()
-      window.preview(one, 2)
+      window.preview(one, 2, BAND)
 
       vim.api.nvim_set_current_win(left)
       window.focus()
-      window.preview(two, 3)
+      window.preview(two, 3, BAND)
 
       assert.equal(vim.fn.resolve(two), showing(left))
       assert.equal(vim.fn.resolve(one), showing(right))
@@ -172,7 +176,7 @@ describe("changeset.window", function()
     it("marks the window a preview lands in", function()
       local _, right, one = staged()
 
-      window.preview(one, 2)
+      window.preview(one, 2, BAND)
 
       assert.is_true(vim.wo[right].winbar:find(vim.fn.fnamemodify(one, ":."), 1, true) ~= nil)
     end)
@@ -184,7 +188,7 @@ describe("changeset.window", function()
       local _, right, _, two = staged()
       vim.wo[right].winbar = "mine"
 
-      window.preview(two, 2)
+      window.preview(two, 2, BAND)
       window.close()
 
       assert.equal("mine", vim.wo[right].winbar)
@@ -195,7 +199,7 @@ describe("changeset.window", function()
       local displaced = vim.api.nvim_win_get_buf(right)
       vim.wo[right].winbar = "mine"
 
-      window.preview(one, 2)
+      window.preview(one, 2, BAND)
       vim.api.nvim_buf_delete(displaced, { force = true })
       window.close()
 
@@ -204,7 +208,7 @@ describe("changeset.window", function()
 
     it("takes the mark off the window a commit claims", function()
       local _, right, one = staged()
-      window.preview(one, 2)
+      window.preview(one, 2, BAND)
       window.focus()
 
       window.commit(one, 2, "reuse")
@@ -214,10 +218,10 @@ describe("changeset.window", function()
 
     it("puts back every window it previewed into", function()
       local left, right, one, two = staged()
-      window.preview(one, 2)
+      window.preview(one, 2, BAND)
       vim.api.nvim_set_current_win(left)
       window.focus()
-      window.preview(two, 3)
+      window.preview(two, 3, BAND)
 
       window.close()
 
