@@ -143,15 +143,20 @@ another branch can hide things this one never had.
 Right-aligned virtual text, `+N` in `GitSignsAdd`, `-N` in `GitSignsDelete`. Numbers, not
 a bar — a bar would be decoration competing with the rail, and the rail already won.
 
-### Winbar
+### Header
 
 ```text
  vs origin/trunk                         7 files  +142 -38
 ```
 
 Sentence case, no separators-as-ornament, no all-caps label. It states the comparison
-because "changed relative to what" is the one question the rows themselves cannot answer.
-The totals hang off the right edge, in the column the per-row stats already occupy, so
+because "changed relative to what" is the one question the rows themselves cannot answer,
+and wears it as a reversed badge — the shape the strip over a borrowed window uses, since
+both answer what a window is holding before anything in it does. The badge takes
+`Directory`'s colour rather than that strip's warning yellow, which is spoken for by "on
+loan", and the strip behind it is `TabLine`'s background: what a colorscheme paints its own
+chrome with, and not the shade the sidebar draws its cursor line in — a header the colour
+of a row is a row. The totals hang off the right edge, in the column the per-row stats already occupy, so
 the branch's numbers and each file's numbers read down one edge instead of two.
 
 ### A borrowed window says so

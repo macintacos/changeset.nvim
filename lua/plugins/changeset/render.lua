@@ -66,6 +66,14 @@ M.MATCH_HL = "ChangesetMatch"
 ---@type string
 M.HIDDEN_HL = "ChangesetHidden"
 
+---Group for the sidebar's own header strip. Created by `define_highlights`.
+---@type string
+M.HEADER_HL = "ChangesetHeader"
+
+---Group for the badge at the head of that strip. Created by `define_highlights`.
+---@type string
+M.HEADER_LABEL_HL = "ChangesetHeaderLabel"
+
 ---Group for the filetype glyph on the preview band. Recoloured by `band_icon`.
 ---@type string
 M.PREVIEW_ICON_HL = "ChangesetPreviewIcon"
@@ -374,13 +382,19 @@ function M.hidden_note(kinds, width)
   return ("Hiding %d kinds of symbol. F to change."):format(#kinds)
 end
 
----The winbar text: what the tree is compared against, then the file count and line totals.
+---The sidebar's header: what the tree is compared against worn as a badge, then
+---the file count and line totals at the right edge.
+---
+---Badge over a band, the shape the strip over a borrowed window uses, because
+---both answer "what is this window holding" before anything in it.
 ---@param summary changeset.Summary
 ---@return string
 function M.winbar(summary)
-  local base = escaped(summary.base_ref)
   local noun = summary.files == 1 and "file" or "files"
-  return (" vs %s%%=%d %s  +%d -%d "):format(base, summary.files, noun, summary.added, summary.removed)
+  return table.concat({
+    ("%%#%s# vs %s "):format(M.HEADER_LABEL_HL, escaped(summary.base_ref)),
+    ("%%#%s#%%=%d %s  +%d -%d "):format(M.HEADER_HL, summary.files, noun, summary.added, summary.removed),
+  })
 end
 
 ---The winbar over a window the sidebar is borrowing: a band across the top
@@ -451,6 +465,15 @@ function M.define_highlights()
   -- theme that leaves `Normal` transparent.
   vim.api.nvim_set_hl(0, M.PREVIEW_LABEL_HL, { fg = warn.fg or comment.fg, reverse = true, bold = true })
   vim.api.nvim_set_hl(0, M.PREVIEW_HINT_HL, { fg = comment.fg, bg = band, italic = true })
+  -- TabLine's background is what a colorscheme paints its own chrome with, so the
+  -- header reads as the panel's frame. Not the band's shade: the sidebar draws its
+  -- cursor line in exactly that, and a header the colour of a row is a row.
+  local chrome = vim.api.nvim_get_hl(0, { name = "TabLine", link = false }).bg or band
+  vim.api.nvim_set_hl(0, M.HEADER_HL, { bg = chrome })
+  -- Directory's colour rather than the badge's warning yellow: this badge says
+  -- what the panel is, and yellow is already spoken for by "on loan".
+  local directory = vim.api.nvim_get_hl(0, { name = "Directory", link = false })
+  vim.api.nvim_set_hl(0, M.HEADER_LABEL_HL, { fg = directory.fg or comment.fg, reverse = true, bold = true })
   -- What the editor already paints over the text you searched for.
   vim.api.nvim_set_hl(0, M.MATCH_HL, { link = "Search" })
   -- Struck through as well as dimmed: dim on its own is what ancestor rows mean,

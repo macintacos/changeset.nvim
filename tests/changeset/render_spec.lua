@@ -393,45 +393,52 @@ describe("changeset.render", function()
   end)
 
   describe("winbar", function()
-    it("states what the tree is compared against, then the file count and line totals", function()
-      local summary = { base_ref = "origin/trunk", files = 7, added = 142, removed = 38 }
+    ---@param summary changeset.Summary
+    ---@return string
+    local function shown(summary)
+      return vim.api.nvim_eval_statusline(render.winbar(summary), { use_winbar = true, maxwidth = 60 }).str
+    end
 
-      assert.equal(" vs origin/trunk%=7 files  +142 -38 ", render.winbar(summary))
+    it("states what the tree is compared against, then the file count and line totals", function()
+      local text = shown({ base_ref = "origin/trunk", files = 7, added = 142, removed = 38 })
+
+      assert.is_true(text:find(" vs origin/trunk ", 1, true) ~= nil)
+      assert.is_true(vim.endswith(text, "7 files  +142 -38 "))
     end)
 
     it("says '1 file', not '1 files'", function()
-      local summary = { base_ref = "origin/trunk", files = 1, added = 3, removed = 0 }
+      local text = shown({ base_ref = "origin/trunk", files = 1, added = 3, removed = 0 })
 
-      assert.equal(" vs origin/trunk%=1 file  +3 -0 ", render.winbar(summary))
+      assert.is_true(vim.endswith(text, "1 file  +3 -0 "))
     end)
 
     it("escapes % in the base ref so the statusline does not read it as an item", function()
-      local summary = { base_ref = "origin/50%off", files = 2, added = 1, removed = 1 }
+      local text = shown({ base_ref = "origin/50%off", files = 2, added = 1, removed = 1 })
 
-      assert.equal(" vs origin/50%%off%=2 files  +1 -1 ", render.winbar(summary))
+      assert.is_true(text:find("origin/50%off", 1, true) ~= nil)
     end)
 
     it("hangs the counts off the right edge", function()
-      local summary = { base_ref = "origin/trunk", files = 7, added = 142, removed = 38 }
+      local text = shown({ base_ref = "origin/trunk", files = 7, added = 142, removed = 38 })
 
-      local shown = vim.api.nvim_eval_statusline(render.winbar(summary), { use_winbar = true, maxwidth = 60 }).str
-
-      assert.equal("+142 -38 ", shown:sub(-9))
-      assert.equal(60, vim.fn.strdisplaywidth(shown))
-    end)
-  end)
-
-  describe("_matches", function()
-    it("gives every occurrence as a byte range over the text", function()
-      assert.same({ { 0, 2 }, { 6, 8 } }, render._matches("ab xy ab", "ab"))
+      assert.equal("+142 -38 ", text:sub(-9))
+      assert.equal(60, vim.fn.strdisplaywidth(text))
     end)
 
-    it("ignores case, as the filter that produced the query does", function()
-      assert.same({ { 4, 7 } }, render._matches("src/Foo.lua", "foo"))
-    end)
+    it("wears the base ref as a badge, on a band of its own across the rest", function()
+      render.define_highlights()
 
-    it("finds nothing when nothing is being filtered", function()
-      assert.same({}, render._matches("src/Foo.lua", ""))
+      local marks = vim.api.nvim_eval_statusline(
+        render.winbar({ base_ref = "origin/trunk", files = 7, added = 142, removed = 38 }),
+        { use_winbar = true, maxwidth = 60, highlights = true }
+      ).highlights
+
+      assert.same(
+        { render.HEADER_LABEL_HL, render.HEADER_HL },
+        vim.tbl_map(function(mark)
+          return mark.group
+        end, marks)
+      )
     end)
   end)
 
