@@ -1,6 +1,6 @@
-local menu = require("plugins.changetree.menu")
+local menu = require("plugins.changeset.menu")
 
-describe("changetree.menu", function()
+describe("changeset.menu", function()
   describe("_rows", function()
     it("offers no choice for a tree with no symbols in it", function()
       assert.same({}, menu._rows({}, {}))

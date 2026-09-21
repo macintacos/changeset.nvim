@@ -6,14 +6,14 @@
 
 local Git = require("helpers.git")
 local Paths = require("helpers.paths")
-local cache = require("plugins.changetree.cache")
-local prefs = require("plugins.changetree.prefs")
-local render = require("plugins.changetree.render")
-local resolve = require("plugins.changetree.resolve")
-local state = require("plugins.changetree.state")
-local tree = require("plugins.changetree.tree")
-local view = require("plugins.changetree.view")
-local window = require("plugins.changetree.window")
+local cache = require("plugins.changeset.cache")
+local prefs = require("plugins.changeset.prefs")
+local render = require("plugins.changeset.render")
+local resolve = require("plugins.changeset.resolve")
+local state = require("plugins.changeset.state")
+local tree = require("plugins.changeset.tree")
+local view = require("plugins.changeset.view")
+local window = require("plugins.changeset.window")
 
 -- gitsigns republishes on every sign refresh, several times per write. One
 -- rebuild per burst is enough, and a rebuild mid-keypress is what the identity
@@ -28,43 +28,43 @@ local SAVE_DEBOUNCE_MS = 1000
 
 local M = {}
 
----@class changetree.Config
+---@class changeset.Config
 ---@field gitsigns_base boolean Point gitsigns' base at the fork point while the sidebar is open, so `<leader>gP`'s gutter marks the whole branch.
 
----@type changetree.Config
+---@type changeset.Config
 local config = { gitsigns_base = true }
 
-local ns = vim.api.nvim_create_namespace("changetree")
-local augroup = vim.api.nvim_create_augroup("changetree", { clear = true })
+local ns = vim.api.nvim_create_namespace("changeset")
+local augroup = vim.api.nvim_create_augroup("changeset", { clear = true })
 
----@class changetree.Session
+---@class changeset.Session
 ---@field root string
 ---@field base string
 ---@field ref string Ref the fork point was measured against, e.g. "origin/trunk".
 ---@field branch string
 ---@field default_branch string
----@field files changetree.File[]
+---@field files changeset.File[]
 ---@field symbols table<string, MiniPickers.Symbol[]> Absent key means "still resolving".
----@field rows changetree.Row[]
----@field visible changetree.Row[]
----@field st changetree.State
+---@field rows changeset.Row[]
+---@field visible changeset.Row[]
+---@field st changeset.State
 ---@field query string
 ---@field hidden table<string, true> Symbol kinds the tree is not showing.
 ---@field cancel fun()?
 ---@field timer uv.uv_timer_t?
 
----@type changetree.Session?
+---@type changeset.Session?
 local session
 
 ---Symbols read for the repo at `root`, carried between openings and to disk.
----@type { root: string, entries: table<string, changetree.CacheEntry> }?
+---@type { root: string, entries: table<string, changeset.CacheEntry> }?
 local memo
 
 ---@type uv.uv_timer_t?
 local save_timer
 
 ---Folds outlive a close, so reopening the sidebar looks like you left it.
----@type changetree.State
+---@type changeset.State
 local folds = state.new()
 
 local function save_soon()
@@ -89,7 +89,7 @@ local function icon(category, name)
   return " ", "Normal"
 end
 
----@param row changetree.Row
+---@param row changeset.Row
 ---@return string glyph, string hl
 local function icon_for(row)
   if row.kind == "file" then
@@ -98,7 +98,7 @@ local function icon_for(row)
   return icon("lsp", row.kind == "symbol" and row.symbol_kind or "Text")
 end
 
----@return changetree.Row?
+---@return changeset.Row?
 local function row_at_cursor()
   if not session then
     return nil
@@ -233,7 +233,7 @@ local function rebuild()
   draw()
 end
 
----@param row changetree.Row
+---@param row changeset.Row
 ---@param open boolean
 local function set_open(row, open)
   -- A compressed chain hides intermediate rows; a folded row hides its children.
@@ -276,7 +276,7 @@ end
 ---Whether children are showing is read off the next line rather than the fold
 ---state, because a compressed chain shows them while it is itself still shut — so
 ---`h` closes one in the same two steps `l` opened it in.
----@param rows changetree.Row[] The visible rows, in display order.
+---@param rows changeset.Row[] The visible rows, in display order.
 ---@param lnum integer
 ---@return "collapse"|"parent"|nil action nil on a shut row with no parent above it.
 ---@return integer? lnum Line of the parent, when the action is "parent".
@@ -355,10 +355,10 @@ local function set_keymaps(buf)
     end
   end, "Yank path:line")
   map("?", function()
-    require("plugins.changetree.help").show(buf, own)
+    require("plugins.changeset.help").show(buf, own)
   end, "Show these keymaps")
   map("f", function()
-    require("plugins.changetree.menu").open({
+    require("plugins.changeset.menu").open({
       root = session.root,
       branch = session.branch,
       counts = view.kind_counts(session.rows),
@@ -375,12 +375,12 @@ local function set_keymaps(buf)
   end, "Filter by symbol kind")
   map("/", function()
     local previous = session.query
-    local group = vim.api.nvim_create_augroup("changetree.filter", { clear = true })
+    local group = vim.api.nvim_create_augroup("changeset.filter", { clear = true })
     -- input() edits on the command line, so every keystroke is a CmdlineChanged
     -- — which is what lets the tree narrow as it is typed rather than at <CR>.
     vim.api.nvim_create_autocmd("CmdlineChanged", {
       group = group,
-      desc = "changetree: filter the tree on each keystroke of the filter prompt",
+      desc = "changeset: filter the tree on each keystroke of the filter prompt",
       callback = function()
         session.query = vim.fn.getcmdline()
         draw()
@@ -410,13 +410,13 @@ function M.refresh()
     session.cancel = nil
   end
 
-  local diff = require("plugins.changetree.diff")
+  local diff = require("plugins.changeset.diff")
   diff.collect(session.base, session.root, function(files, err)
     if not session then
       return
     end
     if not files then
-      return vim.notify("Change Tree: " .. (err or "git failed"), vim.log.levels.ERROR)
+      return vim.notify("Changeset: " .. (err or "git failed"), vim.log.levels.ERROR)
     end
     session.files = files
 
@@ -474,14 +474,14 @@ function M.open()
   end
   local base, _, ref = Git.merge_base()
   if not base then
-    return vim.notify("Change Tree: no merge base with the default branch", vim.log.levels.WARN)
+    return vim.notify("Changeset: no merge base with the default branch", vim.log.levels.WARN)
   end
 
   local ok, gitsigns = pcall(require, "gitsigns")
   M._review_gutter(ok and gitsigns or nil, base, config.gitsigns_base)
 
   local buf = vim.api.nvim_create_buf(false, true)
-  vim.bo[buf].filetype = "changetree"
+  vim.bo[buf].filetype = "changeset"
   vim.bo[buf].buftype = "nofile"
   vim.bo[buf].modifiable = false
 
@@ -514,7 +514,7 @@ function M.open()
   vim.api.nvim_create_autocmd("CursorMoved", {
     group = augroup,
     buffer = buf,
-    desc = "changetree: preview the row under the cursor without leaving the sidebar",
+    desc = "changeset: preview the row under the cursor without leaving the sidebar",
     callback = preview_current,
   })
   -- Advance the selection from the file you are reading, so a whole branch can be
@@ -523,10 +523,10 @@ function M.open()
   -- user mapping on close. `h` is free across mini.bracketed's targets.
   vim.keymap.set("n", "]h", function()
     step(1)
-  end, { desc = "Next change (Change Tree)" })
+  end, { desc = "Next change (Changeset)" })
   vim.keymap.set("n", "[h", function()
     step(-1)
-  end, { desc = "Previous change (Change Tree)" })
+  end, { desc = "Previous change (Changeset)" })
 
   M.refresh()
 end
@@ -541,7 +541,7 @@ function M.close()
     end
   end
   session = nil
-  require("plugins.changetree.menu").close()
+  require("plugins.changeset.menu").close()
   pcall(vim.keymap.del, "n", "]h")
   pcall(vim.keymap.del, "n", "[h")
   vim.api.nvim_clear_autocmds({ group = augroup })
@@ -564,7 +564,7 @@ function M.restore()
   end
 end
 
----@param opts changetree.Config?
+---@param opts changeset.Config?
 function M.setup(opts)
   config = vim.tbl_extend("force", config, opts or {})
 end
@@ -595,8 +595,8 @@ end
 -- The meta highlight is mixed from Comment's foreground, which a new colorscheme
 -- replaces. Same idiom as lua/config/highlights.lua.
 vim.api.nvim_create_autocmd("ColorScheme", {
-  group = vim.api.nvim_create_augroup("changetree.highlights", { clear = true }),
-  desc = "changetree: rebuild the dim label colour against the new palette",
+  group = vim.api.nvim_create_augroup("changeset.highlights", { clear = true }),
+  desc = "changeset: rebuild the dim label colour against the new palette",
   callback = render.define_highlights,
 })
 
@@ -604,8 +604,8 @@ vim.api.nvim_create_autocmd("ColorScheme", {
 -- may have moved" hook — a commit, a write, or a checkout made outside Neovim.
 vim.api.nvim_create_autocmd("User", {
   pattern = "GitSignsUpdate",
-  group = vim.api.nvim_create_augroup("changetree.watch", { clear = true }),
-  desc = "changetree: rebuild the tree after the working tree or branch changes",
+  group = vim.api.nvim_create_augroup("changeset.watch", { clear = true }),
+  desc = "changeset: rebuild the tree after the working tree or branch changes",
   callback = function()
     if not session then
       return

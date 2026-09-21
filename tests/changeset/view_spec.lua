@@ -1,15 +1,15 @@
-local view = require("plugins.changetree.view")
+local view = require("plugins.changeset.view")
 
 ---@param id string
 ---@param name string
----@param children changetree.Row[]?
----@return changetree.Row
+---@param children changeset.Row[]?
+---@return changeset.Row
 local function row(id, name, children)
   return { id = id, name = name, children = children or {} }
 end
 
 ---Names of a row tree, depth-first, parents before children.
----@param rows changetree.Row[]
+---@param rows changeset.Row[]
 ---@return string[]
 local function names(rows)
   local out = {}
@@ -26,13 +26,13 @@ end
 ---@param id string
 ---@param name string
 ---@param kind string LSP kind name.
----@param children changetree.Row[]?
----@return changetree.Row
+---@param children changeset.Row[]?
+---@return changeset.Row
 local function sym(id, name, kind, children)
   return { id = id, kind = "symbol", name = name, symbol_kind = kind, children = children or {} }
 end
 
-describe("changetree.view", function()
+describe("changeset.view", function()
   describe("filter", function()
     it("returns the whole tree for an empty query", function()
       local rows = { row("f1", "session.ts", { row("s1", "refresh") }) }

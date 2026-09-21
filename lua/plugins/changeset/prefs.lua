@@ -7,21 +7,21 @@
 
 local M = {}
 
----@class changetree.RepoPrefs
+---@class changeset.RepoPrefs
 ---@field kinds string[]? Set for the whole repository.
 ---@field branches table<string, string[]>? Set per branch.
 
----@class changetree.Prefs
+---@class changeset.Prefs
 ---@field global string[]?
----@field repos table<string, changetree.RepoPrefs>?
+---@field repos table<string, changeset.RepoPrefs>?
 
----@alias changetree.Scope "global"|"repo"|"branch"
+---@alias changeset.Scope "global"|"repo"|"branch"
 
 ---Where the record lives. Under `state` rather than `cache`, unlike the symbol
 ---cache: nothing here can be derived again, so losing the file loses a choice.
 ---@return string
 function M.path()
-  return vim.fs.joinpath(vim.fn.stdpath("state"), "changetree", "filters.json")
+  return vim.fs.joinpath(vim.fn.stdpath("state"), "changeset", "filters.json")
 end
 
 ---@param list string[]?
@@ -46,7 +46,7 @@ local function as_list(set)
 end
 
 ---Drop the empty tables a clearing leaves behind, so the file stays legible.
----@param data changetree.Prefs
+---@param data changeset.Prefs
 ---@param root string
 local function prune(data, root)
   local repo = data.repos[root]
@@ -62,11 +62,11 @@ local function prune(data, root)
 end
 
 ---The kinds hidden for this branch of this repo, and the scope that decided it.
----@param data changetree.Prefs
+---@param data changeset.Prefs
 ---@param root string Absolute repo root.
 ---@param branch string
 ---@return table<string, true> hidden
----@return changetree.Scope? scope nil when no scope has a record.
+---@return changeset.Scope? scope nil when no scope has a record.
 function M.resolve(data, root, branch)
   local repo = (data.repos or {})[root] or {}
   for _, candidate in ipairs({
@@ -88,12 +88,12 @@ end
 ---record would change nothing here, and the word would be a lie. Only the
 ---records shadowing *this* repo and branch go; another repository's deliberate
 ---choice is none of this save's business.
----@param data changetree.Prefs Left unmodified.
----@param scope changetree.Scope
+---@param data changeset.Prefs Left unmodified.
+---@param scope changeset.Scope
 ---@param root string
 ---@param branch string
 ---@param hidden table<string, true>
----@return changetree.Prefs
+---@return changeset.Prefs
 function M.apply(data, scope, root, branch, hidden)
   local out = vim.deepcopy(data)
   out.repos = out.repos or {}
@@ -121,7 +121,7 @@ end
 
 ---Read the record from `file`. Missing or corrupt file means nothing is hidden.
 ---@param file string
----@return changetree.Prefs
+---@return changeset.Prefs
 function M.load(file)
   local fd = io.open(file, "r")
   if not fd then
@@ -138,7 +138,7 @@ end
 
 ---Overwrite `file` with `data`.
 ---@param file string
----@param data changetree.Prefs
+---@param data changeset.Prefs
 ---@return boolean written A choice that did not reach the disk is worth reporting.
 function M.save(file, data)
   vim.fn.mkdir(vim.fs.dirname(file), "p")

@@ -1,6 +1,6 @@
-local help = require("plugins.changetree.help")
+local help = require("plugins.changeset.help")
 
-describe("changetree.help", function()
+describe("changeset.help", function()
   describe("_own", function()
     it("drops mappings another plugin put on the sidebar's buffer", function()
       local keymaps = {

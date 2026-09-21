@@ -1,10 +1,10 @@
 ---Asking language servers for the symbols of files the branch touched.
 ---
 ---This is the I/O shell: it loads buffers, waits for clients, and hands the
----flattened trees back. Everything it learns goes to `changetree.tree`, which does
+---flattened trees back. Everything it learns goes to `changeset.tree`, which does
 ---the thinking without touching the editor.
 
-local buffers = require("plugins.changetree.buffers")
+local buffers = require("plugins.changeset.buffers")
 local kinds = require("plugins.mini-pickers.kinds")
 local symbols = require("plugins.mini-pickers.symbols")
 
@@ -20,7 +20,7 @@ local ATTACH_TIMEOUT_MS = 2000
 local M = {}
 
 ---Paths worth asking a server about, in display order.
----@param files changetree.File[]
+---@param files changeset.File[]
 ---@return string[]
 function M._resolvable(files)
   local out = {}
@@ -41,7 +41,7 @@ local function await_client(bufnr, on_client)
   end
 
   local done = false
-  local group = vim.api.nvim_create_augroup("ChangeTreeAttach" .. bufnr, { clear = true })
+  local group = vim.api.nvim_create_augroup("ChangesetAttach" .. bufnr, { clear = true })
   local function finish(ok)
     if done then
       return
@@ -54,7 +54,7 @@ local function await_client(bufnr, on_client)
   vim.api.nvim_create_autocmd("LspAttach", {
     group = group,
     buffer = bufnr,
-    desc = "changetree: a server reached a changed file, so its symbols can be requested",
+    desc = "changeset: a server reached a changed file, so its symbols can be requested",
     callback = function()
       vim.schedule(function()
         finish(#vim.lsp.get_clients({ bufnr = bufnr, method = method }) > 0)
@@ -110,7 +110,7 @@ end
 
 ---Resolve every changed file's symbols, reporting each as it lands.
 ---@param root string
----@param files changetree.File[]
+---@param files changeset.File[]
 ---@param on_file fun(path: string, items: MiniPickers.Symbol[]?)
 ---@return fun() cancel
 function M.start(root, files, on_file)

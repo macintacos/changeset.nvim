@@ -1,8 +1,8 @@
-local cache = require("plugins.changetree.cache")
+local cache = require("plugins.changeset.cache")
 
 ---@param path string
 ---@param added integer?
----@return changetree.File
+---@return changeset.File
 local function file(path, added)
   return { path = path, status = "modified", added = added or 1, removed = 0, hunks = {} }
 end
@@ -16,7 +16,7 @@ local function stamps(map)
   end
 end
 
-describe("changetree.cache", function()
+describe("changeset.cache", function()
   describe("fresh", function()
     it("keeps the symbols of a file that has not changed since they were read", function()
       local entries = { ["api.ts"] = { stamp = "120:9", symbols = { { name = "send" } } } }

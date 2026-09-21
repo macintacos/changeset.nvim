@@ -5,13 +5,13 @@
 ---gets made. Toggling is immediate; the three save keys only decide where it is
 ---remembered, and closing without one puts back the set that is on disk.
 
-local help = require("plugins.changetree.help")
-local prefs = require("plugins.changetree.prefs")
-local render = require("plugins.changetree.render")
+local help = require("plugins.changeset.help")
+local prefs = require("plugins.changeset.prefs")
+local render = require("plugins.changeset.render")
 
 local M = {}
 
-local ns = vim.api.nvim_create_namespace("changetree.menu")
+local ns = vim.api.nvim_create_namespace("changeset.menu")
 
 local MIN_WIDTH = 28
 local MAX_HEIGHT = 14
@@ -23,7 +23,7 @@ local FOOTER = {
   branch = "set for this branch",
 }
 
----@class changetree.MenuOpts
+---@class changeset.MenuOpts
 ---@field root string       Repo root a repo-scoped save is filed under.
 ---@field branch string
 ---@field counts table<string, integer> Symbol rows per kind across the whole tree.
@@ -32,17 +32,17 @@ local FOOTER = {
 ---@field sidebar integer   Window the menu docks against.
 ---@field on_change fun(hidden: table<string, true>) Redraw the tree with this set.
 
----@class changetree.MenuState
+---@class changeset.MenuState
 ---@field buf integer
 ---@field win integer
 ---@field width integer
----@field rows changetree.KindRow[]
+---@field rows changeset.KindRow[]
 ---@field hidden table<string, true> The working set, as `x` leaves it.
 ---@field saved table<string, true>  The set on disk, which `q` goes back to.
----@field scope changetree.Scope?
----@field opts changetree.MenuOpts
+---@field scope changeset.Scope?
+---@field opts changeset.MenuOpts
 
----@type changetree.MenuState?
+---@type changeset.MenuState?
 local menu
 
 ---One row per kind the branch touched, noisiest first.
@@ -52,7 +52,7 @@ local menu
 ---name so the list does not shuffle between openings.
 ---@param counts table<string, integer> From `view.kind_counts`.
 ---@param hidden table<string, true>
----@return changetree.KindRow[]
+---@return changeset.KindRow[]
 function M._rows(counts, hidden)
   local rows = {}
   for kind, count in pairs(counts) do
@@ -84,7 +84,7 @@ end
 ---that drift away and a footer naming a scope would read as though it were safe.
 ---@param hidden table<string, true> Working set.
 ---@param saved table<string, true>  Set on disk.
----@param scope changetree.Scope?    Where `saved` came from.
+---@param scope changeset.Scope?    Where `saved` came from.
 ---@return string
 function M._footer(hidden, saved, scope)
   if not vim.deep_equal(hidden, saved) then
@@ -96,7 +96,7 @@ function M._footer(hidden, saved, scope)
   return (" %s "):format(FOOTER[scope])
 end
 
----@param scope changetree.Scope
+---@param scope changeset.Scope
 ---@param root string
 ---@param branch string
 ---@return string
@@ -110,7 +110,7 @@ local function where(scope, root, branch)
   return "on " .. branch
 end
 
----@param rows changetree.KindRow[]
+---@param rows changeset.KindRow[]
 ---@param footer string
 ---@param room integer Cells between the editor's left edge and the sidebar.
 ---@return integer
@@ -181,14 +181,14 @@ local function toggle()
   menu.opts.on_change(vim.deepcopy(menu.hidden))
 end
 
----@param scope changetree.Scope
+---@param scope changeset.Scope
 local function save(scope)
   if not menu then
     return
   end
   local file, opts = prefs.path(), menu.opts
   if not prefs.save(file, prefs.apply(prefs.load(file), scope, opts.root, opts.branch, menu.hidden)) then
-    return vim.notify("Change Tree: could not write " .. file, vim.log.levels.ERROR)
+    return vim.notify("Changeset: could not write " .. file, vim.log.levels.ERROR)
   end
   local hiding = vim.tbl_keys(menu.hidden)
   table.sort(hiding)
@@ -233,14 +233,14 @@ local function set_keymaps(buf)
 end
 
 ---Open the menu against the sidebar.
----@param opts changetree.MenuOpts
+---@param opts changeset.MenuOpts
 function M.open(opts)
   M.close()
   local saved, scope = prefs.resolve(prefs.load(prefs.path()), opts.root, opts.branch)
   local hidden = vim.deepcopy(opts.hidden)
   local rows = M._rows(opts.counts, hidden)
   if #rows == 0 then
-    return vim.notify("Change Tree: nothing to filter — no symbols in this branch's changes yet")
+    return vim.notify("Changeset: nothing to filter — no symbols in this branch's changes yet")
   end
 
   local footer = M._footer(hidden, saved, scope)

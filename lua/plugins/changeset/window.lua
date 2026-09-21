@@ -1,8 +1,8 @@
 ---Window bookkeeping for the sidebar: which window previews land in, and how
 ---that window is put back when the sidebar is dismissed without committing.
 
-local buffers = require("plugins.changetree.buffers")
-local render = require("plugins.changetree.render")
+local buffers = require("plugins.changeset.buffers")
+local render = require("plugins.changeset.render")
 
 local M = {}
 
@@ -12,17 +12,17 @@ local SIDEBAR_WIDTH = 44
 -- restored session brings the sidebar's window back empty. The buffer's name is
 -- the one thing that survives, which makes it what tells that leftover window
 -- apart from one the user opened.
-local NAME = "changetree://"
+local NAME = "changeset://"
 
 ---@type table<string, string>
 local SPLIT_CMD = { vsplit = "vsplit", split = "split", tab = "tabnew" }
 
----@class changetree.Snapshot What a window held before the sidebar borrowed it.
+---@class changeset.Snapshot What a window held before the sidebar borrowed it.
 ---@field buf integer
 ---@field cursor integer[]
 ---@field winbar string
 
----@type { win: integer?, buf: integer?, borrowed: table<integer, changetree.Snapshot> }
+---@type { win: integer?, buf: integer?, borrowed: table<integer, changeset.Snapshot> }
 local sidebar = { borrowed = {} }
 
 ---Windows a preview could go to, most recently used first.
@@ -221,7 +221,7 @@ end
 function M.commit(path, lnum, how)
   local buf = buffers.load(path)
   if not buf then
-    return vim.notify("Change Tree: cannot open " .. path, vim.log.levels.WARN)
+    return vim.notify("Changeset: cannot open " .. path, vim.log.levels.WARN)
   end
   -- Listed from here on: the user chose this file, so it is theirs now.
   vim.bo[buf].buflisted = true

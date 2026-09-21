@@ -1,6 +1,6 @@
-local resolve = require("plugins.changetree.resolve")
+local resolve = require("plugins.changeset.resolve")
 
-describe("changetree.resolve", function()
+describe("changeset.resolve", function()
   describe("_resolvable", function()
     it("keeps files in the order they are displayed, so the tree fills top-down", function()
       local files = {

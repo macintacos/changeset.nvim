@@ -1,17 +1,17 @@
 local M = {}
 
----@class changetree.diff.Stat
+---@class changeset.diff.Stat
 ---@field added integer
 ---@field removed integer
 
----@class changetree.diff.Entry
+---@class changeset.diff.Entry
 ---@field status "added"|"modified"|"deleted"|"renamed"
 ---@field oldpath string? Previous path, renames only.
 
----@class changetree.diff.Parts
----@field numstat table<string, changetree.diff.Stat> By new path.
----@field statuses table<string, changetree.diff.Entry> By new path.
----@field hunks table<string, changetree.Hunk[]> By new path.
+---@class changeset.diff.Parts
+---@field numstat table<string, changeset.diff.Stat> By new path.
+---@field statuses table<string, changeset.diff.Entry> By new path.
+---@field hunks table<string, changeset.Hunk[]> By new path.
 ---@field untracked table<string, integer> Line count by path.
 
 -- Any other name-status code (M, T) reads as a modification.
@@ -32,7 +32,7 @@ end
 
 ---Added and removed line counts per path from `git diff --numstat -M`.
 ---@param lines string[]
----@return table<string, changetree.diff.Stat> stats By new path; binary files count as 0/0.
+---@return table<string, changeset.diff.Stat> stats By new path; binary files count as 0/0.
 function M._parse_numstat(lines)
   local stats = {}
   for _, line in ipairs(lines) do
@@ -46,7 +46,7 @@ end
 
 ---Change status per path from `git diff --name-status -M`.
 ---@param lines string[]
----@return table<string, changetree.diff.Entry> statuses By new path.
+---@return table<string, changeset.diff.Entry> statuses By new path.
 function M._parse_name_status(lines)
   local statuses = {}
   for _, line in ipairs(lines) do
@@ -68,7 +68,7 @@ local function line_count(digits)
 end
 
 ---@param line string
----@return changetree.Hunk?
+---@return changeset.Hunk?
 local function parse_hunk_header(line)
   local old_count, new_start, new_count = line:match("^@@ %-%d+,?(%d*) %+(%d+),?(%d*) @@")
   if not new_start then
@@ -80,7 +80,7 @@ end
 
 ---Hunks per path from `git diff --unified=0 --no-color -M`.
 ---@param lines string[]
----@return table<string, changetree.Hunk[]> hunks By new path; a file with no text hunks maps to `{}`.
+---@return table<string, changeset.Hunk[]> hunks By new path; a file with no text hunks maps to `{}`.
 function M._parse_hunks(lines)
   local hunks, current = {}, nil
   for _, line in ipairs(lines) do
@@ -99,9 +99,9 @@ function M._parse_hunks(lines)
 end
 
 ---@param path string
----@param entry changetree.diff.Entry
----@param parts changetree.diff.Parts
----@return changetree.File
+---@param entry changeset.diff.Entry
+---@param parts changeset.diff.Parts
+---@return changeset.File
 local function tracked_file(path, entry, parts)
   local stat = parts.numstat[path] or { added = 0, removed = 0 }
   return {
@@ -116,7 +116,7 @@ end
 
 ---@param path string
 ---@param lines integer
----@return changetree.File
+---@return changeset.File
 local function untracked_file(path, lines)
   local whole_file = { lnum = 1, count = lines, added = lines, removed = 0 }
   return {
@@ -129,8 +129,8 @@ local function untracked_file(path, lines)
 end
 
 ---Join the parsed git output and untracked line counts into files ordered by path.
----@param parts changetree.diff.Parts
----@return changetree.File[]
+---@param parts changeset.diff.Parts
+---@return changeset.File[]
 function M._assemble(parts)
   local files = {}
   for path, entry in pairs(parts.statuses) do
@@ -215,7 +215,7 @@ end
 ---Calls back on the main loop with the files, or `nil` and git's stderr when any git command fails.
 ---@param base string Commit-ish to diff against.
 ---@param cwd string Repository root; untracked paths are relative to it, like the diff paths.
----@param callback fun(files: changetree.File[]?, err: string?)
+---@param callback fun(files: changeset.File[]?, err: string?)
 function M.collect(base, cwd, callback)
   run_all(git_commands(base), cwd, function(results)
     local err = first_failure(results)

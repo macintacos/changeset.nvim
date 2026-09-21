@@ -1,9 +1,9 @@
-local prefs = require("plugins.changetree.prefs")
+local prefs = require("plugins.changeset.prefs")
 
 local ROOT = "/src/app"
 local BRANCH = "feat/login"
 
-describe("changetree.prefs", function()
+describe("changeset.prefs", function()
   describe("resolve", function()
     it("hides nothing when nothing has been saved", function()
       local hidden, scope = prefs.resolve({}, ROOT, BRANCH)

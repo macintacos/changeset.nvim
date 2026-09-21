@@ -1,11 +1,11 @@
----Turns the changetree row model into buffer lines and the extmarks that colour them.
+---Turns the changeset row model into buffer lines and the extmarks that colour them.
 ---
 ---Everything here is data in, data out: the caller supplies icons, collapse state
 ---and width, and applies the returned marks to a buffer itself.
 
 local symbols = require("plugins.mini-pickers.symbols")
 
----@class changetree.Mark
+---@class changeset.Mark
 ---@field priority? integer    Draw order against the row's other marks; the caller's default stands when absent.
 ---@field col integer          0-based byte column the mark starts at.
 ---@field end_col? integer     0-based exclusive byte column; absent on virtual-text marks.
@@ -13,24 +13,24 @@ local symbols = require("plugins.mini-pickers.symbols")
 ---@field virt_text? table[]   `nvim_buf_set_extmark` virtual-text chunks.
 ---@field pos? "inline"|"right_align" Where the virtual text is drawn.
 
----@class changetree.Line
+---@class changeset.Line
 ---@field text string
----@field marks changetree.Mark[]
----@field row changetree.Row The row this line draws; a placeholder line carries the file it stands in for.
+---@field marks changeset.Mark[]
+---@field row changeset.Row The row this line draws; a placeholder line carries the file it stands in for.
 
----@class changetree.RenderOpts
----@field icon fun(row: changetree.Row): string, string Glyph and its highlight group; the caller wraps `MiniIcons.get`.
+---@class changeset.RenderOpts
+---@field icon fun(row: changeset.Row): string, string Glyph and its highlight group; the caller wraps `MiniIcons.get`.
 ---@field collapsed fun(id: string): boolean         Whether the row with this id hides its children.
 ---@field width integer                              Window width in cells; long names are trimmed so stats stay visible.
 ---@field query? string                               Filter text; every occurrence of it in a line is marked.
 
----@class changetree.Summary
+---@class changeset.Summary
 ---@field base_ref string  What the branch is compared against, e.g. "origin/trunk".
 ---@field files integer
 ---@field added integer
 ---@field removed integer
 
----@class changetree.Empty
+---@class changeset.Empty
 ---@field on_default_branch boolean
 ---@field branch string
 ---@field ref string      What the branch is compared against, e.g. "origin/trunk".
@@ -39,27 +39,27 @@ local M = {}
 
 ---Group for text that is not content: `Comment` with italics. Created by `define_highlights`.
 ---@type string
-M.META_HL = "ChangeTreeMeta"
+M.META_HL = "ChangesetMeta"
 
 ---Group for the band over a window the sidebar is previewing into. Created by `define_highlights`.
 ---@type string
-M.PREVIEW_HL = "ChangeTreePreview"
+M.PREVIEW_HL = "ChangesetPreview"
 
 ---Group for the badge at the head of that band. Created by `define_highlights`.
 ---@type string
-M.PREVIEW_LABEL_HL = "ChangeTreePreviewLabel"
+M.PREVIEW_LABEL_HL = "ChangesetPreviewLabel"
 
 ---Group for the affordance at the tail of that band. Created by `define_highlights`.
 ---@type string
-M.PREVIEW_HINT_HL = "ChangeTreePreviewHint"
+M.PREVIEW_HINT_HL = "ChangesetPreviewHint"
 
 ---Group for the run of characters a filter query matched. Created by `define_highlights`.
 ---@type string
-M.MATCH_HL = "ChangeTreeMatch"
+M.MATCH_HL = "ChangesetMatch"
 
 ---Group for a symbol kind the tree is not showing. Created by `define_highlights`.
 ---@type string
-M.HIDDEN_HL = "ChangeTreeHidden"
+M.HIDDEN_HL = "ChangesetHidden"
 
 -- Above the marks a row already carries, so a match reads over a dimmed
 -- ancestor and a coloured symbol name alike.
@@ -109,10 +109,10 @@ local STATUS_MARKER = { deleted = " deleted", renamed = " renamed" }
 local META_KINDS = { orphans = true, orphan = true }
 
 ---Joins highlighted chunks into a line, recording each chunk's byte range as a mark.
----@param row changetree.Row? The row the line draws; absent on a line that draws no row.
+---@param row changeset.Row? The row the line draws; absent on a line that draws no row.
 ---@param chunks { [1]: string, [2]: string? }[] Text and, optionally, the group that colours it.
 ---@param stat? table[] Virtual-text chunks to right-align on the line.
----@return changetree.Line
+---@return changeset.Line
 local function compose(row, chunks, stat)
   local text, marks = "", {}
   for _, chunk in ipairs(chunks) do
@@ -129,7 +129,7 @@ local function compose(row, chunks, stat)
 end
 
 ---The `+N -N` virtual text for a row.
----@param row changetree.Row
+---@param row changeset.Row
 ---@return table[]? chunks `nil` when the row has no stat of its own.
 local function stat_chunks(row)
   if row.ancestor or (row.added == nil and row.removed == nil) then
@@ -167,9 +167,9 @@ local function clip_right(text, room)
   return vim.fn.strcharpart(text, 0, math.max(room - 1, 0)) .. "…"
 end
 
----@param file changetree.Row
----@param opts changetree.RenderOpts
----@return changetree.Line
+---@param file changeset.Row
+---@param opts changeset.RenderOpts
+---@return changeset.Line
 local function file_line(file, opts)
   local glyph, icon_hl = opts.icon(file)
   local marker = STATUS_MARKER[file.status]
@@ -191,10 +191,10 @@ local function file_line(file, opts)
   return compose(file, chunks, stat)
 end
 
----@param row changetree.Row
+---@param row changeset.Row
 ---@param guides string Tree connectors for the row, e.g. "│ └─".
----@param opts changetree.RenderOpts
----@return changetree.Line
+---@param opts changeset.RenderOpts
+---@return changeset.Line
 local function child_line(row, guides, opts)
   local glyph, icon_hl = opts.icon(row)
   local stat = stat_chunks(row)
@@ -212,16 +212,16 @@ local function child_line(row, guides, opts)
   }, stat)
 end
 
----@param file changetree.Row The file the placeholder waits under.
----@return changetree.Line
+---@param file changeset.Row The file the placeholder waits under.
+---@return changeset.Line
 local function placeholder_line(file)
   return compose(file, { { "  " }, { "└─", "Comment" }, { "⋯ reading symbols", M.META_HL } })
 end
 
----@param out changetree.Line[]
----@param row changetree.Row
+---@param out changeset.Line[]
+---@param row changeset.Row
 ---@param bars string Ancestor bars this level's connectors hang off.
----@param opts changetree.RenderOpts
+---@param opts changeset.RenderOpts
 local function append_children(out, row, bars, opts)
   for i, child in ipairs(row.children) do
     local is_last = i == #row.children
@@ -232,9 +232,9 @@ local function append_children(out, row, bars, opts)
   end
 end
 
----@param out changetree.Line[]
----@param file changetree.Row
----@param opts changetree.RenderOpts
+---@param out changeset.Line[]
+---@param file changeset.Row
+---@param opts changeset.RenderOpts
 local function append_file(out, file, opts)
   out[#out + 1] = file_line(file, opts)
   if opts.collapsed(file.id) then
@@ -276,9 +276,9 @@ function M._matches(text, query)
 end
 
 ---Render file rows and everything visible under them, one buffer line per row.
----@param rows changetree.Row[] File rows, children nested.
----@param opts changetree.RenderOpts
----@return changetree.Line[]
+---@param rows changeset.Row[] File rows, children nested.
+---@param opts changeset.RenderOpts
+---@return changeset.Line[]
 function M.lines(rows, opts)
   local out = {}
   for _, file in ipairs(rows) do
@@ -292,17 +292,17 @@ function M.lines(rows, opts)
   return out
 end
 
----@class changetree.KindRow One symbol kind's standing in the tree.
+---@class changeset.KindRow One symbol kind's standing in the tree.
 ---@field kind string    LSP kind name, e.g. "Method".
 ---@field count integer  Symbol rows of this kind, whether hidden or not.
 ---@field hidden boolean
 
----@class changetree.KindLine
+---@class changeset.KindLine
 ---@field text string
----@field marks changetree.Mark[]
+---@field marks changeset.Mark[]
 ---@field kind string The kind this line stands for.
 
----@class changetree.KindOpts
+---@class changeset.KindOpts
 ---@field icon fun(kind: string): string, string Glyph and its highlight group.
 ---@field width integer Cells the menu is wide.
 
@@ -313,9 +313,9 @@ end
 ---checkbox list. A hidden kind loses the rail *and* is struck through: the rail's
 ---absence alone is a negative signal, and dimming alone is what ancestor rows
 ---already mean.
----@param rows changetree.KindRow[]
----@param opts changetree.KindOpts
----@return changetree.KindLine[]
+---@param rows changeset.KindRow[]
+---@param opts changeset.KindOpts
+---@return changeset.KindLine[]
 function M.kind_lines(rows, opts)
   local out = {}
   for i, row in ipairs(rows) do
@@ -366,7 +366,7 @@ function M.hidden_note(kinds, width)
 end
 
 ---The winbar text: what the tree is compared against, then the file count and line totals.
----@param summary changetree.Summary
+---@param summary changeset.Summary
 ---@return string
 function M.winbar(summary)
   local base = escaped(summary.base_ref)
@@ -396,7 +396,7 @@ function M.preview_winbar(path, target)
 end
 
 ---The sentence shown in place of the tree when there is nothing to list.
----@param info changetree.Empty
+---@param info changeset.Empty
 ---@return string
 function M.empty_message(info)
   if info.on_default_branch then

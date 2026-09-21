@@ -1,6 +1,6 @@
-local buffers = require("plugins.changetree.buffers")
+local buffers = require("plugins.changeset.buffers")
 
-describe("changetree.buffers", function()
+describe("changeset.buffers", function()
   local tmp
 
   before_each(function()
@@ -34,13 +34,13 @@ describe("changetree.buffers", function()
       local buf
 
       vim.api.nvim_create_autocmd("User", {
-        pattern = "ChangeTreeBuffersSpec",
+        pattern = "ChangesetBuffersSpec",
         once = true,
         callback = function()
           buf = buffers.load(path)
         end,
       })
-      vim.api.nvim_exec_autocmds("User", { pattern = "ChangeTreeBuffersSpec" })
+      vim.api.nvim_exec_autocmds("User", { pattern = "ChangesetBuffersSpec" })
 
       assert.equal("lua", vim.bo[buf].filetype)
     end)

@@ -1,4 +1,4 @@
-# changetree
+# changeset
 
 A read-only sidebar mapping what this branch changed, nested by symbol.
 
@@ -84,7 +84,7 @@ While a filter is in force every occurrence of it is painted in `Search` — the
 editor already uses for "the text you went looking for" — above whatever colour the row
 already carries, so a match reads over a dimmed ancestor as clearly as over a symbol name.
 The runs are found in the rendered line rather than in the row's name, so a path trimmed
-to `…a/plugins/changetree/window.lua` still lights the part you can actually see. They
+to `…a/plugins/changeset/window.lua` still lights the part you can actually see. They
 last as long as the filter does, not as long as the prompt.
 
 ### The kind menu docks against the sidebar, and reuses its rail
@@ -203,7 +203,7 @@ waits. Symbols are cached per file instead, stamped with the file's size and mti
 reopening asks a server only about what has changed since — the same tree comes back
 complete in under 300ms, which is the `git diff` and nothing else.
 
-The cache is one JSON file per repo under `stdpath("cache")/changetree/`, holding only the
+The cache is one JSON file per repo under `stdpath("cache")/changeset/`, holding only the
 fields the tree reads from a symbol. Every open narrows it to the files the current diff
 touches, so it stays the size of a branch rather than growing with every branch ever
 reviewed, and losing it costs one slow open. Folds are remembered for as long as Neovim
@@ -211,14 +211,14 @@ is running, so reopening looks like you left it; a restart starts expanded.
 
 ## Settings
 
-`plugin/changetree.lua` calls `setup()`:
+`plugin/changeset.lua` calls `setup()`:
 
 | Option | Default | Does |
 | --- | --- | --- |
 | `gitsigns_base` | `true` | Point gitsigns' base at the fork point when the sidebar opens, so `<leader>gP`'s gutter marks the whole branch. One-way: closing the sidebar leaves the signs up, and `:PRReview` is what takes them down. |
 
 Which symbol kinds are hidden is not a setting: it is a choice made in the menu and
-written to `stdpath("state")/changetree/filters.json`. Three scopes, narrowest first —
+written to `stdpath("state")/changeset/filters.json`. Three scopes, narrowest first —
 this branch, this repository, everywhere — and a scope counts as set by *having* a record,
 not by that record hiding anything, so a branch that hides nothing overrides a repository
 that hides something. That is the only way "show me everything, just here" can be said.

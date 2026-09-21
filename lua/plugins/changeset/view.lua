@@ -11,9 +11,9 @@ local M = {}
 ---A match keeps its ancestors, so a hit never floats free of the file it lives
 ---in, and keeps its own children, so matching a file still shows what changed
 ---inside it.
----@param rows changetree.Row[]
+---@param rows changeset.Row[]
 ---@param query string Empty returns the tree untouched.
----@return changetree.Row[]
+---@return changeset.Row[]
 function M.filter(rows, query)
   if query == "" then
     return rows
@@ -53,9 +53,9 @@ end
 ---them down with it, so hiding `Class` still shows the methods that changed
 ---inside one. Same rule `symbols.flatten` applies to its own kind filter, for the
 ---same reason: the kind you dropped is not the thing you were looking for.
----@param rows changetree.Row[]
+---@param rows changeset.Row[]
 ---@param hidden table<string, true> LSP kind names to drop.
----@return changetree.Row[]
+---@return changeset.Row[]
 function M.by_kind(rows, hidden)
   if vim.tbl_isempty(hidden) then
     return rows
@@ -77,7 +77,7 @@ function M.by_kind(rows, hidden)
 end
 
 ---How many symbol rows of each kind the tree holds.
----@param rows changetree.Row[] Unfiltered, so a hidden kind still reports its size.
+---@param rows changeset.Row[] Unfiltered, so a hidden kind still reports its size.
 ---@return table<string, integer>
 function M.kind_counts(rows)
   local counts = {}

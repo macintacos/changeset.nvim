@@ -1,6 +1,6 @@
-local state = require("plugins.changetree.state")
+local state = require("plugins.changeset.state")
 
-describe("changetree.state", function()
+describe("changeset.state", function()
   describe("folds", function()
     it("shows a row's children until something collapses it", function()
       local st = state.new()

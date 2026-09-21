@@ -86,7 +86,7 @@ function M.show(buf, own)
   end
   vim.lsp.util.open_floating_preview(M._lines(mine), "", {
     border = "rounded",
-    title = " Change Tree ",
+    title = " Changeset ",
   })
 end
 

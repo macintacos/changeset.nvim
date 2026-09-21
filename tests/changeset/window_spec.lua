@@ -1,4 +1,4 @@
-local window = require("plugins.changetree.window")
+local window = require("plugins.changeset.window")
 
 ---A `usable` predicate that accepts only the listed windows.
 ---@param ok integer[]
@@ -9,7 +9,7 @@ local function only(ok)
   end
 end
 
-describe("changetree.window", function()
+describe("changeset.window", function()
   describe("_clamp", function()
     it("keeps a line that is already inside the buffer", function()
       assert.equal(12, window._clamp(12, 40))
@@ -94,7 +94,7 @@ describe("changetree.window", function()
 
     it("takes over the window a restored session left, instead of opening another", function()
       local stale = vim.api.nvim_create_buf(true, false)
-      vim.api.nvim_buf_set_name(stale, "changetree://tree")
+      vim.api.nvim_buf_set_name(stale, "changeset://tree")
       local placeholder = vim.api.nvim_open_win(stale, false, { split = "right", win = -1, width = 44 })
       local before = #vim.api.nvim_tabpage_list_wins(0)
       local buf = vim.api.nvim_create_buf(false, true)

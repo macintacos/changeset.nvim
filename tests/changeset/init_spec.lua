@@ -1,6 +1,6 @@
-local changetree = require("plugins.changetree")
+local changeset = require("plugins.changeset")
 
-describe("changetree", function()
+describe("changeset", function()
   describe("_review_gutter", function()
     it("points the gutter at the fork point the tree is measured against", function()
       local seen
@@ -10,7 +10,7 @@ describe("changetree", function()
         end,
       }
 
-      changetree._review_gutter(gitsigns, "abc123", true)
+      changeset._review_gutter(gitsigns, "abc123", true)
 
       assert.same({ "abc123", true }, seen)
     end)
@@ -22,47 +22,47 @@ describe("changetree", function()
         end,
       }
 
-      changetree._review_gutter(gitsigns, "abc123", false)
+      changeset._review_gutter(gitsigns, "abc123", false)
     end)
 
     it("does nothing when gitsigns is not installed", function()
-      changetree._review_gutter(nil, "abc123", true)
+      changeset._review_gutter(nil, "abc123", true)
     end)
   end)
 
   describe("_next_action", function()
     it("opens and focuses when the sidebar is not showing", function()
-      assert.equal("open", changetree._next_action({ visible = false, focused = false }))
+      assert.equal("open", changeset._next_action({ visible = false, focused = false }))
     end)
 
     it("focuses the sidebar when it is showing but the cursor is elsewhere", function()
-      assert.equal("focus", changetree._next_action({ visible = true, focused = false }))
+      assert.equal("focus", changeset._next_action({ visible = true, focused = false }))
     end)
 
     it("closes the sidebar when the cursor is already in it", function()
-      assert.equal("close", changetree._next_action({ visible = true, focused = true }))
+      assert.equal("close", changeset._next_action({ visible = true, focused = true }))
     end)
   end)
 
   describe("_outward", function()
     it("shuts a row whose children are on screen", function()
-      assert.equal("collapse", changetree._outward({ { depth = 0 }, { depth = 1 } }, 1))
+      assert.equal("collapse", changeset._outward({ { depth = 0 }, { depth = 1 } }, 1))
     end)
 
     it("steps out to the parent when nothing is showing below the row", function()
-      local action, lnum = changetree._outward({ { depth = 0 }, { depth = 1 } }, 2)
+      local action, lnum = changeset._outward({ { depth = 0 }, { depth = 1 } }, 2)
       assert.equal("parent", action)
       assert.equal(1, lnum)
     end)
 
     it("steps out past the siblings sitting between a row and its parent", function()
-      local action, lnum = changetree._outward({ { depth = 0 }, { depth = 1 }, { depth = 2 }, { depth = 2 } }, 4)
+      local action, lnum = changeset._outward({ { depth = 0 }, { depth = 1 }, { depth = 2 }, { depth = 2 } }, 4)
       assert.equal("parent", action)
       assert.equal(2, lnum)
     end)
 
     it("does nothing on a shut file row, which has no parent to step out to", function()
-      assert.is_nil(changetree._outward({ { depth = 0 }, { depth = 0 } }, 1))
+      assert.is_nil(changeset._outward({ { depth = 0 }, { depth = 0 } }, 1))
     end)
   end)
 end)
