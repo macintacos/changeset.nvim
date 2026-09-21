@@ -401,6 +401,13 @@ describe("changeset.tree", function()
 
         assert.are_not.equal(rows[1].children[1].id, rows[2].children[1].id)
       end)
+
+      it("tells same-named siblings apart, as the overloads of one function are", function()
+        local symbols = { sym("get", "Function", 0, 1, 3), sym("get", "Function", 0, 5, 7) }
+        local rows = tree.build({ file(PATH, { hunk(2, 1), hunk(6, 1) }) }, { [PATH] = symbols })[1].children
+
+        assert.are_not.equal(rows[1].id, rows[2].id)
+      end)
     end)
   end)
 

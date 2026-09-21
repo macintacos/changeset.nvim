@@ -1,5 +1,7 @@
 local M = {}
 
+-- Must stay equal to `symbols.SEP`: `symbols.fit` trims a chain by splitting it on
+-- its own separator, and the chains it is handed are joined with this one.
 ---@type string
 local SEP = " › "
 
@@ -107,10 +109,14 @@ end
 ---@param parent changeset.Row
 ---@return changeset.Row[]
 local function symbol_rows(nodes, parent)
-  local rows = {}
+  local rows, seen = {}, {}
   for _, node in ipairs(nodes) do
+    -- Nesting alone cannot separate two siblings of one name, which is what a
+    -- function's overloads are. `#`-prefixed segments are already synthetic ids.
+    local id = parent.id .. "\0" .. node.sym.name
+    seen[id] = (seen[id] or 0) + 1
     local row = {
-      id = parent.id .. "\0" .. node.sym.name,
+      id = seen[id] == 1 and id or ("%s\0#%d"):format(id, seen[id]),
       kind = "symbol",
       depth = parent.depth + 1,
       name = node.sym.name,
