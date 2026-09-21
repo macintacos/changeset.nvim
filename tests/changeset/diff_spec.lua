@@ -55,6 +55,12 @@ describe("changeset.diff._parse_numstat", function()
     assert.same({ added = 0, removed = 0 }, stats["logo.png"])
   end)
 
+  it("unquotes a path git quoted because it holds a quote character", function()
+    local stat = diff._parse_numstat({ '1\t0\t"quo\\"te.txt"' })
+
+    assert.same({ added = 1, removed = 0 }, stat['quo"te.txt'])
+  end)
+
   it("returns an empty table for an empty diff", function()
     assert.same({}, diff._parse_numstat({}))
   end)
@@ -77,6 +83,12 @@ describe("changeset.diff._parse_name_status", function()
     assert.same({ status = "renamed", oldpath = "old_name.lua" }, statuses["new_name.lua"])
     assert.same({ status = "renamed", oldpath = "lua/a/x.lua" }, statuses["lua/x.lua"])
     assert.is_nil(statuses["old_name.lua"])
+  end)
+
+  it("unquotes a path git quoted because it holds a quote character", function()
+    local status = diff._parse_name_status({ 'A\t"quo\\"te.txt"' })
+
+    assert.same({ status = "added" }, status['quo"te.txt'])
   end)
 
   it("returns an empty table for an empty diff", function()
@@ -217,6 +229,19 @@ describe("changeset.diff._parse_hunks", function()
   it("keeps the spaces in a path", function()
     local spaced = diff._parse_hunks(HUNKS_SPACED_PATH)
     assert.same({ { lnum = 2, count = 1, added = 1, removed = 1 } }, spaced["my notes.txt"])
+  end)
+
+  it("unquotes a path git quoted because it holds a quote character", function()
+    local quoted = diff._parse_hunks({
+      'diff --git "a/quo\\"te.txt" "b/quo\\"te.txt"',
+      "@@ -1 +1 @@",
+    })
+
+    assert.same({ { lnum = 1, count = 1, added = 1, removed = 1 } }, quoted['quo"te.txt'])
+  end)
+
+  it("drops a hunk header that arrives before any file header", function()
+    assert.same({}, diff._parse_hunks({ "@@ -1 +1 @@" }))
   end)
 
   it("returns an empty table for an empty diff", function()

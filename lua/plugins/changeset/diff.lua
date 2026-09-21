@@ -1,5 +1,19 @@
 local M = {}
 
+---@class changeset.Hunk A run of changed lines, in new-file coordinates.
+---@field lnum integer   First new line; a pure deletion sits on the line it followed, which is 0 at the top of a file.
+---@field count integer  New lines the hunk covers; 0 for a pure deletion.
+---@field added integer
+---@field removed integer
+
+---@class changeset.File A changed file and the hunks inside it.
+---@field path string      Repo-relative, the new path for a rename.
+---@field oldpath string?  Previous path, renames only.
+---@field status "added"|"modified"|"deleted"|"renamed"|"untracked"
+---@field added integer
+---@field removed integer
+---@field hunks changeset.Hunk[] Ascending by line, as git emits them; empty for a binary or pure rename.
+
 ---@class changeset.diff.Stat
 ---@field added integer
 ---@field removed integer
@@ -17,6 +31,24 @@ local M = {}
 -- Any other name-status code (M, T) reads as a modification.
 ---@type table<string, "added"|"deleted">
 local STATUS = { A = "added", D = "deleted" }
+
+---@type table<string, string>
+local ESCAPE = { ['"'] = '"', ["\\"] = "\\", t = "\t", n = "\n", r = "\r" }
+
+---Undo git's C-quoting. `core.quotepath=off` stops it for non-ASCII bytes only, so a
+---path holding `"`, `\` or a control character still arrives quoted and escaped.
+---@param inner string Text between the quotes.
+---@return string
+local function unescape(inner)
+  return (inner:gsub("\\(.)", ESCAPE))
+end
+
+---@param field string A path column, quoted or bare.
+---@return string
+local function unquote(field)
+  local inner = field:match('^"(.*)"$')
+  return inner and unescape(inner) or field
+end
 
 ---The new path from a numstat path column, which is `old => new` or, when old and new share
 ---a prefix or suffix, `prefix/{old => new}/suffix`.
@@ -38,7 +70,7 @@ function M._parse_numstat(lines)
   for _, line in ipairs(lines) do
     local added, removed, field = line:match("^(%S+)\t(%S+)\t(.+)$")
     if field then
-      stats[new_path(field)] = { added = tonumber(added) or 0, removed = tonumber(removed) or 0 }
+      stats[new_path(unquote(field))] = { added = tonumber(added) or 0, removed = tonumber(removed) or 0 }
     end
   end
   return stats
@@ -52,9 +84,9 @@ function M._parse_name_status(lines)
   for _, line in ipairs(lines) do
     local code, from, to = line:match("^(%u)%d*\t([^\t]+)\t?([^\t]*)$")
     if code == "R" then
-      statuses[to] = { status = "renamed", oldpath = from }
+      statuses[unquote(to)] = { status = "renamed", oldpath = unquote(from) }
     elseif code then
-      statuses[from] = { status = STATUS[code] or "modified" }
+      statuses[unquote(from)] = { status = STATUS[code] or "modified" }
     end
   end
   return statuses
@@ -85,12 +117,16 @@ function M._parse_hunks(lines)
   local hunks, current = {}, nil
   for _, line in ipairs(lines) do
     local path = line:match("^diff %-%-git a/.+ b/(.+)$")
-    if path then
+    -- The other header shape: git quotes each side whole, so `b/` sits inside the quotes.
+    local quoted = not path and line:match('^diff %-%-git "a/.+" "b/(.+)"$')
+    if path or quoted then
       current = {}
-      hunks[path] = current
+      hunks[path or unescape(quoted)] = current
     else
       local hunk = parse_hunk_header(line)
-      if hunk then
+      -- A hunk before any header means a shape this does not read. Dropping it costs one
+      -- file's hunks; appending it to the file before would misattribute them.
+      if hunk and current then
         table.insert(current, hunk)
       end
     end
