@@ -110,7 +110,7 @@ local function parse_hunk_header(line)
   return { lnum = tonumber(new_start), count = added, added = added, removed = removed }
 end
 
----Hunks per path from `git diff --unified=0 --no-color -M`.
+---Hunks per path from `git diff --unified=0 -M`.
 ---@param lines string[]
 ---@return table<string, changeset.Hunk[]> hunks By new path; a file with no text hunks maps to `{}`.
 function M._parse_hunks(lines)
@@ -181,7 +181,9 @@ function M._assemble(parts)
   return files
 end
 
--- quotepath=off keeps non-ASCII paths as real filenames instead of quoted escapes.
+-- These pin output the user's own git config can otherwise reshape: quotepath keeps
+-- non-ASCII paths as real filenames, and the prefix, colour and external-driver flags
+-- keep the `diff --git a/x b/x` header the hunk parser reads.
 ---@param base string
 ---@return table<string, string[]> argv By result name.
 local function git_commands(base)
@@ -189,10 +191,13 @@ local function git_commands(base)
   local function cmd(...)
     return vim.list_extend(vim.list_slice(git), { ... })
   end
+  local function diff_cmd(...)
+    return cmd("diff", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/", "-M", ...)
+  end
   return {
-    numstat = cmd("diff", "--numstat", "--no-color", "-M", base),
-    name_status = cmd("diff", "--name-status", "--no-color", "-M", base),
-    hunks = cmd("diff", "--unified=0", "--no-color", "-M", base),
+    numstat = diff_cmd("--numstat", base),
+    name_status = diff_cmd("--name-status", base),
+    hunks = diff_cmd("--unified=0", base),
     untracked = cmd("ls-files", "--others", "--exclude-standard"),
   }
 end

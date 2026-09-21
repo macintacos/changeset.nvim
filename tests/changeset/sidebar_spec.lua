@@ -1,16 +1,8 @@
 local changeset = require("plugins.changeset")
 local window = require("plugins.changeset.window")
+local Fixture = require("support.git")
 
 local ns = vim.api.nvim_get_namespaces()["changeset"]
-
----Run git in the current directory, asserting it succeeded.
----@param args string[]
----@return string
-local function git(args)
-  local out = vim.fn.system(vim.list_extend({ "git" }, args))
-  assert(vim.v.shell_error == 0, out)
-  return vim.trim(out)
-end
 
 ---@param path string
 ---@param lines string[]
@@ -19,28 +11,18 @@ local function write(path, lines)
 end
 
 ---A repo on `trunk` with two files, then a `feature` branch that changes both.
-local function init_repo()
-  git({ "init", "-q", "-b", "trunk" })
-  -- Refuse to go further unless git resolved to the fixture. Everything below
-  -- writes commits and config, and a stray GIT_* var pointing elsewhere would
-  -- land them in a real repo.
-  local root = vim.fn.resolve(git({ "rev-parse", "--show-toplevel" }))
-  assert(root == vim.fn.resolve(vim.fn.getcwd()), "fixture git repo escaped to " .. root)
-
-  git({ "config", "user.email", "test@example.com" })
-  git({ "config", "user.name", "Test" })
-  git({ "config", "commit.gpgsign", "false" })
+---@param cwd string
+local function init_feature_repo(cwd)
+  Fixture.init_repo("trunk", cwd)
 
   write("mod.lua", { "local M = {}", "", "function M.one()", "  return 1", "end", "", "return M" })
   write("other.lua", { "return { a = 1 }" })
-  git({ "add", "-A" })
-  git({ "commit", "-q", "-m", "base" })
+  Fixture.commit("base", cwd)
 
-  git({ "checkout", "-q", "-b", "feature" })
+  Fixture.git({ "checkout", "-q", "-b", "feature" }, cwd)
   write("mod.lua", { "local M = {}", "", "function M.one()", "  return 2", "end", "", "return M" })
   write("other.lua", { "return { a = 1, b = 2 }" })
-  git({ "add", "-A" })
-  git({ "commit", "-q", "-m", "change" })
+  Fixture.commit("change", cwd)
 end
 
 ---@param buf integer
@@ -77,42 +59,30 @@ local function press(key)
 end
 
 describe("changeset sidebar", function()
-  local tmp, cwd, git_env, state_home
+  local tmp, previous_dir, state_home
 
+  -- The sidebar resolves its repo from the process cwd, and `write` above takes
+  -- relative paths, so the fixture has to be entered rather than merely pointed at.
   before_each(function()
-    -- Git hooks export GIT_DIR and friends, and those override cwd-based repo
-    -- discovery — under `pre-push` the fixture below would otherwise operate on
-    -- the repo being pushed.
-    git_env = {}
-    for name, value in pairs(vim.fn.environ()) do
-      if name:match("^GIT_") then
-        git_env[name] = value
-        vim.env[name] = nil
-      end
-    end
-
     tmp = vim.fn.tempname()
     vim.fn.mkdir(tmp, "p")
+    previous_dir = vim.fn.chdir(tmp)
+    assert(previous_dir ~= "", "could not enter the fixture directory")
     -- `prefs.path()` hangs off stdpath("state"), so without this the sidebar
     -- opens with whatever symbol kinds the developer has hidden in their own
     -- editor, and what this fixture renders changes machine to machine.
     state_home = vim.env.XDG_STATE_HOME
     vim.env.XDG_STATE_HOME = tmp .. "/state"
 
-    cwd = vim.fn.chdir(tmp)
-    assert(cwd ~= "", "could not enter the fixture directory")
-    init_repo()
+    init_feature_repo(tmp)
   end)
 
   after_each(function()
     changeset.close()
     vim.cmd("silent! %bwipeout!")
-    vim.fn.chdir(cwd)
+    vim.fn.chdir(previous_dir)
     vim.fn.delete(tmp, "rf")
     vim.env.XDG_STATE_HOME = state_home
-    for name, value in pairs(git_env) do
-      vim.env[name] = value
-    end
   end)
 
   it("lists every file the branch changed", function()
