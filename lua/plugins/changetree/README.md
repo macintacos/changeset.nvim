@@ -236,7 +236,7 @@ repository's deliberate choice is none of that save's business.
 | `j` / `k` | sidebar | move, previewing into the window you were last in, without leaving the sidebar |
 | `<CR>` | sidebar | commit: focus that window at the row's position, keep the jump |
 | `q` | sidebar | close, restore focus and put back whatever the previews borrowed |
-| `h` / `l` | sidebar | collapse / expand; `l` on a compressed chain expands it to full nesting |
+| `h` / `l` | sidebar | collapse / expand; `h` with nothing left to shut steps out to the parent, so repeated `h` walks up to the filename; `l` on a compressed chain expands it to full nesting |
 | `zM` / `zR` | sidebar | collapse / expand every file |
 | `f` | sidebar | open the symbol-kind menu |
 | `x` | kind menu | hide or show the kind under the cursor, redrawing the tree at once |
