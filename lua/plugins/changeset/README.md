@@ -220,13 +220,10 @@ is running, so reopening looks like you left it; a restart starts expanded.
 
 ## Settings
 
-`plugin/changeset.lua` calls `setup()`:
+There are none, and opening the sidebar changes nothing outside it — the gutter is
+`<leader>gP`'s to switch on, including its memory of you having switched it off.
 
-| Option | Default | Does |
-| --- | --- | --- |
-| `gitsigns_base` | `true` | Point gitsigns' base at the fork point when the sidebar opens, so `<leader>gP`'s gutter marks the whole branch. One-way: closing the sidebar leaves the signs up, and `:PRReview` is what takes them down. |
-
-Which symbol kinds are hidden is not a setting: it is a choice made in the menu and
+Which symbol kinds are hidden is not a setting either: it is a choice made in the menu and
 written to `stdpath("state")/changeset/filters.json`. Three scopes, narrowest first —
 this branch, this repository, everywhere — and a scope counts as set by *having* a record,
 not by that record hiding anything, so a branch that hides nothing overrides a repository

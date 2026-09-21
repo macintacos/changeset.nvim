@@ -28,12 +28,6 @@ local SAVE_DEBOUNCE_MS = 1000
 
 local M = {}
 
----@class changeset.Config
----@field gitsigns_base boolean Point gitsigns' base at the fork point while the sidebar is open, so `<leader>gP`'s gutter marks the whole branch.
-
----@type changeset.Config
-local config = { gitsigns_base = true }
-
 local ns = vim.api.nvim_create_namespace("changeset")
 local augroup = vim.api.nvim_create_augroup("changeset", { clear = true })
 
@@ -471,20 +465,6 @@ function M.refresh()
   end)
 end
 
----Point the gutter at the same fork point the tree is measured against, so the
----signs cover the branch rather than just uncommitted work.
----
----Only ever switched on. A close is not a dismissal: the gutter is the user's
----to put back with `:PRReview` when they are done with it.
----@param gitsigns table? The plugin's module, absent when it is not installed.
----@param base string Fork point from the default branch.
----@param wanted boolean
-function M._review_gutter(gitsigns, base, wanted)
-  if gitsigns and wanted then
-    gitsigns.change_base(base, true)
-  end
-end
-
 function M.open()
   if session then
     M.close()
@@ -493,9 +473,6 @@ function M.open()
   if not base then
     return vim.notify("Changeset: no merge base with the default branch", vim.log.levels.WARN)
   end
-
-  local ok, gitsigns = pcall(require, "gitsigns")
-  M._review_gutter(ok and gitsigns or nil, base, config.gitsigns_base)
 
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].filetype = "changeset"
@@ -579,11 +556,6 @@ function M.restore()
   if not window.is_visible() then
     vim.api.nvim_win_close(placeholder, true)
   end
-end
-
----@param opts changeset.Config?
-function M.setup(opts)
-  config = vim.tbl_extend("force", config, opts or {})
 end
 
 ---What `<leader>gp` does next, given where the sidebar and the cursor are.

@@ -3,12 +3,6 @@
 -- by the symbols each hunk touched. Sibling to <leader>gP (PR Review Mode),
 -- which puts the same range in the gutter.
 
-require("plugins.changeset").setup({
-  -- Put the gutter in PR Review Mode whenever the sidebar opens. One-way: a
-  -- close leaves the signs up, and `:PRReview` is what takes them down.
-  gitsigns_base = true,
-})
-
 -- Mapped here rather than in plugin/which-key.lua so it travels with the plugin.
 -- A plain keymap with a `desc` is all which-key needs to label it; `add()` is for
 -- groups and description-only entries, and the <leader>g group already exists.
