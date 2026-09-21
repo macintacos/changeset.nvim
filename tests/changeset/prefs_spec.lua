@@ -124,5 +124,25 @@ describe("changeset.prefs", function()
     it("hides nothing when the file is absent", function()
       assert.same({}, prefs.load(vim.fn.tempname() .. "/missing.json"))
     end)
+
+    it("reports a choice that did not reach the disk", function()
+      local dir = vim.fn.tempname()
+      vim.fn.mkdir(dir, "p")
+      vim.fn.setfperm(dir, "r-xr-xr-x")
+
+      local written = prefs.save(dir .. "/filters.json", { global = { "Field" } })
+      vim.fn.setfperm(dir, "rwxr-xr-x")
+      vim.fn.delete(dir, "rf")
+
+      assert.is_false(written)
+    end)
+
+    it("hides nothing when a scope in the file was hand-edited to null", function()
+      local file = vim.fn.tempname() .. "/filters.json"
+      vim.fn.mkdir(vim.fs.dirname(file), "p")
+      vim.fn.writefile({ '{"repos": null, "global": null}' }, file)
+
+      assert.same({}, (prefs.resolve(prefs.load(file), ROOT, BRANCH)))
+    end)
   end)
 end)

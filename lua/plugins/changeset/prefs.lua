@@ -5,6 +5,8 @@
 ---so a branch that hides nothing still overrides a repository that hides
 ---something — which is the only way "show me everything, just here" can be said.
 
+local jsonfile = require("helpers.jsonfile")
+
 local M = {}
 
 ---@class changeset.RepoPrefs
@@ -24,10 +26,17 @@ function M.path()
   return vim.fs.joinpath(vim.fn.stdpath("state"), "changeset", "filters.json")
 end
 
+---A field read from the file, where a hand edit can leave any JSON value.
+---@param value any
+---@return table
+local function object(value)
+  return type(value) == "table" and value or {}
+end
+
 ---@param list string[]?
 ---@return table<string, true>? nil only when there is no record at all.
 local function as_set(list)
-  if not list then
+  if type(list) ~= "table" then
     return nil
   end
   local set = {}
@@ -68,9 +77,9 @@ end
 ---@return table<string, true> hidden
 ---@return changeset.Scope? scope nil when no scope has a record.
 function M.resolve(data, root, branch)
-  local repo = (data.repos or {})[root] or {}
+  local repo = object(object(data.repos)[root])
   for _, candidate in ipairs({
-    { "branch", (repo.branches or {})[branch] },
+    { "branch", object(repo.branches)[branch] },
     { "repo", repo.kinds },
     { "global", data.global },
   }) do
@@ -96,7 +105,7 @@ end
 ---@return changeset.Prefs
 function M.apply(data, scope, root, branch, hidden)
   local out = vim.deepcopy(data)
-  out.repos = out.repos or {}
+  out.repos = object(out.repos)
   out.repos[root] = out.repos[root] or {}
   local repo = out.repos[root]
 
@@ -123,17 +132,7 @@ end
 ---@param file string
 ---@return changeset.Prefs
 function M.load(file)
-  local fd = io.open(file, "r")
-  if not fd then
-    return {}
-  end
-  local content = fd:read("*a")
-  fd:close()
-  local ok, data = pcall(vim.json.decode, content)
-  if not ok or type(data) ~= "table" then
-    return {}
-  end
-  return data
+  return jsonfile.read(file)
 end
 
 ---Overwrite `file` with `data`.
@@ -141,14 +140,7 @@ end
 ---@param data changeset.Prefs
 ---@return boolean written A choice that did not reach the disk is worth reporting.
 function M.save(file, data)
-  vim.fn.mkdir(vim.fs.dirname(file), "p")
-  local fd = io.open(file, "w")
-  if not fd then
-    return false
-  end
-  fd:write(vim.json.encode(data))
-  fd:close()
-  return true
+  return jsonfile.write(file, data)
 end
 
 return M

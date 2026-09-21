@@ -5,6 +5,8 @@
 ---stamped with the file it was read from, so reopening asks a server only about
 ---what has actually changed since.
 
+local jsonfile = require("helpers.jsonfile")
+
 local M = {}
 
 ---@class changeset.CachedSymbol Only what `changeset.tree` reads from a symbol.
@@ -81,17 +83,7 @@ end
 ---@param file string
 ---@return table<string, changeset.CacheEntry>
 function M.load(file)
-  local fd = io.open(file, "r")
-  if not fd then
-    return {}
-  end
-  local content = fd:read("*a")
-  fd:close()
-  local ok, data = pcall(vim.json.decode, content)
-  if not ok or type(data) ~= "table" then
-    return {}
-  end
-  return data
+  return jsonfile.read(file)
 end
 
 ---Overwrite `file` with `entries`. A cache that cannot be written is not worth
@@ -99,13 +91,7 @@ end
 ---@param file string
 ---@param entries table<string, changeset.CacheEntry>
 function M.save(file, entries)
-  vim.fn.mkdir(vim.fs.dirname(file), "p")
-  local fd = io.open(file, "w")
-  if not fd then
-    return
-  end
-  fd:write(vim.json.encode(entries))
-  fd:close()
+  jsonfile.write(file, entries)
 end
 
 return M
