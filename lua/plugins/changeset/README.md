@@ -89,7 +89,7 @@ last as long as the filter does, not as long as the prompt.
 
 ### The kind menu docks against the sidebar, and reuses its rail
 
-`f` opens the list of symbol kinds this branch touched, as a float whose right border
+`F` opens the list of symbol kinds this branch touched, as a float whose right border
 sits on the cell the sidebar starts after:
 
 ```text
@@ -129,7 +129,7 @@ answers that, the same way it does in the sidebar.
 ▎ Makefile                            +2 -0
   └─󰘦 Other changes                   +2 -0
 
- Hiding variables and fields. f to change.
+ Hiding variables and fields. F to change.
 ```
 
 A virtual line, so the cursor cannot land on it and it needs no place among the rows. It
@@ -239,17 +239,18 @@ repository's deliberate choice is none of that save's business.
 | `<leader>gp` | anywhere | closed → open+focus; open+unfocused → focus; open+focused → close, restore focus |
 | `j` / `k` | sidebar | move, previewing into the window you were last in, without leaving the sidebar |
 | `<CR>` | sidebar | commit: focus that window at the row's position, keep the jump |
+| `<S-CR>` | sidebar | commit, then close the sidebar behind you |
 | `q` | sidebar | close, restore focus and put back whatever the previews borrowed |
 | `h` / `l` | sidebar | collapse / expand; `h` with nothing left to shut steps out to the parent, so repeated `h` walks up to the filename; `l` on a compressed chain expands it to full nesting |
-| `zM` / `zR` | sidebar | collapse / expand every file |
-| `f` | sidebar | open the symbol-kind menu |
+| `H` / `L` | sidebar | collapse / expand every file, the whole-tree form of `h` / `l` |
+| `F` | sidebar | open the symbol-kind menu |
 | `x` | kind menu | hide or show the kind under the cursor, redrawing the tree at once |
 | `<CR>` / `r` / `b` | kind menu | remember this set everywhere / for this repository / for this branch, then close |
 | `q` / `<Esc>` | kind menu | close, putting the tree back to the set on disk |
-| `/` | sidebar | filter as you type, keeping ancestors so matches stay placed and lighting every match until the filter goes; `<Esc>` restores the last filter |
+| `f` | sidebar | filter as you type, keeping ancestors so matches stay placed and lighting every match until the filter goes; `<Esc>` restores the last filter |
 | `R` | sidebar | rebuild now |
 | `y` | sidebar | yank the row's `path:line` via `helpers.yank` |
-| `<C-v>` `<C-x>` `<C-t>` | sidebar | commit into a vsplit / split / new tab instead |
+| `/` `-` `<C-t>` | sidebar | commit into a vsplit / split / new tab instead |
 | `?` | sidebar | list these keys: which-key's popup where it is installed, a float where it is not |
 | `]h` / `[h` | anywhere, while open | advance the sidebar's selection and jump — review without focusing the sidebar |
 

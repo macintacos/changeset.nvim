@@ -597,25 +597,25 @@ describe("changeset.render", function()
     end)
 
     it("names the one kind it is hiding", function()
-      assert.equal("Hiding variables. f to change.", render.hidden_note({ "Variable" }, 44))
+      assert.equal("Hiding variables. F to change.", render.hidden_note({ "Variable" }, 44))
     end)
 
     it("joins two kinds with and", function()
-      assert.equal("Hiding fields and variables. f to change.", render.hidden_note({ "Field", "Variable" }, 44))
+      assert.equal("Hiding fields and variables. F to change.", render.hidden_note({ "Field", "Variable" }, 44))
     end)
 
     it("pluralises a kind that does not just take an s", function()
-      assert.equal("Hiding classes. f to change.", render.hidden_note({ "Class" }, 44))
+      assert.equal("Hiding classes. F to change.", render.hidden_note({ "Class" }, 44))
     end)
 
     it("splits a two-word kind into words", function()
-      assert.equal("Hiding enum members. f to change.", render.hidden_note({ "EnumMember" }, 44))
+      assert.equal("Hiding enum members. F to change.", render.hidden_note({ "EnumMember" }, 44))
     end)
 
     it("counts the kinds instead once naming them would not fit", function()
       local note = render.hidden_note({ "Constructor", "Interface", "Property", "Variable" }, 44)
 
-      assert.equal("Hiding 4 kinds of symbol. f to change.", note)
+      assert.equal("Hiding 4 kinds of symbol. F to change.", note)
     end)
   end)
 end)

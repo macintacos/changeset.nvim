@@ -367,11 +367,11 @@ function M.hidden_note(kinds, width)
   if #kinds == 0 then
     return nil
   end
-  local named = ("Hiding %s. f to change."):format(M.kind_list(kinds))
+  local named = ("Hiding %s. F to change."):format(M.kind_list(kinds))
   if vim.fn.strdisplaywidth(named) <= width then
     return named
   end
-  return ("Hiding %d kinds of symbol. f to change."):format(#kinds)
+  return ("Hiding %d kinds of symbol. F to change."):format(#kinds)
 end
 
 ---The winbar text: what the tree is compared against, then the file count and line totals.
