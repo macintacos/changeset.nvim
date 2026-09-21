@@ -8,7 +8,8 @@ neither drives the other.
 
 ## What it shows
 
-Files changed between `merge-base(origin/<default>, HEAD)` and the working tree — the
+Files changed between `merge-base(origin/<default>, HEAD)` — the local default branch
+when there is no `origin/` copy of it — and the working tree: the
 same range PR Review Mode's gutter marks, so the sidebar and the signs never disagree.
 Untracked files count; deleted files are listed but not navigable.
 
@@ -16,12 +17,12 @@ Under each file sit the symbols a hunk actually touched, plus the ancestors need
 place them. Unchanged siblings are hidden: the tree is a map of the diff, not an outline.
 
 ```text
-▎ session.ts                         +12 -3
+▎ 󰛦 session.ts                       +12 -3
   ├─󰌗 SessionStore › refresh › deadline  +8 -1
   ├─󰏿 SESSION_TTL                     +1 -0
   └─󰘦 Other changes                   +3 -2
-▎ legacy/auth.ts  deleted
-▎ Makefile                            +2 -0
+▎ 󰛦 legacy/auth.ts deleted
+▎ 󰛡 Makefile                          +2 -0
   └─󰘦 Other changes                   +2 -0
 ```
 
@@ -59,11 +60,13 @@ to spend its right edge twice, and the kind icon already encodes kind in colour 
 The right edge goes to the stat instead. This is the one place the sidebar deliberately
 diverges from the picker, and it is a width decision, not a style one.
 
-### Tree guides and chain separators are reused verbatim
+### Tree guides and chain separators are the outline picker's
 
-`├─ └─ │` come from `symbols.flatten`'s existing `guides` field. A compressed chain joins
-with ` › ` — `symbols.lua`'s existing `SEP`, the same separator its breadcrumbs use. No
-new punctuation is introduced.
+`├─ └─ │` are the guides the outline picker draws, and a compressed chain joins with
+` › `, the separator its breadcrumbs use. Both are built here rather than carried over:
+the picker's guides describe its own flat list, and this tree nests differently. The
+separator is the one that has to stay identical, because `symbols.fit` trims a chain by
+splitting it on its own copy. No new punctuation is introduced.
 
 ### Three levels of emphasis, all theme-derived
 
@@ -74,7 +77,8 @@ new punctuation is introduced.
 | Meta | `⋯ reading symbols`, the orphan group's label | `Comment` + italic |
 
 Italic means "this is not content" — the idiom `render.crumb_hl()` already establishes.
-Nothing is bold: the outline picker uses no bold, and adding it would break the pairing.
+No row is bold: the outline picker uses no bold, and adding it would break the pairing.
+The two badges are, because a badge is chrome rather than content.
 
 Ancestor-only rows carry no stat. They did not change; only their descendants did.
 
@@ -215,8 +219,10 @@ complete in under 300ms, which is the `git diff` and nothing else.
 The cache is one JSON file per repo under `stdpath("cache")/changeset/`, holding only the
 fields the tree reads from a symbol. Every open narrows it to the files the current diff
 touches, so it stays the size of a branch rather than growing with every branch ever
-reviewed, and losing it costs one slow open. Folds are remembered for as long as Neovim
-is running, so reopening looks like you left it; a restart starts expanded.
+reviewed, and losing it costs one slow open. Folds are remembered per repository for as long as
+Neovim is running, so reopening looks like you left it; a restart starts expanded. Per
+repository because a row is identified by a repo-relative path, which two checkouts can
+easily both have.
 
 ## Settings
 
@@ -224,7 +230,9 @@ There are none, and opening the sidebar changes nothing outside it — the gutte
 `<leader>gP`'s to switch on, including its memory of you having switched it off.
 
 Which symbol kinds are hidden is not a setting either: it is a choice made in the menu and
-written to `stdpath("state")/changeset/filters.json`. Three scopes, narrowest first —
+written to `stdpath("state")/changeset/filters.json`, through a temporary file renamed over
+the old one, so an interrupted write leaves the last good copy standing. Three scopes,
+narrowest first —
 this branch, this repository, everywhere — and a scope counts as set by *having* a record,
 not by that record hiding anything, so a branch that hides nothing overrides a repository
 that hides something. That is the only way "show me everything, just here" can be said.
@@ -251,10 +259,10 @@ repository's deliberate choice is none of that save's business.
 | `q` / `<Esc>` | kind menu | close, putting the tree back to the set on disk |
 | `f` | sidebar | filter as you type, keeping ancestors so matches stay placed and lighting every match until the filter goes; `<Esc>` restores the last filter |
 | `R` | sidebar | rebuild now |
-| `y` | sidebar | yank the row's `path:line` via `helpers.yank` |
+| `y` | sidebar | yank the row's `path:line` via `helpers.paths.copy` |
 | `/` `-` `<C-t>` | sidebar | commit into a vsplit / split / new tab instead |
-| `?` | sidebar | list these keys: which-key's popup where it is installed, a float where it is not |
-| `]h` / `[h` | anywhere, while open | advance the sidebar's selection and jump — review without focusing the sidebar |
+| `?` | sidebar | list these keys, `]h` / `[h` included: which-key's popup where it is installed, a float where it is not |
+| `]h` / `[h` | anywhere, while open | advance the sidebar's selection, previewing as it goes — review without focusing the sidebar |
 
 ## Behaviour that is easy to get wrong
 
@@ -277,7 +285,9 @@ repository's deliberate choice is none of that save's business.
   those keys are not this sidebar's interface. The keys it sets are recorded as it sets
   them, and which-key is handed a throwaway buffer carrying only those, since it describes
   whatever a buffer maps and takes no say in which. The callbacks travel across with the
-  keys, so pressing one from inside the popup still works.
+  keys, so pressing one from inside the popup still works. `]h` / `[h` are global rather
+  than buffer-local, so they are looked up by name and added to that buffer, or they would
+  be the two keys the reference never mentions.
 - **Refresh re-anchors by identity, not line.** A rebuild keyed on `GitSignsUpdate` must
   restore the cursor to the same row *identity* and preserve collapse state, including an
   `l`-expanded chain. One key scheme serves all three.
@@ -294,6 +304,13 @@ repository's deliberate choice is none of that save's business.
 - **Stamp a file before asking about it, not after.** A file edited while its symbols are
   being read has to fail the freshness check next time; stamping afterwards would file
   the answer under the content that replaced it.
+- **Only an answer is cached.** A server that never attached, and a file whose buffer held
+  unwritten edits when it was read, are both left out: a stamp taken off the file on disk
+  cannot describe either, and either one filed as fresh would outlive the edit that made
+  it wrong — across restarts, until the file next moves.
+- **One line is one row, one level below its parent.** `h` and the cursor anchor both read
+  the next line's depth to decide what is showing, so the `⋯ reading symbols` placeholder
+  is a row of its own rather than the file's row drawn a second time.
 - **Hiding a kind promotes its children.** Dropping `Class` still shows the methods that
   changed inside one — the kind you hid is not the thing you were looking for. Same rule
   `symbols.flatten` applies to its own kind filter, for the same reason.

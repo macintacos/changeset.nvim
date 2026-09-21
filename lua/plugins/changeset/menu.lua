@@ -208,12 +208,7 @@ end
 
 ---@param buf integer
 local function set_keymaps(buf)
-  -- What `?` documents, collected as it is set — the same reason the sidebar does.
-  local own = {}
-  local function map(lhs, fn, desc)
-    own[#own + 1] = lhs
-    vim.keymap.set("n", lhs, fn, { buffer = buf, nowait = true, desc = desc })
-  end
+  local map, own = help.mapper(buf)
 
   map("x", toggle, "Hide or show this kind")
   map("<CR>", function()

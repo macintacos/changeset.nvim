@@ -87,6 +87,15 @@ local function usable(win)
   return vim.bo[vim.api.nvim_win_get_buf(win)].buftype == ""
 end
 
+---Windows in this tabpage that can hold a file. A float is not one of them, and
+---counting them is what decides whether the sidebar's window can be closed at all.
+---@return integer[]
+local function panes()
+  return vim.tbl_filter(function(win)
+    return vim.api.nvim_win_get_config(win).relative == ""
+  end, vim.api.nvim_tabpage_list_wins(0))
+end
+
 ---@return integer[]
 local function reachable()
   return M._candidates(
@@ -124,9 +133,15 @@ local function remember(win)
   }
 end
 
+---Whether the sidebar is on screen where the user is standing.
+---
+---A window in another tabpage is not: focusing it would haul the user out of the tab
+---they are in, and every caller here means "can they see it from here".
 ---@return boolean
 function M.is_visible()
-  return sidebar.win ~= nil and vim.api.nvim_win_is_valid(sidebar.win)
+  return sidebar.win ~= nil
+    and vim.api.nvim_win_is_valid(sidebar.win)
+    and vim.tbl_contains(vim.api.nvim_tabpage_list_wins(0), sidebar.win)
 end
 
 ---@return boolean
@@ -136,12 +151,16 @@ end
 
 ---@return integer? buf
 function M.buf()
-  return sidebar.buf
+  return sidebar.buf and vim.api.nvim_buf_is_valid(sidebar.buf) and sidebar.buf or nil
 end
 
+---The sidebar's window, or nothing when it is not there to be used.
+---
+---Guarded rather than raw: the window can go without the plugin being asked — `:q`,
+---`:only`, `:tabclose` — and the callers all pass what they get here to the API.
 ---@return integer? win
 function M.win()
-  return sidebar.win
+  return M.is_visible() and sidebar.win or nil
 end
 
 ---The window a restored session left standing where the sidebar was.
@@ -204,7 +223,7 @@ function M.preview(path, lnum, band)
   local win = target()
   remember(win)
   vim.api.nvim_win_set_buf(win, buf)
-  vim.wo[win].winbar = render.preview_winbar(vim.fn.fnamemodify(path, ":."), band)
+  vim.wo[win].winbar = render.preview_winbar(band)
   if lnum then
     local last = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
     vim.api.nvim_win_set_cursor(win, { M._clamp(lnum, last), 0 })
@@ -259,8 +278,16 @@ function M.close()
   local borrowed, win = sidebar.borrowed, sidebar.win
   sidebar.win, sidebar.buf, sidebar.borrowed = nil, nil, {}
 
-  if win and vim.api.nvim_win_is_valid(win) and #vim.api.nvim_tabpage_list_wins(0) > 1 then
-    vim.api.nvim_win_close(win, true)
+  if win and vim.api.nvim_win_is_valid(win) then
+    if #panes() > 1 then
+      vim.api.nvim_win_close(win, true)
+    else
+      -- The last window cannot be closed, and leaving the tree in it would leave a
+      -- panel on screen whose keys no longer answer.
+      vim.api.nvim_win_call(win, function()
+        vim.cmd("enew")
+      end)
+    end
   end
 
   for borrower, snapshot in pairs(borrowed) do

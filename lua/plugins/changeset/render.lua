@@ -16,7 +16,7 @@ local symbols = require("plugins.mini-pickers.symbols")
 ---@class changeset.Line
 ---@field text string
 ---@field marks changeset.Mark[]
----@field row changeset.Row The row this line draws; a placeholder line carries the file it stands in for.
+---@field row changeset.Row The row this line draws; a placeholder's stands in for its file.
 
 ---@class changeset.RenderOpts
 ---@field icon fun(row: changeset.Row): string, string Glyph and its highlight group; the caller wraps `MiniIcons.get`.
@@ -33,6 +33,7 @@ local symbols = require("plugins.mini-pickers.symbols")
 ---@class changeset.Band The strip over a window the sidebar is previewing into.
 ---@field icon string       Glyph for the previewed file's type.
 ---@field icon_hl string    Group to draw it in, from `band_icon`.
+---@field path string       The file, named as the sidebar's own row names it.
 ---@field destination string? What `<CR>` lands on; absent for a row that names nothing.
 
 ---@class changeset.Empty
@@ -232,7 +233,14 @@ end
 ---@param file changeset.Row The file the placeholder waits under.
 ---@return changeset.Line
 local function placeholder_line(file)
-  return compose(file, { { "  " }, { "└─", "Comment" }, { "⋯ reading symbols", M.META_HL } })
+  -- A row of its own, one level down. Two lines under one id would make the file read as
+  -- childless to `h` and to the cursor anchor, both of which go by the next line's depth.
+  local row = vim.tbl_extend("force", file, {
+    id = file.id .. "\0#pending",
+    depth = file.depth + 1,
+    children = {},
+  })
+  return compose(row, { { "  " }, { "└─", "Comment" }, { "⋯ reading symbols", M.META_HL } })
 end
 
 ---@param out changeset.Line[]
@@ -274,7 +282,7 @@ end
 ---@param text string
 ---@param query string
 ---@return { [1]: integer, [2]: integer }[] 0-based, end exclusive.
-function M._matches(text, query)
+local function matches(text, query)
   if query == "" then
     return {}
   end
@@ -302,7 +310,7 @@ function M.lines(rows, opts)
     append_file(out, file, opts)
   end
   for _, line in ipairs(out) do
-    for _, span in ipairs(M._matches(line.text, opts.query or "")) do
+    for _, span in ipairs(matches(line.text, opts.query or "")) do
       line.marks[#line.marks + 1] = { col = span[1], end_col = span[2], hl = M.MATCH_HL, priority = MATCH_PRIORITY }
     end
   end
@@ -389,7 +397,7 @@ end
 ---both answer "what is this window holding" before anything in it.
 ---@param summary changeset.Summary
 ---@return string
-function M.winbar(summary)
+function M.header(summary)
   local noun = summary.files == 1 and "file" or "files"
   return table.concat({
     ("%%#%s# vs %s "):format(M.HEADER_LABEL_HL, escaped(summary.base_ref)),
@@ -409,13 +417,13 @@ end
 ---@param path string Display path of the previewed file.
 ---@param band changeset.Band
 ---@return string
-function M.preview_winbar(path, band)
+function M.preview_winbar(band)
   return table.concat({
     ("%%#%s# Preview "):format(M.PREVIEW_LABEL_HL),
     -- The spaces belong to the icon's group rather than the band's, which keeps
     -- the two one highlight run and the icon one cell off the badge either way.
     ("%%#%s# %s "):format(band.icon_hl, band.icon),
-    ("%%#%s#%%<%s"):format(M.PREVIEW_HL, escaped(path)),
+    ("%%#%s#%%<%s"):format(M.PREVIEW_HL, escaped(band.path)),
     "%=",
     ("%%#%s#%s "):format(M.PREVIEW_HINT_HL, escaped(band.destination or HINT)),
   })
@@ -426,9 +434,14 @@ end
 ---A MiniIcons group carries a foreground only, so a glyph drawn straight in one
 ---punches the window's own background through the band. One group recoloured per
 ---preview rather than one per filetype: only ever one band is on screen.
+---@type string? The group the band's glyph last came with, so a new colorscheme can
+---be followed: this one is mixed from two resolved colours rather than linked to them.
+local band_hl
+
 ---@param hl string Group the glyph came with.
 ---@return string group
 function M.band_icon(hl)
+  band_hl = hl
   vim.api.nvim_set_hl(0, M.PREVIEW_ICON_HL, {
     fg = vim.api.nvim_get_hl(0, { name = hl, link = false }).fg,
     bg = vim.api.nvim_get_hl(0, { name = M.PREVIEW_HL, link = false }).bg,
@@ -479,6 +492,11 @@ function M.define_highlights()
   -- Struck through as well as dimmed: dim on its own is what ancestor rows mean,
   -- and it reads as faint rather than as switched off in a light colourscheme.
   vim.api.nvim_set_hl(0, M.HIDDEN_HL, { fg = comment.fg, strikethrough = true })
+  -- Last, over the band it is drawn on: a glyph left on the old theme's colour is
+  -- the one thing here that can come out invisible rather than merely off-key.
+  if band_hl then
+    M.band_icon(band_hl)
+  end
 end
 
 return M

@@ -25,6 +25,16 @@ describe("changeset.buffers", function()
       assert.same({ "local x = 1", "return x" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
     end)
 
+    it("leaves a buffer the user already has open in their buffer list", function()
+      local path = tmp .. "/open.lua"
+      vim.fn.writefile({ "local x = 1" }, path)
+      vim.cmd.edit(path)
+      local open = vim.api.nvim_get_current_buf()
+
+      assert.equal(open, buffers.load(path))
+      assert.is_true(vim.bo[open].buflisted)
+    end)
+
     -- The sidebar previews from a `CursorMoved` callback, and autocommands do
     -- not nest: the read `bufload` performs there skips the `BufRead` chain
     -- that would otherwise name the filetype.

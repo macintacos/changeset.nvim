@@ -12,6 +12,22 @@ local M = {}
 ---@type integer?
 local staged
 
+---A buffer-local mapper that records what it sets, for `show` to document.
+---
+---The ledger lives here because `show` is the only thing that reads it: a panel that
+---maps its own keys and then asks what it mapped is one bookkeeping job, not two.
+---@param buf integer
+---@return fun(lhs: string, fn: function, desc: string) map
+---@return string[] own The `lhs` of everything mapped through it, in the order set.
+function M.mapper(buf)
+  local own = {}
+  return function(lhs, fn, desc)
+    own[#own + 1] = lhs
+    vim.keymap.set("n", lhs, fn, { buffer = buf, nowait = true, desc = desc })
+  end,
+    own
+end
+
 ---The mappings on the sidebar's buffer that the sidebar itself set.
 ---
 ---A buffer collects mappings from whoever wants one — a blanket `FileType`
@@ -77,9 +93,12 @@ end
 
 ---Show the keys the sidebar answers to.
 ---@param buf integer The sidebar's buffer.
----@param own string[] The `lhs` of every mapping the sidebar set.
-function M.show(buf, own)
+---@param own string[] The `lhs` of every mapping the sidebar set on it.
+---@param global string[]? The sidebar's keys that work from anywhere, which live in
+---the global table rather than on the buffer and would otherwise go undocumented.
+function M.show(buf, own, global)
   local mine = M._own(vim.api.nvim_buf_get_keymap(buf, "n"), own)
+  vim.list_extend(mine, M._own(vim.api.nvim_get_keymap("n"), global or {}))
   local ok, wk = pcall(require, "which-key")
   if ok then
     return wk.show({ buf = M._stage(mine), global = false })

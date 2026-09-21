@@ -6,10 +6,12 @@
 
 local M = {}
 
----Load `path` into an unlisted buffer.
+---Load `path` into a buffer, without disturbing one the user already has.
 ---
----Unlisted because the user did not open these files: they must stay out of
----`:ls`, the buffer picker, and the session file until a commit promotes one.
+---`bufadd` leaves a buffer it creates unlisted, which is what keeps the files
+---only the sidebar opened out of `:ls`, the buffer picker and the session file
+---until a commit promotes one. It returns an existing buffer untouched, and a
+---buffer the user opened is theirs to list.
 ---
 ---`shortmess+=A` is the load-bearing part. A changed file that is already open
 ---in another Neovim has a swap file, and `bufload` on it raises `E325:
@@ -23,7 +25,6 @@ function M.load(path)
     return nil
   end
   local buf = vim.fn.bufadd(path)
-  vim.bo[buf].buflisted = false
   if vim.api.nvim_buf_is_loaded(buf) then
     return buf
   end

@@ -235,10 +235,12 @@ describe("changeset.render", function()
         assert.same({ "▎ F src/a.lua" }, texts(lines))
       end)
 
-      it("ties the placeholder line to the file it stands in for", function()
+      it("nests the placeholder under the file as a row of its own", function()
         local lines = render.lines({ file({ resolved = false }) }, opts())
 
-        assert.equal("src/a.lua", lines[2].row.id)
+        assert.are_not.equal(lines[1].row.id, lines[2].row.id)
+        assert.equal(lines[1].row.depth + 1, lines[2].row.depth)
+        assert.equal("src/a.lua", lines[2].row.path)
       end)
 
       it("shows no placeholder for a deleted file, whose subtree is empty by design", function()
@@ -392,11 +394,11 @@ describe("changeset.render", function()
     end)
   end)
 
-  describe("winbar", function()
+  describe("header", function()
     ---@param summary changeset.Summary
     ---@return string
     local function shown(summary)
-      return vim.api.nvim_eval_statusline(render.winbar(summary), { use_winbar = true, maxwidth = 60 }).str
+      return vim.api.nvim_eval_statusline(render.header(summary), { use_winbar = true, maxwidth = 60 }).str
     end
 
     it("states what the tree is compared against, then the file count and line totals", function()
@@ -429,7 +431,7 @@ describe("changeset.render", function()
       render.define_highlights()
 
       local marks = vim.api.nvim_eval_statusline(
-        render.winbar({ base_ref = "origin/trunk", files = 7, added = 142, removed = 38 }),
+        render.header({ base_ref = "origin/trunk", files = 7, added = 142, removed = 38 }),
         { use_winbar = true, maxwidth = 60, highlights = true }
       ).highlights
 
@@ -444,31 +446,36 @@ describe("changeset.render", function()
 
   describe("preview_winbar", function()
     ---@param destination string?
+    ---@param path string?
     ---@return changeset.Band
-    local function band(destination)
-      return { icon = "󰢱", icon_hl = "MiniIconsAzure", destination = destination }
+    local function band(destination, path)
+      return {
+        icon = "󰢱",
+        -- What `band_icon` hands back, which is the only group a real band carries.
+        icon_hl = render.PREVIEW_ICON_HL,
+        destination = destination,
+        path = path or "lua/init.lua",
+      }
     end
 
     it("names the file being previewed", function()
-      assert.is_true(render.preview_winbar("lua/init.lua", band()):find("lua/init.lua", 1, true) ~= nil)
+      assert.is_true(render.preview_winbar(band()):find("lua/init.lua", 1, true) ~= nil)
     end)
 
     it("escapes % in the path so the statusline does not read it as an item", function()
-      assert.is_true(render.preview_winbar("a/50%off.md", band()):find("50%%off", 1, true) ~= nil)
+      assert.is_true(render.preview_winbar(band(nil, "a/50%off.md")):find("50%%off", 1, true) ~= nil)
     end)
 
     it("carries the file's own icon in front of the path", function()
-      local shown = vim.api.nvim_eval_statusline(
-        render.preview_winbar("lua/init.lua", band()),
-        { use_winbar = true, maxwidth = 70 }
-      ).str
+      local shown =
+        vim.api.nvim_eval_statusline(render.preview_winbar(band()), { use_winbar = true, maxwidth = 70 }).str
 
       assert.is_true(shown:find("󰢱 lua/init.lua", 1, true) ~= nil)
     end)
 
     it("names what <CR> lands on at the right edge", function()
       local shown = vim.api.nvim_eval_statusline(
-        render.preview_winbar("lua/init.lua", band("SessionStore › refresh")),
+        render.preview_winbar(band("SessionStore › refresh")),
         { use_winbar = true, maxwidth = 70 }
       ).str
 
@@ -476,17 +483,15 @@ describe("changeset.render", function()
     end)
 
     it("offers the way out instead when the row names nothing to land on", function()
-      local shown = vim.api.nvim_eval_statusline(
-        render.preview_winbar("lua/init.lua", band()),
-        { use_winbar = true, maxwidth = 70 }
-      ).str
+      local shown =
+        vim.api.nvim_eval_statusline(render.preview_winbar(band()), { use_winbar = true, maxwidth = 70 }).str
 
       assert.is_true(vim.endswith(shown, "<CR> to open "))
     end)
 
     it("gives up the path first when the window is too narrow for all three", function()
       local shown = vim.api.nvim_eval_statusline(
-        render.preview_winbar("a/very/long/path/that/will/never/fit.lua", band("refresh")),
+        render.preview_winbar(band("refresh", "a/very/long/path/that/will/never/fit.lua")),
         { use_winbar = true, maxwidth = 26 }
       ).str
 
@@ -495,19 +500,23 @@ describe("changeset.render", function()
     end)
 
     it("draws the badge, the icon, the path and the way out as separate runs", function()
+      render.define_highlights()
+      render.band_icon("Comment")
       local shown = vim.api.nvim_eval_statusline(
-        render.preview_winbar("lua/init.lua", band()),
+        render.preview_winbar(band()),
         { use_winbar = true, maxwidth = 60, highlights = true }
       )
 
-      assert.equal(4, #shown.highlights)
+      assert.same(
+        { render.PREVIEW_LABEL_HL, render.PREVIEW_ICON_HL, render.PREVIEW_HL, render.PREVIEW_HINT_HL },
+        vim.tbl_map(function(mark)
+          return mark.group
+        end, shown.highlights)
+      )
     end)
 
     it("fills the width, so the band spans the window", function()
-      local shown = vim.api.nvim_eval_statusline(
-        render.preview_winbar("lua/init.lua", band()),
-        { use_winbar = true, maxwidth = 60 }
-      )
+      local shown = vim.api.nvim_eval_statusline(render.preview_winbar(band()), { use_winbar = true, maxwidth = 60 })
 
       assert.equal(60, vim.fn.strdisplaywidth(shown.str))
     end)
@@ -528,14 +537,28 @@ describe("changeset.render", function()
   end)
 
   describe("define_highlights", function()
-    local comment
+    local comment, cursorline
 
     before_each(function()
       comment = vim.api.nvim_get_hl(0, { name = "Comment", link = false })
+      cursorline = vim.api.nvim_get_hl(0, { name = "CursorLine", link = false })
     end)
 
     after_each(function()
       vim.api.nvim_set_hl(0, "Comment", comment)
+      vim.api.nvim_set_hl(0, "CursorLine", cursorline)
+    end)
+
+    it("keeps the previewed file's icon sitting on the band's new colour", function()
+      vim.api.nvim_set_hl(0, "ChangesetSpecIcon", { fg = 0x00ff00 })
+      render.band_icon("ChangesetSpecIcon")
+      vim.api.nvim_set_hl(0, "CursorLine", { bg = 0x123456 })
+
+      render.define_highlights()
+
+      local icon = vim.api.nvim_get_hl(0, { name = render.PREVIEW_ICON_HL, link = false })
+      assert.equal(0x123456, icon.bg)
+      assert.equal(0x00ff00, icon.fg)
     end)
 
     it("makes the meta group Comment's colour with italics added", function()

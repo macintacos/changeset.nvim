@@ -2,7 +2,7 @@ local window = require("plugins.changeset.window")
 
 ---What the band says is the sidebar's business; these tests only need one to pass on.
 ---@type changeset.Band
-local BAND = { icon = "󰢱", icon_hl = "MiniIconsAzure" }
+local BAND = { icon = "󰢱", icon_hl = "MiniIconsAzure", path = "src/session.ts" }
 
 ---A `usable` predicate that accepts only the listed windows.
 ---@param ok integer[]
@@ -117,6 +117,43 @@ describe("changeset.window", function()
     end)
   end)
 
+  describe("what it reports about itself", function()
+    after_each(function()
+      window.close()
+      vim.cmd("only")
+    end)
+
+    it("reports no window once the one it opened is closed by hand", function()
+      window.open(vim.api.nvim_create_buf(false, true))
+      vim.api.nvim_win_close(window.win(), true)
+
+      assert.is_nil(window.win())
+      assert.is_false(window.is_visible())
+    end)
+
+    it("reports nothing visible from a tabpage the sidebar is not in", function()
+      window.open(vim.api.nvim_create_buf(false, true))
+      vim.cmd("tabnew")
+      local visible = window.is_visible()
+      vim.cmd("tabclose")
+
+      assert.is_false(visible)
+    end)
+
+    it("hands its window an ordinary buffer when nothing is left to fall back to", function()
+      vim.cmd("only")
+      local outside = vim.api.nvim_get_current_win()
+      local tree = vim.api.nvim_create_buf(false, true)
+      local win = window.open(tree)
+      vim.api.nvim_win_close(outside, true)
+
+      window.close()
+
+      assert.is_true(vim.api.nvim_win_is_valid(win))
+      assert.are_not.equal(tree, vim.api.nvim_win_get_buf(win))
+    end)
+  end)
+
   describe("previewing", function()
     local files
 
@@ -173,12 +210,12 @@ describe("changeset.window", function()
       assert.equal(vim.fn.resolve(one), showing(right))
     end)
 
-    it("marks the window a preview lands in", function()
+    it("marks the window a preview lands in with the path the sidebar named", function()
       local _, right, one = staged()
 
       window.preview(one, 2, BAND)
 
-      assert.is_true(vim.wo[right].winbar:find(vim.fn.fnamemodify(one, ":."), 1, true) ~= nil)
+      assert.is_true(vim.wo[right].winbar:find(BAND.path, 1, true) ~= nil)
     end)
 
     -- Previewing the file the window already shows, which is where the mark

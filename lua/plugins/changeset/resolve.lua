@@ -71,6 +71,12 @@ end
 ---@param path string
 ---@param on_done fun(items: MiniPickers.Symbol[]?)
 local function request(bufnr, path, on_done)
+  -- The attach wait ends in a timer or an autocommand, by which time a `:bwipeout`
+  -- or another plugin's buffer sweep may have taken this one. Answering nothing
+  -- keeps the walk pumping; raising here would strand one of its four lanes.
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return on_done(nil)
+  end
   local keep = kinds.for_filetype(vim.bo[bufnr].filetype)
   local params = { textDocument = vim.lsp.util.make_text_document_params(bufnr) }
   vim.lsp.buf_request_all(bufnr, "textDocument/documentSymbol", params, function(results)

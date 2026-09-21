@@ -7,6 +7,7 @@
 local Git = require("helpers.git")
 local Paths = require("helpers.paths")
 local cache = require("plugins.changeset.cache")
+local help = require("plugins.changeset.help")
 local prefs = require("plugins.changeset.prefs")
 local render = require("plugins.changeset.render")
 local resolve = require("plugins.changeset.resolve")
@@ -26,6 +27,13 @@ local CANCELLED = "\r"
 -- One write per burst of answers rather than one per file.
 local SAVE_DEBOUNCE_MS = 1000
 
+-- Advance the selection from the file you are reading, so a whole branch can be
+-- reviewed without ever putting the cursor in the sidebar. Not <C-n>/<C-p>:
+-- plugin/multicursor.lua owns those, and shadowing them would mean deleting a user
+-- mapping on close. `h` is free across mini.bracketed's targets. Next first, which
+-- is the order `?` and the deletion below both read them in.
+local STEP_KEYS = { "]h", "[h" }
+
 local M = {}
 
 local ns = vim.api.nvim_create_namespace("changeset")
@@ -38,7 +46,7 @@ local augroup = vim.api.nvim_create_augroup("changeset", { clear = true })
 ---@field branch string
 ---@field default_branch string
 ---@field files changeset.File[]
----@field symbols table<string, MiniPickers.Symbol[]> Absent key means "still resolving".
+---@field symbols table<string, changeset.CachedSymbol[]> Absent key means "still resolving".
 ---@field rows changeset.Row[]
 ---@field visible changeset.Row[]
 ---@field st changeset.State
@@ -46,6 +54,7 @@ local augroup = vim.api.nvim_create_augroup("changeset", { clear = true })
 ---@field hidden table<string, true> Symbol kinds the tree is not showing.
 ---@field cancel fun()?
 ---@field timer uv.uv_timer_t?
+---@field request table? The refresh whose answers this session is still listening for.
 
 ---@type changeset.Session?
 local session
@@ -57,14 +66,24 @@ local memo
 ---@type uv.uv_timer_t?
 local save_timer
 
----Folds outlive a close, so reopening the sidebar looks like you left it.
----@type changeset.State
-local folds = state.new()
+---Folds outlive a close, so reopening the sidebar looks like you left it. Kept per
+---repository: row ids start at a repo-relative path, so one table would share a fold
+---between two checkouts that both have a `lua/config/options.lua`.
+---@type table<string, changeset.State>
+local folds = {}
+
+---Stop a deferred callback for good. `vim.defer_fn` closes its handle from inside the
+---callback, so a timer replaced before it fires leaves one open.
+---@param timer uv.uv_timer_t?
+local function stop(timer)
+  if timer and not timer:is_closing() then
+    timer:stop()
+    timer:close()
+  end
+end
 
 local function save_soon()
-  if save_timer then
-    save_timer:stop()
-  end
+  stop(save_timer)
   save_timer = vim.defer_fn(function()
     if memo then
       cache.save(cache.path(memo.root), memo.entries)
@@ -76,7 +95,11 @@ end
 ---@param name string
 ---@return string glyph, string hl
 local function icon(category, name)
-  local ok, glyph, hl = pcall(MiniIcons.get, category, name)
+  -- The call is wrapped, not `MiniIcons.get`: an argument is evaluated before `pcall`
+  -- runs, so indexing a missing mini.icons would raise past the fallback below.
+  local ok, glyph, hl = pcall(function()
+    return MiniIcons.get(category, name)
+  end)
   if ok then
     return glyph, hl
   end
@@ -104,6 +127,14 @@ local function row_at_cursor()
   return session.visible[vim.api.nvim_win_get_cursor(win)[1]]
 end
 
+---Whether the file at `path` holds edits the file on disk does not.
+---@param path string Repo-relative.
+---@return boolean
+local function unwritten(path)
+  local buf = vim.fn.bufnr(session.root .. "/" .. path)
+  return buf ~= -1 and vim.bo[buf].modified
+end
+
 ---@param row changeset.Row
 ---@return changeset.Band
 local function band_for(row)
@@ -111,6 +142,7 @@ local function band_for(row)
   return {
     icon = glyph,
     icon_hl = render.band_icon(hl),
+    path = row.path,
     -- Only a symbol row names its destination. An orphan hunk's own text is the
     -- changed line, which is not a place and does not read as one.
     destination = row.kind == "symbol" and row.name or nil,
@@ -204,7 +236,7 @@ local function draw()
   for _, file in ipairs(session.files) do
     added, removed = added + (file.added or 0), removed + (file.removed or 0)
   end
-  vim.wo[win].winbar = render.winbar({
+  vim.wo[win].winbar = render.header({
     base_ref = session.ref,
     files = #session.files,
     added = added,
@@ -300,12 +332,16 @@ end
 
 ---@param buf integer
 local function set_keymaps(buf)
-  -- What `?` documents. Collected rather than re-read off the buffer, which by
-  -- then holds whatever else has mapped into it.
-  local own = {}
+  local set, own = help.mapper(buf)
+  -- Every handler below reads the session, and the window can outlive it: a `:q`
+  -- mid-rebuild, or the tabpage's last window, which cannot be closed. A key that
+  -- does nothing beats one that raises.
   local function map(lhs, fn, desc)
-    own[#own + 1] = lhs
-    vim.keymap.set("n", lhs, fn, { buffer = buf, nowait = true, desc = desc })
+    set(lhs, function()
+      if session then
+        fn()
+      end
+    end, desc)
   end
 
   map("<CR>", function()
@@ -366,7 +402,7 @@ local function set_keymaps(buf)
     end
   end, "Yank path:line")
   map("?", function()
-    require("plugins.changeset.help").show(buf, own)
+    help.show(buf, own, STEP_KEYS)
   end, "Show these keymaps")
   map("F", function()
     require("plugins.changeset.menu").open({
@@ -421,9 +457,14 @@ function M.refresh()
     session.cancel = nil
   end
 
+  -- Identity rather than a counter: an answer from a refresh that this one replaced
+  -- has to be dropped, and a session opened later starts from a table of its own.
+  local request = {}
+  session.request = request
+
   local diff = require("plugins.changeset.diff")
   diff.collect(session.base, session.root, function(files, err)
-    if not session then
+    if not session or session.request ~= request then
       return
     end
     if not files then
@@ -453,14 +494,19 @@ function M.refresh()
     -- turns every hunk in an unsupported file into an orphan row. Leaving the key
     -- absent would instead read as "still resolving", forever.
     session.cancel = resolve.start(session.root, unknown, function(path, items)
-      if session then
-        session.symbols[path] = items or {}
-        if stamps[path] then
-          memo.entries[path] = { stamp = stamps[path], symbols = cache.project(items or {}) }
-          save_soon()
-        end
-        rebuild()
+      if not session or session.request ~= request then
+        return
       end
+      session.symbols[path] = items or {}
+      -- Only an answer that arrived is filed. A server that never attached would
+      -- otherwise leave "this file has no symbols" on disk, fresh until the file
+      -- next moves; and a stamp taken off the file cannot describe what a server
+      -- read out of a buffer holding unwritten edits.
+      if items and stamps[path] and not unwritten(path) then
+        memo.entries[path] = { stamp = stamps[path], symbols = cache.project(items) }
+        save_soon()
+      end
+      rebuild()
     end)
   end)
 end
@@ -469,7 +515,10 @@ function M.open()
   if session then
     M.close()
   end
-  local base, _, ref = Git.merge_base()
+  -- The buffer's repository, not Neovim's directory: with the two different, a base
+  -- measured in the wrong one leaves every later `git diff` on a bad object.
+  local root = Paths.root(0)
+  local base, _, ref = Git.merge_base(root)
   if not base then
     return vim.notify("Changeset: no merge base with the default branch", vim.log.levels.WARN)
   end
@@ -477,15 +526,18 @@ function M.open()
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].filetype = "changeset"
   vim.bo[buf].buftype = "nofile"
+  -- Wiped with its window. A scratch buffer is kept otherwise, so every close would
+  -- leave one behind, its extmarks and its fifteen mappings included.
+  vim.bo[buf].bufhidden = "wipe"
   vim.bo[buf].modifiable = false
 
-  local root = Paths.root(0)
   if not memo or memo.root ~= root then
     memo = { root = root, entries = cache.load(cache.path(root)) }
   end
 
-  local default_branch = Git.default_base()
-  local branch = Git.lines({ "git", "rev-parse", "--abbrev-ref", "HEAD" })[1] or "HEAD"
+  folds[root] = folds[root] or state.new()
+  local default_branch = Git.default_base(root)
+  local branch = Git.lines({ "git", "rev-parse", "--abbrev-ref", "HEAD" }, root)[1] or "HEAD"
   session = {
     root = root,
     base = base,
@@ -496,29 +548,36 @@ function M.open()
     symbols = {},
     rows = {},
     visible = {},
-    st = folds,
+    st = folds[root],
     query = "",
     hidden = prefs.resolve(prefs.load(prefs.path()), root, branch),
   }
 
   render.define_highlights()
-  window.open(buf)
+  local win = window.open(buf)
   set_keymaps(buf)
 
+  -- Fires: the sidebar's window going without the plugin being asked — `:q`, `:only`,
+  -- `:tabclose`, a layout plugin. Scheduled because the window is still in the layout
+  -- while this runs, and `close` reads the layout to decide where to leave the cursor.
+  vim.api.nvim_create_autocmd("WinClosed", {
+    group = augroup,
+    pattern = tostring(win),
+    desc = "changeset: let go of the session when its window closes another way",
+    callback = function()
+      vim.schedule(M.close)
+    end,
+  })
   vim.api.nvim_create_autocmd("CursorMoved", {
     group = augroup,
     buffer = buf,
     desc = "changeset: preview the row under the cursor without leaving the sidebar",
     callback = preview_current,
   })
-  -- Advance the selection from the file you are reading, so a whole branch can be
-  -- reviewed without ever putting the cursor in the sidebar. Not <C-n>/<C-p>:
-  -- plugin/multicursor.lua owns those, and shadowing them would mean deleting a
-  -- user mapping on close. `h` is free across mini.bracketed's targets.
-  vim.keymap.set("n", "]h", function()
+  vim.keymap.set("n", STEP_KEYS[1], function()
     step(1)
   end, { desc = "Next change (Changeset)" })
-  vim.keymap.set("n", "[h", function()
+  vim.keymap.set("n", STEP_KEYS[2], function()
     step(-1)
   end, { desc = "Previous change (Changeset)" })
 
@@ -530,14 +589,13 @@ function M.close()
     if session.cancel then
       session.cancel()
     end
-    if session.timer then
-      session.timer:stop()
-    end
+    stop(session.timer)
   end
   session = nil
   require("plugins.changeset.menu").close()
-  pcall(vim.keymap.del, "n", "]h")
-  pcall(vim.keymap.del, "n", "[h")
+  for _, lhs in ipairs(STEP_KEYS) do
+    pcall(vim.keymap.del, "n", lhs)
+  end
   vim.api.nvim_clear_autocmds({ group = augroup })
   window.close()
 end
@@ -599,9 +657,7 @@ vim.api.nvim_create_autocmd("User", {
     if not session then
       return
     end
-    if session.timer then
-      session.timer:stop()
-    end
+    stop(session.timer)
     session.timer = vim.defer_fn(function()
       if session then
         M.refresh()
