@@ -268,8 +268,9 @@ repository's deliberate choice is none of that save's business.
 
 - **Preview is non-destructive.** `j`/`k` swap a window's buffer and cursor for real, but
   `q` or `<leader>gp` puts back every window a preview borrowed, buffer *and* cursor. Only
-  `<CR>` relocates you, and only `<CR>` writes a jumplist entry — previewing must not, or
-  `<C-o>` becomes one entry per keypress.
+  `<CR>` relocates you, and only `<CR>` writes a jumplist entry, sending `<C-o>` back to
+  where the window stood before the sidebar opened rather than to the last preview —
+  previewing must not write one, or `<C-o>` becomes one entry per keypress.
 - **Previews follow the window you were last in** — the focused one, or, while the cursor
   is in the sidebar, the one it came from. `winnr("#")` answers 0 once that window has
   been closed, and 0 is an alias for the current window wherever it would then be passed,

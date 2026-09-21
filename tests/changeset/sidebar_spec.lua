@@ -153,6 +153,48 @@ describe("changeset sidebar", function()
     assert.equal(expanded, #lines_of(buf))
   end)
 
+  ---Walk the selection `steps` rows with `]h`, commit it, and assert the previews
+  ---left the jumplist alone while `<CR>` pointed `<C-o>` at the pre-sidebar position.
+  ---@param steps integer
+  local function commit_after(steps)
+    vim.cmd.edit("mod.lua")
+    local target = vim.api.nvim_get_current_win()
+    local from_buf = vim.api.nvim_win_get_buf(target)
+    local from_lnum = vim.api.nvim_win_get_cursor(target)[1]
+    open_sidebar()
+    local before = vim.fn.getjumplist(target)[1]
+
+    for _ = 1, steps do
+      vim.cmd.normal("]h")
+    end
+
+    assert.same(before, vim.fn.getjumplist(target)[1])
+    assert.equal(target, vim.api.nvim_get_current_win())
+    -- The band is the proof a preview landed at all: without it an untouched
+    -- jumplist would also pass when `]h` did nothing.
+    assert.truthy(vim.wo[target].winbar ~= "")
+
+    vim.api.nvim_set_current_win(window.win())
+    vim.cmd.normal(vim.keycode("<CR>"))
+
+    local jumps = vim.fn.getjumplist(target)[1]
+    local last_jump = jumps[#jumps]
+    assert.truthy(last_jump, "<CR> recorded no jumplist entry, so <C-o> has nowhere to go")
+    assert.equal(from_buf, last_jump.bufnr)
+    assert.equal(from_lnum, last_jump.lnum)
+  end
+
+  it("previews without touching the jumplist, and sends <C-o> back to where the sidebar opened", function()
+    commit_after(3)
+  end)
+
+  -- One `]h` stays inside the file the sidebar was opened from, where the commit
+  -- re-shows the buffer the window already holds, so no buffer swap records the
+  -- jump and the commit has to.
+  it("sends <C-o> back for a row in the file the sidebar was opened from", function()
+    commit_after(1)
+  end)
+
   it("shuts the row under the cursor", function()
     local buf = open_sidebar()
     local expanded = #lines_of(buf)

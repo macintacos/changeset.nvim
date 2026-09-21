@@ -163,6 +163,10 @@ describe("changeset.window", function()
     end)
 
     after_each(function()
+      -- `tabfirst` first: a failure that strands focus in the new tab would
+      -- otherwise leave `tabonly` closing the one the sidebar is in.
+      vim.cmd("silent! tabfirst")
+      vim.cmd("silent! tabonly")
       window.close()
       vim.cmd("only")
       for _, path in ipairs(files) do
@@ -251,6 +255,71 @@ describe("changeset.window", function()
       window.commit(one, 2, "reuse")
 
       assert.equal("", vim.wo[right].winbar)
+    end)
+
+    -- Previewing the file the window already shows: a buffer round trip restores
+    -- the cursor on its own, so only a preview that never changes the buffer can
+    -- tell whether the sidebar put the position back itself.
+    it("gives a borrowed window back the cursor it had", function()
+      local _, right, _, two = staged()
+      vim.api.nvim_win_set_cursor(right, { 3, 0 })
+
+      window.preview(two, 1, BAND)
+      window.close()
+
+      assert.same({ 3, 0 }, vim.api.nvim_win_get_cursor(right))
+    end)
+
+    it("opens a new tabpage for a commit that asks for one", function()
+      local _, _, one = staged()
+      local before = #vim.api.nvim_list_tabpages()
+
+      window.commit(one, 2, "tab")
+
+      assert.equal(before + 1, #vim.api.nvim_list_tabpages())
+    end)
+
+    -- Only `tab` can leak: `:tabnew` records the position it is standing on and
+    -- lands on an empty buffer, whereas `split`/`vsplit` copy the jumplist across
+    -- instead of adding to it.
+    it("sends <C-o> from a new tab back to where the window stood, not the preview", function()
+      local _, right, one, two = staged()
+      local stood_lnum = vim.api.nvim_win_get_cursor(right)[1]
+      local stood_buf = vim.api.nvim_win_get_buf(right)
+      window.preview(two, 2, BAND)
+
+      window.commit(one, 2, "tab")
+
+      local jumps = vim.fn.getjumplist()[1]
+      local lnums = {}
+      for _, jump in ipairs(jumps) do
+        if jump.bufnr == stood_buf then
+          lnums[#lnums + 1] = jump.lnum
+        end
+      end
+      assert.same({ stood_lnum }, lnums)
+      assert.equal(stood_buf, jumps[#jumps].bufnr)
+    end)
+
+    -- A file the sidebar opened by itself, never `:edit`ed, so `bufadd` left it
+    -- unlisted and the commit is the only thing that can promote it.
+    it("lists the buffer a commit claims", function()
+      staged()
+      local three = fixture("three")
+
+      window.commit(three, 2, "reuse")
+
+      assert.is_true(vim.bo[vim.api.nvim_get_current_buf()].buflisted)
+    end)
+
+    it("puts a borrowed window back without disturbing its jumplist", function()
+      local _, right, one = staged()
+      local before = vim.fn.getjumplist(right)[1]
+
+      window.preview(one, 2, BAND)
+      window.close()
+
+      assert.same(before, vim.fn.getjumplist(right)[1])
     end)
 
     it("puts back every window it previewed into", function()
