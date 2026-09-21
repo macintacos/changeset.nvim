@@ -414,7 +414,6 @@ end
 ---`%<` sits before the path because the path is the one part the sidebar is
 ---already showing: when the window is too narrow for all three, it is what a
 ---reader can most afford to lose.
----@param path string Display path of the previewed file.
 ---@param band changeset.Band
 ---@return string
 function M.preview_winbar(band)
