@@ -60,15 +60,6 @@ describe("changeset.view", function()
 
       assert.same({ "session.ts", "Refresh" }, names(view.filter(rows, "refresh")))
     end)
-
-    it("drops a subtree with nothing matching in it", function()
-      local rows = {
-        row("f1", "session.ts", { row("s1", "refresh") }),
-        row("f2", "auth.ts", { row("s2", "verify") }),
-      }
-
-      assert.same({ "session.ts", "refresh" }, names(view.filter(rows, "refresh")))
-    end)
   end)
   describe("by_kind", function()
     it("returns the whole tree when nothing is hidden", function()

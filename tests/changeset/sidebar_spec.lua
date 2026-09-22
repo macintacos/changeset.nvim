@@ -1,4 +1,5 @@
 local changeset = require("plugins.changeset")
+local render = require("plugins.changeset.render")
 local window = require("plugins.changeset.window")
 local Fixture = require("support.git")
 
@@ -99,6 +100,18 @@ describe("changeset sidebar", function()
     assert.truthy(#row_marks > 0)
   end)
 
+  -- `render` sits a filter match one above `MARK_PRIORITY`, which only holds while
+  -- the marks it outranks are stamped at `MARK_PRIORITY` here.
+  it("stamps a mark that carries no priority of its own at the default", function()
+    local buf = open_sidebar()
+
+    local row_mark = vim.tbl_filter(function(mark)
+      return mark[4].hl_group ~= nil
+    end, vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true }))[1]
+
+    assert.equal(render.MARK_PRIORITY, row_mark[4].priority)
+  end)
+
   it("summarises the branch in the window bar", function()
     open_sidebar()
 
@@ -157,6 +170,20 @@ describe("changeset sidebar", function()
   -- jump and the commit has to.
   it("sends <C-o> back for a row in the file the sidebar was opened from", function()
     commit_after(1)
+  end)
+
+  it("filters on a query the pattern matcher would choke on", function()
+    local buf = open_sidebar()
+    vim.api.nvim_set_current_win(window.win())
+
+    -- Not `press`: `vim.fn.input` blocks, so the keys it consumes have to be in the
+    -- typeahead before `f` runs. `x` mode drains what is already queued.
+    vim.api.nvim_feedkeys(vim.keycode("f(<CR>"), "xt", false)
+
+    -- `(` matches no row, so `draw` falls through to the empty message. Under a
+    -- pattern-mode `find` the filter raises instead and the tree is left standing.
+    assert.equal(1, #lines_of(buf))
+    assert.falsy(table.concat(lines_of(buf), "\n"):find("other.lua", 1, true))
   end)
 
   it("shuts the row under the cursor", function()

@@ -167,8 +167,7 @@ local function apply_marks(buf, lines)
         hl_group = mark.hl,
         virt_text = mark.virt_text,
         virt_text_pos = mark.pos,
-        -- Below render's MATCH_PRIORITY, so a filter match reads over the row's own marks.
-        priority = mark.priority or 199,
+        priority = mark.priority or render.MARK_PRIORITY,
       })
     end
   end

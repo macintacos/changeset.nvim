@@ -6,7 +6,7 @@
 local symbols = require("plugins.mini-pickers.symbols")
 
 ---@class changeset.Mark
----@field priority? integer    Draw order against the row's other marks; the caller's default stands when absent.
+---@field priority? integer    Draw order against the row's other marks; `MARK_PRIORITY` stands when absent.
 ---@field col integer          0-based byte column the mark starts at.
 ---@field end_col? integer     0-based exclusive byte column; absent on virtual-text marks.
 ---@field hl? string           Group over `col`..`end_col`; absent on virtual-text marks, whose chunks carry their own.
@@ -79,9 +79,14 @@ M.HEADER_LABEL_HL = "ChangesetHeaderLabel"
 ---@type string
 M.PREVIEW_ICON_HL = "ChangesetPreviewIcon"
 
+---The priority a mark draws at when it carries none of its own. The magnitude is
+---arbitrary — only the step up to the match matters.
+---@type integer
+M.MARK_PRIORITY = 199
+
 -- Above the marks a row already carries, so a match reads over a dimmed
 -- ancestor and a coloured symbol name alike.
-local MATCH_PRIORITY = 200
+local MATCH_PRIORITY = M.MARK_PRIORITY + 1
 
 -- Stands in at the tail of the preview band when the row names no destination.
 local HINT = "<CR> to open"

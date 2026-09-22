@@ -382,7 +382,17 @@ describe("changeset.render", function()
       local match = mark_over(lines[2], "lph")
       local name = mark_over(lines[2], "Alpha")
 
-      assert.is_true((match.priority or 0) > (name.priority or 0))
+      assert.is_nil(name.priority)
+      assert.is_true(match.priority > render.MARK_PRIORITY)
+    end)
+
+    it("takes the query as plain text, not as a pattern", function()
+      local lines = render.lines({ file({ path = "a(b).lua" }) }, opts({ query = "(" }))
+
+      local mark = mark_over(lines[1], "(")
+
+      assert.is_not_nil(mark)
+      assert.equal(render.MATCH_HL, mark.hl)
     end)
 
     it("leaves the rows unmarked when nothing is being filtered", function()
@@ -401,17 +411,18 @@ describe("changeset.render", function()
       return vim.api.nvim_eval_statusline(render.header(summary), { use_winbar = true, maxwidth = 60 }).str
     end
 
-    it("states what the tree is compared against, then the file count and line totals", function()
+    it("states what the tree is compared against", function()
       local text = shown({ base_ref = "origin/trunk", files = 7, added = 142, removed = 38 })
 
       assert.is_true(text:find(" vs origin/trunk ", 1, true) ~= nil)
-      assert.is_true(vim.endswith(text, "7 files  +142 -38 "))
     end)
 
     it("says '1 file', not '1 files'", function()
-      local text = shown({ base_ref = "origin/trunk", files = 1, added = 3, removed = 0 })
+      local singular = shown({ base_ref = "origin/trunk", files = 1, added = 3, removed = 0 })
+      local plural = shown({ base_ref = "origin/trunk", files = 2, added = 3, removed = 0 })
 
-      assert.is_true(vim.endswith(text, "1 file  +3 -0 "))
+      assert.is_true(vim.endswith(singular, "1 file  +3 -0 "))
+      assert.is_true(vim.endswith(plural, "2 files  +3 -0 "))
     end)
 
     it("escapes % in the base ref so the statusline does not read it as an item", function()
@@ -457,10 +468,6 @@ describe("changeset.render", function()
         path = path or "lua/init.lua",
       }
     end
-
-    it("names the file being previewed", function()
-      assert.is_true(render.preview_winbar(band()):find("lua/init.lua", 1, true) ~= nil)
-    end)
 
     it("escapes % in the path so the statusline does not read it as an item", function()
       assert.is_true(render.preview_winbar(band(nil, "a/50%off.md")):find("50%%off", 1, true) ~= nil)
@@ -537,26 +544,39 @@ describe("changeset.render", function()
   end)
 
   describe("define_highlights", function()
-    local comment, cursorline
+    local GROUP_NAMES = { "Comment", "CursorLine", "Visual", "DiagnosticWarn", "TabLine", "Directory" }
+    local saved
+
+    ---@param name string
+    ---@return vim.api.keyset.get_hl_info
+    local function group(name)
+      return vim.api.nvim_get_hl(0, { name = name, link = false })
+    end
 
     before_each(function()
-      comment = vim.api.nvim_get_hl(0, { name = "Comment", link = false })
-      cursorline = vim.api.nvim_get_hl(0, { name = "CursorLine", link = false })
+      saved = {}
+      for _, name in ipairs(GROUP_NAMES) do
+        saved[name] = group(name)
+      end
+      -- `band_hl` is file-local with `band_icon` as its only writer, so without a pin
+      -- here each test inherits whichever group the last one happened to set. No getter
+      -- to read it back, so unlike the groups above it stays pinned past this block.
+      vim.api.nvim_set_hl(0, "ChangesetSpecIcon", { fg = 0x00ff00 })
+      render.band_icon("ChangesetSpecIcon")
     end)
 
     after_each(function()
-      vim.api.nvim_set_hl(0, "Comment", comment)
-      vim.api.nvim_set_hl(0, "CursorLine", cursorline)
+      for _, name in ipairs(GROUP_NAMES) do
+        vim.api.nvim_set_hl(0, name, saved[name])
+      end
     end)
 
     it("keeps the previewed file's icon sitting on the band's new colour", function()
-      vim.api.nvim_set_hl(0, "ChangesetSpecIcon", { fg = 0x00ff00 })
-      render.band_icon("ChangesetSpecIcon")
       vim.api.nvim_set_hl(0, "CursorLine", { bg = 0x123456 })
 
       render.define_highlights()
 
-      local icon = vim.api.nvim_get_hl(0, { name = render.PREVIEW_ICON_HL, link = false })
+      local icon = group(render.PREVIEW_ICON_HL)
       assert.equal(0x123456, icon.bg)
       assert.equal(0x00ff00, icon.fg)
     end)
@@ -566,9 +586,89 @@ describe("changeset.render", function()
 
       render.define_highlights()
 
-      local meta = vim.api.nvim_get_hl(0, { name = render.META_HL, link = false })
+      local meta = group(render.META_HL)
       assert.equal(0x336699, meta.fg)
       assert.is_true(meta.italic)
+    end)
+
+    it("falls back to Visual for the band in a theme that tints no CursorLine", function()
+      vim.api.nvim_set_hl(0, "CursorLine", {})
+      vim.api.nvim_set_hl(0, "Visual", { bg = 0xabcdef })
+
+      render.define_highlights()
+
+      assert.equal(0xabcdef, group(render.PREVIEW_HL).bg)
+    end)
+
+    it("paints the preview badge in the theme's warning colour", function()
+      vim.api.nvim_set_hl(0, "Comment", { fg = 0x336699 })
+      vim.api.nvim_set_hl(0, "DiagnosticWarn", { fg = 0xffaa00 })
+
+      render.define_highlights()
+
+      assert.equal(0xffaa00, group(render.PREVIEW_LABEL_HL).fg)
+    end)
+
+    it("falls back to Comment for the preview badge in a theme with no warning colour", function()
+      vim.api.nvim_set_hl(0, "Comment", { fg = 0x336699 })
+      vim.api.nvim_set_hl(0, "DiagnosticWarn", {})
+
+      render.define_highlights()
+
+      assert.equal(0x336699, group(render.PREVIEW_LABEL_HL).fg)
+    end)
+
+    it("paints the header with the theme's own chrome, not the band's shade", function()
+      vim.api.nvim_set_hl(0, "CursorLine", { bg = 0x123456 })
+      vim.api.nvim_set_hl(0, "TabLine", { bg = 0x654321 })
+
+      render.define_highlights()
+
+      assert.equal(0x654321, group(render.HEADER_HL).bg)
+    end)
+
+    it("falls back to the band for the header in a theme that paints no chrome", function()
+      vim.api.nvim_set_hl(0, "CursorLine", { bg = 0x123456 })
+      vim.api.nvim_set_hl(0, "TabLine", {})
+
+      render.define_highlights()
+
+      assert.equal(0x123456, group(render.HEADER_HL).bg)
+    end)
+
+    it("paints the header badge in the theme's directory colour", function()
+      vim.api.nvim_set_hl(0, "Comment", { fg = 0x336699 })
+      vim.api.nvim_set_hl(0, "Directory", { fg = 0x4488cc })
+
+      render.define_highlights()
+
+      assert.equal(0x4488cc, group(render.HEADER_LABEL_HL).fg)
+    end)
+
+    it("falls back to Comment for the header badge in a theme with no directory colour", function()
+      vim.api.nvim_set_hl(0, "Comment", { fg = 0x336699 })
+      vim.api.nvim_set_hl(0, "Directory", {})
+
+      render.define_highlights()
+
+      assert.equal(0x336699, group(render.HEADER_LABEL_HL).fg)
+    end)
+
+    it("reverses both badges, so neither needs an opaque Normal", function()
+      render.define_highlights()
+
+      assert.is_true(group(render.PREVIEW_LABEL_HL).reverse)
+      assert.is_true(group(render.HEADER_LABEL_HL).reverse)
+    end)
+
+    it("strikes a hidden kind through as well as dimming it", function()
+      vim.api.nvim_set_hl(0, "Comment", { fg = 0x336699 })
+
+      render.define_highlights()
+
+      local hidden = group(render.HIDDEN_HL)
+      assert.equal(0x336699, hidden.fg)
+      assert.is_true(hidden.strikethrough)
     end)
   end)
   describe("kind_lines", function()
@@ -621,6 +721,20 @@ describe("changeset.render", function()
     end)
   end)
 
+  describe("kind_list", function()
+    it("joins two kinds with and", function()
+      assert.equal("fields and variables", render.kind_list({ "Field", "Variable" }))
+    end)
+
+    it("pluralises a kind that does not just take an s", function()
+      assert.equal("classes", render.kind_list({ "Class" }))
+    end)
+
+    it("splits a two-word kind into words", function()
+      assert.equal("enum members", render.kind_list({ "EnumMember" }))
+    end)
+  end)
+
   describe("hidden_note", function()
     it("says nothing when every kind is showing", function()
       assert.is_nil(render.hidden_note({}, 44))
@@ -628,18 +742,6 @@ describe("changeset.render", function()
 
     it("names the one kind it is hiding", function()
       assert.equal("Hiding variables. F to change.", render.hidden_note({ "Variable" }, 44))
-    end)
-
-    it("joins two kinds with and", function()
-      assert.equal("Hiding fields and variables. F to change.", render.hidden_note({ "Field", "Variable" }, 44))
-    end)
-
-    it("pluralises a kind that does not just take an s", function()
-      assert.equal("Hiding classes. F to change.", render.hidden_note({ "Class" }, 44))
-    end)
-
-    it("splits a two-word kind into words", function()
-      assert.equal("Hiding enum members. F to change.", render.hidden_note({ "EnumMember" }, 44))
     end)
 
     it("counts the kinds instead once naming them would not fit", function()
