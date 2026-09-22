@@ -312,6 +312,28 @@ describe("changeset.window", function()
       assert.is_true(vim.bo[vim.api.nvim_get_current_buf()].buflisted)
     end)
 
+    -- Scrolling an unfocused window drags its cursor without focusing it, so a
+    -- claim that re-revealed the cursor would jump the view as focus arrived.
+    it("keeps the view of a preview the cursor moves into", function()
+      local _, right = staged()
+      local tall = vim.fn.tempname()
+      vim.fn.writefile(vim.tbl_map(tostring, vim.fn.range(1, 300)), tall)
+      files[#files + 1] = tall
+      window.focus()
+      window.preview(tall, 150, BAND)
+      vim.api.nvim_win_call(right, function()
+        vim.cmd("normal! 40" .. vim.keycode("<C-e>"))
+      end)
+      local scrolled = vim.api.nvim_win_call(right, vim.fn.winsaveview)
+
+      vim.api.nvim_set_current_win(right)
+      window.claim()
+
+      local view = vim.fn.winsaveview()
+      assert.equal(scrolled.topline, view.topline)
+      assert.equal(scrolled.lnum, view.lnum)
+    end)
+
     it("puts a borrowed window back without disturbing its jumplist", function()
       local _, right, one = staged()
       local before = vim.fn.getjumplist(right)[1]

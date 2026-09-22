@@ -596,6 +596,14 @@ function M.open()
     desc = "changeset: preview the row under the cursor without leaving the sidebar",
     callback = preview_current,
   })
+  -- Fires: the cursor entering any window while the sidebar is open. Nested so the
+  -- buffer swaps inside the commit fire their autocmds as `<CR>`'s do.
+  vim.api.nvim_create_autocmd("WinEnter", {
+    group = augroup,
+    nested = true,
+    desc = "changeset: open a previewed file once the cursor enters its window",
+    callback = window.claim,
+  })
   vim.keymap.set("n", STEP_KEYS[1], function()
     step(1)
   end, { desc = "Next change (Changeset)" })

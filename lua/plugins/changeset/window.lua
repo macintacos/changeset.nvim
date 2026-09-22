@@ -21,6 +21,7 @@ local SPLIT_CMD = { vsplit = "vsplit", split = "split", tab = "tabnew" }
 ---@field buf integer
 ---@field cursor integer[]
 ---@field winbar string
+---@field standing_buf integer? The buffer a preview put here while the cursor stood in the window.
 
 ---@type { win: integer?, buf: integer?, borrowed: table<integer, changeset.Snapshot> }
 local sidebar = { borrowed = {} }
@@ -249,6 +250,7 @@ function M.preview(path, lnum, band)
   end
   local win = target()
   remember(win)
+  sidebar.borrowed[win].standing_buf = win == vim.api.nvim_get_current_win() and buf or nil
   show(win, buf)
   vim.wo[win].winbar = render.preview_winbar(band)
   if lnum then
@@ -260,21 +262,20 @@ function M.preview(path, lnum, band)
   end
 end
 
----Commit the previewed location: focus it, leave `<C-o>` pointing where the
----window stood before the sidebar, and list the buffer.
----@param path string
+---Make `buf` the chosen contents of `win`: focus it, leave `<C-o>` pointing where
+---the window stood before the sidebar, and list the buffer.
+---@param win integer
+---@param buf integer
 ---@param lnum integer?
 ---@param how "reuse"|"vsplit"|"split"|"tab"
-function M.commit(path, lnum, how)
-  local buf = buffers.load(path)
-  if not buf then
-    return vim.notify("Changeset: cannot open " .. path, vim.log.levels.WARN)
-  end
+local function promote(win, buf, lnum, how)
   -- Listed from here on: the user chose this file, so it is theirs now.
   vim.bo[buf].buflisted = true
 
-  local win = target()
   local snapshot = sidebar.borrowed[win]
+  -- Chosen, not borrowed — and dropped before the focus below, whose `WinEnter`
+  -- would otherwise have `claim` commit it a second time.
+  sidebar.borrowed[win] = nil
   vim.api.nvim_set_current_win(win)
   -- On the snapshot first, so the entry below is the user's own position rather
   -- than the last preview — and before any split, since `:tabnew` records the
@@ -298,8 +299,35 @@ function M.commit(path, lnum, how)
     vim.api.nvim_win_set_cursor(0, { M._clamp(lnum, vim.api.nvim_buf_line_count(buf)), 0 })
     require("helpers.windows").reveal_cursor()
   end
-  -- Chosen, not borrowed: this window keeps what it is showing.
-  sidebar.borrowed[vim.api.nvim_get_current_win()] = nil
+end
+
+---Commit the previewed location in the window the preview went to.
+---@param path string
+---@param lnum integer?
+---@param how "reuse"|"vsplit"|"split"|"tab"
+function M.commit(path, lnum, how)
+  local buf = buffers.load(path)
+  if not buf then
+    return vim.notify("Changeset: cannot open " .. path, vim.log.levels.WARN)
+  end
+  promote(target(), buf, lnum, how)
+end
+
+---Commit the focused window if the sidebar previewed into it from elsewhere:
+---arriving at a preview by any route counts as choosing it, but one made where
+---the cursor already stood was never arrived at.
+function M.claim()
+  local win = vim.api.nvim_get_current_win()
+  local snapshot = M.is_visible() and sidebar.borrowed[win]
+  local buf = vim.api.nvim_win_get_buf(win)
+  if not snapshot or snapshot.standing_buf == buf then
+    return
+  end
+  -- The user may have scrolled the preview before reaching it; the swaps inside
+  -- the promote would lose that view.
+  local view = vim.fn.winsaveview()
+  promote(win, buf, nil, "reuse")
+  vim.fn.winrestview(view)
 end
 
 ---Close the sidebar. Every window it previewed into goes back to the buffer and

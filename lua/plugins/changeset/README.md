@@ -197,7 +197,8 @@ carries a foreground only and the glyph would otherwise punch the window's own b
 through the band.
 
 The band goes the moment the window stops previewing — `q` puts it back with the buffer,
-and `<CR>` clears it, because a file you chose is not on loan.
+and a commit clears it — `<CR>`, or simply entering the window — because a file you chose
+is not on loan.
 
 ### Empty and failed states direct, never apologise
 
@@ -273,18 +274,22 @@ repository's deliberate choice is none of that save's business.
 ## Behaviour that is easy to get wrong
 
 - **Preview is non-destructive.** `j`/`k` swap a window's buffer and cursor for real, but
-  `q` or `<leader>gp` puts back every window a preview borrowed, buffer *and* cursor. Only
-  `<CR>` relocates you, and only `<CR>` writes a jumplist entry, sending `<C-o>` back to
-  where the window stood before the sidebar opened rather than to the last preview —
-  previewing must not write one, or `<C-o>` becomes one entry per keypress.
+  `q` or `<leader>gp` puts back every window a preview borrowed, buffer *and* cursor.
+  Only a commit — `<CR>` and its split variants, or entering the previewed window — keeps
+  the file there and writes a jumplist entry, sending `<C-o>` back to where the window
+  stood before the sidebar opened rather than to the last preview — previewing must not
+  write one, or `<C-o>` becomes one entry per keypress. Entering counts only as an
+  arrival: a preview `]h` made in the window the cursor was already in stays a preview
+  however focus leaves and returns, until `<CR>` or `q`.
 - **Previews follow the window you were last in** — the focused one, or, while the cursor
   is in the sidebar, the one it came from. `winnr("#")` answers 0 once that window has
   been closed, and 0 is an alias for the current window wherever it would then be passed,
   so it has to be dropped rather than carried through. Nothing usable at all: the rest of
   the tabpage, then a split of its own.
-- **A previewed file is highlighted, not opened.** Its buffer stays unlisted until `<CR>`
-  promotes it, but it carries a filetype, so treesitter, syntax and any language server
-  attach to it exactly as they would to a file you opened. The filetype has to be named
+- **A previewed file is highlighted, not opened.** Its buffer stays unlisted until a commit
+  promotes it — `<CR>`, or the cursor arriving in its window by any route (mouse, `<C-w>`,
+  `:wincmd`, another plugin). It carries a filetype, so treesitter, syntax and any language
+  server attach to it exactly as they would to a file you opened. The filetype has to be named
   explicitly: previews happen in a `CursorMoved` callback, autocommands do not nest, and
   the read therefore skips the `BufRead` chain that would otherwise detect one. gitsigns
   is attached explicitly for the same reason: `BufRead` is what it attaches on.
