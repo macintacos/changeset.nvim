@@ -152,7 +152,9 @@ local function preview_current()
   local row = row_at_cursor()
   if row and row.lnum and row.kind ~= "file" then
     window.preview(session.root .. "/" .. row.path, row.lnum, band_for(row))
-  elseif row and row.kind == "file" and row.status ~= "deleted" then
+  elseif row and row.kind == "file" and row.status == "deleted" then
+    window.preview_notice("This file was deleted on this branch", band_for(row))
+  elseif row and row.kind == "file" then
     window.preview(session.root .. "/" .. row.path, 1, band_for(row))
   end
 end

@@ -11,7 +11,8 @@ neither drives the other.
 Files changed between `merge-base(origin/<default>, HEAD)` — the local default branch
 when there is no `origin/` copy of it — and the working tree: the
 same range PR Review Mode's gutter marks, so the sidebar and the signs never disagree.
-Untracked files count; deleted files are listed but not navigable.
+Untracked files count. A deleted file is listed, but its row previews a notice
+in place of the file and never opens it.
 
 Under each file sit the symbols a hunk actually touched, plus the ancestors needed to
 place them. Unchanged siblings are hidden: the tree is a map of the diff, not an outline.
@@ -286,13 +287,15 @@ repository's deliberate choice is none of that save's business.
   been closed, and 0 is an alias for the current window wherever it would then be passed,
   so it has to be dropped rather than carried through. Nothing usable at all: the rest of
   the tabpage, then a split of its own.
-- **A previewed file is highlighted, not opened.** Its buffer stays unlisted until a commit
-  promotes it — `<CR>`, or the cursor arriving in its window by any route (mouse, `<C-w>`,
-  `:wincmd`, another plugin). It carries a filetype, so treesitter, syntax and any language
-  server attach to it exactly as they would to a file you opened. The filetype has to be named
-  explicitly: previews happen in a `CursorMoved` callback, autocommands do not nest, and
-  the read therefore skips the `BufRead` chain that would otherwise detect one. gitsigns
-  is attached explicitly for the same reason: `BufRead` is what it attaches on.
+- **A previewed file is highlighted, not opened.** Its buffer stays unlisted until a
+  commit promotes it — `<CR>`, or the cursor arriving in its window by any route (mouse,
+  `<C-w>`, `:wincmd`, another plugin). A deleted row's notice is the exception: it stands
+  in for a file that cannot be opened, so arriving in it chooses nothing. It carries a
+  filetype, so treesitter, syntax and any language server attach to it exactly as they
+  would to a file you opened. The filetype has to be named explicitly: previews happen in
+  a `CursorMoved` callback, autocommands do not nest, and the read therefore skips the
+  `BufRead` chain that would otherwise detect one. gitsigns is attached explicitly for the
+  same reason: `BufRead` is what it attaches on.
 - **`?` documents the sidebar, not its buffer.** A buffer collects mappings from whoever
   wants one — a blanket `FileType` autocmd elsewhere in the config is all it takes — and
   those keys are not this sidebar's interface. The keys it sets are recorded as it sets

@@ -260,6 +260,70 @@ describe("changeset sidebar", function()
     assert.is_false(vim.bo[p.previewed].buflisted)
   end)
 
+  describe("on a file the branch deleted", function()
+    before_each(function()
+      Fixture.git({ "rm", "-q", "other.lua" }, tmp)
+      Fixture.commit("drop other", tmp)
+    end)
+
+    ---Open the sidebar from `mod.lua` and move its cursor onto the deleted row.
+    ---@return integer target The window the preview goes to.
+    local function on_deleted_row()
+      vim.cmd.edit("mod.lua")
+      local target = vim.api.nvim_get_current_win()
+      local buf = open_sidebar()
+      local lnum
+      for i, line in ipairs(lines_of(buf)) do
+        if line:find("other.lua", 1, true) then
+          lnum = i
+          break
+        end
+      end
+      assert(lnum, "the deleted file has no row")
+      vim.api.nvim_set_current_win(window.win())
+      vim.api.nvim_win_set_cursor(0, { lnum, 0 })
+      vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+      return target
+    end
+
+    ---@return boolean
+    local function deleted_file_loaded()
+      for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.endswith(vim.api.nvim_buf_get_name(buf), "/other.lua") then
+          return true
+        end
+      end
+      return false
+    end
+
+    it("previews a notice that the file was deleted", function()
+      local target = on_deleted_row()
+
+      local text = table.concat(lines_of(vim.api.nvim_win_get_buf(target)), "\n")
+      assert.truthy(text:find("This file was deleted on this branch", 1, true))
+    end)
+
+    it("opens nothing for the deleted file on <CR>", function()
+      on_deleted_row()
+
+      vim.cmd.normal(vim.keycode("<CR>"))
+
+      assert.is_false(deleted_file_loaded())
+    end)
+
+    it("chooses nothing when the cursor moves into the notice", function()
+      local target = on_deleted_row()
+      local notice = vim.api.nvim_win_get_buf(target)
+      local listed = #vim.fn.getbufinfo({ buflisted = 1 })
+
+      vim.cmd.wincmd("p")
+
+      assert.equal(target, vim.api.nvim_get_current_win())
+      assert.equal(notice, vim.api.nvim_win_get_buf(target))
+      assert.equal(listed, #vim.fn.getbufinfo({ buflisted = 1 }))
+    end)
+  end)
+
   it("filters on a query the pattern matcher would choke on", function()
     local buf = open_sidebar()
     vim.api.nvim_set_current_win(window.win())

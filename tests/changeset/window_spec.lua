@@ -32,6 +32,21 @@ describe("changeset.window", function()
     end)
   end)
 
+  describe("_centred", function()
+    it("puts the text on the middle row, padded to the middle column", function()
+      local lines, row = window._centred("gone", 10, 5)
+
+      assert.equal(2, row)
+      assert.equal("   gone", lines[row + 1])
+    end)
+
+    it("does not pad text wider than the window", function()
+      local lines, row = window._centred("a long message", 4, 1)
+
+      assert.equal("a long message", lines[row + 1])
+    end)
+  end)
+
   describe("_candidates", function()
     it("offers the window with focus first, then the one focused before it", function()
       assert.same({ 7, 9, 3 }, window._candidates(7, 9, { 3, 7, 9 }))
@@ -342,6 +357,72 @@ describe("changeset.window", function()
       window.close()
 
       assert.same(before, vim.fn.getjumplist(right)[1])
+    end)
+
+    it("shows a notice as read-only text the buffer list never sees", function()
+      local _, right = staged()
+
+      window.preview_notice("This file was deleted", BAND)
+
+      local buf = vim.api.nvim_win_get_buf(right)
+      assert.is_false(vim.bo[buf].buflisted)
+      assert.is_false(vim.bo[buf].modifiable)
+      assert.truthy(
+        table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n"):find("This file was deleted", 1, true)
+      )
+      assert.is_true(vim.wo[right].winbar:find(BAND.path, 1, true) ~= nil)
+    end)
+
+    it("keeps one notice highlight however often the notice is shown", function()
+      local _, right = staged()
+
+      window.preview_notice("This file was deleted", BAND)
+      window.preview_notice("This file was deleted", BAND)
+
+      local buf = vim.api.nvim_win_get_buf(right)
+      local ns = vim.api.nvim_get_namespaces()["changeset.notice"]
+      local marks = vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, {})
+      assert.equal(1, #marks)
+      assert.truthy(
+        vim.api.nvim_buf_get_lines(buf, marks[1][2], marks[1][2] + 1, false)[1]:find("This file was deleted", 1, true)
+      )
+    end)
+
+    it("previews a file into the window a notice is standing in", function()
+      local _, right, one = staged()
+      window.preview_notice("This file was deleted", BAND)
+      local before = #vim.api.nvim_tabpage_list_wins(0)
+
+      window.preview(one, 2, BAND)
+
+      assert.equal(before, #vim.api.nvim_tabpage_list_wins(0))
+      assert.equal(vim.fn.resolve(one), showing(right))
+    end)
+
+    it("leaves a notice borrowed when the cursor moves into it", function()
+      local _, right, _, two = staged()
+      window.focus()
+      window.preview_notice("This file was deleted", BAND)
+      local notice = vim.api.nvim_win_get_buf(right)
+
+      vim.api.nvim_set_current_win(right)
+      window.claim()
+
+      assert.equal(notice, vim.api.nvim_win_get_buf(right))
+      assert.is_false(vim.bo[notice].buflisted)
+      window.close()
+      assert.equal(vim.fn.resolve(two), showing(right))
+    end)
+
+    it("puts a borrowed window back after showing a notice in it", function()
+      local _, right, _, two = staged()
+      vim.wo[right].winbar = "mine"
+
+      window.preview_notice("This file was deleted", BAND)
+      window.close()
+
+      assert.equal(vim.fn.resolve(two), showing(right))
+      assert.equal("mine", vim.wo[right].winbar)
     end)
 
     it("puts back every window it previewed into", function()
