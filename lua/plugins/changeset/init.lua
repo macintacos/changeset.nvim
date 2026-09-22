@@ -530,6 +530,7 @@ function M.refresh()
   end)
 end
 
+---Open the sidebar on the current buffer's repository and kick off the first refresh.
 function M.open()
   if session then
     M.close()
@@ -605,6 +606,7 @@ function M.open()
   M.refresh()
 end
 
+---Dismiss the sidebar, dropping the session, its timers and the global `]h`/`[h` keys.
 function M.close()
   if session then
     if session.cancel then

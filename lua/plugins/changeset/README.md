@@ -147,6 +147,12 @@ another branch can hide things this one never had.
 Right-aligned virtual text, `+N` in `GitSignsAdd`, `-N` in `GitSignsDelete`. Numbers, not
 a bar — a bar would be decoration competing with the rail, and the rail already won.
 
+A symbol's `+N` counts only the changed lines falling inside its own range, so a hunk
+running across two symbols gives each one its own share and the lines in the gap between
+them to neither. A file's `+N` is git's count for the whole file and can therefore exceed
+the sum of its symbols'. Removed lines have no position in the new file to split on, so a
+hunk's `-N` goes wholly to the first symbol it reaches.
+
 ### Header
 
 ```text

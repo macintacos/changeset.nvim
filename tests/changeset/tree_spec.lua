@@ -349,9 +349,15 @@ describe("changeset.tree", function()
       local FUNCTIONS = { sym("first", "Function", 0, 1, 3), sym("second", "Function", 0, 5, 9) }
 
       ---@param hunks changeset.Hunk[]
+      ---@return changeset.Row
+      local function build_file(hunks)
+        return tree.build({ file(PATH, hunks) }, { [PATH] = FUNCTIONS })[1]
+      end
+
+      ---@param hunks changeset.Hunk[]
       ---@return changeset.Row[]
       local function build_functions(hunks)
-        return tree.build({ file(PATH, hunks) }, { [PATH] = FUNCTIONS })[1].children
+        return build_file(hunks).children
       end
 
       it("counts a spanning hunk's added lines in each symbol only as far as they fall inside it", function()
@@ -373,6 +379,14 @@ describe("changeset.tree", function()
 
         assert.equal(3, rows[1].added)
         assert.equal(3, rows[1].removed)
+      end)
+
+      it("leaves a file's total above the sum of its symbols when a hunk spans the gap between them", function()
+        local file_row = build_file({ hunk(2, 8, 4) })
+        local symbols_added = file_row.children[1].added + file_row.children[2].added
+
+        assert.equal(8, file_row.added)
+        assert.is_true(file_row.added > symbols_added)
       end)
     end)
 

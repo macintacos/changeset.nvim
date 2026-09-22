@@ -166,11 +166,13 @@ function M.is_visible()
     and vim.tbl_contains(vim.api.nvim_tabpage_list_wins(0), sidebar.win)
 end
 
+---Whether the cursor is in the sidebar.
 ---@return boolean
 function M.is_focused()
   return M.is_visible() and vim.api.nvim_get_current_win() == sidebar.win
 end
 
+---The sidebar's buffer, or nothing once it has been wiped with its window.
 ---@return integer? buf
 function M.buf()
   return sidebar.buf and vim.api.nvim_buf_is_valid(sidebar.buf) and sidebar.buf or nil

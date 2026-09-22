@@ -11,11 +11,13 @@
 
 local M = {}
 
+---A fresh view state: nothing folded, no chain opened out.
 ---@return changeset.State
 function M.new()
   return { collapsed = {}, chains = {} }
 end
 
+---Whether the row's children are hidden.
 ---@param st changeset.State
 ---@param id string
 ---@return boolean
@@ -23,6 +25,7 @@ function M.is_collapsed(st, id)
   return st.collapsed[id] == true
 end
 
+---Fold or unfold a row's children.
 ---@param st changeset.State
 ---@param id string
 ---@param collapsed boolean
@@ -30,6 +33,7 @@ function M.set_collapsed(st, id, collapsed)
   st.collapsed[id] = collapsed or nil
 end
 
+---Fold every row in `ids`.
 ---@param st changeset.State
 ---@param ids string[]
 function M.collapse_all(st, ids)
@@ -38,6 +42,7 @@ function M.collapse_all(st, ids)
   end
 end
 
+---Unfold every row, leaving opened chains as they are.
 ---@param st changeset.State
 function M.expand_all(st)
   st.collapsed = {}
@@ -55,6 +60,7 @@ function M.is_chain_open(st, id)
   return st.chains[id] == true
 end
 
+---Show or re-hide the intermediate rows of a compressed chain.
 ---@param st changeset.State
 ---@param id string
 ---@param open boolean
