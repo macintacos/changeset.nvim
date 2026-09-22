@@ -59,7 +59,7 @@ local function press(key)
 end
 
 describe("changeset sidebar", function()
-  local tmp, previous_dir, state_home
+  local tmp, previous_dir
 
   -- The sidebar resolves its repo from the process cwd, and `write` above takes
   -- relative paths, so the fixture has to be entered rather than merely pointed at.
@@ -68,11 +68,6 @@ describe("changeset sidebar", function()
     vim.fn.mkdir(tmp, "p")
     previous_dir = vim.fn.chdir(tmp)
     assert(previous_dir ~= "", "could not enter the fixture directory")
-    -- `prefs.path()` hangs off stdpath("state"), so without this the sidebar
-    -- opens with whatever symbol kinds the developer has hidden in their own
-    -- editor, and what this fixture renders changes machine to machine.
-    state_home = vim.env.XDG_STATE_HOME
-    vim.env.XDG_STATE_HOME = tmp .. "/state"
 
     init_feature_repo(tmp)
   end)
@@ -82,7 +77,6 @@ describe("changeset sidebar", function()
     vim.cmd("silent! %bwipeout!")
     vim.fn.chdir(previous_dir)
     vim.fn.delete(tmp, "rf")
-    vim.env.XDG_STATE_HOME = state_home
   end)
 
   it("lists every file the branch changed", function()

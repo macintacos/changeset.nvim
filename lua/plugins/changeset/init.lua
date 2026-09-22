@@ -42,6 +42,7 @@ local augroup = vim.api.nvim_create_augroup("changeset", { clear = true })
 ---@field base string
 ---@field ref string Ref the fork point was measured against, e.g. "origin/trunk".
 ---@field branch string
+---@field file string Preferences file for this changeset session.
 ---@field default_branch string
 ---@field files changeset.File[]
 ---@field symbols table<string, changeset.CachedSymbol[]> Absent key means "still resolving".
@@ -335,6 +336,7 @@ local function open_kind_menu(open_session)
   require("plugins.changeset.menu").open({
     root = open_session.root,
     branch = open_session.branch,
+    file = open_session.file,
     counts = view.kind_counts(open_session.rows),
     hidden = open_session.hidden,
     icon = function(symbol_kind)
@@ -536,6 +538,7 @@ function M.open()
   -- The buffer's repository, not Neovim's directory: with the two different, a base
   -- measured in the wrong one leaves every later `git diff` on a bad object.
   local root = Paths.root(0)
+  local preferences_file = prefs.path()
   local base, _, ref = Git.merge_base(root)
   if not base then
     return vim.notify("Changeset: no merge base with the default branch", vim.log.levels.WARN)
@@ -561,6 +564,7 @@ function M.open()
     base = base,
     ref = ref or default_branch,
     branch = branch,
+    file = preferences_file,
     default_branch = default_branch,
     files = {},
     symbols = {},
@@ -568,7 +572,7 @@ function M.open()
     visible = {},
     st = folds[root],
     query = "",
-    hidden = prefs.resolve(prefs.load(prefs.path()), root, branch),
+    hidden = prefs.resolve(prefs.load(preferences_file), root, branch),
   }
 
   render.define_highlights()

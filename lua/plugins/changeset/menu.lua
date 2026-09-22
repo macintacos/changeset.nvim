@@ -26,6 +26,7 @@ local FOOTER = {
 ---@class changeset.MenuOpts
 ---@field root string       Repo root a repo-scoped save is filed under.
 ---@field branch string
+---@field file string       Preferences file for this changeset session.
 ---@field counts table<string, integer> Symbol rows per kind across the whole tree.
 ---@field hidden table<string, true>    Kinds the tree is hiding now.
 ---@field icon fun(kind: string): string, string Glyph and its highlight group.
@@ -186,9 +187,9 @@ local function save(scope)
   if not menu then
     return
   end
-  local file, opts = prefs.path(), menu.opts
-  if not prefs.save(file, prefs.apply(prefs.load(file), scope, opts.root, opts.branch, menu.hidden)) then
-    return vim.notify("Changeset: could not write " .. file, vim.log.levels.ERROR)
+  local opts = menu.opts
+  if not prefs.save(opts.file, prefs.apply(prefs.load(opts.file), scope, opts.root, opts.branch, menu.hidden)) then
+    return vim.notify("Changeset: could not write " .. opts.file, vim.log.levels.ERROR)
   end
   local hiding = vim.tbl_keys(menu.hidden)
   table.sort(hiding)
@@ -231,7 +232,7 @@ end
 ---@param opts changeset.MenuOpts
 function M.open(opts)
   M.close()
-  local saved, scope = prefs.resolve(prefs.load(prefs.path()), opts.root, opts.branch)
+  local saved, scope = prefs.resolve(prefs.load(opts.file), opts.root, opts.branch)
   local hidden = vim.deepcopy(opts.hidden)
   local rows = M._rows(opts.counts, hidden)
   if #rows == 0 then
