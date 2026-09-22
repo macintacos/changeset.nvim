@@ -130,10 +130,14 @@ function M._walk(queue, run, on_file)
     end
     local path = queue[next_index]
     next_index = next_index + 1
+    -- The pcall below also catches a raise arriving after `run` has answered, and
+    -- pumping twice for one lane would put more than CONCURRENCY in flight.
+    local answered = false
     local function step(items)
-      if cancelled then
+      if cancelled or answered then
         return
       end
+      answered = true
       on_file(path, items)
       pump()
     end

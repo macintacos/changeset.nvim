@@ -100,5 +100,18 @@ describe("changeset.resolve", function()
 
       assert.equal(items, answers["api.ts"])
     end)
+
+    it("reports a file once when its step answers and then raises", function()
+      local seen = {}
+
+      resolve._walk({ "api.ts", "auth.ts" }, function(_, done)
+        done({})
+        error("client vanished")
+      end, function(path)
+        seen[#seen + 1] = path
+      end)
+
+      assert.same({ "api.ts", "auth.ts" }, seen)
+    end)
   end)
 end)
