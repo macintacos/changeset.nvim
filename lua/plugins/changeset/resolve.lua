@@ -114,13 +114,14 @@ local function resolve_one(root, path, on_done)
   end)
 end
 
----Resolve every changed file's symbols, reporting each as it lands.
----@param root string
----@param files changeset.File[]
+---Walk a queue of paths through `run`, at most `CONCURRENCY` of them in flight, reporting
+---each answer as it lands. A `run` that raises before answering is reported as no symbols,
+---so a failing step closes its lane instead of stranding it.
+---@param queue string[]
+---@param run fun(path: string, done: fun(items: MiniPickers.Symbol[]?))
 ---@param on_file fun(path: string, items: MiniPickers.Symbol[]?)
 ---@return fun() cancel
-function M.start(root, files, on_file)
-  local queue = M._resolvable(files)
+function M._walk(queue, run, on_file)
   local next_index, cancelled = 1, false
 
   local function pump()
@@ -136,7 +137,7 @@ function M.start(root, files, on_file)
       on_file(path, items)
       pump()
     end
-    if not pcall(resolve_one, root, path, step) then
+    if not pcall(run, path, step) then
       step(nil)
     end
   end
@@ -148,6 +149,17 @@ function M.start(root, files, on_file)
   return function()
     cancelled = true
   end
+end
+
+---Resolve every changed file's symbols, reporting each as it lands.
+---@param root string
+---@param files changeset.File[]
+---@param on_file fun(path: string, items: MiniPickers.Symbol[]?)
+---@return fun() cancel
+function M.start(root, files, on_file)
+  return M._walk(M._resolvable(files), function(path, done)
+    resolve_one(root, path, done)
+  end, on_file)
 end
 
 return M
