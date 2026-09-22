@@ -3,14 +3,14 @@
 A read-only sidebar mapping what this branch changed, nested by symbol.
 
 `<leader>gp` opens the *map* of what this branch changed. `<leader>gP` puts the *gutter*
-in PR Review Mode over the same range. They are siblings and read the same base, but
-neither drives the other.
+in PR Review Mode over the same range — unless the branch is stacked on another PR, whose
+target the gutter diffs against instead. Neither drives the other.
 
 ## What it shows
 
 Files changed between `merge-base(origin/<default>, HEAD)` — the local default branch
 when there is no `origin/` copy of it — and the working tree: the
-same range PR Review Mode's gutter marks, so the sidebar and the signs never disagree.
+same range PR Review Mode's gutter marks, except on a branch whose open PR targets another branch.
 Untracked files count. A deleted file is listed, but its row previews a notice
 in place of the file and never opens it.
 

@@ -1,7 +1,7 @@
 -- Local plugin (no upstream repo)
 -- <leader>gp opens a read-only sidebar mapping what this branch changed, nested
 -- by the symbols each hunk touched. Sibling to <leader>gP (PR Review Mode),
--- which puts the same range in the gutter.
+-- which marks the branch's changes in the gutter.
 
 -- Mapped here rather than in plugin/which-key.lua so it travels with the plugin.
 -- A plain keymap with a `desc` is all which-key needs to label it; `add()` is for
