@@ -241,6 +241,12 @@ function M.preview(path, lnum, band)
   if not buf then
     return
   end
+  -- Previews load from a `CursorMoved` callback, where `BufRead` (gitsigns' attach
+  -- trigger) does not fire.
+  local ok, gitsigns = pcall(require, "gitsigns")
+  if ok then
+    gitsigns.attach({ bufnr = buf })
+  end
   local win = target()
   remember(win)
   show(win, buf)

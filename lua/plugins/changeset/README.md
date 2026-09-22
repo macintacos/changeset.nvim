@@ -286,7 +286,8 @@ repository's deliberate choice is none of that save's business.
   promotes it, but it carries a filetype, so treesitter, syntax and any language server
   attach to it exactly as they would to a file you opened. The filetype has to be named
   explicitly: previews happen in a `CursorMoved` callback, autocommands do not nest, and
-  the read therefore skips the `BufRead` chain that would otherwise detect one.
+  the read therefore skips the `BufRead` chain that would otherwise detect one. gitsigns
+  is attached explicitly for the same reason: `BufRead` is what it attaches on.
 - **`?` documents the sidebar, not its buffer.** A buffer collects mappings from whoever
   wants one — a blanket `FileType` autocmd elsewhere in the config is all it takes — and
   those keys are not this sidebar's interface. The keys it sets are recorded as it sets
