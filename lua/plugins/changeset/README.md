@@ -233,7 +233,9 @@ through the band.
 
 The band goes the moment the window stops previewing — `q` puts it back with the buffer,
 and a commit clears it — `<CR>`, or simply entering the window — because a file you chose
-is not on loan.
+is not on loan. The window the cursor is in never wears it at all: a `]h` pressed there
+previews without a band, and one that came along with a buffer or a split comes off the
+moment that window takes focus or a buffer.
 
 ### Empty and failed states direct, never apologise
 

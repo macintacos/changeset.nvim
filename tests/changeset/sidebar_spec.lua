@@ -187,9 +187,12 @@ describe("changeset sidebar", function()
     assert.same(before, vim.fn.getjumplist(target)[1])
     assert.equal(listed, #vim.fn.getbufinfo({ buflisted = 1 }))
     assert.equal(standing, vim.api.nvim_get_current_win())
-    -- The band is the proof a preview landed at all: without it an untouched
-    -- jumplist would also pass when `]h` did nothing.
-    assert.truthy(vim.wo[target].winbar ~= "")
+    -- From the sidebar, the band is the proof a preview landed at all: without it
+    -- an untouched jumplist would also pass when `]h` did nothing. From the file,
+    -- the callers prove it by the buffer instead, since the window being read has none.
+    if from == "sidebar" then
+      assert.truthy(vim.wo[target].winbar ~= "")
+    end
     staged.previewed = vim.api.nvim_win_get_buf(target)
     return staged
   end

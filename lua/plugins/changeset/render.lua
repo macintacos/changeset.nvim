@@ -454,6 +454,13 @@ function M.preview_winbar(band)
   })
 end
 
+---Whether `winbar` is a band `preview_winbar` made.
+---@param winbar string
+---@return boolean
+function M.is_preview_winbar(winbar)
+  return winbar:find(("%%#%s# Preview "):format(M.PREVIEW_LABEL_HL), 1, true) ~= nil
+end
+
 ---Point `PREVIEW_ICON_HL` at `hl`'s colour over the band's background.
 ---
 ---A MiniIcons group carries a foreground only, so a glyph drawn straight in one

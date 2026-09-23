@@ -979,6 +979,14 @@ vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter", "CursorMoved", "CursorMove
   end,
 })
 
+-- Fires: the cursor entering any window, or any window taking a buffer, sidebar
+-- open or not — the two ways a preview band can come to sit where the user reads.
+vim.api.nvim_create_autocmd({ "WinEnter", "BufWinEnter" }, {
+  group = vim.api.nvim_create_augroup("changeset.unband", { clear = true }),
+  desc = "changeset: keep the preview band off the window the cursor is in",
+  callback = window.unband,
+})
+
 -- gitsigns publishes this on every sign refresh, so it doubles as a "the diff
 -- may have moved" hook — a commit, a write, or a checkout made outside Neovim.
 vim.api.nvim_create_autocmd("User", {

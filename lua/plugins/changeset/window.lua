@@ -168,12 +168,30 @@ end
 ---@return integer win
 local function borrow(buf, band, pick)
   local win = target()
+  local standing = win == vim.api.nvim_get_current_win()
   remember(win)
-  sidebar.borrowed[win].standing_buf = win == vim.api.nvim_get_current_win() and buf or nil
+  sidebar.borrowed[win].standing_buf = standing and buf or nil
   sidebar.borrowed[win].pick = pick
   show(win, buf)
-  vim.wo[win].winbar = render.preview_winbar(band)
+  -- The band is for a window seen from the sidebar, never the one being read.
+  if not standing then
+    vim.wo[win].winbar = render.preview_winbar(band)
+  end
   return win
+end
+
+---Take the band off the focused window, which is never a preview to the user.
+---
+---Stripped on arrival rather than only by `claim`: window options are remembered
+---per buffer, so re-showing a buffer that was once previewed brings its band back
+---with it, as does splitting a banded window — sidebar open or not.
+function M.unband()
+  local win = vim.api.nvim_get_current_win()
+  if win == sidebar.win or not render.is_preview_winbar(vim.wo[win].winbar) then
+    return
+  end
+  local snapshot = sidebar.borrowed[win]
+  vim.wo[win].winbar = snapshot and snapshot.winbar or vim.go.winbar
 end
 
 ---Whether the sidebar is on screen where the user is standing.

@@ -231,6 +231,7 @@ describe("changeset.window", function()
 
     it("marks the window a preview lands in with the path the sidebar named", function()
       local _, right, one = staged()
+      window.focus()
 
       window.preview(one, 2, BAND)
 
@@ -361,6 +362,7 @@ describe("changeset.window", function()
 
     it("shows a notice as read-only text the buffer list never sees", function()
       local _, right = staged()
+      window.focus()
 
       window.preview_notice("This file was deleted", BAND)
 
