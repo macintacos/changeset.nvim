@@ -1,8 +1,8 @@
 ---A read-only sidebar mapping what this branch changed, nested by symbol.
 ---
 ---See README.md for the design. This file is the glue: it gathers the diff and
----the symbols, hands them to `tree` and `render`, and owns the window state
----machine. The thinking happens in the pure modules it calls.
+---the symbols, hands them to `tree` and `render`, and owns the tree's lifecycle
+---and the window state machine. The thinking happens in the pure modules it calls.
 
 local Git = require("helpers.git")
 local Paths = require("helpers.paths")
@@ -45,6 +45,7 @@ local augroup = vim.api.nvim_create_augroup("changeset", { clear = true })
 ---@field file string Preferences file for this changeset session.
 ---@field default_branch string
 ---@field files changeset.File[]
+---@field collected boolean Whether the diff has been read yet.
 ---@field symbols table<string, changeset.CachedSymbol[]> Absent key means "still resolving".
 ---@field rows changeset.Row[]
 ---@field visible changeset.Row[]
@@ -58,16 +59,17 @@ local augroup = vim.api.nvim_create_augroup("changeset", { clear = true })
 ---@type changeset.Session?
 local session
 
----Symbols read for the repo at `root`, carried between openings and to disk.
+---Symbols read for the repo at `root`, carried between builds and to disk.
 ---@type { root: string, entries: table<string, changeset.CacheEntry> }?
 local memo
 
 ---@type uv.uv_timer_t?
 local save_timer
 
----Folds outlive a close, so reopening the sidebar looks like you left it. Kept per
----repository: row ids start at a repo-relative path, so one table would share a fold
----between two checkouts that both have a `lua/config/options.lua`.
+---Folds outlive the tree: a rebuild for a moved fork point, or a trip to another
+---repository and back, keeps them. Kept per repository: row ids start at a
+---repo-relative path, so one table would share a fold between two checkouts that
+---both have a `lua/config/options.lua`.
 ---@type table<string, changeset.State>
 local folds = {}
 
@@ -241,7 +243,7 @@ local function draw()
   local text = vim.tbl_map(function(line)
     return line.text
   end, lines)
-  if #text == 0 then
+  if #text == 0 and session.collected then
     text = {
       render.empty_message({
         on_default_branch = session.branch == session.default_branch,
@@ -408,8 +410,8 @@ end
 ---@param buf integer
 local function set_keymaps(buf)
   local set, own = help.mapper(buf)
-  -- The window can outlive the session: a `:q` mid-rebuild, or the tabpage's last
-  -- window, which cannot be closed. Handing the session down rather than letting
+  -- The window can outlive the session: a `build()` for another repository lets go
+  -- of the tree while a sidebar stands. Handing the session down rather than letting
   -- handlers reach for it means the check that it exists is the same line that
   -- passes it on.
   ---@param lhs string
@@ -479,7 +481,7 @@ function M.refresh()
   end
 
   -- Identity rather than a counter: an answer from a refresh that this one replaced
-  -- has to be dropped, and a session opened later starts from a table of its own.
+  -- has to be dropped, and a session built later starts from a table of its own.
   local request = {}
   session.request = request
 
@@ -492,6 +494,7 @@ function M.refresh()
       return vim.notify("Changeset: " .. (err or "git failed"), vim.log.levels.ERROR)
     end
     session.files = files
+    session.collected = true
 
     -- Stamped before the request rather than after: a file edited while its
     -- symbols are being read then fails this check next time, instead of
@@ -532,17 +535,77 @@ function M.refresh()
   end)
 end
 
----Open the sidebar on the current buffer's repository and kick off the first refresh.
-function M.open()
+---Let go of the tree, stopping whatever it was still gathering.
+local function drop()
   if session then
-    M.close()
+    if session.cancel then
+      session.cancel()
+    end
+    stop(session.timer)
   end
-  -- The buffer's repository, not Neovim's directory: with the two different, a base
-  -- measured in the wrong one leaves every later `git diff` on a bad object.
+  session = nil
+end
+
+---Build the tree for the current buffer's repository, unless it is already built there.
+---
+---The buffer's repository, not Neovim's directory: with the two different, a base
+---measured in the wrong one leaves every later `git diff` on a bad object.
+---@return boolean ready false when the repository has no merge base with its default
+---branch, which includes a buffer outside any repository.
+function M.build()
   local root = Paths.root(0)
-  local preferences_file = prefs.path()
   local base, _, ref = Git.merge_base(root)
   if not base then
+    return false
+  end
+  local branch = Git.lines({ "git", "rev-parse", "--abbrev-ref", "HEAD" }, root)[1] or "HEAD"
+  if session and session.root == root and session.base == base and session.branch == branch then
+    return true
+  end
+  drop()
+
+  if not memo or memo.root ~= root then
+    memo = { root = root, entries = cache.load(cache.path(root)) }
+  end
+
+  folds[root] = folds[root] or state.new()
+  local preferences_file = prefs.path()
+  local default_branch = Git.default_base(root)
+  session = {
+    root = root,
+    base = base,
+    ref = ref or default_branch,
+    branch = branch,
+    file = preferences_file,
+    default_branch = default_branch,
+    files = {},
+    collected = false,
+    symbols = {},
+    rows = {},
+    visible = {},
+    st = folds[root],
+    query = "",
+    hidden = prefs.resolve(prefs.load(preferences_file), root, branch),
+  }
+  M.refresh()
+  return true
+end
+
+---The tree, for specs.
+---@return changeset.Session?
+function M._tree()
+  return session
+end
+
+---Open the sidebar on the current buffer's repository, drawing its tree.
+function M.open()
+  -- `window.buf()`, not `window.win()`: the buffer is wiped with its window, so it is
+  -- live exactly while a sidebar stands on some tabpage.
+  if window.buf() then
+    M.close()
+  end
+  local kept = session
+  if not M.build() then
     return vim.notify("Changeset: no merge base with the default branch", vim.log.levels.WARN)
   end
 
@@ -554,29 +617,6 @@ function M.open()
   vim.bo[buf].bufhidden = "wipe"
   vim.bo[buf].modifiable = false
 
-  if not memo or memo.root ~= root then
-    memo = { root = root, entries = cache.load(cache.path(root)) }
-  end
-
-  folds[root] = folds[root] or state.new()
-  local default_branch = Git.default_base(root)
-  local branch = Git.lines({ "git", "rev-parse", "--abbrev-ref", "HEAD" }, root)[1] or "HEAD"
-  session = {
-    root = root,
-    base = base,
-    ref = ref or default_branch,
-    branch = branch,
-    file = preferences_file,
-    default_branch = default_branch,
-    files = {},
-    symbols = {},
-    rows = {},
-    visible = {},
-    st = folds[root],
-    query = "",
-    hidden = prefs.resolve(prefs.load(preferences_file), root, branch),
-  }
-
   render.define_highlights()
   local win = window.open(buf)
   set_keymaps(buf)
@@ -587,7 +627,7 @@ function M.open()
   vim.api.nvim_create_autocmd("WinClosed", {
     group = augroup,
     pattern = tostring(win),
-    desc = "changeset: let go of the session when its window closes another way",
+    desc = "changeset: let go of the sidebar when its window closes another way",
     callback = function()
       vim.schedule(M.close)
     end,
@@ -613,18 +653,15 @@ function M.open()
     step(-1)
   end, { desc = "Previous change (Changeset)" })
 
-  M.refresh()
+  draw()
+  -- A file changed with no buffer open fires no gitsigns update.
+  if session == kept then
+    M.refresh()
+  end
 end
 
----Dismiss the sidebar, dropping the session, its timers and the global `]h`/`[h` keys.
+---Dismiss the sidebar and the global `]h`/`[h` keys. The tree stays, and keeps refreshing.
 function M.close()
-  if session then
-    if session.cancel then
-      session.cancel()
-    end
-    stop(session.timer)
-  end
-  session = nil
   require("plugins.changeset.menu").close()
   for _, lhs in ipairs(STEP_KEYS) do
     pcall(vim.keymap.del, "n", lhs)

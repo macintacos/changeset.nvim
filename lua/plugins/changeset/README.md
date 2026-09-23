@@ -218,23 +218,37 @@ binary change.
 
 ## What it remembers
 
-Asking a language server about every changed file is what makes the first open slow: 28
+The tree is built just after startup — the fork point is measured before the first
+keypress is read, the diff and symbols in the background — for the repository of the
+buffer Neovim starts on, or of the buffer a restored session lands on, and `GitSignsUpdate`
+keeps it fresh whether or not the sidebar is showing. Opening the sidebar draws that tree
+and refreshes its diff in the background, and closing it lets go of the window only, so
+the first `<leader>gp` opens onto a built tree rather than starting the work. A tree still
+waiting on its first diff opens blank rather than claiming nothing changed. The tree is
+rebuilt for a different repository, fork point or branch, and a build that finds no fork
+point keeps the tree it had. Reading symbols loads each changed file the cache
+can't answer, so those buffers and their language servers arrive at startup rather than on
+the first open. Outside a repository, or with nothing to fork from, startup builds nothing
+and says nothing; without a UI, or on git's own commit-message and rebase-todo buffers, it
+does not try.
+
+Asking a language server about every changed file is what makes a cold build slow: 28
 files take about nine seconds in this repo, and the tree fills a row at a time while it
 waits. Symbols are cached per file instead, stamped with the file's size and mtime, so
-reopening asks a server only about what has changed since — the same tree comes back
+the next build asks a server only about what has changed since — the same tree comes back
 complete in under 300ms, which is the `git diff` and nothing else.
 
 The cache is one JSON file per repo under `stdpath("cache")/changeset/`, holding only the
-fields the tree reads from a symbol. Every open narrows it to the files the current diff
+fields the tree reads from a symbol. Every refresh narrows it to the files the current diff
 touches, so it stays the size of a branch rather than growing with every branch ever
-reviewed, and losing it costs one slow open. Folds are remembered per repository for as long as
+reviewed, and losing it costs one slow build. Folds are remembered per repository for as long as
 Neovim is running, so reopening looks like you left it; a restart starts expanded. Per
 repository because a row is identified by a repo-relative path, which two checkouts can
 easily both have.
 
 ## Settings
 
-There are none, and opening the sidebar changes nothing outside it — the gutter is
+There are none, and the sidebar leaves the gutter alone — that is
 `<leader>gP`'s to switch on, including its memory of you having switched it off.
 
 Which symbol kinds are hidden is not a setting either: it is a choice made in the menu and
@@ -310,7 +324,7 @@ repository's deliberate choice is none of that save's business.
 - **Opening the sidebar is an ordinary split.** It takes its width with `winfixwidth`
   already set and then lets `'equalalways'` settle the rest, so the windows that were
   already open share out what is left instead of one of them being squashed.
-- **A session restores the window, not the tree.** `:mksession` records the layout but
+- **A session restores the window, not its contents.** `:mksession` records the layout but
   not a scratch buffer's contents, so the sidebar comes back as an empty window. Its
   name is what survives, and it is how the tree finds that window and fills it rather
   than splitting a second sidebar beside it.

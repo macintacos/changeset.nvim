@@ -1,8 +1,8 @@
----Symbols the sidebar has already read, kept between openings and restarts.
+---Symbols the sidebar has already read, kept between builds and restarts.
 ---
----Asking a language server about every changed file is what makes the first
----open slow, and an answer only goes stale when the file does. Each entry is
----stamped with the file it was read from, so reopening asks a server only about
+---Asking a language server about every changed file is what makes a cold build
+---slow, and an answer only goes stale when the file does. Each entry is stamped
+---with the file it was read from, so the next build asks a server only about
 ---what has actually changed since.
 
 local jsonfile = require("helpers.jsonfile")
