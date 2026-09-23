@@ -112,6 +112,26 @@ describe("changeset sidebar", function()
     assert.equal(render.MARK_PRIORITY, row_mark[4].priority)
   end)
 
+  it("leads a nested file's row with its filename and dims its directory", function()
+    vim.fn.mkdir("lua/pkg", "p")
+    write("lua/pkg/nested.lua", { "return {}" })
+    Fixture.commit("nested", tmp)
+    local buf = open_sidebar()
+
+    local lnum, line
+    for i, text in ipairs(lines_of(buf)) do
+      if text:find("nested.lua (lua/pkg)", 1, true) then
+        lnum, line = i - 1, text
+      end
+    end
+    assert(line, "no row reads `nested.lua (lua/pkg)`")
+    local col = line:find("(lua/pkg)", 1, true) - 1
+    local dim_marks = vim.tbl_filter(function(mark)
+      return mark[4].hl_group == "Comment" and mark[3] == col and mark[4].end_col == col + #"(lua/pkg)"
+    end, vim.api.nvim_buf_get_extmarks(buf, ns, { lnum, 0 }, { lnum, -1 }, { details = true }))
+    assert.equal(1, #dim_marks)
+  end)
+
   it("summarises the branch in the window bar", function()
     open_sidebar()
 

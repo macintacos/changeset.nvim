@@ -21,7 +21,7 @@ local symbols = require("plugins.mini-pickers.symbols")
 ---@class changeset.RenderOpts
 ---@field icon fun(row: changeset.Row): string, string Glyph and its highlight group; the caller wraps `MiniIcons.get`.
 ---@field collapsed fun(id: string): boolean         Whether the row with this id hides its children.
----@field width integer                              Window width in cells; long names are trimmed so stats stay visible.
+---@field width integer                              Window width in cells; long names and directories are trimmed so stats stay visible.
 ---@field query? string                               Filter text; every occurrence of it in a line is marked.
 
 ---@class changeset.Summary
@@ -33,7 +33,7 @@ local symbols = require("plugins.mini-pickers.symbols")
 ---@class changeset.Band The strip over a window the sidebar is previewing into.
 ---@field icon string       Glyph for the previewed file's type.
 ---@field icon_hl string    Group to draw it in, from `band_icon`.
----@field path string       The file, named as the sidebar's own row names it.
+---@field path string       Repo-relative path of the previewed file.
 ---@field destination string? What `<CR>` lands on; absent for a row that names nothing.
 
 ---@class changeset.Empty
@@ -204,6 +204,7 @@ local function clip_right(text, room)
   return vim.fn.strcharpart(text, 0, math.max(room - 1, 0)) .. "…"
 end
 
+---A file row: filename first, its directory dimmed in parentheses, dropped before the name is trimmed.
 ---@param file changeset.Row
 ---@param opts changeset.RenderOpts
 ---@return changeset.Line
@@ -215,13 +216,19 @@ local function file_line(file, opts)
     - vim.fn.strdisplaywidth(RAIL .. " " .. glyph .. " ")
     - (marker and vim.fn.strdisplaywidth(marker) or 0)
     - stat_cells(stat)
+  local filename, dir = vim.fs.basename(file.path), vim.fs.dirname(file.path)
+  local dir_room = room - vim.fn.strdisplaywidth(filename .. " ()")
   local chunks = {
     { RAIL, RAIL_HL[file.status] },
     { " " },
     { glyph, icon_hl },
     { " " },
-    { symbols.fit(file.path, room) },
   }
+  if dir ~= "." and dir_room >= 1 then
+    vim.list_extend(chunks, { { filename }, { " " }, { "(" .. symbols.fit(dir, dir_room, "/") .. ")", "Comment" } })
+  else
+    chunks[#chunks + 1] = { symbols.fit(filename, room) }
+  end
   if marker then
     chunks[#chunks + 1] = { marker, "Comment" }
   end

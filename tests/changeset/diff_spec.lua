@@ -291,7 +291,7 @@ describe("changeset.diff._assemble", function()
     assert.same({}, files[1].hunks)
   end)
 
-  it("orders tracked and untracked files together by path", function()
+  it("orders tracked and untracked files together", function()
     local files = assemble({
       statuses = { ["b.lua"] = { status = "modified" }, ["d.lua"] = { status = "added" } },
       untracked = { ["a.txt"] = 1, ["c.txt"] = 1 },
@@ -301,6 +301,15 @@ describe("changeset.diff._assemble", function()
       return file.path
     end, files)
     assert.same({ "a.txt", "b.lua", "c.txt", "d.lua" }, paths)
+  end)
+
+  it("orders files by directory, then filename, a directory's own files first", function()
+    local files = assemble({ untracked = { ["a/z.lua"] = 1, ["a/b/c.lua"] = 1, ["a/a.lua"] = 1, ["root.lua"] = 1 } })
+
+    local paths = vim.tbl_map(function(file)
+      return file.path
+    end, files)
+    assert.same({ "root.lua", "a/a.lua", "a/z.lua", "a/b/c.lua" }, paths)
   end)
 
   it("zero-fills a tracked path the other git calls did not report", function()
