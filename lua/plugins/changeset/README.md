@@ -115,6 +115,13 @@ unless you have moved the cursor or left the sidebar by then. From a file outsid
 changeset the cursor stays where you left it. Closing the kind menu is not a new arrival:
 you never left the sidebar for it, so the cursor stays on the row you were on.
 
+A terminal or help window is not a file you are in either, so it leaves "you are here"
+where it was. Both that and the row the sidebar's cursor is on ride the session, in the
+`ChangesetPosition` global: restoring one puts each back once the rebuilt tree has read
+its file's symbols (a deleted file has none to wait for), unless you have moved into a
+file, into the sidebar, or the sidebar's cursor by then. A file or row the changeset no
+longer holds is let go without a word.
+
 ### The kind menu docks against the sidebar, and reuses its rail
 
 `F` opens the list of symbol kinds this branch touched, as a float whose right border
