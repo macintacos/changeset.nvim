@@ -118,12 +118,12 @@ local function target()
     return win
   end
   -- Nothing left to preview into: the sidebar is the only window, so give the
-  -- file a split of its own rather than borrowing the sidebar.
-  vim.api.nvim_set_current_win(sidebar.win)
-  vim.cmd("leftabove vsplit")
-  local fresh = vim.api.nvim_get_current_win()
-  vim.api.nvim_set_current_win(sidebar.win)
-  return fresh
+  -- file a split of its own rather than borrowing the sidebar. Split from inside
+  -- `nvim_win_call`, which hands focus back without a `WinEnter` on the sidebar.
+  return vim.api.nvim_win_call(sidebar.win, function()
+    vim.cmd("leftabove vsplit")
+    return vim.api.nvim_get_current_win()
+  end)
 end
 
 ---Show `buf` in `win` without recording a jumplist entry.

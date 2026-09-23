@@ -39,6 +39,9 @@ local ns = vim.api.nvim_create_namespace("changeset")
 local rows_ns = vim.api.nvim_create_namespace("changeset.rows")
 local augroup = vim.api.nvim_create_augroup("changeset", { clear = true })
 
+---@class changeset.Landing
+---@field id string? nil when it landed before the tree had rows; the table's presence is what marks a landing pending.
+
 ---@class changeset.Session
 ---@field root string
 ---@field base string
@@ -59,6 +62,7 @@ local augroup = vim.api.nvim_create_augroup("changeset", { clear = true })
 ---@field request table? The refresh whose answers this session is still listening for.
 ---@field here changeset.Spot? Where the cursor is, while that is a file in this repository.
 ---@field selected changeset.Picked? The row last picked from the sidebar.
+---@field landing changeset.Landing? The row focusing the sidebar put its cursor on, until the user moves it.
 
 ---@type changeset.Session?
 local session
@@ -80,6 +84,10 @@ local tracking = false
 ---both have a `lua/config/options.lua`.
 ---@type table<string, changeset.State>
 local folds = {}
+
+---Whether the window last left was a float: coming back from one is not arriving.
+---@type boolean
+local left_float = false
 
 ---Stop a deferred callback for good. `vim.defer_fn` closes its handle from inside the
 ---callback, so a timer replaced before it fires leaves one open.
@@ -221,6 +229,19 @@ local function track()
   paint()
 end
 
+---Put the sidebar's cursor on "you are here", or its nearest ancestor on screen,
+---and note where it landed.
+---@param win integer The sidebar's window.
+local function land(win)
+  local here = session.here
+  local row = here and tree.locate(session.rows, here.path, here.lnum)
+  local lnum = row and state._nearest(visible_ids(), row.id)
+  if lnum then
+    vim.api.nvim_win_set_cursor(win, { lnum, 0 })
+  end
+  session.landing = { id = (row_at_cursor() or {}).id }
+end
+
 ---Make `row` the selection. A folded chain is recorded by its tip, the symbol it jumps to.
 ---@param row changeset.Row
 local function pick(row)
@@ -356,8 +377,17 @@ local function line_text(path, lnum)
 end
 
 local function rebuild()
+  -- Taken before the rows change. Before the first diff the landing and the row under
+  -- the cursor are both nil, which is still "not moved". Only a rebuild follows: a
+  -- fold or filter redraw brings no deeper row.
+  local follow = session.landing and window.is_focused() and session.landing.id == (row_at_cursor() or {}).id
   session.rows = tree.build(session.files, session.symbols, line_text)
   draw()
+  if follow then
+    land(vim.api.nvim_get_current_win())
+  else
+    session.landing = nil
+  end
 end
 
 ---@param row changeset.Row
@@ -707,6 +737,30 @@ function M.open()
     buffer = buf,
     desc = "changeset: preview the row under the cursor without leaving the sidebar",
     callback = preview_current,
+  })
+  -- Fires: leaving any window while the sidebar is open. Remembers whether it was a
+  -- float, so the sidebar's `WinEnter` can tell a return from one from an arrival.
+  vim.api.nvim_create_autocmd("WinLeave", {
+    group = augroup,
+    desc = "changeset: note whether the window being left is a float",
+    callback = function()
+      left_float = vim.api.nvim_win_get_config(0).relative ~= ""
+    end,
+  })
+  -- Fires: the cursor entering the sidebar by any route — `<leader>gp`, a click,
+  -- `<C-w>` — but not a return from a float such as the kind menu, which the user
+  -- never left the sidebar for. Lands on the row you are on; the `CursorMoved` that
+  -- follows previews it.
+  vim.api.nvim_create_autocmd("WinEnter", {
+    group = augroup,
+    buffer = buf,
+    desc = "changeset: put the sidebar's cursor on the row you are on",
+    callback = function()
+      local current = vim.api.nvim_get_current_win()
+      if session and current == window.win() and not left_float then
+        land(current)
+      end
+    end,
   })
   -- Fires: the cursor entering any window while the sidebar is open. Nested so the
   -- buffer swaps inside the commit fire their autocmds as `<CR>`'s do.
