@@ -75,18 +75,32 @@ M.HEADER_HL = "ChangesetHeader"
 ---@type string
 M.HEADER_LABEL_HL = "ChangesetHeaderLabel"
 
+---Background of the row last picked from the sidebar. Created by `define_highlights`.
+---@type string
+M.SELECTED_HL = "ChangesetSelected"
+
+---Background of the row for the file and line the cursor is in. Created by `define_highlights`.
+---@type string
+M.HERE_HL = "ChangesetHere"
+
 ---Group for the filetype glyph on the preview band. Recoloured by `band_icon`.
 ---@type string
 M.PREVIEW_ICON_HL = "ChangesetPreviewIcon"
 
 ---The priority a mark draws at when it carries none of its own. The magnitude is
----arbitrary — only the step up to the match matters.
+---arbitrary — only the steps to the row backgrounds below and the match above matter.
 ---@type integer
 M.MARK_PRIORITY = 199
 
 -- Above the marks a row already carries, so a match reads over a dimmed
 -- ancestor and a coloured symbol name alike.
 local MATCH_PRIORITY = M.MARK_PRIORITY + 1
+
+---Row backgrounds draw beneath every row mark; a selection over "you are here".
+---@type integer
+M.HERE_PRIORITY = M.MARK_PRIORITY - 2
+---@type integer
+M.SELECTED_PRIORITY = M.MARK_PRIORITY - 1
 
 -- Stands in at the tail of the preview band when the row names no destination.
 local HINT = "<CR> to open"
@@ -473,8 +487,9 @@ function M.define_highlights()
   -- to say "this is the thing you are on", so the band reads in any theme without
   -- competing with the file under it. Visual is the same idea two shades louder,
   -- and stands in for a theme that leaves CursorLine to the number column.
-  local band = vim.api.nvim_get_hl(0, { name = "CursorLine", link = false }).bg
-    or vim.api.nvim_get_hl(0, { name = "Visual", link = false }).bg
+  local cursorline = vim.api.nvim_get_hl(0, { name = "CursorLine", link = false })
+  local visual = vim.api.nvim_get_hl(0, { name = "Visual", link = false })
+  local band = cursorline.bg or visual.bg
   local warn = vim.api.nvim_get_hl(0, { name = "DiagnosticWarn", link = false })
   vim.api.nvim_set_hl(0, M.PREVIEW_HL, { bg = band })
   -- `reverse` rather than a background read off `Normal`: it pairs the accent
@@ -496,6 +511,12 @@ function M.define_highlights()
   -- Struck through as well as dimmed: dim on its own is what ancestor rows mean,
   -- and it reads as faint rather than as switched off in a light colourscheme.
   vim.api.nvim_set_hl(0, M.HIDDEN_HL, { fg = comment.fg, strikethrough = true })
+  vim.api.nvim_set_hl(0, M.SELECTED_HL, { bg = visual.bg or cursorline.bg })
+  -- ColorColumn before CursorLine for "here": the sidebar draws its own cursor line
+  -- in CursorLine, and a second row that shade reads as a second cursor.
+  vim.api.nvim_set_hl(0, M.HERE_HL, {
+    bg = vim.api.nvim_get_hl(0, { name = "ColorColumn", link = false }).bg or cursorline.bg,
+  })
   -- Last, over the band it is drawn on: a glyph left on the old theme's colour is
   -- the one thing here that can come out invisible rather than merely off-key.
   if band_hl then

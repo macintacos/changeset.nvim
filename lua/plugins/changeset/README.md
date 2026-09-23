@@ -92,6 +92,22 @@ The runs are found in the rendered line rather than in the row's name, so a path
 to `…a/plugins/changeset/window.lua` still lights the part you can actually see. They
 last as long as the filter does, not as long as the prompt.
 
+### Two rows say where you are and what you picked
+
+Two full-line backgrounds, the only row highlights the tree has. **Selected** is the row
+last picked from the sidebar — `<CR>`, a split or tab key, or moving into a preview — in
+`Visual`'s background. **You are here** is the row for the file and line the cursor is in,
+in `ColorColumn`'s: lighter, and never `CursorLine` first, because the sidebar draws its
+own cursor line in that and a second row of the same shade reads as a second cursor.
+Either falls back to `CursorLine`'s background when a theme leaves its own unset. Back in
+the file you picked, both sit on one row and the selection wins. Both draw beneath every
+row mark, so the rail, the row colours and a filter match stay on top.
+
+A line belongs to the deepest symbol row whose body holds it, else to the file's
+`Other changes` row when one of its hunks does, else to the file row. When the row is off
+screen — folded, filtered, or inside a compressed chain — its nearest visible ancestor
+wears the highlight instead.
+
 ### The kind menu docks against the sidebar, and reuses its rail
 
 `F` opens the list of symbol kinds this branch touched, as a float whose right border
@@ -318,6 +334,13 @@ repository's deliberate choice is none of that save's business.
   keys, so pressing one from inside the popup still works. `]h` / `[h` are global rather
   than buffer-local, so they are looked up by name and added to that buffer, or they would
   be the two keys the reference never mentions.
+- **Only a pick moves the selection.** `gd`, a picker or `:edit` into another changed
+  file moves "you are here" and leaves "selected" where it was. Previews never count as
+  being somewhere: the tracker reads focus on the next tick, after a preview's buffer swap
+  inside the borrowed window has finished, and ignores the sidebar and floats. It runs
+  whether or not the sidebar is showing, and each redraw resolves both highlights against
+  the rebuilt tree, so a selected row that a rebuild removed is found again from its file
+  and line.
 - **Refresh re-anchors by identity, not line.** A rebuild keyed on `GitSignsUpdate` must
   restore the cursor to the same row *identity* and preserve collapse state, including an
   `l`-expanded chain. One key scheme serves all three.

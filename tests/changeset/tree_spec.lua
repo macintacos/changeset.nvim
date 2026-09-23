@@ -519,6 +519,12 @@ describe("changeset.tree", function()
       assert.is_nil(file_row.chain)
     end)
 
+    it("points a folded chain at the id of the deepest symbol it stands for", function()
+      local folded = tree.compress(build_nested({ hunk(5, 1) }, CHAIN))[1].children[1]
+
+      assert.equal("src/session.ts\0Outer\0mid\0leaf", folded.tip)
+    end)
+
     it("does not mark a symbol that is not a chain", function()
       local file_row = tree.compress(build_nested({ hunk(5, 1), hunk(11, 1) }))[1]
 
@@ -574,6 +580,67 @@ describe("changeset.tree", function()
       tree.compress(full)
 
       assert.same(before, full)
+    end)
+  end)
+  describe("locate", function()
+    -- Class holding two methods, one of them changed, then an unchanged gap and a changed line past every symbol.
+    local SYMBOLS = {
+      sym("Store", "Class", 0, 1, 20),
+      sym("load", "Method", 1, 3, 8),
+      sym("save", "Method", 1, 10, 15),
+    }
+
+    ---@return changeset.Row[]
+    local function rows()
+      return tree.build({ file(PATH, { hunk(5, 1), hunk(18, 1), hunk(30, 2) }), file("other.ts", {}) }, {
+        [PATH] = SYMBOLS,
+        ["other.ts"] = {},
+      })
+    end
+
+    it("finds the deepest symbol row enclosing the line", function()
+      assert.equal(PATH .. "\0Store\0load", tree.locate(rows(), PATH, 7).id)
+    end)
+
+    it("stops at an ancestor row when the line is in its body but outside its changed members", function()
+      assert.equal(PATH .. "\0Store", tree.locate(rows(), PATH, 12).id)
+    end)
+
+    it("lands on the file's orphan group when the line is in a hunk outside every symbol", function()
+      assert.equal(PATH .. "\0#orphans", tree.locate(rows(), PATH, 31).id)
+    end)
+
+    it("falls back to the file row for a line in neither", function()
+      assert.equal(PATH, tree.locate(rows(), PATH, 25).id)
+    end)
+
+    it("finds nothing for a file the changeset does not hold", function()
+      assert.is_nil(tree.locate(rows(), "elsewhere.ts", 1))
+    end)
+  end)
+
+  describe("find", function()
+    it("finds a row by its id at any depth", function()
+      local rows = tree.build({ file(PATH, { hunk(5, 1) }) }, { [PATH] = { sym("load", "Method", 0, 3, 8) } })
+
+      assert.equal("load", tree.find(rows, PATH .. "\0load").name)
+      assert.is_nil(tree.find(rows, PATH .. "\0save"))
+    end)
+  end)
+
+  describe("relocate", function()
+    local rows = tree.build({ file(PATH, { hunk(5, 1) }) }, { [PATH] = { sym("load", "Method", 0, 3, 8) } })
+
+    it("keeps the picked row while the tree still holds it", function()
+      local picked = { id = PATH .. "\0load", path = PATH, lnum = 30 }
+
+      assert.equal(PATH .. "\0load", tree.relocate(rows, picked).id)
+    end)
+
+    it("resolves a picked row the tree dropped from its file and line", function()
+      local picked = { id = PATH .. "\0save", path = PATH, lnum = 5 }
+
+      assert.equal(PATH .. "\0load", tree.relocate(rows, picked).id)
     end)
   end)
 end)

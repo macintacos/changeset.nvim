@@ -35,6 +35,8 @@ local STEP_KEYS = { "]h", "[h" }
 local M = {}
 
 local ns = vim.api.nvim_create_namespace("changeset")
+-- Separate from `ns` so the tracker can repaint row backgrounds without redrawing the tree.
+local rows_ns = vim.api.nvim_create_namespace("changeset.rows")
 local augroup = vim.api.nvim_create_augroup("changeset", { clear = true })
 
 ---@class changeset.Session
@@ -55,6 +57,8 @@ local augroup = vim.api.nvim_create_augroup("changeset", { clear = true })
 ---@field cancel fun()?
 ---@field timer uv.uv_timer_t?
 ---@field request table? The refresh whose answers this session is still listening for.
+---@field here changeset.Spot? Where the cursor is, while that is a file in this repository.
+---@field selected changeset.Picked? The row last picked from the sidebar.
 
 ---@type changeset.Session?
 local session
@@ -65,6 +69,10 @@ local memo
 
 ---@type uv.uv_timer_t?
 local save_timer
+
+---Whether a `track` is already scheduled for this tick.
+---@type boolean
+local tracking = false
 
 ---Folds outlive the tree: a rebuild for a moved fork point, or a trip to another
 ---repository and back, keeps them. Kept per repository: row ids start at a
@@ -153,12 +161,71 @@ end
 local function preview_current()
   local row = row_at_cursor()
   if row and row.lnum and row.kind ~= "file" then
-    window.preview(session.root .. "/" .. row.path, row.lnum, band_for(row))
+    window.preview(session.root .. "/" .. row.path, row.lnum, band_for(row), { row = row, session = session })
   elseif row and row.kind == "file" and row.status == "deleted" then
     window.preview_notice("This file was deleted on this branch", band_for(row))
   elseif row and row.kind == "file" then
-    window.preview(session.root .. "/" .. row.path, 1, band_for(row))
+    window.preview(session.root .. "/" .. row.path, 1, band_for(row), { row = row, session = session })
   end
+end
+
+---@return string[] ids Of the rows on screen, in display order.
+local function visible_ids()
+  return vim.tbl_map(function(row)
+    return row.id
+  end, session.visible)
+end
+
+---Lay `hl` over the line showing `row`, or its nearest ancestor on screen.
+---@param buf integer
+---@param ids string[]
+---@param row changeset.Row?
+---@param hl string
+---@param priority integer
+local function paint_row(buf, ids, row, hl, priority)
+  local lnum = row and state._nearest(ids, row.id)
+  if lnum then
+    vim.api.nvim_buf_set_extmark(buf, rows_ns, lnum - 1, 0, {
+      end_row = lnum,
+      hl_group = hl,
+      hl_eol = true,
+      priority = priority,
+      strict = false,
+    })
+  end
+end
+
+---Lay the "selected" and "you are here" backgrounds over the rows they resolve to.
+local function paint()
+  local buf = window.buf()
+  if not (session and buf) then
+    return
+  end
+  vim.api.nvim_buf_clear_namespace(buf, rows_ns, 0, -1)
+  local ids = visible_ids()
+  local here, picked = session.here, session.selected
+  paint_row(buf, ids, here and tree.locate(session.rows, here.path, here.lnum), render.HERE_HL, render.HERE_PRIORITY)
+  paint_row(buf, ids, picked and tree.relocate(session.rows, picked), render.SELECTED_HL, render.SELECTED_PRIORITY)
+end
+
+---Note the file and line the cursor is in. The sidebar and floats are not somewhere
+---the user is, so they leave the last place standing.
+local function track()
+  local win = vim.api.nvim_get_current_win()
+  if not session or win == window.win() or vim.api.nvim_win_get_config(win).relative ~= "" then
+    return
+  end
+  local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win))
+  local path = name ~= "" and vim.fs.relpath(session.root, vim.fs.normalize(name)) or nil
+  session.here = path and { path = path, lnum = vim.api.nvim_win_get_cursor(win)[1] } or nil
+  paint()
+end
+
+---Make `row` the selection. A folded chain is recorded by its tip, the symbol it jumps to.
+---@param row changeset.Row
+local function pick(row)
+  session.selected = { id = row.tip or row.id, path = row.path, lnum = row.lnum or 1 }
+  paint()
 end
 
 ---@param buf integer
@@ -261,12 +328,10 @@ local function draw()
   apply_marks(buf, lines)
   hidden_note_line(buf, #text - 1, width, view.hiding(view.kind_counts(session.rows), session.hidden))
 
-  local ids = vim.tbl_map(function(row)
-    return row.id
-  end, session.visible)
-  vim.api.nvim_win_set_cursor(win, { state._reanchor(ids, wanted, previous_line), 0 })
+  vim.api.nvim_win_set_cursor(win, { state._reanchor(visible_ids(), wanted, previous_line), 0 })
 
   set_header(win, session.files, session.ref)
+  paint()
 end
 
 ---Text of a changed line, for captioning an orphan hunk.
@@ -319,7 +384,9 @@ local function commit(how)
   if row.kind == "file" and row.status == "deleted" then
     return vim.notify(row.path .. " was deleted on this branch — :CodeDiff to read it", vim.log.levels.INFO)
   end
-  window.commit(session.root .. "/" .. row.path, row.lnum or 1, how)
+  if window.commit(session.root .. "/" .. row.path, row.lnum or 1, how) then
+    pick(row)
+  end
 end
 
 ---@param delta integer
@@ -609,6 +676,9 @@ function M.open()
     return vim.notify("Changeset: no merge base with the default branch", vim.log.levels.WARN)
   end
 
+  -- The cursor is still where the user was, and nothing tracked it before a tree existed.
+  track()
+
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].filetype = "changeset"
   vim.bo[buf].buftype = "nofile"
@@ -644,7 +714,13 @@ function M.open()
     group = augroup,
     nested = true,
     desc = "changeset: open a previewed file once the cursor enters its window",
-    callback = window.claim,
+    callback = function()
+      local claimed = window.claim()
+      -- A build for another repository, base or branch replaces the session under a preview.
+      if claimed and claimed.session == session then
+        pick(claimed.row)
+      end
+    end,
   })
   vim.keymap.set("n", STEP_KEYS[1], function()
     step(1)
@@ -715,6 +791,24 @@ vim.api.nvim_create_autocmd("ColorScheme", {
   group = vim.api.nvim_create_augroup("changeset.highlights", { clear = true }),
   desc = "changeset: rebuild the dim label colour against the new palette",
   callback = render.define_highlights,
+})
+
+-- Fires: every buffer or window switch and cursor move, sidebar open or not, so
+-- "you are here" is current whenever the sidebar shows. Scheduled because a
+-- preview swaps its buffer inside `nvim_win_call`, which fires these with the
+-- borrowed window current; by the next tick focus is back where the user is.
+vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter", "CursorMoved", "CursorMovedI" }, {
+  group = vim.api.nvim_create_augroup("changeset.track", { clear = true }),
+  desc = "changeset: track the file and line the cursor is in",
+  callback = function()
+    if session and not tracking then
+      tracking = true
+      vim.schedule(function()
+        tracking = false
+        track()
+      end)
+    end
+  end,
 })
 
 -- gitsigns publishes this on every sign refresh, so it doubles as a "the diff

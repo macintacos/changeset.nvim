@@ -18,9 +18,19 @@ local SEP = " › "
 ---@field removed integer?
 ---@field ancestor boolean    Shown only because a descendant changed.
 ---@field chain boolean?      True on the row standing in for a folded run of single-child symbols.
+---@field tip string?         On a `chain` row, the id of the deepest row it stands for.
+---@field range { [1]: integer, [2]: integer }? Lines a symbol's body or an orphan hunk covers, inclusive.
 ---@field status string?      File rows only.
 ---@field resolved boolean?   File rows only: whether a server has answered for this file yet.
 ---@field children changeset.Row[]
+
+---A line of a file, repo-relative.
+---@class changeset.Spot
+---@field path string
+---@field lnum integer
+
+---@class changeset.Picked : changeset.Spot
+---@field id string The row picked; `path` and `lnum` stand in for it once a rebuild drops it.
 
 ---Text of a line of `path` in the working tree, used to caption orphan hunks.
 ---@alias changeset.LineText fun(path: string, lnum: integer): string?
@@ -122,6 +132,7 @@ local function symbol_rows(nodes, parent)
       name = node.sym.name,
       path = parent.path,
       lnum = node.sym.lnum,
+      range = { node.sym.range_lnum, node.sym.range_end_lnum },
       symbol_kind = node.sym.kind,
       ancestor = not node.changed,
     }
@@ -143,12 +154,20 @@ local function jump_line(hunk)
   return math.max(hunk.lnum, 1)
 end
 
+---The lines an orphan hunk is named by and counts as covering.
+---@param hunk changeset.Hunk
+---@return integer first
+---@return integer last
+local function orphan_span(hunk)
+  local first = jump_line(hunk)
+  return first, first + math.max(hunk.count, 1) - 1
+end
+
 ---@param hunk changeset.Hunk
 ---@param text string?
 ---@return string
 local function orphan_name(hunk, text)
-  local first = jump_line(hunk)
-  local last = first + math.max(hunk.count, 1) - 1
+  local first, last = orphan_span(hunk)
   local label = last > first and ("L%d–%d"):format(first, last) or "L" .. first
   return text and text ~= "" and label .. " " .. text or label
 end
@@ -168,6 +187,7 @@ local function orphan_row(hunk, group, line_text)
     name = orphan_name(hunk, text and vim.trim(text)),
     path = group.path,
     lnum = lnum,
+    range = { orphan_span(hunk) },
     added = hunk.added,
     removed = hunk.removed,
     ancestor = false,
@@ -309,6 +329,7 @@ local function compress_row(row, depth, is_open)
   end
   return vim.tbl_extend("force", deepest, {
     id = row.id,
+    tip = deepest.id,
     name = table.concat(names, SEP),
     depth = depth,
     chain = true,
@@ -335,6 +356,71 @@ end
 ---@return changeset.Row[]
 function M.compress(rows, is_open)
   return compress_rows(rows, 0, is_open)
+end
+
+---The first of `rows` whose range holds `lnum`; siblings' ranges do not overlap.
+---@param rows changeset.Row[]
+---@param lnum integer
+---@return changeset.Row?
+local function enclosing(rows, lnum)
+  for _, row in ipairs(rows) do
+    if row.range and row.range[1] <= lnum and lnum <= row.range[2] then
+      return row
+    end
+  end
+end
+
+---The innermost symbol under `row` whose range holds `lnum`.
+---@param row changeset.Row A symbol row.
+---@param lnum integer A line inside its range.
+---@return changeset.Row
+local function deepest_symbol(row, lnum)
+  local inner = enclosing(row.children, lnum)
+  return inner and deepest_symbol(inner, lnum) or row
+end
+
+---The row a line of a file belongs to: the deepest symbol row whose body holds it, else the file's
+---"Other changes" row when one of its hunks does, else the file row.
+---@param rows changeset.Row[] File rows from `build`, uncompressed.
+---@param path string Repo-relative.
+---@param lnum integer
+---@return changeset.Row? nil when the changeset does not hold `path`.
+function M.locate(rows, path, lnum)
+  for _, file in ipairs(rows) do
+    if file.path == path then
+      local symbol = enclosing(file.children, lnum)
+      if symbol then
+        return deepest_symbol(symbol, lnum)
+      end
+      for _, child in ipairs(file.children) do
+        if child.kind == "orphans" and enclosing(child.children, lnum) then
+          return child
+        end
+      end
+      return file
+    end
+  end
+end
+
+---The row with `id`, at any depth.
+---@param rows changeset.Row[]
+---@param id string
+---@return changeset.Row?
+function M.find(rows, id)
+  for _, row in ipairs(rows) do
+    local found = row.id == id and row or M.find(row.children, id)
+    if found then
+      return found
+    end
+  end
+end
+
+---The row a pick stands on now: itself while the tree still holds it, else the row its line resolves to.
+---@param rows changeset.Row[]
+---@param picked changeset.Picked
+---@return changeset.Row?
+function M.relocate(rows, picked)
+  return M.find(rows, picked.id) or M.locate(rows, picked.path, picked.lnum)
 end
 
 return M
