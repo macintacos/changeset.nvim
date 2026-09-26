@@ -901,6 +901,8 @@ function M.open()
   -- leave one behind, its extmarks and its fifteen mappings included.
   vim.bo[buf].bufhidden = "wipe"
   vim.bo[buf].modifiable = false
+  -- The tree draws its own guides; a scope line would be a second set.
+  vim.b[buf].miniindentscope_disable = true
 
   render.define_highlights()
   local win = window.open(buf)
