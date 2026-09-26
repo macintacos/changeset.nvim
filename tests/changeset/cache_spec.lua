@@ -99,6 +99,15 @@ describe("changeset.cache", function()
       assert.same(entries, cache.load(path))
     end)
 
+    it("leaves out what no server answered, which only this Neovim remembers", function()
+      cache.save(path, {
+        ["api.ts"] = { stamp = "120:9", symbols = { { name = "send", lnum = 12 } } },
+        ["go.sum"] = { stamp = "80:3", symbols = {}, silent = true },
+      })
+
+      assert.same({ "api.ts" }, vim.tbl_keys(cache.load(path)))
+    end)
+
     it("starts empty when nothing has been written yet", function()
       assert.same({}, cache.load(path))
     end)

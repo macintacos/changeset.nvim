@@ -420,6 +420,12 @@ repository's deliberate choice is none of that save's business.
   unwritten edits when it was read, are both left out: a stamp taken off the file on disk
   cannot describe either, and either one filed as fresh would outlive the edit that made
   it wrong — across restarts, until the file next moves.
+- **No answer is remembered, but only in memory.** A file no server answers for — `go.sum`,
+  a `Makefile` — is not asked about again on every refresh, each of which would wait out
+  the attach timeout under a `reading symbols` row. Previewing a file for the first time
+  is enough to cause one: gitsigns attaches, and every `GitSignsUpdate` refreshes the tree.
+  The file is asked about again once it moves, or once a server that lists symbols
+  attaches to it, which is how a slow or newly installed server still gets heard.
 - **One line is one row, one level below its parent.** `h` and the cursor anchor both read
   the next line's depth to decide what is showing, so the `⋯ reading symbols` placeholder
   is a row of its own rather than the file's row drawn a second time.

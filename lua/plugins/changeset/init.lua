@@ -742,9 +742,10 @@ function M.refresh()
 
     -- Down to what this diff needs: the file caches the branch being read, not
     -- every file whose symbols have ever been asked for.
+    local entries = memo.entries
     memo.entries = {}
-    for path, symbols in pairs(known) do
-      memo.entries[path] = { stamp = stamps[path], symbols = symbols }
+    for path in pairs(known) do
+      memo.entries[path] = entries[path]
     end
     rebuild()
 
@@ -763,6 +764,11 @@ function M.refresh()
       if items and stamps[path] and not unwritten(path) then
         memo.entries[path] = { stamp = stamps[path], symbols = cache.project(items) }
         save_soon()
+      elseif not items and stamps[path] then
+        -- Not asked again on every refresh — each ask waits out the attach timeout
+        -- under a "reading symbols" row — only once the file moves or a server
+        -- arrives for it.
+        memo.entries[path] = { stamp = stamps[path], symbols = {}, silent = true }
       end
       rebuild()
     end)
@@ -1095,6 +1101,26 @@ vim.api.nvim_create_autocmd({ "WinEnter", "BufWinEnter" }, {
   group = vim.api.nvim_create_augroup("changeset.unband", { clear = true }),
   desc = "changeset: keep the preview band off the window the cursor is in",
   callback = window.unband,
+})
+
+-- Fires: a language server attaching to any buffer. A file no server answered for
+-- is not asked about again until it changes, so one that attaches late — started
+-- slowly, or installed since — would otherwise never be heard from.
+vim.api.nvim_create_autocmd("LspAttach", {
+  group = vim.api.nvim_create_augroup("changeset.servers", { clear = true }),
+  desc = "changeset: ask again about a file once a server that lists symbols reaches it",
+  callback = function(args)
+    local client = vim.lsp.get_client_by_id(args.data.client_id)
+    if not (session and memo and client and client:supports_method("textDocument/documentSymbol")) then
+      return
+    end
+    local path = vim.fs.relpath(session.root, vim.fs.normalize(vim.api.nvim_buf_get_name(args.buf)))
+    local entry = path and memo.entries[path]
+    if entry and entry.silent then
+      memo.entries[path] = nil
+      M.refresh()
+    end
+  end,
 })
 
 -- gitsigns publishes this on every sign refresh, so it doubles as a "the diff

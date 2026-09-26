@@ -153,6 +153,39 @@ describe("changeset sidebar", function()
     assert.truthy(vim.api.nvim_win_call(window.win(), vim.fn.winsaveview).topfill > 0)
   end)
 
+  -- No language server runs under the specs, so neither fixture file gets an answer.
+  it("asks again about a file no server answered for only once it changes", function()
+    open_sidebar()
+    local resolve = require("plugins.changeset.resolve")
+    local start = resolve.start
+    local asked
+    resolve.start = function(root, files, on_file)
+      asked = vim.tbl_map(function(file)
+        return file.path
+      end, files)
+      return start(root, files, on_file)
+    end
+    local function refreshed()
+      asked = nil
+      changeset.refresh()
+      assert(
+        vim.wait(5000, function()
+          return asked ~= nil
+        end, 10),
+        "the refresh never reached the symbols"
+      )
+      return asked
+    end
+
+    local ok, err = pcall(function()
+      assert.same({}, refreshed())
+      write("other.lua", { "return { a = 1, b = 2, c = 3 }" })
+      assert.same({ "other.lua" }, refreshed())
+    end)
+    resolve.start = start
+    assert(ok, err)
+  end)
+
   it("footers the sidebar with the file the cursor is in", function()
     open_sidebar()
     local win = window.win()

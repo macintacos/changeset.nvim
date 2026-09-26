@@ -20,6 +20,8 @@ local M = {}
 ---@class changeset.CacheEntry
 ---@field stamp string The file as it stood when its symbols were read.
 ---@field symbols changeset.CachedSymbol[]
+---@field silent true? No server answered for the file. Kept out of the file on disk: a
+---server installed or started later must get asked, where one Neovim can stop asking.
 
 ---Where the cache for the repo at `root` lives. Under `cache` rather than
 ---`state`: every entry can be read again from a server, so losing the file
@@ -86,12 +88,18 @@ function M.load(file)
   return jsonfile.read(file)
 end
 
----Overwrite `file` with `entries`. A cache that cannot be written is not worth
----interrupting anyone over.
+---Overwrite `file` with `entries`, leaving out the `silent` ones. A cache that cannot
+---be written is not worth interrupting anyone over.
 ---@param file string
 ---@param entries table<string, changeset.CacheEntry>
 function M.save(file, entries)
-  jsonfile.write(file, entries)
+  local answered = {}
+  for path, entry in pairs(entries) do
+    if not entry.silent then
+      answered[path] = entry
+    end
+  end
+  jsonfile.write(file, answered)
 end
 
 return M
