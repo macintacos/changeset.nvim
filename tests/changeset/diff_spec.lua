@@ -447,6 +447,26 @@ describe("changeset.diff.collect", function()
     assert.truthy(err and #err > 0)
   end)
 
+  it("counts the commits made since the base", function()
+    local base = Fixture.init_repo("trunk", tmp)
+    write("a.txt", { "a" })
+    Fixture.commit("one", tmp)
+    write("b.txt", { "b" })
+    Fixture.commit("two", tmp)
+    local commits, done
+    diff.collect(base, tmp, function(_, _, count)
+      commits, done = count, true
+    end)
+    assert(
+      vim.wait(10000, function()
+        return done
+      end, 10),
+      "collect never called back"
+    )
+
+    assert.equal(2, commits)
+  end)
+
   it("reports a staged rename as one renamed file", function()
     Fixture.init_repo("trunk", tmp)
     -- git enables rename detection by default, so without this the argv flag is

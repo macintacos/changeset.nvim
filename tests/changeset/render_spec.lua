@@ -427,53 +427,193 @@ describe("changeset.render", function()
   end)
 
   describe("header", function()
-    ---@param summary changeset.Summary
-    ---@return string
-    local function shown(summary)
-      return vim.api.nvim_eval_statusline(render.header(summary), { use_winbar = true, maxwidth = 60 }).str
+    local LONG = "origin/jt/exc-1200-stacked-parent-branch-with-a-long-name"
+
+    ---@param summary table
+    ---@param width integer?
+    ---@param highlights boolean?
+    ---@return { str: string, highlights: table[]? }
+    local function eval(summary, width, highlights)
+      width = width or 44
+      return vim.api.nvim_eval_statusline(
+        render.header(summary, width),
+        { use_winbar = true, maxwidth = width, highlights = highlights }
+      )
     end
 
-    it("states what the tree is compared against", function()
-      local text = shown({ base_ref = "origin/trunk", files = 7, added = 142, removed = 38 })
+    ---The group drawing the first byte of `needle` in an evaluated statusline.
+    ---@param shown { str: string, highlights: table[] }
+    ---@param needle string
+    ---@return string?
+    local function group_at(shown, needle)
+      local at = shown.str:find(needle, 1, true) - 1
+      local found
+      for _, mark in ipairs(shown.highlights) do
+        if mark.start <= at then
+          found = mark.group
+        end
+      end
+      return found
+    end
 
-      assert.is_true(text:find(" vs origin/trunk ", 1, true) ~= nil)
+    it("names what the tree is compared against", function()
+      assert.truthy(eval({ ref = "origin/trunk" }).str:find("origin/trunk", 1, true))
     end)
 
-    it("says '1 file', not '1 files'", function()
-      local singular = shown({ base_ref = "origin/trunk", files = 1, added = 3, removed = 0 })
-      local plural = shown({ base_ref = "origin/trunk", files = 2, added = 3, removed = 0 })
+    it("keeps the head of a ref too long to fit, marking the cut at its end", function()
+      local text = eval({ ref = LONG }, 30).str
 
-      assert.is_true(vim.endswith(singular, "1 file  +3 -0 "))
-      assert.is_true(vim.endswith(plural, "2 files  +3 -0 "))
+      assert.truthy(text:find("origin/jt/exc-1200", 1, true))
+      assert.truthy(vim.endswith(vim.trim(text), "…"))
+      -- The statusline marks a cut of its own with `<`, and keeps the tail.
+      assert.falsy(text:find("<", 1, true))
     end)
 
-    it("escapes % in the base ref so the statusline does not read it as an item", function()
-      local text = shown({ base_ref = "origin/50%off", files = 2, added = 1, removed = 1 })
-
-      assert.is_true(text:find("origin/50%off", 1, true) ~= nil)
+    it("names the branch's open PR at the right edge", function()
+      assert.equal(" #412", eval({ ref = "origin/trunk", pr = 412 }).str:sub(-5))
     end)
 
-    it("hangs the counts off the right edge", function()
-      local text = shown({ base_ref = "origin/trunk", files = 7, added = 142, removed = 38 })
+    it("gives up the ref's tail rather than the PR number", function()
+      local text = eval({ ref = LONG, pr = 412 }, 30).str
 
-      assert.equal("+142 -38 ", text:sub(-9))
-      assert.equal(60, vim.fn.strdisplaywidth(text))
+      assert.equal(" #412", text:sub(-5))
+      assert.truthy(text:find("origin/jt", 1, true))
+      assert.truthy(text:find("…", 1, true))
+      assert.falsy(text:find("<", 1, true))
     end)
 
-    it("wears the base ref as a badge, on a band of its own across the rest", function()
+    it("escapes % in the ref so the statusline does not read it as an item", function()
+      assert.truthy(eval({ ref = "origin/50%off" }).str:find("origin/50%off", 1, true))
+    end)
+
+    it("dims the remote so the branch name leads", function()
+      render.define_highlights()
+      local shown = eval({ ref = "origin/trunk" }, 44, true)
+
+      assert.equal(render.HEADER_DIM_HL, group_at(shown, "origin/"))
+      assert.equal(render.HEADER_REF_HL, group_at(shown, "trunk"))
+    end)
+
+    it("reads a local ref whole, with nothing dimmed", function()
+      render.define_highlights()
+      local shown = eval({ ref = "jt/parent" }, 44, true)
+
+      assert.equal(render.HEADER_REF_HL, group_at(shown, "jt/parent"))
+    end)
+  end)
+
+  describe("header_totals", function()
+    local BASE = { ref = "origin/trunk", files = 7, added = 142, removed = 38 }
+
+    ---@param overrides table?
+    ---@return table[] chunks
+    local function totals(overrides)
+      return render.header_totals(vim.tbl_extend("force", BASE, overrides or {}), 44)
+    end
+
+    ---@param chunks table[]
+    ---@return string
+    local function text(chunks)
+      return table.concat(vim.tbl_map(function(chunk)
+        return chunk[1]
+      end, chunks))
+    end
+
+    it("counts the files, saying '1 file' for one", function()
+      assert.truthy(text(totals()):find("7 files", 1, true))
+      assert.truthy(text(totals({ files = 1 })):find("1 file", 1, true))
+      assert.falsy(text(totals({ files = 1 })):find("1 files", 1, true))
+    end)
+
+    it("counts the branch's commits, saying '1 commit' for one", function()
+      assert.truthy(text(totals({ commits = 3 })):find("3 commits", 1, true))
+      assert.falsy(text(totals({ commits = 1 })):find("1 commits", 1, true))
+      assert.truthy(text(totals({ commits = 1 })):find("1 commit", 1, true))
+    end)
+
+    it("sets the commits at the right edge, beside the line totals", function()
+      assert.truthy(vim.endswith(text(totals({ commits = 3 })), "3 commits  +142 -38"))
+    end)
+
+    it("leaves commits out when there are none to count", function()
+      assert.falsy(text(totals()):find("commit", 1, true))
+      assert.falsy(text(totals({ commits = 0 })):find("commit", 1, true))
+    end)
+
+    it("hangs the line totals off the right edge, filling the width", function()
+      local line = text(totals())
+
+      assert.equal(" +142 -38", line:sub(-9))
+      assert.equal(44, vim.fn.strdisplaywidth(line))
+    end)
+
+    it("reports symbols being read in place of the counts on the left", function()
+      local line = text(totals({ commits = 3, reading = { done = 12, total = 28 } }))
+
+      assert.truthy(line:find("reading symbols 12/28", 1, true))
+      assert.falsy(line:find("files", 1, true))
+      assert.falsy(line:find("commit", 1, true))
+      assert.equal(" +142 -38", line:sub(-9))
+    end)
+
+    it("draws every chunk on the header's strip", function()
+      vim.api.nvim_set_hl(0, "ChangesetSpecStrip", { bg = 0x654321 })
+      local tabline = vim.api.nvim_get_hl(0, { name = "TabLine" })
+      vim.api.nvim_set_hl(0, "TabLine", { link = "ChangesetSpecStrip" })
       render.define_highlights()
 
-      local marks = vim.api.nvim_eval_statusline(
-        render.header({ base_ref = "origin/trunk", files = 7, added = 142, removed = 38 }),
-        { use_winbar = true, maxwidth = 60, highlights = true }
-      ).highlights
+      for _, chunk in ipairs(totals({ commits = 3 })) do
+        -- A stack of groups takes each attribute from the last group that sets it.
+        local bg
+        for _, name in ipairs(type(chunk[2]) == "table" and chunk[2] or { chunk[2] }) do
+          bg = vim.api.nvim_get_hl(0, { name = name, link = false }).bg or bg
+        end
+        assert.equal(0x654321, bg)
+      end
+      vim.api.nvim_set_hl(0, "TabLine", tabline)
+    end)
 
-      assert.same(
-        { render.HEADER_LABEL_HL, render.HEADER_HL },
-        vim.tbl_map(function(mark)
-          return mark.group
-        end, marks)
-      )
+    it("colours the totals the way the rows colour theirs", function()
+      local by_text = {}
+      for _, chunk in ipairs(totals()) do
+        by_text[chunk[1]] = chunk[2]
+      end
+
+      assert.same({ render.HEADER_HL, "GitSignsAdd" }, by_text["+142"])
+      assert.same({ render.HEADER_HL, "GitSignsDelete" }, by_text["-38"])
+    end)
+  end)
+
+  describe("footer", function()
+    ---@param info table
+    ---@return string
+    local function shown(info)
+      local full = vim.tbl_extend("force", { files = 12, query = "" }, info)
+      return vim.api.nvim_eval_statusline(render.footer(full), { maxwidth = 120 }).str
+    end
+
+    it("names the panel", function()
+      assert.truthy(shown({}):find(" Changeset ", 1, true))
+    end)
+
+    it("says which of the files shown the cursor is in", function()
+      assert.truthy(shown({ file = 3 }):find("file 3 of 12", 1, true))
+    end)
+
+    it("leaves the position out when the cursor is in no file", function()
+      assert.falsy(shown({}):find(" of 12", 1, true))
+    end)
+
+    it("shows the filter in force", function()
+      assert.truthy(shown({ query = "sess" }):find("sess", 1, true))
+    end)
+
+    it("escapes % in the filter so the statusline does not read it as an item", function()
+      assert.truthy(shown({ query = "50%" }):find("50%", 1, true))
+    end)
+
+    it("points at ? for every key, at the right edge", function()
+      assert.truthy(vim.endswith(shown({}), "? all keys "))
     end)
   end)
 
@@ -566,7 +706,7 @@ describe("changeset.render", function()
   end)
 
   describe("define_highlights", function()
-    local GROUP_NAMES = { "Comment", "CursorLine", "Visual", "DiagnosticWarn", "TabLine", "Directory" }
+    local GROUP_NAMES = { "Comment", "CursorLine", "Visual", "DiagnosticWarn", "TabLine", "Directory", "StatusLine" }
     local saved
 
     ---@param name string
@@ -658,29 +798,52 @@ describe("changeset.render", function()
       assert.equal(0x123456, group(render.HEADER_HL).bg)
     end)
 
-    it("paints the header badge in the theme's directory colour", function()
+    it("paints the footer badge in the theme's directory colour", function()
       vim.api.nvim_set_hl(0, "Comment", { fg = 0x336699 })
       vim.api.nvim_set_hl(0, "Directory", { fg = 0x4488cc })
 
       render.define_highlights()
 
-      assert.equal(0x4488cc, group(render.HEADER_LABEL_HL).fg)
+      assert.equal(0x4488cc, group(render.BADGE_HL).fg)
     end)
 
-    it("falls back to Comment for the header badge in a theme with no directory colour", function()
+    it("falls back to Comment for the footer badge in a theme with no directory colour", function()
       vim.api.nvim_set_hl(0, "Comment", { fg = 0x336699 })
       vim.api.nvim_set_hl(0, "Directory", {})
 
       render.define_highlights()
 
-      assert.equal(0x336699, group(render.HEADER_LABEL_HL).fg)
+      assert.equal(0x336699, group(render.BADGE_HL).fg)
     end)
 
     it("reverses both badges, so neither needs an opaque Normal", function()
       render.define_highlights()
 
       assert.is_true(group(render.PREVIEW_LABEL_HL).reverse)
-      assert.is_true(group(render.HEADER_LABEL_HL).reverse)
+      assert.is_true(group(render.BADGE_HL).reverse)
+    end)
+
+    it("sets the header's icon, remote and ref on the header's strip", function()
+      vim.api.nvim_set_hl(0, "TabLine", { bg = 0x654321 })
+      vim.api.nvim_set_hl(0, "Directory", { fg = 0x4488cc })
+      vim.api.nvim_set_hl(0, "Comment", { fg = 0x336699 })
+
+      render.define_highlights()
+
+      assert.same({ 0x4488cc, 0x654321 }, { group(render.HEADER_ICON_HL).fg, group(render.HEADER_ICON_HL).bg })
+      assert.same({ 0x336699, 0x654321 }, { group(render.HEADER_DIM_HL).fg, group(render.HEADER_DIM_HL).bg })
+      assert.equal(0x654321, group(render.HEADER_REF_HL).bg)
+      assert.is_true(group(render.HEADER_REF_HL).bold)
+    end)
+
+    it("paints the footer on the statusline's own background", function()
+      vim.api.nvim_set_hl(0, "StatusLine", { fg = 0xeeeeee, bg = 0x222222 })
+      vim.api.nvim_set_hl(0, "Comment", { fg = 0x336699 })
+
+      render.define_highlights()
+
+      assert.same({ 0x336699, 0x222222 }, { group(render.FOOTER_HL).fg, group(render.FOOTER_HL).bg })
+      assert.same({ 0xeeeeee, 0x222222 }, { group(render.FOOTER_KEY_HL).fg, group(render.FOOTER_KEY_HL).bg })
     end)
 
     it("strikes a hidden kind through as well as dimming it", function()

@@ -214,6 +214,7 @@ local function git_commands(base)
     name_status = diff_cmd("--name-status", base),
     hunks = diff_cmd("--unified=0", base),
     untracked = cmd("ls-files", "--others", "--exclude-standard"),
+    commits = cmd("rev-list", "--count", base .. "..HEAD"),
   }
 end
 
@@ -267,23 +268,28 @@ local function count_lines(paths, cwd)
   return counts
 end
 
----Files changed between `base` and the working tree, plus untracked files.
----Calls back on the main loop with the files, or `nil` and git's stderr when any git command fails.
+---Files changed between `base` and the working tree, plus untracked files, and the
+---commits made since `base`.
+---Calls back on the main loop with those, or `nil` and git's stderr when any git command fails.
 ---@param base string Commit-ish to diff against.
 ---@param cwd string Repository root; untracked paths are relative to it, like the diff paths.
----@param callback fun(files: changeset.File[]?, err: string?)
+---@param callback fun(files: changeset.File[]?, err: string?, commits: integer?)
 function M.collect(base, cwd, callback)
   run_all(git_commands(base), cwd, function(results)
     local err = first_failure(results)
     if err then
       return callback(nil, err)
     end
-    callback(M._assemble({
-      numstat = M._parse_numstat(stdout_lines(results.numstat)),
-      statuses = M._parse_name_status(stdout_lines(results.name_status)),
-      hunks = M._parse_hunks(stdout_lines(results.hunks)),
-      untracked = count_lines(stdout_lines(results.untracked), cwd),
-    }))
+    callback(
+      M._assemble({
+        numstat = M._parse_numstat(stdout_lines(results.numstat)),
+        statuses = M._parse_name_status(stdout_lines(results.name_status)),
+        hunks = M._parse_hunks(stdout_lines(results.hunks)),
+        untracked = count_lines(stdout_lines(results.untracked), cwd),
+      }),
+      nil,
+      tonumber(stdout_lines(results.commits)[1])
+    )
   end)
 end
 

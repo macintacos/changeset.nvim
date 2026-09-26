@@ -126,4 +126,22 @@ describe("changeset.view", function()
       assert.same({ "Field", "Variable" }, view.hiding(counts, { Variable = true, Field = true, Class = true }))
     end)
   end)
+
+  describe("position", function()
+    -- One row per line, as the renderer hands them back: two files, the first with a
+    -- symbol nested two deep.
+    local lines = { { depth = 0 }, { depth = 1 }, { depth = 2 }, { depth = 0 }, { depth = 1 } }
+
+    it("places a line under the file it belongs to", function()
+      assert.same({ 1, 2 }, { view.position(lines, 3) })
+    end)
+
+    it("counts a file's own row as that file", function()
+      assert.same({ 2, 2 }, { view.position(lines, 4) })
+    end)
+
+    it("has no position on an empty tree", function()
+      assert.same({ nil, 0 }, { view.position({}, 1) })
+    end)
+  end)
 end)

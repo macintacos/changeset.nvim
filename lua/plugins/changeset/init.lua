@@ -35,6 +35,9 @@ local STEP_KEYS = { "]h", "[h" }
 -- Capitalised: `:mksession` saves only globals named so, and only with "globals" in 'sessionoptions'.
 local POSITION_GLOBAL = "ChangesetPosition"
 
+-- The totals row over the tree and the blank one under it.
+local HEADER_LINES = 2
+
 local M = {}
 
 local ns = vim.api.nvim_create_namespace("changeset")
@@ -52,7 +55,9 @@ local augroup = vim.api.nvim_create_augroup("changeset", { clear = true })
 ---@field branch string
 ---@field file string Preferences file for this changeset session.
 ---@field default_branch string
+---@field pr integer? The branch's open PR, while the tree is measured against its target.
 ---@field files changeset.File[]
+---@field commits integer? Commits on the branch since `base`, once the diff has been read.
 ---@field collected boolean Whether the diff has been read yet.
 ---@field symbols table<string, changeset.CachedSymbol[]> Absent key means "still resolving".
 ---@field rows changeset.Row[]
@@ -95,9 +100,9 @@ local tracking = false
 ---@type table<string, changeset.State>
 local folds = {}
 
----Branch each open PR targets, by repository and branch; false while gh is asked.
+---Each open PR's target and number, by repository and branch; false while gh is asked.
 ---No answer is not kept, so a PR opened later is found on the next build.
----@type table<string, string|false>
+---@type table<string, { target: string, number: integer }|false>
 local targets = {}
 
 ---Whether the window last left was a float: coming back from one is not arriving.
@@ -327,21 +332,56 @@ local function hidden_note_line(buf, anchor_line, width, hidden_kinds)
   end
 end
 
----Total the branch's line changes into the sidebar's winbar.
----@param win integer
----@param files changeset.File[]
----@param base_ref string
-local function set_header(win, files, base_ref)
-  local added, removed = 0, 0
-  for _, file in ipairs(files) do
+---What the header says about the branch, as the tree stands.
+---@return changeset.Summary
+local function summary()
+  local added, removed, readable, pending = 0, 0, 0, 0
+  for _, file in ipairs(session.files) do
     added, removed = added + (file.added or 0), removed + (file.removed or 0)
+    -- A deleted file's symbols are never read.
+    if file.status ~= "deleted" then
+      readable = readable + 1
+      pending = pending + (session.symbols[file.path] == nil and 1 or 0)
+    end
   end
-  vim.wo[win].winbar = render.header({
-    base_ref = base_ref,
-    files = #files,
+  return {
+    ref = session.ref,
+    pr = session.pr,
+    files = #session.files,
+    commits = session.commits,
     added = added,
     removed = removed,
-  })
+    reading = pending > 0 and { done = readable - pending, total = readable } or nil,
+  }
+end
+
+---Scroll the header's totals into view while the tree is at its top. Virtual lines
+---above the first line are filler, which Neovim leaves out of view unless asked.
+---@param win integer
+local function reveal_header(win)
+  vim.api.nvim_win_call(win, function()
+    local at = vim.fn.winsaveview()
+    if at.topline == 1 and at.topfill < HEADER_LINES then
+      vim.fn.winrestview({ topfill = HEADER_LINES })
+    end
+  end)
+end
+
+---Put the ref in the winbar and hang the totals above the tree's first line.
+---@param buf integer
+---@param win integer
+---@param width integer
+local function draw_header(buf, win, width)
+  local header = summary()
+  vim.wo[win].winbar = render.header(header, width)
+  -- Totals before the first diff would claim that nothing changed.
+  if session.collected then
+    vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {
+      virt_lines = { render.header_totals(header, width), { { "" } } },
+      virt_lines_above = true,
+    })
+  end
+  reveal_header(win)
 end
 
 local function draw()
@@ -397,7 +437,7 @@ local function draw()
 
   vim.api.nvim_win_set_cursor(win, { state._reanchor(visible_ids(), wanted, previous_line), 0 })
 
-  set_header(win, session.files, session.ref)
+  draw_header(buf, win, width)
   paint()
 end
 
@@ -677,7 +717,7 @@ function M.refresh()
   session.request = request
 
   local diff = require("plugins.changeset.diff")
-  diff.collect(session.base, session.root, function(files, err)
+  diff.collect(session.base, session.root, function(files, err, commits)
     if not session or session.request ~= request then
       return
     end
@@ -687,6 +727,7 @@ function M.refresh()
       return vim.notify("Changeset: " .. (err or "git failed"), vim.log.levels.ERROR)
     end
     session.files = files
+    session.commits = commits
     session.collected = true
 
     -- Stamped before the request rather than after: a file edited while its
@@ -739,19 +780,25 @@ local function drop()
   session = nil
 end
 
----The branch `branch`'s open PR targets, once gh has said. Asks it otherwise, and
----builds again when the answer lands on the repository and branch still in view.
+---The branch `branch`'s open PR, once gh has said. Asks it otherwise, and builds
+---again when the answer lands on the repository and branch still in view.
 ---@param root string
 ---@param branch string
----@return string?
+---@return { target: string, number: integer }?
 local function pr_target(root, branch)
   local key = root .. "\n" .. branch
   if targets[key] == nil then
     targets[key] = false
-    Git.pr_target(root, function(target)
-      targets[key] = target
+    Git.pr_target(root, function(target, number)
+      targets[key] = target and { target = target, number = number } or nil
       if target and session and session.root == root and session.branch == branch and Paths.root(0) == root then
+        local kept = session
         M.build()
+        -- A PR onto the branch already compared against leaves the tree standing,
+        -- and only the header has news.
+        if session == kept then
+          draw()
+        end
       end
     end)
   end
@@ -773,14 +820,16 @@ function M.build()
   local branch = Git.lines({ "git", "rev-parse", "--abbrev-ref", "HEAD" }, root)[1] or "HEAD"
   -- A stacked branch reads its fork point from its PR's target; one that target
   -- has none with (never fetched, say) stays on the default branch's.
-  local target = pr_target(root, branch)
-  if target then
-    local stacked, _, stacked_ref = Git.merge_base(root, target)
+  local pr, number = pr_target(root, branch), nil
+  if pr then
+    local stacked, _, stacked_ref = Git.merge_base(root, pr.target)
     if stacked then
-      base, ref = stacked, stacked_ref
+      -- Named only while the tree is measured against the ref the PR merges into.
+      base, ref, number = stacked, stacked_ref, pr.number
     end
   end
   if session and session.root == root and session.base == base and session.branch == branch then
+    session.pr = number
     return true
   end
   drop()
@@ -799,6 +848,7 @@ function M.build()
     branch = branch,
     file = preferences_file,
     default_branch = default_branch,
+    pr = number,
     files = {},
     collected = false,
     symbols = {},
@@ -810,6 +860,17 @@ function M.build()
   }
   M.refresh()
   return true
+end
+
+---The sidebar's footer, which its statusline evaluates on every redraw.
+---@return string
+function M.footer()
+  local win = window.win()
+  if not (session and win) then
+    return ""
+  end
+  local file, files = view.position(session.visible, vim.api.nvim_win_get_cursor(win)[1])
+  return render.footer({ file = file, files = files, query = session.query })
 end
 
 ---The tree, for specs.
@@ -843,6 +904,7 @@ function M.open()
 
   render.define_highlights()
   local win = window.open(buf)
+  vim.wo[win].statusline = "%{%v:lua.require'plugins.changeset'.footer()%}"
   set_keymaps(buf)
 
   -- Fires: the sidebar's window going without the plugin being asked — `:q`, `:only`,
@@ -861,6 +923,19 @@ function M.open()
     buffer = buf,
     desc = "changeset: preview the row under the cursor without leaving the sidebar",
     callback = preview_current,
+  })
+  -- Fires: the sidebar scrolling, by any means. Back at the top, the header's totals
+  -- stay out of view unless they are scrolled in again. Only on the way up: scrolling
+  -- down from the top starts by taking them away, and restoring them would pin the tree.
+  vim.api.nvim_create_autocmd("WinScrolled", {
+    group = augroup,
+    pattern = tostring(win),
+    desc = "changeset: keep the header's totals in view at the top of the tree",
+    callback = function()
+      if vim.v.event[tostring(win)].topline < 0 then
+        reveal_header(win)
+      end
+    end,
   })
   -- Fires: leaving any window while the sidebar is open. Remembers whether it was a
   -- float, so the sidebar's `WinEnter` can tell a return from one from an arrival.

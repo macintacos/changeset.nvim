@@ -425,6 +425,8 @@ function M.close()
       vim.api.nvim_win_call(win, function()
         vim.cmd("enew")
       end)
+      -- A new buffer takes the window's options, header and footer included.
+      vim.wo[win].winbar, vim.wo[win].statusline = "", ""
     end
   end
 

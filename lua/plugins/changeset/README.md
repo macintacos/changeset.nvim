@@ -191,18 +191,52 @@ hunk's `-N` goes wholly to the first symbol it reaches.
 ### Header
 
 ```text
- vs origin/trunk                         7 files  +142 -38
+  origin/jt/exc-1200-stacked-parent…  #412
+  4 files            2 commits  +142 -38
+
+▎ 󰛦 session.ts                       +12 -3
 ```
 
-Sentence case, no separators-as-ornament, no all-caps label. It states the comparison
-because "changed relative to what" is the one question the rows themselves cannot answer,
-and wears it as a reversed badge — the shape the strip over a borrowed window uses, since
-both answer what a window is holding before anything in it does. The badge takes
-`Directory`'s colour rather than that strip's warning yellow, which is spoken for by "on
-loan", and the strip behind it is `TabLine`'s background: what a colorscheme paints its own
+Two rows on one strip, the strip `TabLine`'s background: what a colorscheme paints its own
 chrome with, and not the shade the sidebar draws its cursor line in — a header the colour
-of a row is a row. The totals hang off the right edge, in the column the per-row stats already occupy, so
-the branch's numbers and each file's numbers read down one edge instead of two.
+of a row is a row.
+
+The first row states the ref the tree is compared against, because "changed relative to
+what" is the one question the rows themselves cannot answer. It leads with mini.statusline's
+own branch glyph in `Directory`'s colour, and dims `origin/` so the branch name reads first.
+A ref too long for the width loses its tail, never its head: stacked branches are told apart
+by how their names start, which is why the cut is made here rather than by the statusline's
+`%<`, which keeps the tail. The branch's open PR sits at the right edge while the tree is
+measured against the branch that PR merges into.
+
+The second row counts what the branch holds, the numbers lit and their nouns dimmed: files
+on the left, commits at the right beside the line totals, which sit flush with the right
+edge — the column the per-row stats already occupy, so the branch's numbers and each file's
+read down one edge instead of two. While symbols are being read, `⋯ reading symbols 12/28`
+takes the file count's place and the commits give it their room.
+
+A split has one winbar row, so the second row is a virtual line above the tree's first, with
+a blank one under it. Neovim treats lines above the first as filler and leaves them out of
+view unless asked, so the sidebar scrolls them back in whenever it returns to its top; they
+scroll away with the tree like any row would. Until the first diff is in the row is absent,
+rather than claiming that nothing changed.
+
+### Footer
+
+```text
+ Changeset  file 3 of 12  󰈲 sess           <CR> open  f filter  F kinds  ? all keys
+```
+
+The sidebar's own `statusline`. With `laststatus=3` a window's own statusline is drawn
+only while that window has focus, so it takes the global bar's place exactly when the
+sidebar's keys are worth naming, and hands it back the moment you leave. The badge is
+the header glyph's `Directory` colour, reversed, standing where the mode badge would. The
+position counts the files on screen; the filter in force is named, since once its prompt
+closes the lit matches are the only other trace of it. Only four keys are offered — `?`
+lists the rest.
+
+The sidebar turns off `scrollEOF.nvim`, which would otherwise scroll the tree past its end
+on opening and push its first row off the top.
 
 ### A borrowed window says so
 

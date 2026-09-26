@@ -25,10 +25,18 @@ local symbols = require("plugins.mini-pickers.symbols")
 ---@field query? string                               Filter text; every occurrence of it in a line is marked.
 
 ---@class changeset.Summary
----@field base_ref string  What the branch is compared against, e.g. "origin/trunk".
+---@field ref string        What the branch is compared against, e.g. "origin/trunk".
+---@field pr integer?       Number of the branch's open PR, when it merges into `ref`.
 ---@field files integer
+---@field commits integer?  Commits on the branch since it forked from `ref`.
 ---@field added integer
 ---@field removed integer
+---@field reading { done: integer, total: integer }? Present while symbols are still being read.
+
+---@class changeset.Footer
+---@field file integer?  Which of the files shown the cursor is in; absent when it is in none.
+---@field files integer  Files shown.
+---@field query string   Filter in force; empty for none.
 
 ---@class changeset.Band The strip over a window the sidebar is previewing into.
 ---@field icon string       Glyph for the previewed file's type.
@@ -71,9 +79,29 @@ M.HIDDEN_HL = "ChangesetHidden"
 ---@type string
 M.HEADER_HL = "ChangesetHeader"
 
----Group for the badge at the head of that strip. Created by `define_highlights`.
+---Group for the branch glyph at the head of that strip. Created by `define_highlights`.
 ---@type string
-M.HEADER_LABEL_HL = "ChangesetHeaderLabel"
+M.HEADER_ICON_HL = "ChangesetHeaderIcon"
+
+---Group for what is not content on that strip: a remote, a noun, the PR. Created by `define_highlights`.
+---@type string
+M.HEADER_DIM_HL = "ChangesetHeaderDim"
+
+---Group for the ref the tree is compared against. Created by `define_highlights`.
+---@type string
+M.HEADER_REF_HL = "ChangesetHeaderRef"
+
+---Group for the badge naming the sidebar in its footer. Created by `define_highlights`.
+---@type string
+M.BADGE_HL = "ChangesetBadge"
+
+---Group for the footer's text. Created by `define_highlights`.
+---@type string
+M.FOOTER_HL = "ChangesetFooter"
+
+---Group for the keys and the filter the footer names. Created by `define_highlights`.
+---@type string
+M.FOOTER_KEY_HL = "ChangesetFooterKey"
 
 ---Background of the row last picked from the sidebar. Created by `define_highlights`.
 ---@type string
@@ -113,6 +141,16 @@ local function escaped(text)
 end
 
 local RAIL = "▎"
+
+-- The branch and diff glyphs are the ones mini.statusline already draws.
+local BRANCH_ICON = ""
+local PR_ICON = ""
+local FILES_ICON = ""
+local COMMIT_ICON = ""
+local FILTER_ICON = "󰈲"
+
+-- The keys the footer offers, `?` last since it lists the rest.
+local HINTS = { { "<CR>", "open" }, { "f", "filter" }, { "F", "kinds" }, { "?", "all keys" } }
 
 -- The two kinds whose plural is not just an `s`. The rest split on the camel hump
 -- ("EnumMember" reads as two words) and take one.
@@ -416,19 +454,108 @@ function M.hidden_note(kinds, width)
   return ("Hiding %d kinds of symbol. F to change."):format(#kinds)
 end
 
----The sidebar's header: what the tree is compared against worn as a badge, then
----the file count and line totals at the right edge.
+---The header's first row, for the sidebar's winbar: the ref the tree is compared
+---against, and the branch's PR at the right edge.
 ---
----Badge over a band, the shape the strip over a borrowed window uses, because
----both answer "what is this window holding" before anything in it.
----@param summary changeset.Summary
+---A ref too long for the width loses its tail, not its head: a stacked branch is
+---told apart by the start of its name. The statusline's own `%<` would cut the
+---other way.
+---@param summary { ref: string, pr: integer? }
+---@param width integer Cells the winbar spans.
 ---@return string
-function M.header(summary)
-  local noun = summary.files == 1 and "file" or "files"
+function M.header(summary, width)
+  local pr = summary.pr and ("%s #%d"):format(PR_ICON, summary.pr)
+  local room = width
+    - vim.fn.strdisplaywidth((" %s "):format(BRANCH_ICON))
+    - (pr and vim.fn.strdisplaywidth(pr) + 1 or 0)
+  local ref = clip_right(summary.ref, room)
+  local remote = ref:match("^origin/") or ""
   return table.concat({
-    ("%%#%s# vs %s "):format(M.HEADER_LABEL_HL, escaped(summary.base_ref)),
-    ("%%#%s#%%=%d %s  +%d -%d "):format(M.HEADER_HL, summary.files, noun, summary.added, summary.removed),
+    ("%%#%s# %s "):format(M.HEADER_ICON_HL, BRANCH_ICON),
+    ("%%#%s#%s"):format(M.HEADER_DIM_HL, remote),
+    ("%%#%s#%s"):format(M.HEADER_REF_HL, escaped(ref:sub(#remote + 1))),
+    ("%%#%s#%%="):format(M.HEADER_HL),
+    pr and ("%%#%s#%s"):format(M.HEADER_DIM_HL, pr) or "",
   })
+end
+
+---`N noun`, the glyph and noun dimmed so the number leads.
+---@param glyph string
+---@param count integer
+---@param noun string Singular.
+---@return table[] chunks
+local function counted(glyph, count, noun)
+  return {
+    { glyph .. " ", M.HEADER_DIM_HL },
+    { tostring(count), M.HEADER_HL },
+    { " " .. noun .. (count == 1 and "" or "s"), M.HEADER_DIM_HL },
+  }
+end
+
+---Width in cells of virtual-text chunks.
+---@param chunks table[]
+---@return integer
+local function cells(chunks)
+  local total = 0
+  for _, chunk in ipairs(chunks) do
+    total = total + vim.fn.strdisplaywidth(chunk[1])
+  end
+  return total
+end
+
+---The header's second row, as a virtual line over the tree: the file count on the
+---left, the commits and line totals at the right edge — the totals flush with it, in
+---the column every row's own stat already occupies.
+---
+---Symbols still being read take the file count's place and push the commits out, since
+---the counts are about to change under the reader anyway and the width is not there.
+---@param summary changeset.Summary
+---@param width integer Cells the line spans; padded to fill, so the strip runs the full width.
+---@return table[] chunks Virtual-text chunks for one line of `virt_lines`.
+function M.header_totals(summary, width)
+  local strip = M.HEADER_HL
+  local left, right
+  if summary.reading then
+    left = {
+      { ("⋯ reading symbols %d/%d"):format(summary.reading.done, summary.reading.total), { strip, M.META_HL } },
+    }
+    right = {}
+  else
+    left = counted(FILES_ICON, summary.files, "file")
+    right = (summary.commits or 0) > 0 and counted(COMMIT_ICON, summary.commits, "commit") or {}
+  end
+  if #right > 0 then
+    right[#right + 1] = { "  ", strip }
+  end
+  vim.list_extend(right, {
+    { "+" .. summary.added, { strip, "GitSignsAdd" } },
+    { " ", strip },
+    { "-" .. summary.removed, { strip, "GitSignsDelete" } },
+  })
+
+  local chunks = vim.list_extend({ { " ", strip } }, left)
+  chunks[#chunks + 1] = { (" "):rep(math.max(width - cells(chunks) - cells(right), 1)), strip }
+  return vim.list_extend(chunks, right)
+end
+
+---The sidebar's statusline. With 'laststatus' at 3 a window's own statusline is drawn
+---only while that window has focus, which is exactly when its keys are worth naming.
+---@param info changeset.Footer
+---@return string
+function M.footer(info)
+  local parts = { ("%%#%s# Changeset "):format(M.BADGE_HL) }
+  if info.file then
+    parts[#parts + 1] = ("%%#%s# file %d of %d"):format(M.FOOTER_HL, info.file, info.files)
+  end
+  if info.query ~= "" then
+    parts[#parts + 1] = ("%%#%s#  %s %%#%s#%s"):format(M.FOOTER_HL, FILTER_ICON, M.FOOTER_KEY_HL, escaped(info.query))
+  end
+  local hints = vim.tbl_map(function(hint)
+    return ("%%#%s#%s %%#%s#%s"):format(M.FOOTER_KEY_HL, hint[1], M.FOOTER_HL, hint[2])
+  end, HINTS)
+  -- `%<` before the hints: a bar too narrow for everything gives up the keys first.
+  parts[#parts + 1] = ("%%#%s#%%=%%<"):format(M.FOOTER_HL) .. table.concat(hints, "  ") .. " "
+  return table.concat(parts)
 end
 
 ---The winbar over a window the sidebar is borrowing: a band across the top
@@ -516,10 +643,17 @@ function M.define_highlights()
   -- cursor line in exactly that, and a header the colour of a row is a row.
   local chrome = vim.api.nvim_get_hl(0, { name = "TabLine", link = false }).bg or band
   vim.api.nvim_set_hl(0, M.HEADER_HL, { bg = chrome })
-  -- Directory's colour rather than the badge's warning yellow: this badge says
+  -- Directory's colour rather than the preview badge's warning yellow: these say
   -- what the panel is, and yellow is already spoken for by "on loan".
-  local directory = vim.api.nvim_get_hl(0, { name = "Directory", link = false })
-  vim.api.nvim_set_hl(0, M.HEADER_LABEL_HL, { fg = directory.fg or comment.fg, reverse = true, bold = true })
+  local directory = vim.api.nvim_get_hl(0, { name = "Directory", link = false }).fg or comment.fg
+  vim.api.nvim_set_hl(0, M.HEADER_ICON_HL, { fg = directory, bg = chrome })
+  vim.api.nvim_set_hl(0, M.HEADER_DIM_HL, { fg = comment.fg, bg = chrome })
+  local normal = vim.api.nvim_get_hl(0, { name = "Normal", link = false })
+  vim.api.nvim_set_hl(0, M.HEADER_REF_HL, { fg = normal.fg, bg = chrome, bold = true })
+  vim.api.nvim_set_hl(0, M.BADGE_HL, { fg = directory, reverse = true, bold = true })
+  local statusline = vim.api.nvim_get_hl(0, { name = "StatusLine", link = false })
+  vim.api.nvim_set_hl(0, M.FOOTER_HL, { fg = comment.fg, bg = statusline.bg })
+  vim.api.nvim_set_hl(0, M.FOOTER_KEY_HL, { fg = statusline.fg, bg = statusline.bg, bold = true })
   -- What the editor already paints over the text you searched for.
   vim.api.nvim_set_hl(0, M.MATCH_HL, { link = "Search" })
   -- Struck through as well as dimmed: dim on its own is what ancestor rows mean,

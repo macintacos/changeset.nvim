@@ -93,6 +93,24 @@ function M.kind_counts(rows)
   return counts
 end
 
+---Where the file holding line `lnum` stands among the files on screen.
+---@param rows { depth: integer }[] One per line, as `render.lines` hands them back.
+---@param lnum integer
+---@return integer? index nil when no file is at or above `lnum`.
+---@return integer total
+function M.position(rows, lnum)
+  local index, total = nil, 0
+  for i, row in ipairs(rows) do
+    if row.depth == 0 then
+      total = total + 1
+      if i <= lnum then
+        index = total
+      end
+    end
+  end
+  return index, total
+end
+
 ---The hidden kinds this tree actually has.
 ---
 ---A set carried in from another branch can name kinds nothing here uses, and

@@ -132,10 +132,36 @@ describe("changeset sidebar", function()
     assert.equal(1, #dim_marks)
   end)
 
-  it("summarises the branch in the window bar", function()
+  it("names what the branch is compared against in the window bar", function()
     open_sidebar()
 
-    assert.truthy(vim.wo[window.win()].winbar:find("%d"))
+    assert.truthy(vim.wo[window.win()].winbar:find("trunk", 1, true))
+  end)
+
+  it("totals the branch above the tree, scrolled into view", function()
+    local buf = open_sidebar()
+
+    local above = vim.tbl_filter(function(mark)
+      return mark[4].virt_lines_above
+    end, vim.api.nvim_buf_get_extmarks(buf, ns, 0, 0, { details = true }))
+    assert.equal(1, #above)
+    local text = table.concat(vim.tbl_map(function(chunk)
+      return chunk[1]
+    end, above[1][4].virt_lines[1]))
+    assert.truthy(text:find("2 files", 1, true))
+    -- Lines above the first only show as filler, which nothing scrolls in unasked.
+    assert.truthy(vim.api.nvim_win_call(window.win(), vim.fn.winsaveview).topfill > 0)
+  end)
+
+  it("footers the sidebar with the file the cursor is in", function()
+    open_sidebar()
+    local win = window.win()
+    vim.api.nvim_win_set_cursor(win, { 1, 0 })
+
+    local footer = vim.api.nvim_eval_statusline(vim.wo[win].statusline, { winid = win }).str
+
+    assert.truthy(footer:find("Changeset", 1, true))
+    assert.truthy(footer:find("file 1 of 2", 1, true))
   end)
 
   it("shuts every file, then opens them again", function()
