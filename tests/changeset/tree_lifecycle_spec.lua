@@ -94,13 +94,13 @@ describe("changeset tree", function()
       Fixture.git({ "checkout", "-q", "-b", "feature2" }, tmp)
       changeset.build()
 
-      assert.are_not.equal(tree, changeset._tree())
+      assert.not_equal(tree, changeset._tree())
       assert.equal("feature2", changeset._tree().branch)
     end)
 
     it("rebuilds the tree once the fork point moves", function()
       changeset.build()
-      local tree = changeset._tree()
+      local tree = assert(changeset._tree())
 
       Fixture.git({ "checkout", "-q", "trunk" }, tmp)
       vim.fn.writefile({ "return 1" }, "other.lua")
@@ -108,8 +108,8 @@ describe("changeset tree", function()
       Fixture.git({ "checkout", "-q", "-b", "later" }, tmp)
       changeset.build()
 
-      assert.are_not.equal(tree, changeset._tree())
-      assert.are_not.equal(tree.base, changeset._tree().base)
+      assert.not_equal(tree, changeset._tree())
+      assert.not_equal(tree.base, assert(changeset._tree()).base)
     end)
 
     it("leaves the sidebar blank until the diff is read", function()

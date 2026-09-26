@@ -39,7 +39,7 @@ end
 local function settle()
   local settled = vim.wait(10000, function()
     local text = window.buf() and table.concat(sidebar_lines(), "\n") or ""
-    return text:find("other.lua", 1, true) and not text:find("reading symbols", 1, true)
+    return text:find("other.lua", 1, true) ~= nil and not text:find("reading symbols", 1, true)
   end, 25)
   assert(settled, "the sidebar never settled")
 end
@@ -58,7 +58,8 @@ end
 ---Put the sidebar's cursor on the first line containing `text`, as `j`/`k` would.
 ---@param text string
 local function sidebar_cursor_to(text)
-  vim.api.nvim_set_current_win(window.win())
+  local win = assert(window.win())
+  vim.api.nvim_set_current_win(win)
   for i, line in ipairs(sidebar_lines()) do
     if line:find(text, 1, true) then
       vim.api.nvim_win_set_cursor(0, { i, 0 })
@@ -262,7 +263,7 @@ describe("changeset position in a session", function()
     local function diff_arrived()
       assert(
         vim.wait(10000, function()
-          return window.buf() and table.concat(sidebar_lines(), "\n"):find("other.lua", 1, true)
+          return window.buf() ~= nil and table.concat(sidebar_lines(), "\n"):find("other.lua", 1, true) ~= nil
         end, 25),
         "the diff never arrived"
       )

@@ -167,7 +167,7 @@ describe("changeset.tree", function()
         return tree.build({ file(PATH, hunks) }, { [PATH] = STORE })[1].children
       end
 
-      it("shows a class holding one changed method as a statless ancestor of it", function()
+      it("shows a class holding one changed method as a stateless ancestor of it", function()
         local class = build_store({ hunk(7, 1) })[1]
 
         assert.equal("SessionStore", class.name)
@@ -259,7 +259,7 @@ describe("changeset.tree", function()
       }
 
       ---@param hunks changeset.Hunk[]
-      ---@param line_text fun(path: string, lnum: integer): string?
+      ---@param line_text? fun(path: string, lnum: integer): string?
       ---@return changeset.Row[]
       local function build_store(hunks, line_text)
         return tree.build({ file(PATH, hunks) }, { [PATH] = STORE }, line_text)[1].children
@@ -413,14 +413,14 @@ describe("changeset.tree", function()
         }
         local rows = tree.build({ file(PATH, { hunk(3, 1), hunk(9, 1) }) }, { [PATH] = symbols })[1].children
 
-        assert.are_not.equal(rows[1].children[1].id, rows[2].children[1].id)
+        assert.not_equal(rows[1].children[1].id, rows[2].children[1].id)
       end)
 
       it("tells same-named siblings apart, as the overloads of one function are", function()
         local symbols = { sym("get", "Function", 0, 1, 3), sym("get", "Function", 0, 5, 7) }
         local rows = tree.build({ file(PATH, { hunk(2, 1), hunk(6, 1) }) }, { [PATH] = symbols })[1].children
 
-        assert.are_not.equal(rows[1].id, rows[2].id)
+        assert.not_equal(rows[1].id, rows[2].id)
       end)
     end)
   end)

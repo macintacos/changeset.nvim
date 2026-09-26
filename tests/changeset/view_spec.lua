@@ -91,9 +91,8 @@ describe("changeset.view", function()
     end)
 
     it("keeps an orphan-hunk group, which names no symbol", function()
-      local rows = {
-        row("f1", "Makefile", { { id = "o", kind = "orphans", name = "Other changes", children = {} } }),
-      }
+      local orphans = { id = "o", kind = "orphans", name = "Other changes", children = {} }
+      local rows = { row("f1", "Makefile", { orphans }) }
 
       assert.same({ "Makefile", "Other changes" }, names(view.by_kind(rows, { Variable = true })))
     end)

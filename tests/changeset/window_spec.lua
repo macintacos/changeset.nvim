@@ -140,7 +140,7 @@ describe("changeset.window", function()
 
     it("reports no window once the one it opened is closed by hand", function()
       window.open(vim.api.nvim_create_buf(false, true))
-      vim.api.nvim_win_close(window.win(), true)
+      vim.api.nvim_win_close(assert(window.win()), true)
 
       assert.is_nil(window.win())
       assert.is_false(window.is_visible())
@@ -165,7 +165,7 @@ describe("changeset.window", function()
       window.close()
 
       assert.is_true(vim.api.nvim_win_is_valid(win))
-      assert.are_not.equal(tree, vim.api.nvim_win_get_buf(win))
+      assert.not_equal(tree, vim.api.nvim_win_get_buf(win))
     end)
   end)
 

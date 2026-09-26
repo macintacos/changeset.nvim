@@ -30,7 +30,7 @@ local function open_sidebar()
   changeset.open()
   local settled = vim.wait(10000, function()
     local text = window.buf() and sidebar_text() or ""
-    return text:find("other.lua", 1, true) and not text:find("reading symbols", 1, true)
+    return text:find("other.lua", 1, true) ~= nil and not text:find("reading symbols", 1, true)
   end, 25)
   assert(settled, "the sidebar never settled")
   return file
@@ -60,7 +60,7 @@ end
 ---no band says the window is a preview.
 local function assert_unbanded_here()
   local win = vim.api.nvim_get_current_win()
-  assert.are_not.equal(window.win(), win)
+  assert.not_equal(window.win(), win)
   assert.is_false(banded(win), "the focused window reads: " .. shown(win))
 end
 
@@ -123,7 +123,8 @@ describe("changeset preview band", function()
     it("still bands the window once the cursor goes to the sidebar and steps", function()
       local file = open_sidebar()
       step(1)
-      vim.api.nvim_set_current_win(window.win())
+      local win = assert(window.win())
+      vim.api.nvim_set_current_win(win)
 
       step(2)
 
@@ -135,7 +136,8 @@ describe("changeset preview band", function()
     ---@return integer file
     local function previewed(steps)
       local file = open_sidebar()
-      vim.api.nvim_set_current_win(window.win())
+      local win = assert(window.win())
+      vim.api.nvim_set_current_win(win)
       step(steps)
       assert.is_true(banded(file), "the preview never landed")
       return file
@@ -238,7 +240,8 @@ describe("changeset preview band", function()
 
     it("comes off the notice when the cursor moves into it", function()
       local file = open_sidebar()
-      vim.api.nvim_set_current_win(window.win())
+      local win = assert(window.win())
+      vim.api.nvim_set_current_win(win)
       local lnum
       for i, line in ipairs(vim.api.nvim_buf_get_lines(assert(window.buf()), 0, -1, false)) do
         if line:find("other.lua", 1, true) then

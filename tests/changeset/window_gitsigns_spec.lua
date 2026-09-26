@@ -4,8 +4,7 @@ local Fixture = require("support.git")
 ---@type changeset.Band
 local BAND = { icon = "󰢱", icon_hl = "MiniIconsAzure", path = "src/session.ts" }
 
-local data = vim.fn.stdpath("data") .. "/site/pack/"
-vim.opt.rtp:prepend(vim.fn.glob(data .. "*/opt/gitsigns.nvim", false, true)[1])
+vim.opt.rtp:prepend(require("support.deps").path("gitsigns.nvim"))
 require("gitsigns").setup()
 
 describe("changeset.window gitsigns", function()

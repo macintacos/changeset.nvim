@@ -92,7 +92,12 @@ describe("changeset.cache", function()
     end)
 
     it("reads back what it wrote", function()
-      local entries = { ["api.ts"] = { stamp = "120:9", symbols = { { name = "send", lnum = 12 } } } }
+      local entries = {
+        ["api.ts"] = {
+          stamp = "120:9",
+          symbols = { { name = "send", lnum = 12 } },
+        },
+      }
 
       cache.save(path, entries)
 
@@ -100,10 +105,11 @@ describe("changeset.cache", function()
     end)
 
     it("leaves out what no server answered, which only this Neovim remembers", function()
-      cache.save(path, {
+      local entries = {
         ["api.ts"] = { stamp = "120:9", symbols = { { name = "send", lnum = 12 } } },
         ["go.sum"] = { stamp = "80:3", symbols = {}, silent = true },
-      })
+      }
+      cache.save(path, entries)
 
       assert.same({ "api.ts" }, vim.tbl_keys(cache.load(path)))
     end)

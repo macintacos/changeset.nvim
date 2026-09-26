@@ -125,6 +125,7 @@ local function width_for(rows, footer, room)
 end
 
 local function draw()
+  assert(menu, "changeset: menu is closed")
   local lines = render.kind_lines(menu.rows, { icon = menu.opts.icon, width = menu.width })
 
   vim.bo[menu.buf].modifiable = true

@@ -44,7 +44,7 @@ local function open_sidebar()
   local settled = vim.wait(10000, function()
     local buf = window.buf()
     local text = buf and table.concat(lines_of(buf), "\n") or ""
-    return text:find("other.lua", 1, true) and not text:find("reading symbols", 1, true)
+    return text:find("other.lua", 1, true) ~= nil and not text:find("reading symbols", 1, true)
   end, 25)
   assert(settled, "the sidebar never settled")
 end
@@ -61,9 +61,10 @@ local function line_with(hl)
     return flushed
   end)
   local found = {}
-  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(window.buf(), ns, 0, -1, { details = true })) do
+  local buf = assert(window.buf())
+  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
     if mark[4].hl_group == hl then
-      table.insert(found, lines_of(window.buf())[mark[2] + 1])
+      table.insert(found, lines_of(buf)[mark[2] + 1])
     end
   end
   assert(#found <= 1, ("%d lines wear %s"):format(#found, hl))
@@ -73,8 +74,10 @@ end
 ---Put the sidebar's cursor on the first line containing `text`, as `j`/`k` would.
 ---@param text string
 local function sidebar_cursor_to(text)
-  vim.api.nvim_set_current_win(window.win())
-  for i, line in ipairs(lines_of(window.buf())) do
+  local win = assert(window.win())
+  vim.api.nvim_set_current_win(win)
+  local buf = assert(window.buf())
+  for i, line in ipairs(lines_of(buf)) do
     if line:find(text, 1, true) then
       vim.api.nvim_win_set_cursor(0, { i, 0 })
       vim.api.nvim_exec_autocmds("CursorMoved", { buffer = window.buf() })
@@ -158,7 +161,8 @@ describe("changeset row highlights", function()
     vim.cmd.edit("mod.lua")
     vim.api.nvim_win_set_cursor(0, { 5, 0 })
     open_sidebar()
-    vim.api.nvim_set_current_win(window.win())
+    local win = assert(window.win())
+    vim.api.nvim_set_current_win(win)
 
     for _ = 1, 4 do
       vim.cmd.normal("]h")
@@ -178,7 +182,8 @@ describe("changeset row highlights", function()
     vim.cmd("silent! checktime")
     changeset.refresh()
     vim.wait(5000, function()
-      return not table.concat(lines_of(window.buf()), "\n"):find("L8", 1, true)
+      local buf = assert(window.buf())
+      return not table.concat(lines_of(buf), "\n"):find("L8", 1, true)
     end, 25)
 
     assert.truthy(line_with(render.SELECTED_HL):find("mod.lua", 1, true))

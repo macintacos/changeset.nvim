@@ -17,9 +17,9 @@ describe("changeset.buffers", function()
       local path = tmp .. "/a.lua"
       vim.fn.writefile({ "local x = 1", "return x" }, path)
 
-      local buf = buffers.load(path)
+      local buf = assert(buffers.load(path))
 
-      assert.is_not_nil(buf)
+      assert.not_nil(buf)
       assert.is_true(vim.api.nvim_buf_is_loaded(buf))
       assert.is_false(vim.bo[buf].buflisted)
       assert.same({ "local x = 1", "return x" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))

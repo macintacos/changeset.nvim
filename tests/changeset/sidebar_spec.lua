@@ -39,7 +39,7 @@ local function open_sidebar()
   local buf
   vim.wait(10000, function()
     buf = window.buf()
-    return buf and #lines_of(buf) > 1
+    return buf ~= nil and #lines_of(buf) > 1
   end, 25)
   assert(buf, "the sidebar never opened a buffer")
 
@@ -55,7 +55,8 @@ end
 
 ---@param key string
 local function press(key)
-  vim.api.nvim_set_current_win(window.win())
+  local win = assert(window.win())
+  vim.api.nvim_set_current_win(win)
   vim.cmd.normal(key)
 end
 
@@ -150,7 +151,7 @@ describe("changeset sidebar", function()
     end, above[1][4].virt_lines[1]))
     assert.truthy(text:find("2 files", 1, true))
     -- Lines above the first only show as filler, which nothing scrolls in unasked.
-    assert.truthy(vim.api.nvim_win_call(window.win(), vim.fn.winsaveview).topfill > 0)
+    assert.truthy(vim.api.nvim_win_call(assert(window.win()), vim.fn.winsaveview).topfill > 0)
   end)
 
   -- No language server runs under the specs, so neither fixture file gets an answer.
@@ -188,7 +189,7 @@ describe("changeset sidebar", function()
 
   it("footers the sidebar with the file the cursor is in", function()
     open_sidebar()
-    local win = window.win()
+    local win = assert(window.win())
     vim.api.nvim_win_set_cursor(win, { 1, 0 })
 
     local footer = vim.api.nvim_eval_statusline(vim.wo[win].statusline, { winid = win }).str
@@ -233,7 +234,8 @@ describe("changeset sidebar", function()
     }
     open_sidebar()
     if from == "sidebar" then
-      vim.api.nvim_set_current_win(window.win())
+      local win = assert(window.win())
+      vim.api.nvim_set_current_win(win)
     end
     local standing = vim.api.nvim_get_current_win()
     local before = vim.fn.getjumplist(target)[1]
@@ -303,7 +305,7 @@ describe("changeset sidebar", function()
 
   it("keeps the file a focused preview claimed when the sidebar closes", function()
     local p = preview(3, "sidebar")
-    assert.are_not.equal(p.from_buf, p.previewed)
+    assert.not_equal(p.from_buf, p.previewed)
 
     back_to_previous_window()
     changeset.close()
@@ -313,7 +315,7 @@ describe("changeset sidebar", function()
 
   it("leaves a preview made where the cursor stands a preview when focus comes back to it", function()
     local p = preview(3, "file")
-    assert.are_not.equal(p.from_buf, p.previewed)
+    assert.not_equal(p.from_buf, p.previewed)
 
     local float = vim.api.nvim_open_win(vim.api.nvim_create_buf(false, true), true, {
       relative = "editor",
@@ -331,7 +333,7 @@ describe("changeset sidebar", function()
 
   it("puts a preview back when the sidebar is closed with :q", function()
     local p = preview(3, "sidebar")
-    assert.are_not.equal(p.from_buf, p.previewed)
+    assert.not_equal(p.from_buf, p.previewed)
 
     vim.cmd.quit()
     vim.wait(1000, function()
@@ -362,7 +364,8 @@ describe("changeset sidebar", function()
         end
       end
       assert(lnum, "the deleted file has no row")
-      vim.api.nvim_set_current_win(window.win())
+      local win = assert(window.win())
+      vim.api.nvim_set_current_win(win)
       vim.api.nvim_win_set_cursor(0, { lnum, 0 })
       vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
       return target
@@ -408,7 +411,8 @@ describe("changeset sidebar", function()
 
   it("filters on a query the pattern matcher would choke on", function()
     local buf = open_sidebar()
-    vim.api.nvim_set_current_win(window.win())
+    local win = assert(window.win())
+    vim.api.nvim_set_current_win(win)
 
     -- Not `press`: `vim.fn.input` blocks, so the keys it consumes have to be in the
     -- typeahead before `f` runs. `x` mode drains what is already queued.

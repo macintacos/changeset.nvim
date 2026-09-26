@@ -1,7 +1,6 @@
 local support = require("support.git")
 
-local data = vim.fn.stdpath("data") .. "/site/pack/"
-vim.opt.rtp:prepend(vim.fn.glob(data .. "*/opt/gitsigns.nvim", false, true)[1])
+vim.opt.rtp:prepend(require("support.deps").path("gitsigns.nvim"))
 
 local root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h:h")
 -- The plugin file registers an un-grouped autocmd and keeps its state at file
@@ -390,7 +389,7 @@ describe("PR Review Mode", function()
     -- diffthis reuses the source buffer's comparison text, set by its first update.
     assert.is_true(await_all(bufs, function(buf)
       local bcache = require("gitsigns.cache").cache[buf]
-      return bcache and bcache.compare_text ~= nil
+      return bcache ~= nil and bcache.compare_text ~= nil
     end, 5000))
     require("gitsigns").diffthis()
     local blob

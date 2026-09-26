@@ -47,7 +47,7 @@ local function as_set(list)
 end
 
 ---@param set table<string, true>
----@return string[] Sorted, so saving the same choice twice writes the same bytes.
+---@return string[] list Sorted, so saving the same choice twice writes the same bytes.
 local function as_list(set)
   local list = vim.tbl_keys(set)
   table.sort(list)

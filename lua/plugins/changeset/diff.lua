@@ -96,7 +96,7 @@ end
 ---@param digits string
 ---@return integer
 local function line_count(digits)
-  return digits == "" and 1 or tonumber(digits)
+  return digits == "" and 1 or tonumber(digits) --[[@as integer]]
 end
 
 ---@param line string
@@ -121,7 +121,8 @@ function M._parse_hunks(lines)
     local quoted = not path and line:match('^diff %-%-git "a/.+" "b/(.+)"$')
     if path or quoted then
       current = {}
-      hunks[path or unescape(quoted)] = current
+      local name = path or unescape(quoted --[[@as string]])
+      hunks[name] = current
     else
       local hunk = parse_hunk_header(line)
       -- A hunk before any header means a shape this does not read. Dropping it costs one

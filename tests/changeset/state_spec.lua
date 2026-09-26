@@ -72,24 +72,35 @@ describe("changeset.state", function()
   end)
 
   describe("_outward", function()
+    ---Rows carrying only the depth `_outward` reads.
+    ---@param ... integer
+    ---@return changeset.Row[]
+    local function at_depths(...)
+      local rows = {}
+      for i, depth in ipairs({ ... }) do
+        rows[i] = { depth = depth }
+      end
+      return rows
+    end
+
     it("shuts a row whose children are on screen", function()
-      assert.equal("collapse", state._outward({ { depth = 0 }, { depth = 1 } }, 1))
+      assert.equal("collapse", state._outward(at_depths(0, 1), 1))
     end)
 
     it("steps out to the parent when nothing is showing below the row", function()
-      local action, parent_lnum = state._outward({ { depth = 0 }, { depth = 1 } }, 2)
+      local action, parent_lnum = state._outward(at_depths(0, 1), 2)
       assert.equal("parent", action)
       assert.equal(1, parent_lnum)
     end)
 
     it("steps out past the siblings sitting between a row and its parent", function()
-      local action, parent_lnum = state._outward({ { depth = 0 }, { depth = 1 }, { depth = 2 }, { depth = 2 } }, 4)
+      local action, parent_lnum = state._outward(at_depths(0, 1, 2, 2), 4)
       assert.equal("parent", action)
       assert.equal(2, parent_lnum)
     end)
 
     it("does nothing on a shut file row, which has no parent to step out to", function()
-      assert.is_nil(state._outward({ { depth = 0 }, { depth = 0 } }, 1))
+      assert.is_nil(state._outward(at_depths(0, 0), 1))
     end)
   end)
   describe("_nearest", function()

@@ -29,7 +29,7 @@ describe("changeset.help", function()
         end
       end
 
-      assert.is_not_nil(staged)
+      assert.not_nil(staged)
       assert.equal("Close the tree", staged.desc)
     end)
   end)

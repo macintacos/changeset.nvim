@@ -39,7 +39,7 @@ end
 local function settle()
   local settled = vim.wait(10000, function()
     local text = window.buf() and sidebar_text() or ""
-    return text:find("other.lua", 1, true) and not text:find("reading symbols", 1, true)
+    return text:find("other.lua", 1, true) ~= nil and not text:find("reading symbols", 1, true)
   end, 25)
   assert(settled, "the sidebar never settled")
 end
@@ -59,16 +59,16 @@ end
 ---@return string
 local function sidebar_cursor_line()
   local win = assert(window.win())
-  return vim.api.nvim_buf_get_lines(window.buf(), vim.api.nvim_win_get_cursor(win)[1] - 1, -1, false)[1]
+  return vim.api.nvim_buf_get_lines(assert(window.buf()), vim.api.nvim_win_get_cursor(win)[1] - 1, -1, false)[1]
 end
 
 ---Put the sidebar's cursor on the first line containing `text`. Headless, setting a
 ---cursor fires no `CursorMoved`, so this stands in for the user moving it without a preview.
 ---@param text string
 local function park_sidebar_cursor(text)
-  for i, line in ipairs(vim.api.nvim_buf_get_lines(window.buf(), 0, -1, false)) do
+  for i, line in ipairs(vim.api.nvim_buf_get_lines(assert(window.buf()), 0, -1, false)) do
     if line:find(text, 1, true) then
-      vim.api.nvim_win_set_cursor(window.win(), { i, 0 })
+      vim.api.nvim_win_set_cursor(assert(window.win()), { i, 0 })
       return
     end
   end
@@ -114,7 +114,8 @@ describe("changeset sidebar focus", function()
     settle()
     park_sidebar_cursor("other.lua")
 
-    vim.api.nvim_set_current_win(window.win())
+    local win = assert(window.win())
+    vim.api.nvim_set_current_win(win)
 
     assert.truthy(sidebar_cursor_line():find("Other changes", 1, true))
   end)
@@ -137,7 +138,8 @@ describe("changeset sidebar focus", function()
     vim.api.nvim_win_set_cursor(0, { 8, 0 })
     changeset.open()
     settle()
-    vim.api.nvim_set_current_win(window.win())
+    local win = assert(window.win())
+    vim.api.nvim_set_current_win(win)
     park_sidebar_cursor("mod.lua")
     vim.cmd.normal("h")
     park_sidebar_cursor("other.lua")
@@ -154,7 +156,8 @@ describe("changeset sidebar focus", function()
     vim.api.nvim_win_set_cursor(0, { 8, 0 })
     changeset.open()
     settle()
-    vim.api.nvim_set_current_win(window.win())
+    local win = assert(window.win())
+    vim.api.nvim_set_current_win(win)
     park_sidebar_cursor("mod.lua")
     vim.cmd.normal("h")
     vim.cmd.wincmd("p")
@@ -172,12 +175,13 @@ describe("changeset sidebar focus", function()
     changeset.toggle()
     settle()
     park_sidebar_cursor("other.lua")
-    local parked = vim.api.nvim_win_get_cursor(window.win())[1]
+    local win = assert(window.win())
+    local parked = vim.api.nvim_win_get_cursor(win)[1]
     vim.cmd.only()
 
     vim.cmd.normal("]h")
 
-    assert.equal(parked + 1, vim.api.nvim_win_get_cursor(window.win())[1])
+    assert.equal(parked + 1, vim.api.nvim_win_get_cursor(win)[1])
   end)
 
   it("leaves the cursor alone when a float entered from the sidebar closes", function()
@@ -229,7 +233,7 @@ describe("changeset sidebar focus", function()
       changeset.toggle()
       assert(
         vim.wait(10000, function()
-          return window.buf() and sidebar_text():find("other.lua", 1, true)
+          return window.buf() ~= nil and sidebar_text():find("other.lua", 1, true) ~= nil
         end, 25),
         "the diff never arrived"
       )

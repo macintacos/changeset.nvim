@@ -168,6 +168,7 @@ end
 ---@param path string Repo-relative.
 ---@return boolean
 local function unwritten(path)
+  assert(session, "changeset: no open session")
   local buf = vim.fn.bufnr(session.root .. "/" .. path)
   return buf ~= -1 and vim.bo[buf].modified
 end
@@ -188,17 +189,22 @@ end
 
 local function preview_current()
   local row = row_at_cursor()
-  if row and row.lnum and row.kind ~= "file" then
+  if not row then
+    return
+  end
+  assert(session, "changeset: no open session")
+  if row.lnum and row.kind ~= "file" then
     window.preview(session.root .. "/" .. row.path, row.lnum, band_for(row), { row = row, session = session })
-  elseif row and row.kind == "file" and row.status == "deleted" then
+  elseif row.kind == "file" and row.status == "deleted" then
     window.preview_notice("This file was deleted on this branch", band_for(row))
-  elseif row and row.kind == "file" then
+  elseif row.kind == "file" then
     window.preview(session.root .. "/" .. row.path, 1, band_for(row), { row = row, session = session })
   end
 end
 
 ---@return string[] ids Of the rows on screen, in display order.
 local function visible_ids()
+  assert(session, "changeset: no open session")
   return vim.tbl_map(function(row)
     return row.id
   end, session.visible)
@@ -241,6 +247,7 @@ local PASSING_BUFTYPES = { terminal = true, help = true }
 ---Stop waiting to restore one half of a session's position.
 ---@param half "here"|"row"
 local function release(half)
+  assert(session, "changeset: no open session")
   local wanted = session.restoring
   if wanted then
     wanted[half] = nil
@@ -284,6 +291,7 @@ end
 ---and note where it landed.
 ---@param win integer The sidebar's window.
 local function land(win)
+  assert(session, "changeset: no open session")
   local here = session.here
   local row = here and tree.locate(session.rows, here.path, here.lnum)
   local lnum = row and state._nearest(visible_ids(), row.id)
@@ -296,6 +304,7 @@ end
 ---Make `row` the selection. A folded chain is recorded by its tip, the symbol it jumps to.
 ---@param row changeset.Row
 local function pick(row)
+  assert(session, "changeset: no open session")
   session.selected = { id = row.tip or row.id, path = row.path, lnum = row.lnum or 1 }
   paint()
 end
@@ -335,6 +344,7 @@ end
 ---What the header says about the branch, as the tree stands.
 ---@return changeset.Summary
 local function summary()
+  assert(session, "changeset: no open session")
   local added, removed, readable, pending = 0, 0, 0, 0
   for _, file in ipairs(session.files) do
     added, removed = added + (file.added or 0), removed + (file.removed or 0)
@@ -372,6 +382,7 @@ end
 ---@param win integer
 ---@param width integer
 local function draw_header(buf, win, width)
+  assert(session, "changeset: no open session")
   local header = summary()
   vim.wo[win].winbar = render.header(header, width)
   -- Totals before the first diff would claim that nothing changed.
@@ -389,6 +400,7 @@ local function draw()
   if not (buf and win and vim.api.nvim_buf_is_valid(buf)) then
     return
   end
+  assert(session, "changeset: no open session")
 
   local wanted = (row_at_cursor() or {}).id
   local previous_line = vim.api.nvim_win_get_cursor(win)[1]
@@ -453,6 +465,7 @@ local function line_text(path, lnum)
   if lnum < 1 then
     return nil
   end
+  assert(session, "changeset: no open session")
   local full = session.root .. "/" .. path
   local buf = vim.fn.bufnr(full)
   if buf ~= -1 and vim.api.nvim_buf_is_loaded(buf) then
@@ -467,6 +480,7 @@ end
 ---@param path string
 ---@return boolean
 local function decided(path)
+  assert(session, "changeset: no open session")
   if not session.collected then
     return false
   end
@@ -480,6 +494,7 @@ end
 ---Apply each half of a restored position once its file is decided, and drop a half
 ---the tree no longer holds.
 local function apply_restored()
+  assert(session, "changeset: no open session")
   local wanted = session.restoring
   if wanted and wanted.here and decided(wanted.here.path) then
     if tree.locate(session.rows, wanted.here.path, wanted.here.lnum) then
@@ -491,7 +506,7 @@ local function apply_restored()
   if wanted and wanted.row and decided(wanted.row.path) then
     local win = window.win()
     local lnum = win and tree.find(session.rows, wanted.row.id) and state._nearest(visible_ids(), wanted.row.id)
-    if lnum then
+    if win and lnum then
       vim.api.nvim_win_set_cursor(win, { lnum, 0 })
       -- Else a pending landing's follow would pull the cursor back off it.
       session.landing = nil
@@ -501,6 +516,7 @@ local function apply_restored()
 end
 
 local function rebuild()
+  assert(session, "changeset: no open session")
   -- Taken before the rows change. Before the first diff the landing and the row under
   -- the cursor are both nil, which is still "not moved". Only a rebuild follows: a
   -- fold or filter redraw brings no deeper row.
@@ -527,6 +543,7 @@ end
 ---@param row changeset.Row
 ---@param open boolean
 local function set_open(row, open)
+  assert(session, "changeset: no open session")
   -- A compressed chain hides intermediate rows; a folded row hides its children.
   -- `l` on a compressed row means the first, so it wins while the chain is shut.
   if row.chain and not state.is_chain_open(session.st, row.id) and open then
@@ -548,6 +565,7 @@ local function commit(how)
   if row.kind == "file" and row.status == "deleted" then
     return vim.notify(row.path .. " was deleted on this branch — :CodeDiff to read it", vim.log.levels.INFO)
   end
+  assert(session, "changeset: no open session")
   if window.commit(session.root .. "/" .. row.path, row.lnum or 1, how) then
     pick(row)
   end
@@ -576,7 +594,7 @@ local function open_kind_menu(open_session)
     icon = function(symbol_kind)
       return icon("lsp", symbol_kind)
     end,
-    sidebar = window.win(),
+    sidebar = assert(window.win(), "changeset: sidebar is closed"),
     on_change = function(hidden)
       open_session.hidden = hidden
       draw()
@@ -733,8 +751,10 @@ function M.refresh()
     -- Stamped before the request rather than after: a file edited while its
     -- symbols are being read then fails this check next time, instead of
     -- leaving behind an answer for content that has already moved on.
+    assert(memo, "changeset: symbol cache not loaded")
     local stamps = {}
     local known, unknown = cache.fresh(memo.entries, files, function(path)
+      assert(session, "changeset: no open session")
       stamps[path] = cache.stamp(session.root .. "/" .. path)
       return stamps[path]
     end)
@@ -756,6 +776,7 @@ function M.refresh()
       if not session or session.request ~= request then
         return
       end
+      assert(memo, "changeset: symbol cache not loaded")
       session.symbols[path] = items or {}
       -- Only an answer that arrived is filed. A server that never attached would
       -- otherwise leave "this file has no symbols" on disk, fresh until the file
@@ -1038,6 +1059,7 @@ function M.restore()
     vim.api.nvim_win_close(placeholder, true)
     return
   end
+  assert(session, "changeset: no open session")
   session.restoring = recorded(vim.g[POSITION_GLOBAL])
   if session.restoring then
     session.restoring.at = (row_at_cursor() or {}).id
@@ -1116,7 +1138,7 @@ vim.api.nvim_create_autocmd("LspAttach", {
     end
     local path = vim.fs.relpath(session.root, vim.fs.normalize(vim.api.nvim_buf_get_name(args.buf)))
     local entry = path and memo.entries[path]
-    if entry and entry.silent then
+    if path and entry and entry.silent then
       memo.entries[path] = nil
       M.refresh()
     end

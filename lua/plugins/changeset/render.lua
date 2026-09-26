@@ -17,6 +17,7 @@ local symbols = require("plugins.mini-pickers.symbols")
 ---@field text string
 ---@field marks changeset.Mark[]
 ---@field row changeset.Row The row this line draws; a placeholder's stands in for its file.
+---@field kind? string
 
 ---@class changeset.RenderOpts
 ---@field icon fun(row: changeset.Row): string, string Glyph and its highlight group; the caller wraps `MiniIcons.get`.

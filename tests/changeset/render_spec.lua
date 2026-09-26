@@ -110,7 +110,7 @@ describe("changeset.render", function()
       it("dims the directory after the filename", function()
         local lines = render.lines({ file() }, opts())
 
-        local mark = mark_over(lines[1], "(src)")
+        local mark = assert(mark_over(lines[1], "(src)"))
         assert.equal("Comment", mark.hl)
         assert.is_nil(mark.priority)
       end)
@@ -252,7 +252,7 @@ describe("changeset.render", function()
       it("nests the placeholder under the file as a row of its own", function()
         local lines = render.lines({ file({ resolved = false }) }, opts())
 
-        assert.are_not.equal(lines[1].row.id, lines[2].row.id)
+        assert.not_equal(lines[1].row.id, lines[2].row.id)
         assert.equal(lines[1].row.depth + 1, lines[2].row.depth)
         assert.equal("src/a.lua", lines[2].row.path)
       end)
@@ -355,7 +355,7 @@ describe("changeset.render", function()
         local lines = render.lines({ file({ children = { chain } }) }, opts({ width = 30 }))
 
         assert.equal("  └─S … › deadline", lines[2].text)
-        assert.is_not_nil(stat_mark(lines[2]))
+        assert.not_nil(stat_mark(lines[2]))
       end)
 
       it("trims a long directory from the left, keeping the whole filename and the marker", function()
@@ -388,9 +388,8 @@ describe("changeset.render", function()
     it("marks the characters a filter query matched", function()
       local lines = render.lines({ file() }, opts({ query = "a.lua" }))
 
-      local mark = mark_over(lines[1], "a.lua")
+      local mark = assert(mark_over(lines[1], "a.lua"))
 
-      assert.is_not_nil(mark)
       assert.equal(render.MATCH_HL, mark.hl)
     end)
 
@@ -401,8 +400,8 @@ describe("changeset.render", function()
 
       local lines = render.lines(rows, opts({ query = "lph" }))
 
-      local match = mark_over(lines[2], "lph")
-      local name = mark_over(lines[2], "Alpha")
+      local match = assert(mark_over(lines[2], "lph"))
+      local name = assert(mark_over(lines[2], "Alpha"))
 
       assert.is_nil(name.priority)
       assert.is_true(match.priority > render.MARK_PRIORITY)
@@ -411,9 +410,8 @@ describe("changeset.render", function()
     it("takes the query as plain text, not as a pattern", function()
       local lines = render.lines({ file({ path = "a(b).lua" }) }, opts({ query = "(" }))
 
-      local mark = mark_over(lines[1], "(")
+      local mark = assert(mark_over(lines[1], "("))
 
-      assert.is_not_nil(mark)
       assert.equal(render.MATCH_HL, mark.hl)
     end)
 
@@ -442,13 +440,13 @@ describe("changeset.render", function()
     end
 
     ---The group drawing the first byte of `needle` in an evaluated statusline.
-    ---@param shown { str: string, highlights: table[] }
+    ---@param shown { str: string, highlights: table[]? }
     ---@param needle string
     ---@return string?
     local function group_at(shown, needle)
       local at = shown.str:find(needle, 1, true) - 1
       local found
-      for _, mark in ipairs(shown.highlights) do
+      for _, mark in ipairs(assert(shown.highlights)) do
         if mark.start <= at then
           found = mark.group
         end
@@ -570,7 +568,7 @@ describe("changeset.render", function()
         end
         assert.equal(0x654321, bg)
       end
-      vim.api.nvim_set_hl(0, "TabLine", tabline)
+      vim.api.nvim_set_hl(0, "TabLine", tabline --[[@as vim.api.keyset.highlight]])
     end)
 
     it("colours the totals the way the rows colour theirs", function()
