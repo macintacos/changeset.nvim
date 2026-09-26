@@ -16,19 +16,7 @@ local ok, err = pcall(dofile, root .. "/plugin/gitsigns.lua")
 vim.pack.add = pack_add
 assert(ok, err)
 
--- A fake `gh` on PATH, so no case asks GitHub about its fixture branch: it prints
--- $FAKE_GH_PR after $FAKE_GH_DELAY seconds, and fails as if there were no PR when
--- that is empty.
-local bin = vim.fn.tempname()
-vim.fn.mkdir(bin, "p")
-vim.fn.writefile({
-  "#!/bin/sh",
-  'sleep "${FAKE_GH_DELAY:-0}"',
-  '[ -n "$FAKE_GH_PR" ] || exit 1',
-  'printf "%s" "$FAKE_GH_PR"',
-}, bin .. "/gh")
-vim.fn.setfperm(bin .. "/gh", "rwxr-xr-x")
-vim.env.PATH = bin .. ":" .. vim.env.PATH
+require("support.gh")
 
 local Obj = require("gitsigns.git").Obj
 local in_flight, moves = 0, 0

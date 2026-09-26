@@ -117,24 +117,6 @@ local function apply(base, done)
   landed()
 end
 
----Ask gh which branch this branch's open PR targets.
----@param cb fun(target: string?) nil without an open PR, or when gh fails or times out.
-local function pr_target(cb)
-  if vim.fn.executable("gh") == 0 then
-    return vim.schedule(function()
-      cb(nil)
-    end)
-  end
-  vim.system(
-    { "gh", "pr", "view", "--json", "baseRefName,state" },
-    { text = true, timeout = 5000 },
-    vim.schedule_wrap(function(res)
-      local ok, pr = pcall(vim.json.decode, res.stdout or "")
-      cb(res.code == 0 and ok and type(pr) == "table" and pr.state == "OPEN" and pr.baseRefName or nil)
-    end)
-  )
-end
-
 ---Diff against the fork point from `target`.
 ---@param target string? The default branch when nil.
 ---@param done fun(err: string?) Called once every move has landed, with the first error.
@@ -176,7 +158,7 @@ local function enable(report)
     return vim.notify("PR Review Mode: no merge base with the default branch", vim.log.levels.WARN)
   end
   local token = generation
-  pr_target(function(target)
+  require("helpers.git").pr_target(nil, function(target)
     if token ~= generation then
       return
     end
