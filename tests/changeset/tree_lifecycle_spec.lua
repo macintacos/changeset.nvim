@@ -1,6 +1,7 @@
 local changeset = require("plugins.changeset")
 local window = require("plugins.changeset.window")
 local Fixture = require("support.git")
+require("support.gh")
 
 ---@param tree changeset.Session?
 ---@return string[]
@@ -138,6 +139,33 @@ describe("changeset tree", function()
       vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate" })
 
       assert.is_true(wait_for_file("new.lua"))
+    end)
+  end)
+
+  describe("on a branch whose open PR targets another branch", function()
+    before_each(function()
+      Fixture.init_repo("trunk", tmp)
+      Fixture.git({ "checkout", "-q", "-b", "parent" }, tmp)
+      vim.fn.writefile({ "return 1" }, "parent.lua")
+      Fixture.commit("parent change", tmp)
+      Fixture.git({ "checkout", "-q", "-b", "child" }, tmp)
+      vim.fn.writefile({ "return 2" }, "child.lua")
+      Fixture.commit("child change", tmp)
+      vim.cmd.edit("child.lua")
+      vim.env.FAKE_GH_PR = '{"baseRefName":"parent","state":"OPEN"}'
+    end)
+
+    after_each(function()
+      vim.env.FAKE_GH_PR = nil
+    end)
+
+    it("diffs against the PR's target once gh names it", function()
+      changeset.build()
+
+      assert.is_true(vim.wait(10000, function()
+        local tree = changeset._tree()
+        return tree ~= nil and tree.ref == "parent" and vim.deep_equal({ "child.lua" }, paths_of(tree))
+      end, 25))
     end)
   end)
 

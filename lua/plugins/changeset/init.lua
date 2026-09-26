@@ -95,6 +95,11 @@ local tracking = false
 ---@type table<string, changeset.State>
 local folds = {}
 
+---Branch each open PR targets, by repository and branch; false while gh is asked.
+---No answer is not kept, so a PR opened later is found on the next build.
+---@type table<string, string|false>
+local targets = {}
+
 ---Whether the window last left was a float: coming back from one is not arriving.
 ---@type boolean
 local left_float = false
@@ -734,6 +739,25 @@ local function drop()
   session = nil
 end
 
+---The branch `branch`'s open PR targets, once gh has said. Asks it otherwise, and
+---builds again when the answer lands on the repository and branch still in view.
+---@param root string
+---@param branch string
+---@return string?
+local function pr_target(root, branch)
+  local key = root .. "\n" .. branch
+  if targets[key] == nil then
+    targets[key] = false
+    Git.pr_target(root, function(target)
+      targets[key] = target
+      if target and session and session.root == root and session.branch == branch and Paths.root(0) == root then
+        M.build()
+      end
+    end)
+  end
+  return targets[key] or nil
+end
+
 ---Build the tree for the current buffer's repository, unless it is already built there.
 ---
 ---The buffer's repository, not Neovim's directory: with the two different, a base
@@ -747,6 +771,15 @@ function M.build()
     return false
   end
   local branch = Git.lines({ "git", "rev-parse", "--abbrev-ref", "HEAD" }, root)[1] or "HEAD"
+  -- A stacked branch reads its fork point from its PR's target; one that target
+  -- has none with (never fetched, say) stays on the default branch's.
+  local target = pr_target(root, branch)
+  if target then
+    local stacked, _, stacked_ref = Git.merge_base(root, target)
+    if stacked then
+      base, ref = stacked, stacked_ref
+    end
+  end
   if session and session.root == root and session.base == base and session.branch == branch then
     return true
   end
