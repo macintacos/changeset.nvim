@@ -168,11 +168,10 @@ local function row_at_cursor()
 end
 
 ---Whether the file at `path` holds edits the file on disk does not.
----@param path string Repo-relative.
+---@param path string Absolute.
 ---@return boolean
 local function unwritten(path)
-  assert(session, "changeset: no open session")
-  local buf = vim.fn.bufnr(session.root .. "/" .. path)
+  local buf = vim.fn.bufnr(path)
   return buf ~= -1 and vim.bo[buf].modified
 end
 
@@ -758,6 +757,30 @@ local function split_generated(files)
   return generated_symbols, readable
 end
 
+---File what a server said about `path` in the symbol cache, while the cache is still `root`'s.
+---@param root string
+---@param path string Repo-relative.
+---@param items MiniPickers.Symbol[]? nil when no server answered.
+---@param stamp string? The file as it stood when its symbols were asked for.
+local function file_answer(root, path, items, stamp)
+  if not (memo and memo.root == root and stamp) then
+    return
+  end
+  -- Only an answer that arrived is filed. A server that never attached would
+  -- otherwise leave "this file has no symbols" on disk, fresh until the file
+  -- next moves; and a stamp taken off the file cannot describe what a server
+  -- read out of a buffer holding unwritten edits.
+  if items and not unwritten(root .. "/" .. path) then
+    memo.entries[path] = { stamp = stamp, symbols = cache.project(items) }
+    save_soon()
+  elseif not items then
+    -- Not asked again on every refresh — each ask waits out the attach timeout
+    -- under a "reading symbols" row — only once the file moves or a server
+    -- arrives for it.
+    memo.entries[path] = { stamp = stamp, symbols = {}, silent = true }
+  end
+end
+
 ---Gather the diff, then let symbols fill in behind it.
 function M.refresh()
   if not session then
@@ -811,29 +834,18 @@ function M.refresh()
     end
     rebuild()
 
-    -- A server that answers nothing is "resolved with no symbols", which is what
-    -- turns every hunk in an unsupported file into an orphan row. Leaving the key
-    -- absent would instead read as "still resolving", forever.
-    session.cancel = resolve.start(session.root, unknown, function(path, items)
-      if not session or session.request ~= request then
-        return
+    local root = session.root
+    session.cancel = resolve.start(root, unknown, function(path, items)
+      -- Filed even once a newer refresh has replaced this one: the stamp predates
+      -- the request, so the answer still describes the file it was read from.
+      file_answer(root, path, items, stamps[path])
+      if session and session.request == request then
+        -- A server that answers nothing is "resolved with no symbols", which is what
+        -- turns every hunk in an unsupported file into an orphan row. Leaving the key
+        -- absent would instead read as "still resolving", forever.
+        session.symbols[path] = items or {}
+        rebuild()
       end
-      assert(memo, "changeset: symbol cache not loaded")
-      session.symbols[path] = items or {}
-      -- Only an answer that arrived is filed. A server that never attached would
-      -- otherwise leave "this file has no symbols" on disk, fresh until the file
-      -- next moves; and a stamp taken off the file cannot describe what a server
-      -- read out of a buffer holding unwritten edits.
-      if items and stamps[path] and not unwritten(path) then
-        memo.entries[path] = { stamp = stamps[path], symbols = cache.project(items) }
-        save_soon()
-      elseif not items and stamps[path] then
-        -- Not asked again on every refresh — each ask waits out the attach timeout
-        -- under a "reading symbols" row — only once the file moves or a server
-        -- arrives for it.
-        memo.entries[path] = { stamp = stamps[path], symbols = {}, silent = true }
-      end
-      rebuild()
     end)
   end)
 end

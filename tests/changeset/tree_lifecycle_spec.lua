@@ -165,6 +165,52 @@ describe("changeset tree", function()
       end)
     end
 
+    describe("while its symbols are being read", function()
+      local resolve = require("plugins.changeset.resolve")
+      local real_start = resolve.start
+      ---@type { paths: string[], answer: fun(path: string, items: table[]?) }[]
+      local asks
+
+      ---@param count integer
+      local function wait_for_asks(count)
+        assert.is_true(vim.wait(10000, function()
+          return #asks == count
+        end, 25))
+      end
+
+      before_each(function()
+        asks = {}
+        resolve.start = function(_, files, on_file)
+          asks[#asks + 1] = {
+            paths = vim.tbl_map(function(file)
+              return file.path
+            end, files),
+            answer = on_file,
+          }
+          return function() end
+        end
+      end)
+
+      after_each(function()
+        resolve.start = real_start
+      end)
+
+      it("keeps what a replaced refresh read, so the next one does not ask again", function()
+        changeset.build()
+        wait_for_asks(1)
+        changeset.refresh()
+        wait_for_asks(2)
+
+        asks[1].answer("mod.lua", {
+          { name = "M", kind = "Variable", depth = 0, lnum = 1, range_lnum = 1, range_end_lnum = 1 },
+        })
+        changeset.refresh()
+        wait_for_asks(3)
+
+        assert.same({}, asks[3].paths)
+      end)
+    end)
+
     -- gitsigns fires a buffer's update on attach and on every hunk change while typing,
     -- none of which moves the diff git reads from disk.
     it("keeps the diff it has through a gitsigns update for one buffer", function()

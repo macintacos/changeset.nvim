@@ -139,7 +139,7 @@ end
 ---@param queue string[]
 ---@param run fun(path: string, done: fun(items: MiniPickers.Symbol[]?))
 ---@param on_file fun(path: string, items: MiniPickers.Symbol[]?)
----@return fun() cancel
+---@return fun() cancel Starts no further file; one already in flight is still reported.
 function M._walk(queue, run, on_file)
   local next_index, cancelled = 1, false
 
@@ -153,7 +153,7 @@ function M._walk(queue, run, on_file)
     -- pumping twice for one lane would put more than CONCURRENCY in flight.
     local answered = false
     local function step(items)
-      if cancelled or answered then
+      if answered then
         return
       end
       answered = true

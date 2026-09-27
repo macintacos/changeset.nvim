@@ -46,7 +46,7 @@ describe("changeset.resolve", function()
       assert.equal(5, #pending)
     end)
 
-    it("reports nothing once cancelled", function()
+    it("still reports a file it was already reading when cancelled", function()
       local run, pending = deferred()
       local seen = {}
 
@@ -56,7 +56,17 @@ describe("changeset.resolve", function()
       cancel()
       pending[1].done({})
 
-      assert.same({}, seen)
+      assert.same({ "api.ts" }, seen)
+    end)
+
+    it("starts no further file once cancelled", function()
+      local run, pending = deferred()
+
+      local cancel = resolve._walk({ "1.ts", "2.ts", "3.ts", "4.ts", "5.ts" }, run, function() end)
+      cancel()
+      pending[1].done({})
+
+      assert.equal(4, #pending)
     end)
 
     it("keeps walking past a file its step had no symbols for", function()
