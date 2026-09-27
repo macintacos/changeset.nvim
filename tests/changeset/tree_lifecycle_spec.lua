@@ -65,6 +65,18 @@ describe("changeset tree", function()
       assert.equal(window_count, #vim.api.nvim_list_wins())
     end)
 
+    it("hands over the file rows on the first ask, before any build", function()
+      local tree, err = changeset.rows()
+
+      assert.is_nil(err)
+      assert.same(
+        { "mod.lua" },
+        vim.tbl_map(function(row)
+          return row.path
+        end, assert(tree).rows)
+      )
+    end)
+
     it("keeps the tree it already built for the same fork point", function()
       changeset.build()
       local tree = changeset._tree()

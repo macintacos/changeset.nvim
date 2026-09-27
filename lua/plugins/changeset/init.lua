@@ -22,6 +22,9 @@ local window = require("plugins.changeset.window")
 -- the identity re-anchoring exists to survive.
 local REFRESH_DEBOUNCE_MS = 250
 
+-- How long a picker's first ask blocks on the diff before giving up on it.
+local DIFF_WAIT_MS = 2000
+
 -- input() reads a line, so it can never hand one back: free to mean "cancelled".
 local CANCELLED = "\r"
 
@@ -965,8 +968,11 @@ function M.rows()
   if not M.build() then
     return nil, "no merge base with the default branch"
   end
-  assert(session, "changeset: no open session")
-  if not session.collected then
+  -- The first ask builds the tree too, and a picker cannot fill in behind it the way the sidebar does.
+  vim.wait(DIFF_WAIT_MS, function()
+    return not session or session.collected
+  end, 10)
+  if not (session and session.collected) then
     return nil, "still reading the diff"
   end
   return { rows = view.by_kind(tree.files(session.rows), session.hidden), root = session.root, ref = session.ref }
