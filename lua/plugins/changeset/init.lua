@@ -900,6 +900,20 @@ function M.footer()
   return render.footer({ file = file, files = files, query = session.query })
 end
 
+---The rows the sidebar draws, less the kinds it hides, for the current buffer's repository.
+---@return { rows: changeset.Row[], root: string, ref: string }? tree
+---@return string? err Why there is no tree yet.
+function M.rows()
+  if not M.build() then
+    return nil, "no merge base with the default branch"
+  end
+  assert(session, "changeset: no open session")
+  if not session.collected then
+    return nil, "still reading the diff"
+  end
+  return { rows = view.by_kind(session.rows, session.hidden), root = session.root, ref = session.ref }
+end
+
 ---The tree, for specs.
 ---@return changeset.Session?
 function M._tree()

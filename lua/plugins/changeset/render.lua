@@ -207,7 +207,7 @@ end
 ---The `+N -N` virtual text for a row.
 ---@param row changeset.Row
 ---@return table[]? chunks `nil` when the row has no stat of its own.
-local function stat_chunks(row)
+function M.stat_chunks(row)
   if row.ancestor or (row.added == nil and row.removed == nil) then
     return nil
   end
@@ -250,7 +250,7 @@ end
 local function file_line(file, opts)
   local glyph, icon_hl = opts.icon(file)
   local marker = STATUS_MARKER[file.status]
-  local stat = stat_chunks(file)
+  local stat = M.stat_chunks(file)
   local room = opts.width
     - vim.fn.strdisplaywidth(RAIL .. " " .. glyph .. " ")
     - (marker and vim.fn.strdisplaywidth(marker) or 0)
@@ -280,7 +280,7 @@ end
 ---@return changeset.Line
 local function child_line(row, guides, opts)
   local glyph, icon_hl = opts.icon(row)
-  local stat = stat_chunks(row)
+  local stat = M.stat_chunks(row)
   local room = opts.width - vim.fn.strdisplaywidth("  " .. guides .. glyph .. " ") - stat_cells(stat)
   local name, name_hl = symbols.fit(row.name, room), row.ancestor and "Comment" or nil
   if META_KINDS[row.kind] then

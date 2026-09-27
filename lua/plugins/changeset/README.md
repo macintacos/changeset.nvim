@@ -3,7 +3,8 @@
 A read-only sidebar mapping what this branch changed, nested by symbol.
 
 `<leader>gp` opens the *map* of what this branch changed. `<leader>gP` puts the *gutter*
-in PR Review Mode over the same range. Neither drives the other.
+in PR Review Mode over the same range. Neither drives the other. `<leader>gj` searches the
+same changes in a picker (`MiniPick.registry.changeset`, in `mini-pickers`).
 
 ## What it shows
 
