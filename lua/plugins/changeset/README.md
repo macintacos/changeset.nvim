@@ -6,6 +6,9 @@ A read-only sidebar mapping what this branch changed, nested by symbol.
 in PR Review Mode over the same range. Neither drives the other. `<leader>gj` searches the
 same changes in a picker (`MiniPick.registry.changeset`, in `mini-pickers`).
 
+In an editor too narrow to leave the files 80 columns beside it, the sidebar opens as a
+drawer along the bottom instead, and moves between the two as the editor is resized.
+
 ## What it shows
 
 Files changed between `merge-base(origin/<default>, HEAD)` — the local default branch
@@ -249,7 +252,8 @@ sits on the cell the sidebar starts after:
 
 Docked rather than centred, and beside the tree rather than over it, because `x` redraws
 the tree immediately — watching 242 rows leave is how the choice gets made, so the thing
-being changed has to stay on screen.
+being changed has to stay on screen. A drawer leaves no room beside it, so there the menu
+stands on top of it instead.
 
 Column 0 is the same `▎` rail the file rows use, carrying kind colour here where they
 carry change type, so the menu reads as part of the tree rather than as a checkbox list.
@@ -522,8 +526,13 @@ repository's deliberate choice is none of that save's business.
   tests, or a filter kept only one copy — the cursor moves to the first file row with that
   path.
 - **Opening the sidebar is an ordinary split.** It takes its width with `winfixwidth`
-  already set and then lets `'equalalways'` settle the rest, so the windows that were
-  already open share out what is left instead of one of them being squashed.
+  (a drawer its height, with `winfixheight`) already set and then lets `'equalalways'`
+  settle the rest, so the windows that were already open share out what is left instead
+  of one of them being squashed.
+- **Switching to the drawer moves the window, never reopens it.** Previews, the claim on
+  entering one, and the autocmds that watch the sidebar all hold its window id, which
+  `nvim_win_set_config` keeps. Neovim will not move the last window, so a sidebar standing
+  alone stays where it is.
 - **A session restores the window, not its contents.** `:mksession` records the layout but
   not a scratch buffer's contents, so the sidebar comes back as an empty window. Its
   name is what survives, and it is how the tree finds that window and fills it rather
