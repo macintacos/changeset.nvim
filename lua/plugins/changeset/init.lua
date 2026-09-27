@@ -1035,7 +1035,7 @@ function M.open()
   render.define_highlights()
   local win = window.open(buf)
   vim.wo[win].statusline = "%{%v:lua.require'plugins.changeset'.footer()%}"
-  -- After `filetype`, so these replace the `]]`/`[[` illuminate maps on every buffer at `FileType`.
+  -- After `filetype`, so these replace any `]]`/`[[` a plugin maps on the buffer at `FileType`.
   set_keymaps(buf)
 
   -- Fires: the sidebar's window going without the plugin being asked — `:q`, `:only`,

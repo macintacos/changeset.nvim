@@ -379,14 +379,17 @@ end)
 local TWELVE_LINES =
   { "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve" }
 
----Run `diff.collect` and block until its callback fires, failing on timeout or git error.
+---Run `diff.collect` and block until its callback fires, returning what it passed.
 ---@param base string
 ---@param cwd string
----@return changeset.File[]
-local function collect(base, cwd)
-  local files, err, done
-  diff.collect(base, cwd, function(result, message)
-    files, err, done = result, message, true
+---@return changeset.File[]? files
+---@return string? err
+---@return integer? commits
+local function await_collect(base, cwd)
+  local files, err, commits, done
+  diff.collect(base, cwd, function(...)
+    files, err, commits = ...
+    done = true
   end)
   assert(
     vim.wait(10000, function()
@@ -394,8 +397,16 @@ local function collect(base, cwd)
     end, 10),
     "collect never called back"
   )
-  assert(not err, err)
-  return files
+  return files, err, commits
+end
+
+---Run `diff.collect` and block until its callback fires, failing on timeout or git error.
+---@param base string
+---@param cwd string
+---@return changeset.File[]
+local function collect(base, cwd)
+  local files, err = await_collect(base, cwd)
+  return assert(files, err)
 end
 
 describe("changeset.diff.collect", function()
@@ -594,5 +605,32 @@ describe("changeset.diff.collect", function()
     end
     table.sort(marked)
     assert.same({ "api.pb.go", "gen/new.ts", "gen/old.ts" }, marked)
+  end)
+
+  it("calls back when the repository vanishes before the generated-file read", function()
+    local base = seed_edited_file(tmp)
+    local system = vim.system
+    local check_attr_ran = false
+    vim.system = function(argv, ...)
+      if vim.tbl_contains(argv, "check-attr") then
+        check_attr_ran = true
+        vim.fn.delete(tmp, "rf")
+      end
+      return system(argv, ...)
+    end
+    local files, err
+    local ok, raised = pcall(function()
+      files, err = await_collect(base, tmp)
+    end)
+    vim.system = system
+    assert(ok, raised)
+    assert.is_true(check_attr_ran)
+    assert.is_nil(err)
+    assert.equal("notes.txt", files[1].path)
+    assert.is_nil(files[1].generated)
+  end)
+
+  it("reports a missing repository as an error", function()
+    assert.matches("ENOENT", select(2, await_collect("HEAD", tmp .. "/gone")))
   end)
 end)

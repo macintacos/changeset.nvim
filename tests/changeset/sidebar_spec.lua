@@ -332,7 +332,7 @@ describe("changeset sidebar", function()
 
     it("keeps ]] over a buffer-local ]] another plugin sets at FileType", function()
       local group = vim.api.nvim_create_augroup("changeset.spec.filetype_map", { clear = true })
-      -- Stands in for illuminate, which maps `]]` on every buffer as its filetype is set.
+      -- Stands in for a plugin that maps `]]` on every buffer as its filetype is set.
       vim.api.nvim_create_autocmd("FileType", {
         group = group,
         callback = function(args)
