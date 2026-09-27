@@ -10,7 +10,8 @@ local M = {}
 ---
 ---A match keeps its ancestors, so a hit never floats free of the file it lives
 ---in, and keeps its own children, so matching a file still shows what changed
----inside it.
+---inside it. A section never matches on its own label: it stays only while one of
+---its rows does.
 ---@param rows changeset.Row[]
 ---@param query string Empty returns the tree untouched.
 ---@return changeset.Row[]
@@ -21,7 +22,7 @@ function M.filter(rows, query)
   local needle = query:lower()
 
   local function keep(row)
-    if row.name:lower():find(needle, 1, true) then
+    if row.kind ~= "section" and row.name:lower():find(needle, 1, true) then
       return row
     end
     local children = {}
@@ -94,18 +95,20 @@ function M.kind_counts(rows)
 end
 
 ---Where the file holding line `lnum` stands among the files on screen.
----@param rows { depth: integer }[] One per line, as `render.lines` hands them back.
+---@param rows { depth: integer }[] One per line, as `render.lines` hands them back: 0 a section header, 1 a file.
 ---@param lnum integer
----@return integer? index nil when no file is at or above `lnum`.
+---@return integer? index nil on a section header's line, or when no file is at or above `lnum`.
 ---@return integer total
 function M.position(rows, lnum)
   local index, total = nil, 0
   for i, row in ipairs(rows) do
-    if row.depth == 0 then
+    if row.depth == 1 then
       total = total + 1
       if i <= lnum then
         index = total
       end
+    elseif row.depth == 0 and i <= lnum then
+      index = nil
     end
   end
   return index, total

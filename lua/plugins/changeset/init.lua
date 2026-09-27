@@ -94,8 +94,8 @@ local save_timer
 local tracking = false
 
 ---Folds outlive the tree: a rebuild for a moved fork point, or a trip to another
----repository and back, keeps them. Kept per repository: row ids start at a
----repo-relative path, so one table would share a fold between two checkouts that
+---repository and back, keeps them. Kept per repository: row ids are built from
+---repo-relative paths, so one table would share a fold between two checkouts that
 ---both have a `lua/config/options.lua`.
 ---@type table<string, changeset.State>
 local folds = {}
@@ -146,6 +146,9 @@ end
 ---@param row changeset.Row
 ---@return string glyph, string hl
 local function icon_for(row)
+  if row.kind == "section" then
+    return icon("directory", row.icon)
+  end
   if row.kind == "file" then
     return icon("file", row.path)
   end
@@ -319,6 +322,7 @@ local function apply_marks(buf, lines)
         hl_group = mark.hl,
         virt_text = mark.virt_text,
         virt_text_pos = mark.pos,
+        virt_lines = mark.virt_lines,
         priority = mark.priority or render.MARK_PRIORITY,
       })
     end
@@ -559,7 +563,7 @@ end
 ---@param how "reuse"|"vsplit"|"split"|"tab"
 local function commit(how)
   local row = row_at_cursor()
-  if not row then
+  if not row or row.kind == "section" then
     return
   end
   if row.kind == "file" and row.status == "deleted" then
@@ -577,7 +581,7 @@ local function step(delta)
   if not (session and win) then
     return
   end
-  local lnum = math.max(1, math.min(vim.api.nvim_win_get_cursor(win)[1] + delta, #session.visible))
+  local lnum = state._step(session.visible, vim.api.nvim_win_get_cursor(win)[1], delta)
   vim.api.nvim_win_set_cursor(win, { lnum, 0 })
   preview_current()
 end
@@ -651,8 +655,15 @@ local function collapse_all_files(open_session)
     open_session.st,
     vim.tbl_map(function(row)
       return row.id
-    end, open_session.rows)
+    end, tree.files(open_session.rows))
   )
+  draw()
+end
+
+---Keeps every section's fold, including one whose section is empty for now.
+---@param open_session changeset.Session
+local function expand_all_files(open_session)
+  state.expand_all(open_session.st, tree.section_ids())
   draw()
 end
 
@@ -701,14 +712,11 @@ local function set_keymaps(buf)
   end, "Expand")
   map("h", collapse_or_parent, "Collapse, or step out to the parent")
   map("H", collapse_all_files, "Collapse every file")
-  map("L", function(open_session)
-    state.expand_all(open_session.st)
-    draw()
-  end, "Expand every file")
+  map("L", expand_all_files, "Expand every file")
   map("R", M.refresh, "Rebuild the tree")
   map("y", function()
     local row = row_at_cursor()
-    if row then
+    if row and row.kind ~= "section" then
       Paths.copy(row.lnum and ("%s:%d"):format(row.path, row.lnum) or row.path, "relative path:line")
     end
   end, "Yank path:line")
@@ -900,7 +908,7 @@ function M.footer()
   return render.footer({ file = file, files = files, query = session.query })
 end
 
----The rows the sidebar draws, less the kinds it hides, for the current buffer's repository.
+---The file rows under the sidebar's sections, less the kinds it hides, for the current buffer's repository.
 ---@return { rows: changeset.Row[], root: string, ref: string }? tree
 ---@return string? err Why there is no tree yet.
 function M.rows()
@@ -911,7 +919,7 @@ function M.rows()
   if not session.collected then
     return nil, "still reading the diff"
   end
-  return { rows = view.by_kind(session.rows, session.hidden), root = session.root, ref = session.ref }
+  return { rows = view.by_kind(tree.files(session.rows), session.hidden), root = session.root, ref = session.ref }
 end
 
 ---The tree, for specs.

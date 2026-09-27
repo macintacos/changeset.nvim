@@ -12,6 +12,7 @@ local symbols = require("plugins.mini-pickers.symbols")
 ---@field hl? string           Group over `col`..`end_col`; absent on virtual-text marks, whose chunks carry their own.
 ---@field virt_text? table[]   `nvim_buf_set_extmark` virtual-text chunks.
 ---@field pos? "inline"|"right_align" Where the virtual text is drawn.
+---@field virt_lines? table[]  `nvim_buf_set_extmark` virtual lines, hung below the line.
 
 ---@class changeset.Line
 ---@field text string
@@ -274,6 +275,27 @@ local function file_line(file, opts)
   return compose(file, chunks, stat)
 end
 
+-- Cells a section label is padded to, so every section header's count starts in one column.
+local LABEL_CELLS = 20
+
+---A section header: icon, label, file count, and the section's stat at the right edge. No rail.
+---@param section changeset.Row
+---@param opts changeset.RenderOpts
+---@return changeset.Line
+local function section_line(section, opts)
+  local glyph, icon_hl = opts.icon(section)
+  local stat = M.stat_chunks(section)
+  local count = ("%d file%s"):format(section.files, section.files == 1 and "" or "s")
+  local fixed_cells = vim.fn.strdisplaywidth(glyph .. "  " .. section.name .. count) + stat_cells(stat)
+  local pad = math.max(1, math.min(LABEL_CELLS - vim.fn.strdisplaywidth(section.name), opts.width - fixed_cells))
+  return compose(section, {
+    { glyph, icon_hl },
+    { "  " },
+    { section.name .. (" "):rep(pad) },
+    { count, M.META_HL },
+  }, stat)
+end
+
 ---@param row changeset.Row
 ---@param guides string Tree connectors for the row, e.g. "│ └─".
 ---@param opts changeset.RenderOpts
@@ -365,18 +387,30 @@ local function matches(text, query)
   end
 end
 
----Render file rows and everything visible under them, one buffer line per row.
----@param rows changeset.Row[] File rows, children nested.
+---Render section rows and everything visible under them, one buffer line per row.
+---@param rows changeset.Row[] Section rows, children nested.
 ---@param opts changeset.RenderOpts
 ---@return changeset.Line[]
 function M.lines(rows, opts)
   local out = {}
-  for _, file in ipairs(rows) do
-    append_file(out, file, opts)
+  for i, section in ipairs(rows) do
+    if i > 1 then
+      local marks = out[#out].marks
+      marks[#marks + 1] = { col = 0, virt_lines = { { { "" } } } }
+    end
+    out[#out + 1] = section_line(section, opts)
+    if not opts.collapsed(section.id) then
+      for _, file in ipairs(section.children) do
+        append_file(out, file, opts)
+      end
+    end
   end
   for _, line in ipairs(out) do
-    for _, span in ipairs(matches(line.text, opts.query or "")) do
-      line.marks[#line.marks + 1] = { col = span[1], end_col = span[2], hl = M.MATCH_HL, priority = MATCH_PRIORITY }
+    -- A section header never matches the filter: lighting its label would claim a match.
+    if line.row.kind ~= "section" then
+      for _, span in ipairs(matches(line.text, opts.query or "")) do
+        line.marks[#line.marks + 1] = { col = span[1], end_col = span[2], hl = M.MATCH_HL, priority = MATCH_PRIORITY }
+      end
     end
   end
   return out

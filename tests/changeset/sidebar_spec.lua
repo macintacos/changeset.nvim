@@ -1,3 +1,6 @@
+vim.opt.rtp:prepend(require("support.deps").path("mini.icons"))
+require("mini.icons").setup()
+
 local changeset = require("plugins.changeset")
 local render = require("plugins.changeset.render")
 local window = require("plugins.changeset.window")
@@ -190,7 +193,7 @@ describe("changeset sidebar", function()
   it("footers the sidebar with the file the cursor is in", function()
     open_sidebar()
     local win = assert(window.win())
-    vim.api.nvim_win_set_cursor(win, { 1, 0 })
+    vim.api.nvim_win_set_cursor(win, { 2, 0 })
 
     local footer = vim.api.nvim_eval_statusline(vim.wo[win].statusline, { winid = win }).str
 
@@ -208,6 +211,202 @@ describe("changeset sidebar", function()
 
     assert.truthy(collapsed < expanded)
     assert.equal(expanded, #lines_of(buf))
+  end)
+
+  it("folds files under H but never a section header", function()
+    local buf = open_sidebar()
+
+    press("H")
+
+    assert.truthy(lines_of(buf)[1]:find("Implementation", 1, true))
+    assert.equal(3, #lines_of(buf))
+  end)
+
+  describe("with a second section", function()
+    before_each(function()
+      write("README.md", { "# readme" })
+      Fixture.commit("docs", tmp)
+    end)
+
+    ---@param buf integer
+    ---@param text string
+    ---@return integer
+    local function line_of(buf, text)
+      for i, line in ipairs(lines_of(buf)) do
+        if line:find(text, 1, true) then
+          return i
+        end
+      end
+      error("no sidebar line contains " .. text)
+    end
+
+    ---Rebuild the tree and wait until the Docs section is drawn or gone.
+    ---@param buf integer
+    ---@param shown boolean
+    local function refresh_until(buf, shown)
+      changeset.refresh()
+      assert(vim.wait(5000, function()
+        return (table.concat(lines_of(buf), "\n"):find("Docs", 1, true) ~= nil) == shown
+      end, 25))
+    end
+
+    it("leaves a folded section folded under L", function()
+      local buf = open_sidebar()
+      vim.api.nvim_set_current_win((assert(window.win())))
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+      press("h")
+
+      press("L")
+
+      local text = lines_of(buf)
+      assert.falsy(table.concat(text, "\n"):find("mod.lua", 1, true))
+      assert.truthy(table.concat(text, "\n"):find("README.md", 1, true))
+    end)
+
+    it("leaves a folded section folded under L while the section is empty", function()
+      local buf = open_sidebar()
+      vim.api.nvim_set_current_win((assert(window.win())))
+      vim.api.nvim_win_set_cursor(0, { line_of(buf, "Docs"), 0 })
+      press("h")
+      Fixture.git({ "rm", "-q", "README.md" }, tmp)
+      Fixture.commit("no docs", tmp)
+      refresh_until(buf, false)
+
+      press("L")
+      write("README.md", { "# readme" })
+      Fixture.commit("docs again", tmp)
+      refresh_until(buf, true)
+
+      assert.falsy(table.concat(lines_of(buf), "\n"):find("README.md", 1, true))
+    end)
+
+    it("draws the gap between sections without a buffer line", function()
+      local buf = open_sidebar()
+
+      press("H")
+
+      local above = line_of(buf, "Docs") - 2
+      local gaps = vim.tbl_filter(function(mark)
+        return mark[4].virt_lines ~= nil
+      end, vim.api.nvim_buf_get_extmarks(buf, ns, { above, 0 }, { above, -1 }, { details = true }))
+      assert.equal(2 + 3, #lines_of(buf))
+      assert.equal(1, #gaps)
+    end)
+
+    it("previews the next section's first file with ]h from a section's last line", function()
+      vim.cmd.edit("mod.lua")
+      local target = vim.api.nvim_get_current_win()
+      local buf = open_sidebar()
+      vim.api.nvim_set_current_win((assert(window.win())))
+      vim.api.nvim_win_set_cursor(0, { line_of(buf, "Docs") - 1, 0 })
+
+      press("]h")
+
+      assert.equal(line_of(buf, "README.md"), vim.api.nvim_win_get_cursor(0)[1])
+      assert.truthy(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(target)):find("README.md$"))
+    end)
+  end)
+
+  describe("on a section header", function()
+    ---Open the sidebar from `mod.lua` with its cursor on the first header.
+    ---@return integer buf
+    local function on_header()
+      vim.cmd.edit("mod.lua")
+      local buf = open_sidebar()
+      vim.api.nvim_set_current_win((assert(window.win())))
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+      return buf
+    end
+
+    it("folds its section with h and unfolds it with l", function()
+      local buf = on_header()
+      local expanded = #lines_of(buf)
+
+      press("h")
+      assert.equal(1, #lines_of(buf))
+      press("l")
+
+      assert.equal(expanded, #lines_of(buf))
+    end)
+
+    it("keeps its section folded through a close and a reopen", function()
+      local buf = on_header()
+      press("h")
+
+      changeset.close()
+      buf = open_sidebar()
+
+      assert.equal(1, #lines_of(buf))
+    end)
+
+    it("is where h goes from a shut file", function()
+      on_header()
+      press("H")
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+
+      press("h")
+
+      assert.equal(1, vim.api.nvim_win_get_cursor(0)[1])
+    end)
+
+    it("leaves the file window alone when the cursor moves onto it", function()
+      local buf = on_header()
+      local target = vim.fn.win_getid(vim.fn.winnr("#"))
+      local before = vim.api.nvim_win_get_buf(target)
+
+      vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+
+      assert.equal(before, vim.api.nvim_win_get_buf(target))
+    end)
+
+    it("opens nothing, copies nothing and says nothing on <CR> or y", function()
+      on_header()
+      local Paths = require("helpers.paths")
+      local commit, copy, notify = window.commit, Paths.copy, vim.notify
+      local calls = {}
+      window.commit = function()
+        table.insert(calls, "commit")
+      end
+      Paths.copy = function()
+        table.insert(calls, "copy")
+      end
+      vim.notify = function(msg)
+        table.insert(calls, msg)
+      end
+
+      local ok, err = pcall(function()
+        press(vim.keycode("<CR>"))
+        press("y")
+      end)
+      window.commit, Paths.copy, vim.notify = commit, copy, notify
+      assert(ok, err)
+      assert.same({}, calls)
+    end)
+  end)
+
+  it("hands the picker one file row per changed file", function()
+    open_sidebar()
+
+    local rows = assert(changeset.rows()).rows
+
+    assert.same(
+      { "file", "file" },
+      vim.tbl_map(function(row)
+        return row.kind
+      end, rows)
+    )
+  end)
+
+  it("draws a section header's icon from mini.icons' directory icons", function()
+    local buf = open_sidebar()
+    local glyph, hl = MiniIcons.get("directory", "src")
+
+    local marks = vim.tbl_filter(function(mark)
+      return mark[4].hl_group == hl
+    end, vim.api.nvim_buf_get_extmarks(buf, ns, { 0, 0 }, { 0, 0 }, { details = true }))
+
+    assert.equal(1, #marks)
+    assert.equal(glyph, lines_of(buf)[1]:sub(1, #glyph))
   end)
 
   ---@class changeset.spec.Previewed
@@ -314,7 +513,7 @@ describe("changeset sidebar", function()
   end)
 
   it("leaves a preview made where the cursor stands a preview when focus comes back to it", function()
-    local p = preview(3, "file")
+    local p = preview(4, "file")
     assert.not_equal(p.from_buf, p.previewed)
 
     local float = vim.api.nvim_open_win(vim.api.nvim_create_buf(false, true), true, {

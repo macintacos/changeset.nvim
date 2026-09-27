@@ -72,30 +72,82 @@ local function ids(rows, out)
   return out
 end
 
+local FILE_ID = "#implementation\0" .. PATH
+
 describe("changeset.tree", function()
   describe("build", function()
     it("marks a file resolved once its symbols have arrived", function()
-      local rows = tree.build({ file(PATH, { hunk(3, 1) }) }, { [PATH] = {} })
+      local rows = tree.files(tree.build({ file(PATH, { hunk(3, 1) }) }, { [PATH] = {} }))
 
       assert.is_true(rows[1].resolved)
     end)
 
     it("leaves a file unresolved while its symbols are still outstanding", function()
-      local rows = tree.build({ file(PATH, { hunk(3, 1) }) }, {})
+      local rows = tree.files(tree.build({ file(PATH, { hunk(3, 1) }) }, {}))
 
       assert.is_false(rows[1].resolved)
     end)
   end)
 
   describe("build", function()
+    describe("section rows", function()
+      it("puts non-empty sections at the top in display order", function()
+        local rows = tree.build({ file("README.md", { hunk(1, 1) }), file("tests/a_spec.lua", { hunk(1, 1) }) }, {})
+
+        assert.same({ "Tests", "Docs" }, names(rows))
+        assert.same({ "section", "section" }, { rows[1].kind, rows[2].kind })
+        assert.same({ "tests", "docs" }, { rows[1].icon, rows[2].icon })
+      end)
+
+      it("gives a lone section its own row", function()
+        local rows = tree.build({ file(PATH, { hunk(1, 1) }) }, {})
+
+        assert.same({ "Implementation" }, names(rows))
+        assert.same({ PATH }, names(rows[1].children))
+      end)
+
+      it("keeps the collected order of files within a section", function()
+        local rows = tree.build({ file("b.lua", { hunk(1, 1) }), file("a.lua", { hunk(1, 1) }) }, {})
+
+        assert.same({ "b.lua", "a.lua" }, names(rows[1].children))
+      end)
+
+      it("nests ids and depths under the section", function()
+        local path = "tests/a_spec.lua"
+        local section = tree.build({ file(path, { hunk(2, 1), hunk(9, 1) }) }, {
+          [path] = { sym("case", "Function", 0, 1, 4) },
+        })[1]
+        local file_row = section.children[1]
+        local group = file_row.children[2]
+
+        assert.equal("#tests", section.id)
+        assert.equal("#tests\0tests/a_spec.lua", file_row.id)
+        assert.equal("#tests\0tests/a_spec.lua\0case", file_row.children[1].id)
+        assert.equal("#tests\0tests/a_spec.lua\0#orphans", group.id)
+        assert.equal("#tests\0tests/a_spec.lua\0#orphans\0#orphan:9", group.children[1].id)
+        assert.same({ 0, 1, 2 }, { section.depth, file_row.depth, group.depth })
+      end)
+
+      it("totals the whole section, a deleted file's numbers included", function()
+        local section = tree.build({
+          file("a.lua", { hunk(1, 3, 1) }),
+          file("b.lua", { hunk(0, 0, 5) }, "deleted"),
+        }, {})[1]
+
+        assert.equal(2, section.files)
+        assert.equal(3, section.added)
+        assert.equal(6, section.removed)
+      end)
+    end)
+
     describe("file rows", function()
       it("describes a file by its path, status and totals", function()
-        local rows = tree.build({ file("src/new.ts", { hunk(1, 4) }, "added") }, {})
+        local rows = tree.files(tree.build({ file("src/new.ts", { hunk(1, 4) }, "added") }, {}))
 
         local row = rows[1]
-        assert.equal("src/new.ts", row.id)
+        assert.equal("#implementation\0src/new.ts", row.id)
         assert.equal("file", row.kind)
-        assert.equal(0, row.depth)
+        assert.equal(1, row.depth)
         assert.equal("src/new.ts", row.name)
         assert.equal("src/new.ts", row.path)
         assert.equal("added", row.status)
@@ -105,16 +157,18 @@ describe("changeset.tree", function()
       end)
 
       it("gives a file whose symbols have not resolved no children, not even an orphan group", function()
-        local rows = tree.build({ file(PATH, { hunk(5, 2) }) }, {})
+        local rows = tree.files(tree.build({ file(PATH, { hunk(5, 2) }) }, {}))
 
         assert.equal(1, #rows)
         assert.same({}, rows[1].children)
       end)
 
       it("looks each file's symbols up by its own path", function()
-        local rows = tree.build(
-          { file("a.ts", { hunk(2, 1) }), file("b.ts", { hunk(2, 1) }) },
-          { ["b.ts"] = { sym("f", "Function", 0, 1, 3) } }
+        local rows = tree.files(
+          tree.build(
+            { file("a.ts", { hunk(2, 1) }), file("b.ts", { hunk(2, 1) }) },
+            { ["b.ts"] = { sym("f", "Function", 0, 1, 3) } }
+          )
         )
 
         assert.same({}, rows[1].children)
@@ -122,31 +176,31 @@ describe("changeset.tree", function()
       end)
 
       it("jumps a file row to its first changed line", function()
-        local rows = tree.build({ file(PATH, { hunk(12, 1), hunk(40, 3) }) }, {})
+        local rows = tree.files(tree.build({ file(PATH, { hunk(12, 1), hunk(40, 3) }) }, {}))
 
         assert.equal(12, rows[1].lnum)
       end)
 
       it("jumps a file with no hunks to the top", function()
-        local rows = tree.build({ file("moved.ts", {}, "renamed") }, {})
+        local rows = tree.files(tree.build({ file("moved.ts", {}, "renamed") }, {}))
 
         assert.equal(1, rows[1].lnum)
       end)
 
       it("jumps a file whose first change deletes the top of the file to line 1", function()
-        local rows = tree.build({ file(PATH, { hunk(0, 0, 3) }) }, {})
+        local rows = tree.files(tree.build({ file(PATH, { hunk(0, 0, 3) }) }, {}))
 
         assert.equal(1, rows[1].lnum)
       end)
 
       it("makes a deleted file row non-navigable", function()
-        local rows = tree.build({ file("gone.ts", { hunk(0, 0, 30) }, "deleted") }, {})
+        local rows = tree.files(tree.build({ file("gone.ts", { hunk(0, 0, 30) }, "deleted") }, {}))
 
         assert.is_nil(rows[1].lnum)
       end)
 
       it("gives a deleted file row no stat", function()
-        local rows = tree.build({ file("gone.ts", { hunk(0, 0, 30) }, "deleted") }, {})
+        local rows = tree.files(tree.build({ file("gone.ts", { hunk(0, 0, 30) }, "deleted") }, {}))
 
         assert.is_nil(rows[1].added)
         assert.is_nil(rows[1].removed)
@@ -164,7 +218,7 @@ describe("changeset.tree", function()
       ---@param hunks changeset.Hunk[]
       ---@return changeset.Row[]
       local function build_store(hunks)
-        return tree.build({ file(PATH, hunks) }, { [PATH] = STORE })[1].children
+        return tree.files(tree.build({ file(PATH, hunks) }, { [PATH] = STORE }))[1].children
       end
 
       it("shows a class holding one changed method as a stateless ancestor of it", function()
@@ -181,7 +235,7 @@ describe("changeset.tree", function()
         local method = build_store({ hunk(7, 1, 2) })[1].children[1]
 
         assert.equal("symbol", method.kind)
-        assert.equal(2, method.depth)
+        assert.equal(3, method.depth)
         assert.equal(PATH, method.path)
         assert.equal(5, method.lnum)
         assert.equal("Method", method.symbol_kind)
@@ -202,7 +256,7 @@ describe("changeset.tree", function()
         local rows = build_store({ hunk(7, 1), hunk(22, 1) })
 
         assert.same({ "SessionStore", "SESSION_TTL" }, names(rows))
-        assert.equal(1, rows[2].depth)
+        assert.equal(2, rows[2].depth)
       end)
 
       it("shows a class as changed when a hunk touches its own lines and no member", function()
@@ -262,7 +316,7 @@ describe("changeset.tree", function()
       ---@param line_text? fun(path: string, lnum: integer): string?
       ---@return changeset.Row[]
       local function build_store(hunks, line_text)
-        return tree.build({ file(PATH, hunks) }, { [PATH] = STORE }, line_text)[1].children
+        return tree.files(tree.build({ file(PATH, hunks) }, { [PATH] = STORE }, line_text))[1].children
       end
 
       it("gathers hunks outside every symbol into one group after the symbol rows", function()
@@ -271,12 +325,12 @@ describe("changeset.tree", function()
         assert.same({ "SessionStore", "Other changes" }, names(rows))
         local group = rows[2]
         assert.equal("orphans", group.kind)
-        assert.equal(1, group.depth)
+        assert.equal(2, group.depth)
         assert.equal(PATH, group.path)
         assert.is_false(group.ancestor)
         assert.same({ "L1–2", "L24" }, names(group.children))
         assert.equal("orphan", group.children[1].kind)
-        assert.equal(2, group.children[1].depth)
+        assert.equal(3, group.children[1].depth)
         assert.same({}, group.children[1].children)
       end)
 
@@ -332,13 +386,13 @@ describe("changeset.tree", function()
       end)
 
       it("gives a file with resolved but no symbols only its orphan group", function()
-        local rows = tree.build({ file("Makefile", { hunk(2, 2) }) }, { ["Makefile"] = {} })
+        local rows = tree.files(tree.build({ file("Makefile", { hunk(2, 2) }) }, { ["Makefile"] = {} }))
 
         assert.same({ "Other changes" }, names(rows[1].children))
       end)
 
       it("gives a deleted file no children at all", function()
-        local rows = tree.build({ file("gone.ts", { hunk(0, 0, 30) }, "deleted") }, { ["gone.ts"] = {} })
+        local rows = tree.files(tree.build({ file("gone.ts", { hunk(0, 0, 30) }, "deleted") }, { ["gone.ts"] = {} }))
 
         assert.same({}, rows[1].children)
       end)
@@ -351,7 +405,7 @@ describe("changeset.tree", function()
       ---@param hunks changeset.Hunk[]
       ---@return changeset.Row
       local function build_file(hunks)
-        return tree.build({ file(PATH, hunks) }, { [PATH] = FUNCTIONS })[1]
+        return tree.files(tree.build({ file(PATH, hunks) }, { [PATH] = FUNCTIONS }))[1]
       end
 
       ---@param hunks changeset.Hunk[]
@@ -391,17 +445,17 @@ describe("changeset.tree", function()
     end)
 
     describe("identity", function()
-      it("identifies each row by its path and the full chain of names above it", function()
+      it("identifies each row by its section, its path and the full chain of names above it", function()
         local symbols = { sym("SessionStore", "Class", 0, 3, 20), sym("refresh", "Method", 1, 5, 9) }
-        local file_row = tree.build({ file(PATH, { hunk(7, 1), hunk(24, 1) }) }, { [PATH] = symbols })[1]
+        local file_row = tree.files(tree.build({ file(PATH, { hunk(7, 1), hunk(24, 1) }) }, { [PATH] = symbols }))[1]
         local class = file_row.children[1]
         local group = file_row.children[2]
 
-        assert.equal("src/session.ts", file_row.id)
-        assert.equal("src/session.ts\0SessionStore", class.id)
-        assert.equal("src/session.ts\0SessionStore\0refresh", class.children[1].id)
-        assert.equal("src/session.ts\0#orphans", group.id)
-        assert.equal("src/session.ts\0#orphan:24", group.children[1].id)
+        assert.equal(FILE_ID, file_row.id)
+        assert.equal(FILE_ID .. "\0SessionStore", class.id)
+        assert.equal(FILE_ID .. "\0SessionStore\0refresh", class.children[1].id)
+        assert.equal(FILE_ID .. "\0#orphans", group.id)
+        assert.equal(FILE_ID .. "\0#orphans\0#orphan:24", group.children[1].id)
       end)
 
       it("tells same-named symbols apart by where they nest", function()
@@ -411,14 +465,16 @@ describe("changeset.tree", function()
           sym("B", "Class", 0, 7, 11),
           sym("run", "Method", 1, 8, 10),
         }
-        local rows = tree.build({ file(PATH, { hunk(3, 1), hunk(9, 1) }) }, { [PATH] = symbols })[1].children
+        local rows =
+          tree.files(tree.build({ file(PATH, { hunk(3, 1), hunk(9, 1) }) }, { [PATH] = symbols }))[1].children
 
         assert.not_equal(rows[1].children[1].id, rows[2].children[1].id)
       end)
 
       it("tells same-named siblings apart, as the overloads of one function are", function()
         local symbols = { sym("get", "Function", 0, 1, 3), sym("get", "Function", 0, 5, 7) }
-        local rows = tree.build({ file(PATH, { hunk(2, 1), hunk(6, 1) }) }, { [PATH] = symbols })[1].children
+        local rows =
+          tree.files(tree.build({ file(PATH, { hunk(2, 1), hunk(6, 1) }) }, { [PATH] = symbols }))[1].children
 
         assert.not_equal(rows[1].id, rows[2].id)
       end)
@@ -451,13 +507,13 @@ describe("changeset.tree", function()
     it("folds a chain of single-child symbols into one row aimed at the deepest", function()
       local rows = tree.compress(build_nested({ hunk(5, 2, 1), hunk(40, 1) }, CHAIN))
 
-      local file_row = rows[1]
+      local file_row = rows[1].children[1]
       assert.equal("file", file_row.kind)
       assert.equal(PATH, file_row.name)
       assert.same({ "Outer › mid › leaf", "Other changes" }, names(file_row.children))
       local chain = file_row.children[1]
       assert.equal("symbol", chain.kind)
-      assert.equal(1, chain.depth)
+      assert.equal(2, chain.depth)
       assert.equal(5, chain.lnum)
       assert.equal("Function", chain.symbol_kind)
       assert.is_false(chain.ancestor)
@@ -477,16 +533,16 @@ describe("changeset.tree", function()
     end)
 
     it("ends a chain at a branch, keeping its children one level below the folded row", function()
-      local file_row = tree.compress(build_nested({ hunk(5, 1), hunk(11, 1), hunk(32, 1) }))[1]
+      local file_row = tree.compress(build_nested({ hunk(5, 1), hunk(11, 1), hunk(32, 1) }))[1].children[1]
 
       assert.same({ "Outer › Inner", "LIMIT" }, names(file_row.children))
       local folded = file_row.children[1]
-      assert.equal(1, folded.depth)
+      assert.equal(2, folded.depth)
       assert.is_true(folded.ancestor)
       assert.is_nil(folded.added)
       assert.equal(2, folded.lnum)
       assert.same({ "first", "second" }, names(folded.children))
-      assert.equal(2, folded.children[1].depth)
+      assert.equal(3, folded.children[1].depth)
     end)
 
     it("never folds a file row into its only child, whether a symbol or an orphan group", function()
@@ -506,33 +562,33 @@ describe("changeset.tree", function()
       for _, id in ipairs(ids(compressed)) do
         assert.is_true(vim.tbl_contains(full_ids, id), id)
       end
-      assert.equal("src/session.ts\0Outer", compressed[1].children[1].id)
+      assert.equal(FILE_ID .. "\0Outer", compressed[1].children[1].children[1].id)
     end)
 
     it("marks a folded chain, keyed by its head and aimed at its deepest symbol", function()
-      local file_row = tree.compress(build_nested({ hunk(5, 1) }, CHAIN))[1]
+      local file_row = tree.compress(build_nested({ hunk(5, 1) }, CHAIN))[1].children[1]
       local folded = file_row.children[1]
 
       assert.is_true(folded.chain)
-      assert.equal("src/session.ts\0Outer", folded.id)
+      assert.equal(FILE_ID .. "\0Outer", folded.id)
       assert.equal(5, folded.lnum)
       assert.is_nil(file_row.chain)
     end)
 
     it("points a folded chain at the id of the deepest symbol it stands for", function()
-      local folded = tree.compress(build_nested({ hunk(5, 1) }, CHAIN))[1].children[1]
+      local folded = tree.compress(build_nested({ hunk(5, 1) }, CHAIN))[1].children[1].children[1]
 
-      assert.equal("src/session.ts\0Outer\0mid\0leaf", folded.tip)
+      assert.equal(FILE_ID .. "\0Outer\0mid\0leaf", folded.tip)
     end)
 
     it("does not mark a symbol that is not a chain", function()
-      local file_row = tree.compress(build_nested({ hunk(5, 1), hunk(11, 1) }))[1]
+      local file_row = tree.compress(build_nested({ hunk(5, 1), hunk(11, 1) }))[1].children[1]
 
       assert.is_nil(file_row.children[1].children[1].chain)
     end)
 
     describe("with is_open", function()
-      local HEAD = "src/session.ts\0Outer"
+      local HEAD = FILE_ID .. "\0Outer"
 
       it("leaves a chain at full nesting when its head is open", function()
         local full = build_nested({ hunk(5, 1) }, CHAIN)
@@ -551,7 +607,7 @@ describe("changeset.tree", function()
           return id == HEAD .. "\0mid"
         end)
 
-        assert.same({ "Outer › mid › leaf" }, names(rows[1].children))
+        assert.same({ "Outer › mid › leaf" }, names(rows[1].children[1].children))
       end)
 
       it("still folds the chains below an open one", function()
@@ -566,10 +622,10 @@ describe("changeset.tree", function()
           return id == HEAD
         end)
 
-        local inner = rows[1].children[1].children[1]
+        local inner = rows[1].children[1].children[1].children[1]
         assert.equal("Inner", inner.name)
         assert.same({ "A › a1", "B" }, names(inner.children))
-        assert.equal(3, inner.children[1].depth)
+        assert.equal(4, inner.children[1].depth)
       end)
     end)
 
@@ -599,19 +655,19 @@ describe("changeset.tree", function()
     end
 
     it("finds the deepest symbol row enclosing the line", function()
-      assert.equal(PATH .. "\0Store\0load", tree.locate(rows(), PATH, 7).id)
+      assert.equal(FILE_ID .. "\0Store\0load", tree.locate(rows(), PATH, 7).id)
     end)
 
     it("stops at an ancestor row when the line is in its body but outside its changed members", function()
-      assert.equal(PATH .. "\0Store", tree.locate(rows(), PATH, 12).id)
+      assert.equal(FILE_ID .. "\0Store", tree.locate(rows(), PATH, 12).id)
     end)
 
     it("lands on the file's orphan group when the line is in a hunk outside every symbol", function()
-      assert.equal(PATH .. "\0#orphans", tree.locate(rows(), PATH, 31).id)
+      assert.equal(FILE_ID .. "\0#orphans", tree.locate(rows(), PATH, 31).id)
     end)
 
     it("falls back to the file row for a line in neither", function()
-      assert.equal(PATH, tree.locate(rows(), PATH, 25).id)
+      assert.equal(FILE_ID, tree.locate(rows(), PATH, 25).id)
     end)
 
     it("finds nothing for a file the changeset does not hold", function()
@@ -623,8 +679,8 @@ describe("changeset.tree", function()
     it("finds a row by its id at any depth", function()
       local rows = tree.build({ file(PATH, { hunk(5, 1) }) }, { [PATH] = { sym("load", "Method", 0, 3, 8) } })
 
-      assert.equal("load", tree.find(rows, PATH .. "\0load").name)
-      assert.is_nil(tree.find(rows, PATH .. "\0save"))
+      assert.equal("load", tree.find(rows, FILE_ID .. "\0load").name)
+      assert.is_nil(tree.find(rows, FILE_ID .. "\0save"))
     end)
   end)
 
@@ -632,15 +688,15 @@ describe("changeset.tree", function()
     local rows = tree.build({ file(PATH, { hunk(5, 1) }) }, { [PATH] = { sym("load", "Method", 0, 3, 8) } })
 
     it("keeps the picked row while the tree still holds it", function()
-      local picked = { id = PATH .. "\0load", path = PATH, lnum = 30 }
+      local picked = { id = FILE_ID .. "\0load", path = PATH, lnum = 30 }
 
-      assert.equal(PATH .. "\0load", tree.relocate(rows, picked).id)
+      assert.equal(FILE_ID .. "\0load", tree.relocate(rows, picked).id)
     end)
 
     it("resolves a picked row the tree dropped from its file and line", function()
-      local picked = { id = PATH .. "\0save", path = PATH, lnum = 5 }
+      local picked = { id = FILE_ID .. "\0save", path = PATH, lnum = 5 }
 
-      assert.equal(PATH .. "\0load", tree.relocate(rows, picked).id)
+      assert.equal(FILE_ID .. "\0load", tree.relocate(rows, picked).id)
     end)
   end)
 end)

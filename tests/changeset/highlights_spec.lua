@@ -135,6 +135,19 @@ describe("changeset row highlights", function()
     assert.truthy(line_with(render.HERE_HL):find("other.lua", 1, true))
   end)
 
+  it("marks a folded section's header for where you are and for the selection", function()
+    vim.cmd.edit("mod.lua")
+    open_sidebar()
+    sidebar_cursor_to("L2")
+    vim.cmd.normal(vim.keycode("<CR>"))
+    sidebar_cursor_to("Implementation")
+
+    vim.cmd.normal("h")
+
+    assert.truthy(line_with(render.HERE_HL):find("Implementation", 1, true))
+    assert.truthy(line_with(render.SELECTED_HL):find("Implementation", 1, true))
+  end)
+
   it("clears where you are in a file outside the changeset, and keeps the selection", function()
     vim.cmd.edit("mod.lua")
     open_sidebar()

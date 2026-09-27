@@ -18,12 +18,19 @@ in place of the file and never opens it.
 Under each file sit the symbols a hunk actually touched, plus the ancestors needed to
 place them. Unchanged siblings are hidden: the tree is a map of the diff, not an outline.
 
+Files sit under Implementation / Tests / Docs / Config headers, in that order, and are
+grouped by directory within their section, a directory's own files ahead of its
+subdirectories'.
+
 ```text
+󰴉  Implementation      2 files      +12 -3
 ▎ 󰛦 session.ts                       +12 -3
   ├─󰌗 SessionStore › refresh › deadline  +8 -1
   ├─󰏿 SESSION_TTL                     +1 -0
   └─󰘦 Other changes                   +3 -2
 ▎ 󰛦 auth.ts (legacy) deleted
+
+󱁿  Config              1 file        +2 -0
 ▎ 󰛡 Makefile                          +2 -0
   └─󰘦 Other changes                   +2 -0
 ```
@@ -47,14 +54,53 @@ rail carries change type, added/modified files take no text marker; only `delete
 `renamed` do, where the old path is information the rail cannot hold.
 
 A file row leads with the filename, its directory dimmed in parentheses after it and
-trimmed from the front before the name ever is. Files are grouped by directory, a
-directory's own files ahead of its subdirectories'.
+trimmed from the front before the name ever is.
+
+### Sections
+
+```text
+󱞊  Tests               3 files      +40 -2
+```
+
+A header is the section's `MiniIcons.get("directory", …)` icon, its label as plain
+content, the file count in the meta colour, and a right-aligned `+N -N` for the whole
+section — the same stat chunks a file row draws. The count and stat are the section's
+own, taken before any filter, so they stay put while a filter thins the files beneath. A
+header carries no rail and is never lit as a filter match; it stays on screen only while
+one of its rows matches.
+
+An empty section is left out. A lone section is still headed, so what a file was
+classified as is always on screen. Files are not indented under their header: the rail
+stays in column 0, where the eye already scans for it. A blank virtual line hangs between
+sections — not a row, so the cursor cannot land on it.
+
+`h` / `l` on a section header fold and unfold the section, and the fold is remembered per
+repo like a file's.
+
+Classification reads the path alone. Rules run Tests → Docs → Config and the first match
+wins; anything unmatched is Implementation. A directory rule matches any directory
+segment, not just the first.
+
+- **Tests** — a `tests`, `test`, `spec`, `__tests__` or `testdata` directory; or a file
+  named `*_spec.*`, `*_test.*`, `*.test.*`, `*.spec.*`, `test_*.py`, `conftest.py` or
+  `*.bats`.
+- **Docs** — `*.md`, `*.mdx`, `*.rst`, `README*`, `CHANGELOG*`; or a `*.txt` under a `doc`
+  or `docs` directory.
+- **Config** — `*.toml`, `*.yaml`, `*.yml`, `*.pkl`, `*.json`, `*.ini`, `*.cfg`, any
+  dotfile, `Makefile`, `Dockerfile`, `go.mod`; or anything under `.github` that is not a
+  script (`*.sh`, `*.bash`, `*.py`, `*.js`, `*.ts`, `*.rs`, `*.go`, `*.lua`).
+
+So `plugin/lsp.lua` is Implementation although it configures something, and so is
+`.mise/tasks/test`: `test` there is a file name, not a directory, and a dotted directory
+is not a dotfile.
 
 ### Icons come from mini.icons, never hand-picked
 
 - Symbol rows: `MiniIcons.get("lsp", kind)` — the exact call `outline.lua` makes, so a
   method is the same glyph in the same hue in both the picker and the sidebar.
 - File rows: `MiniIcons.get("file", path)`.
+- Section headers: `MiniIcons.get("directory", …)` with `src`, `tests`, `docs` and
+  `.config`, so each header wears the icon its kind of directory already has.
 - Orphan-hunk groups: the `lsp`/`Text` icon, dimmed. Not a bespoke glyph.
 
 A future icon-set change propagates everywhere at once. That is the point.
@@ -195,6 +241,7 @@ hunk's `-N` goes wholly to the first symbol it reaches.
   origin/jt/exc-1200-stacked-parent…  #412
   4 files            2 commits  +142 -38
 
+󰴉  Implementation      2 files      +12 -3
 ▎ 󰛦 session.ts                       +12 -3
 ```
 
@@ -232,8 +279,9 @@ The sidebar's own `statusline`. With `laststatus=3` a window's own statusline is
 only while that window has focus, so it takes the global bar's place exactly when the
 sidebar's keys are worth naming, and hands it back the moment you leave. The badge is
 the header glyph's `Directory` colour, reversed, standing where the mode badge would. The
-position counts the files on screen; the filter in force is named, since once its prompt
-closes the lit matches are the only other trace of it. Only four keys are offered — `?`
+position counts the files on screen — a folded section's files are not — and names no
+file while the cursor is on a section header. The filter in force is named, since once its
+prompt closes the lit matches are the only other trace of it. Only four keys are offered — `?`
 lists the rest.
 
 The sidebar turns off `scrollEOF.nvim`, which would otherwise scroll the tree past its end
@@ -312,10 +360,10 @@ complete in under 300ms, which is the `git diff` and nothing else.
 The cache is one JSON file per repo under `stdpath("cache")/changeset/`, holding only the
 fields the tree reads from a symbol. Every refresh narrows it to the files the current diff
 touches, so it stays the size of a branch rather than growing with every branch ever
-reviewed, and losing it costs one slow build. Folds are remembered per repository for as long as
-Neovim is running, so reopening looks like you left it; a restart starts expanded. Per
-repository because a row is identified by a repo-relative path, which two checkouts can
-easily both have.
+reviewed, and losing it costs one slow build. Folds — a section's as well as a file's —
+are remembered per repository for as long as Neovim is running, so reopening looks like
+you left it; a restart starts expanded. Per repository because a row is identified by a
+repo-relative path, which two checkouts can easily both have.
 
 ## Settings
 
@@ -341,21 +389,21 @@ repository's deliberate choice is none of that save's business.
 | --- | --- | --- |
 | `<leader>gp` | anywhere | closed → open+focus on the row you are on; open+unfocused → focus on the row you are on; open+focused → close, restore focus |
 | `j` / `k` | sidebar | move, previewing into the window you were last in, without leaving the sidebar |
-| `<CR>` | sidebar | commit: focus that window at the row's position, keep the jump |
+| `<CR>` | sidebar | commit: focus that window at the row's position, keep the jump; nothing on a section header |
 | `<S-CR>` | sidebar | commit, then close the sidebar behind you |
 | `q` | sidebar | close, restore focus and put back whatever the previews borrowed |
-| `h` / `l` | sidebar | collapse / expand; `h` with nothing left to shut steps out to the parent, so repeated `h` walks up to the filename; `l` on a compressed chain expands it to full nesting |
-| `H` / `L` | sidebar | collapse / expand every file, the whole-tree form of `h` / `l` |
+| `h` / `l` | sidebar | collapse / expand; on a header, fold / unfold its section; `h` with nothing left to shut steps out to the parent, so repeated `h` walks up to the filename and then its section header; `l` on a compressed chain expands it to full nesting |
+| `H` / `L` | sidebar | collapse / expand every file, the whole-tree form of `h` / `l`; never folds or unfolds a section |
 | `F` | sidebar | open the symbol-kind menu |
 | `x` | kind menu | hide or show the kind under the cursor, redrawing the tree at once |
 | `<CR>` / `r` / `b` | kind menu | remember this set everywhere / for this repository / for this branch, then close |
 | `q` / `<Esc>` | kind menu | close, putting the tree back to the set on disk |
 | `f` | sidebar | filter as you type, keeping ancestors so matches stay placed and lighting every match until the filter goes; `<Esc>` restores the last filter |
 | `R` | sidebar | rebuild now |
-| `y` | sidebar | yank the row's `path:line` via `helpers.paths.copy` |
+| `y` | sidebar | yank the row's `path:line` via `helpers.paths.copy`; nothing on a section header |
 | `/` `-` `<C-t>` | sidebar | commit into a vsplit / split / new tab instead |
 | `?` | sidebar | list these keys, `]h` / `[h` included: which-key's popup where it is installed, a float where it is not |
-| `]h` / `[h` | anywhere, while open | advance the sidebar's selection, previewing as it goes — review without focusing the sidebar |
+| `]h` / `[h` | anywhere, while open | advance the sidebar's selection, previewing as it goes and stepping over section headers — review without focusing the sidebar |
 
 ## Behaviour that is easy to get wrong
 
@@ -429,7 +477,8 @@ repository's deliberate choice is none of that save's business.
   attaches to it, which is how a slow or newly installed server still gets heard.
 - **One line is one row, one level below its parent.** `h` and the cursor anchor both read
   the next line's depth to decide what is showing, so the `⋯ reading symbols` placeholder
-  is a row of its own rather than the file's row drawn a second time.
+  is a row of its own rather than the file's row drawn a second time. A file sits one
+  level below its section header though drawn unindented, which is why `h` steps out to it.
 - **Hiding a kind promotes its children.** Dropping `Class` still shows the methods that
   changed inside one — the kind you hid is not the thing you were looking for. Same rule
   `symbols.flatten` applies to its own kind filter, for the same reason.

@@ -139,7 +139,7 @@ describe("changeset position in a session", function()
     flush()
 
     assert.same(
-      { here = { path = "mod.lua", lnum = 8 }, row = { id = "other.lua", path = "other.lua" } },
+      { here = { path = "mod.lua", lnum = 8 }, row = { id = "#implementation\0other.lua", path = "other.lua" } },
       vim.json.decode(vim.g.ChangesetPosition)
     )
   end)
@@ -148,7 +148,10 @@ describe("changeset position in a session", function()
     vim.cmd.edit("mod.lua")
     focus_terminal()
 
-    restore_session({ here = { path = "mod.lua", lnum = 8 }, row = { id = "other.lua", path = "other.lua" } })
+    restore_session({
+      here = { path = "mod.lua", lnum = 8 },
+      row = { id = "#implementation\0other.lua", path = "other.lua" },
+    })
     settle()
     flush()
 
@@ -189,7 +192,10 @@ describe("changeset position in a session", function()
     local file_win = vim.api.nvim_get_current_win()
     focus_terminal()
 
-    restore_session({ here = { path = "gone.lua", lnum = 3 }, row = { id = "other.lua\0gone", path = "other.lua" } })
+    restore_session({
+      here = { path = "gone.lua", lnum = 3 },
+      row = { id = "#implementation\0other.lua\0gone", path = "other.lua" },
+    })
     settle()
     flush()
 
@@ -208,7 +214,7 @@ describe("changeset position in a session", function()
     local file_win = vim.api.nvim_get_current_win()
     focus_terminal()
 
-    restore_session({ row = { id = "plain.lua", path = "plain.lua" } })
+    restore_session({ row = { id = "#implementation\0plain.lua", path = "plain.lua" } })
     settle()
     flush()
 
@@ -283,7 +289,10 @@ describe("changeset position in a session", function()
     it("applies the recorded position once its file's symbols resolve", function()
       vim.cmd.edit("other.lua")
       focus_terminal()
-      restore_session({ here = { path = "mod.lua", lnum = 8 }, row = { id = "mod.lua\0step", path = "mod.lua" } })
+      restore_session({
+        here = { path = "mod.lua", lnum = 8 },
+        row = { id = "#implementation\0mod.lua\0step", path = "mod.lua" },
+      })
       diff_arrived()
 
       answer("mod.lua", { symbol("step", 7, 9) })

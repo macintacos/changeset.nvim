@@ -31,10 +31,21 @@ describe("changeset.state", function()
       local st = state.new()
       state.collapse_all(st, { "api.ts", "auth.ts" })
 
-      state.expand_all(st)
+      state.expand_all(st, {})
 
       assert.is_false(state.is_collapsed(st, "api.ts"))
       assert.is_false(state.is_collapsed(st, "auth.ts"))
+    end)
+
+    it("leaves the rows it is told to keep folded", function()
+      local st = state.new()
+      state.collapse_all(st, { "#tests", "#tests\0a_spec.lua" })
+
+      state.expand_all(st, { "#tests", "#docs" })
+
+      assert.is_true(state.is_collapsed(st, "#tests"))
+      assert.is_false(state.is_collapsed(st, "#docs"))
+      assert.is_false(state.is_collapsed(st, "#tests\0a_spec.lua"))
     end)
 
     it("tracks an opened-out chain separately from a collapsed row", function()
@@ -103,6 +114,39 @@ describe("changeset.state", function()
       assert.is_nil(state._outward(at_depths(0, 0), 1))
     end)
   end)
+
+  describe("_step", function()
+    ---@param ... "section"|"file"
+    ---@return changeset.Row[]
+    local function of_kinds(...)
+      return vim.tbl_map(function(kind)
+        return { kind = kind }
+      end, { ... })
+    end
+
+    local ROWS = of_kinds("section", "file", "section", "file")
+
+    it("skips a section header going down", function()
+      assert.equal(4, state._step(ROWS, 2, 1))
+    end)
+
+    it("skips a section header going up", function()
+      assert.equal(2, state._step(ROWS, 4, -1))
+    end)
+
+    it("stays put past the last row", function()
+      assert.equal(4, state._step(ROWS, 4, 1))
+    end)
+
+    it("stays put when only a header lies above", function()
+      assert.equal(2, state._step(ROWS, 2, -1))
+    end)
+
+    it("lands on the next file from a header", function()
+      assert.equal(2, state._step(ROWS, 1, 1))
+    end)
+  end)
+
   describe("_nearest", function()
     local IDS = { "a.lua", "a.lua\0Store", "b.lua" }
 
@@ -112,7 +156,13 @@ describe("changeset.state", function()
 
     it("falls back to the deepest ancestor on screen when the row is hidden", function()
       assert.equal(2, state._nearest(IDS, "a.lua\0Store\0load\0inner"))
-      assert.equal(3, state._nearest(IDS, "b.lua\0#orphans"))
+      assert.equal(3, state._nearest(IDS, "b.lua\0#orphans\0#orphan:4"))
+    end)
+
+    it("sends a hidden orphan to its group when the group is the deepest row shown", function()
+      local ids = { "a.lua", "a.lua\0#orphans" }
+
+      assert.equal(2, state._nearest(ids, "a.lua\0#orphans\0#orphan:4"))
     end)
 
     it("does not take a row whose name merely starts the same for an ancestor", function()

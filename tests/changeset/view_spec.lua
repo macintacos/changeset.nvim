@@ -60,6 +60,30 @@ describe("changeset.view", function()
 
       assert.same({ "session.ts", "Refresh" }, names(view.filter(rows, "refresh")))
     end)
+
+    describe("under sections", function()
+      ---@param children changeset.Row[]
+      ---@return changeset.Row
+      local function tests_section(children)
+        local section = row("#tests", "Tests", children)
+        section.kind, section.files, section.added, section.removed = "section", 2, 7, 3
+        return section
+      end
+
+      it("never keeps a section on its own label", function()
+        local rows = { tests_section({ row("f1", "a_spec.lua"), row("f2", "b_spec.lua") }) }
+
+        assert.same({}, view.filter(rows, "tests"))
+      end)
+
+      it("keeps a section for a matching file, with its whole-section totals", function()
+        local rows = { tests_section({ row("f1", "a_spec.lua"), row("f2", "b_spec.lua") }) }
+
+        local kept = view.filter(rows, "a_spec")[1]
+        assert.same({ "Tests", "a_spec.lua" }, names({ kept }))
+        assert.same({ 2, 7, 3 }, { kept.files, kept.added, kept.removed })
+      end)
+    end)
   end)
   describe("by_kind", function()
     it("returns the whole tree when nothing is hidden", function()
@@ -127,16 +151,33 @@ describe("changeset.view", function()
   end)
 
   describe("position", function()
-    -- One row per line, as the renderer hands them back: two files, the first with a
-    -- symbol nested two deep.
-    local lines = { { depth = 0 }, { depth = 1 }, { depth = 2 }, { depth = 0 }, { depth = 1 } }
+    -- One row per line, as the renderer hands them back: a header, two files, the
+    -- first with a symbol nested two deep, then a second header over a third file.
+    local lines = {
+      { depth = 0 },
+      { depth = 1 },
+      { depth = 2 },
+      { depth = 3 },
+      { depth = 1 },
+      { depth = 2 },
+      { depth = 0 },
+      { depth = 1 },
+    }
 
     it("places a line under the file it belongs to", function()
-      assert.same({ 1, 2 }, { view.position(lines, 3) })
+      assert.same({ 1, 3 }, { view.position(lines, 4) })
     end)
 
     it("counts a file's own row as that file", function()
-      assert.same({ 2, 2 }, { view.position(lines, 4) })
+      assert.same({ 2, 3 }, { view.position(lines, 5) })
+    end)
+
+    it("names no file on a header line", function()
+      assert.same({ nil, 3 }, { view.position(lines, 7) })
+    end)
+
+    it("leaves a folded section's files out of the total", function()
+      assert.same({ 1, 1 }, { view.position({ { depth = 0 }, { depth = 0 }, { depth = 1 } }, 3) })
     end)
 
     it("has no position on an empty tree", function()

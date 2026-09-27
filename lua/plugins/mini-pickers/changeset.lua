@@ -31,7 +31,7 @@ local function is_change(row)
   return row.kind == "orphan" or (row.kind == "symbol" and not row.ancestor)
 end
 
----@param rows changeset.Row[] Uncompressed, as `tree.build` makes them.
+---@param rows changeset.Row[] File rows, uncompressed, as `changeset.rows()` hands them over.
 ---@param root string Repository the rows' paths are relative to.
 ---@return MiniPickers.ChangesetItem[]
 local function items(rows, root)

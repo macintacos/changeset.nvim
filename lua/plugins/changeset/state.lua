@@ -3,8 +3,8 @@
 ---refresh reorders lines whenever the file set changes.
 ---
 ---The `_`-prefixed functions are pure decisions alongside it: where the cursor
----lands after a rebuild, where `h` goes from a row, and which line stands in for a
----row that is not on screen.
+---lands after a rebuild, where `h` goes from a row, where `]h`/`[h` step to, and
+---which line stands in for a row that is not on screen.
 
 ---@class changeset.State
 ---@field collapsed table<string, true> Rows whose children are hidden.
@@ -43,10 +43,15 @@ function M.collapse_all(st, ids)
   end
 end
 
----Unfold every row, leaving opened chains as they are.
+---Unfold every row but those in `keep`, leaving opened chains as they are.
 ---@param st changeset.State
-function M.expand_all(st)
-  st.collapsed = {}
+---@param keep string[] Ids whose fold stays as it is.
+function M.expand_all(st, keep)
+  local kept = {}
+  for _, id in ipairs(keep) do
+    kept[id] = st.collapsed[id]
+  end
+  st.collapsed = kept
 end
 
 ---Whether a compressed chain is being shown at full nesting.
@@ -121,6 +126,20 @@ function M._outward(rows, lnum)
       return "parent", i
     end
   end
+end
+
+---Where `]h`/`[h` go from a line: the nearest row past it in `delta`'s direction
+---that is not a section header, or the line itself when there is none that way.
+---@param rows changeset.Row[] The visible rows, in display order.
+---@param lnum integer 1-based.
+---@param delta integer 1 or -1.
+---@return integer
+function M._step(rows, lnum, delta)
+  local i = lnum + delta
+  while rows[i] and rows[i].kind == "section" do
+    i = i + delta
+  end
+  return rows[i] and i or lnum
 end
 
 return M

@@ -37,6 +37,24 @@ local function symbol(overrides)
 end
 
 ---@param overrides? table
+---@return changeset.Row
+local function section(overrides)
+  return vim.tbl_extend("force", {
+    id = "#implementation",
+    kind = "section",
+    depth = 0,
+    name = "Implementation",
+    path = "",
+    icon = "src",
+    files = 1,
+    added = 12,
+    removed = 3,
+    ancestor = false,
+    children = { file() },
+  }, overrides or {})
+end
+
+---@param overrides? table
 ---@return table
 local function opts(overrides)
   return vim.tbl_extend("force", {
@@ -81,7 +99,101 @@ local function stat_mark(line)
   end
 end
 
+---The lines `files` draw under a section's header, the header itself left out.
+---@param files changeset.Row[]
+---@param options table
+---@return changeset.Line[]
+local function file_lines(files, options)
+  return vim.list_slice(render.lines({ section({ children = files }) }, options), 2)
+end
+
 describe("changeset.render", function()
+  describe("section rows", function()
+    it("heads a section with its label and file count", function()
+      local one = render.lines({ section() }, opts())[1]
+      local two = render.lines({ section({ files = 2 }) }, opts())[1]
+
+      assert.truthy(one.text:find("Implementation", 1, true))
+      assert.truthy(one.text:find("1 file$"))
+      assert.truthy(two.text:find("2 files$"))
+    end)
+
+    it("starts every header's count in the same column", function()
+      local lines = render.lines({ section(), section({ id = "#docs", name = "Docs" }) }, opts())
+
+      assert.equal(lines[1].text:find("1 file"), lines[3].text:find("1 file"))
+    end)
+
+    it("shrinks the label's padding so a wide stat clears the count", function()
+      local wide = section({ files = 123, added = 15234, removed = 8123 })
+      local narrow = render.lines({ wide }, opts({ width = 42 }))[1]
+      local roomy = render.lines({ wide }, opts())[1]
+
+      assert.is_true(vim.fn.strdisplaywidth(narrow.text) + #"+15234 -8123" + 1 <= 42)
+      assert.equal(1 + 2 + 20 + 1, roomy.text:find("123 files", 1, true))
+    end)
+
+    it("draws the label as plain content and the count in the meta group", function()
+      local line = render.lines({ section({ files = 2 }) }, opts())[1]
+
+      for _, mark in ipairs(line.marks) do
+        assert.is_false(mark.end_col ~= nil and line.text:sub(mark.col + 1, mark.end_col):find("Implementation") ~= nil)
+      end
+      assert.equal(render.META_HL, mark_over(line, "2 files").hl)
+    end)
+
+    it("draws the header's icon in the group the caller gives it", function()
+      local line = render.lines({ section() }, opts())[1]
+
+      assert.equal("IconHl", mark_over(line, "S").hl)
+    end)
+
+    it("right-aligns the section's stat", function()
+      local mark = assert(stat_mark(render.lines({ section() }, opts())[1]))
+
+      assert.equal("right_align", mark.pos)
+      assert.equal("+12", mark.virt_text[1][1])
+    end)
+
+    it("draws no rail on the header, and keeps the file's rail at column 0", function()
+      local lines = render.lines({ section() }, opts())
+
+      assert.is_nil(lines[1].text:find("▎", 1, true))
+      assert.equal(1, lines[2].text:find("▎", 1, true))
+    end)
+
+    it("draws only the header of a folded section", function()
+      local lines = render.lines(
+        { section() },
+        opts({
+          collapsed = function(id)
+            return id == "#implementation"
+          end,
+        })
+      )
+
+      assert.equal(1, #lines)
+    end)
+
+    it("hangs a blank line under every section but the last", function()
+      local docs = section({ id = "#docs", name = "Docs", children = { file({ id = "#docs\0b.md" }) } })
+      local lines = render.lines({ section(), docs }, opts())
+
+      local function separators(line)
+        return #vim.tbl_filter(function(mark)
+          return mark.virt_lines ~= nil
+        end, line.marks)
+      end
+      assert.same({ 0, 1, 0, 0 }, vim.tbl_map(separators, lines))
+    end)
+
+    it("does not mark a filter match on a header", function()
+      local line = render.lines({ section() }, opts({ query = "impl" }))[1]
+
+      assert.is_nil(mark_over(line, "Impl"))
+    end)
+  end)
+
   describe("lines", function()
     describe("file rows", function()
       local rails = {
@@ -93,7 +205,7 @@ describe("changeset.render", function()
       }
       for status, hl in pairs(rails) do
         it(("draws the rail in %s for status '%s'"):format(hl, status), function()
-          local lines = render.lines({ file({ status = status }) }, opts())
+          local lines = file_lines({ file({ status = status }) }, opts())
 
           assert.equal("▎", lines[1].text:sub(1, #"▎"))
           assert.same({ col = 0, end_col = #"▎", hl = hl }, mark_over(lines[1], "▎"))
@@ -101,14 +213,14 @@ describe("changeset.render", function()
       end
 
       it("puts the icon, coloured by the caller's group, between the rail and the filename", function()
-        local lines = render.lines({ file() }, opts())
+        local lines = file_lines({ file() }, opts())
 
         assert.equal("▎ F a.lua (src)", lines[1].text)
         assert.equal("IconHl", mark_over(lines[1], "F").hl)
       end)
 
       it("dims the directory after the filename", function()
-        local lines = render.lines({ file() }, opts())
+        local lines = file_lines({ file() }, opts())
 
         local mark = assert(mark_over(lines[1], "(src)"))
         assert.equal("Comment", mark.hl)
@@ -116,14 +228,14 @@ describe("changeset.render", function()
       end)
 
       it("draws a file at the repository root with no directory", function()
-        local lines = render.lines({ file({ path = "a.lua" }) }, opts())
+        local lines = file_lines({ file({ path = "a.lua" }) }, opts())
 
         assert.equal("▎ F a.lua", lines[1].text)
       end)
 
       for _, status in ipairs({ "deleted", "renamed" }) do
         it(("ends a file with status '%s' with a Comment marker"):format(status), function()
-          local lines = render.lines({ file({ status = status }) }, opts())
+          local lines = file_lines({ file({ status = status }) }, opts())
 
           assert.equal("▎ F a.lua (src) " .. status, lines[1].text)
           assert.equal("Comment", mark_over(lines[1], " " .. status).hl)
@@ -132,7 +244,7 @@ describe("changeset.render", function()
 
       for _, status in ipairs({ "added", "modified", "untracked" }) do
         it(("adds no marker for status '%s'"):format(status), function()
-          local lines = render.lines({ file({ status = status }) }, opts())
+          local lines = file_lines({ file({ status = status }) }, opts())
 
           assert.equal("▎ F a.lua (src)", lines[1].text)
         end)
@@ -145,7 +257,7 @@ describe("changeset.render", function()
           file({ children = { symbol({ name = "Alpha" }), symbol({ name = "Beta" }) } }),
         }
 
-        assert.same({ "▎ F a.lua (src)", "  ├─S Alpha", "  └─S Beta" }, texts(render.lines(rows, opts())))
+        assert.same({ "▎ F a.lua (src)", "  ├─S Alpha", "  └─S Beta" }, texts(file_lines(rows, opts())))
       end)
 
       it("carries a bar down under a parent with later siblings, and blank under the last", function()
@@ -164,24 +276,24 @@ describe("changeset.render", function()
           "  │ └─S Inner",
           "  └─S Last",
           "    └─S Tail",
-        }, texts(render.lines(rows, opts())))
+        }, texts(file_lines(rows, opts())))
       end)
 
       it("draws the connectors in Comment", function()
-        local lines = render.lines({ file({ children = { symbol() } }) }, opts())
+        local lines = file_lines({ file({ children = { symbol() } }) }, opts())
 
         assert.equal("Comment", mark_over(lines[2], "└─").hl)
       end)
 
       it("colours the kind icon with the caller's group", function()
-        local lines = render.lines({ file({ children = { symbol() } }) }, opts())
+        local lines = file_lines({ file({ children = { symbol() } }) }, opts())
 
         assert.equal("IconHl", mark_over(lines[2], "S").hl)
       end)
 
       it("draws an ancestor's name in Comment but keeps its icon colour", function()
         local ancestor = symbol({ name = "Container", ancestor = true })
-        local lines = render.lines({ file({ children = { ancestor } }) }, opts())
+        local lines = file_lines({ file({ children = { ancestor } }) }, opts())
 
         assert.equal("Comment", mark_over(lines[2], "Container").hl)
         assert.equal("IconHl", mark_over(lines[2], "S").hl)
@@ -198,14 +310,14 @@ describe("changeset.render", function()
       end
 
       it("right-aligns +N in GitSignsAdd and -N in GitSignsDelete on a file row", function()
-        local lines = render.lines({ file({ added = 12, removed = 3 }) }, opts())
+        local lines = file_lines({ file({ added = 12, removed = 3 }) }, opts())
 
         assert.same(right_aligned(lines[1], 12, 3), stat_mark(lines[1]))
       end)
 
       it("right-aligns them on a symbol row too", function()
         local rows = { file({ children = { symbol({ added = 8, removed = 1 }) } }) }
-        local lines = render.lines(rows, opts())
+        local lines = file_lines(rows, opts())
 
         assert.same(right_aligned(lines[2], 8, 1), stat_mark(lines[2]))
       end)
@@ -213,7 +325,7 @@ describe("changeset.render", function()
       for _, counts in ipairs({ { 2, 0 }, { 0, 5 } }) do
         local added, removed = counts[1], counts[2]
         it(("shows +%d -%d rather than dropping the zero"):format(added, removed), function()
-          local lines = render.lines({ file({ added = added, removed = removed }) }, opts())
+          local lines = file_lines({ file({ added = added, removed = removed }) }, opts())
 
           assert.same(right_aligned(lines[1], added, removed), stat_mark(lines[1]))
         end)
@@ -222,14 +334,14 @@ describe("changeset.render", function()
       it("emits no stat for a row that carries none", function()
         local bare = symbol()
         bare.added, bare.removed = nil, nil
-        local lines = render.lines({ file({ children = { bare } }) }, opts())
+        local lines = file_lines({ file({ children = { bare } }) }, opts())
 
         assert.is_nil(stat_mark(lines[2]))
       end)
 
       it("emits no stat for an ancestor, even when numbers were left on it", function()
         local ancestor = symbol({ ancestor = true, added = 8, removed = 1 })
-        local lines = render.lines({ file({ children = { ancestor } }) }, opts())
+        local lines = file_lines({ file({ children = { ancestor } }) }, opts())
 
         assert.is_nil(stat_mark(lines[2]))
       end)
@@ -237,20 +349,20 @@ describe("changeset.render", function()
 
     describe("symbols still resolving", function()
       it("adds a placeholder child under a file whose children have not arrived", function()
-        local lines = render.lines({ file({ resolved = false }) }, opts())
+        local lines = file_lines({ file({ resolved = false }) }, opts())
 
         assert.same({ "▎ F a.lua (src)", "  └─⋯ reading symbols" }, texts(lines))
         assert.equal(render.META_HL, mark_over(lines[2], "⋯ reading symbols").hl)
       end)
 
       it("shows only the file row once a file is resolved but nothing inside it changed", function()
-        local lines = render.lines({ file({ resolved = true }) }, opts())
+        local lines = file_lines({ file({ resolved = true }) }, opts())
 
         assert.same({ "▎ F a.lua (src)" }, texts(lines))
       end)
 
       it("nests the placeholder under the file as a row of its own", function()
-        local lines = render.lines({ file({ resolved = false }) }, opts())
+        local lines = file_lines({ file({ resolved = false }) }, opts())
 
         assert.not_equal(lines[1].row.id, lines[2].row.id)
         assert.equal(lines[1].row.depth + 1, lines[2].row.depth)
@@ -258,13 +370,13 @@ describe("changeset.render", function()
       end)
 
       it("shows no placeholder for a deleted file, whose subtree is empty by design", function()
-        local lines = render.lines({ file({ status = "deleted" }) }, opts())
+        local lines = file_lines({ file({ status = "deleted" }) }, opts())
 
         assert.same({ "▎ F a.lua (src) deleted" }, texts(lines))
       end)
 
       it("shows no placeholder once the file has children", function()
-        local lines = render.lines({ file({ children = { symbol() } }) }, opts())
+        local lines = file_lines({ file({ children = { symbol() } }) }, opts())
 
         assert.same({ "▎ F a.lua (src)", "  └─S Foo" }, texts(lines))
       end)
@@ -272,21 +384,21 @@ describe("changeset.render", function()
 
     describe("orphan hunks", function()
       local function with_orphans()
-        local hunk = symbol({ id = "src/a.lua\0#orphan:4", kind = "orphan", name = "L4–6 local x = 1" })
+        local hunk = symbol({ id = "src/a.lua\0#orphans\0#orphan:4", kind = "orphan", name = "L4–6 local x = 1" })
         local group =
           symbol({ id = "src/a.lua\0#orphans", kind = "orphans", name = "Other changes", children = { hunk } })
         return { file({ children = { group } }) }
       end
 
       it("draws the group and its hunks in the meta group", function()
-        local lines = render.lines(with_orphans(), opts())
+        local lines = file_lines(with_orphans(), opts())
 
         assert.equal(render.META_HL, mark_over(lines[2], "Other changes").hl)
         assert.equal(render.META_HL, mark_over(lines[3], "L4–6 local x = 1").hl)
       end)
 
       it("dims their icon instead of using the caller's colour", function()
-        local lines = render.lines(with_orphans(), opts())
+        local lines = file_lines(with_orphans(), opts())
 
         assert.equal(render.META_HL, mark_over(lines[2], "S").hl)
       end)
@@ -305,13 +417,13 @@ describe("changeset.render", function()
 
       it("hides everything under a collapsed file", function()
         local rows = { file({ children = { symbol() } }) }
-        local lines = render.lines(rows, opts({ collapsed = collapsed_ids("src/a.lua") }))
+        local lines = file_lines(rows, opts({ collapsed = collapsed_ids("src/a.lua") }))
 
         assert.same({ "▎ F a.lua (src)" }, texts(lines))
       end)
 
       it("hides the placeholder of a collapsed file still resolving", function()
-        local lines = render.lines({ file({ resolved = false }) }, opts({ collapsed = collapsed_ids("src/a.lua") }))
+        local lines = file_lines({ file({ resolved = false }) }, opts({ collapsed = collapsed_ids("src/a.lua") }))
 
         assert.same({ "▎ F a.lua (src)" }, texts(lines))
       end)
@@ -328,7 +440,7 @@ describe("changeset.render", function()
             },
           }),
         }
-        local lines = render.lines(rows, opts({ collapsed = collapsed_ids("a.lua") }))
+        local lines = file_lines(rows, opts({ collapsed = collapsed_ids("a.lua") }))
 
         local ids = vim.tbl_map(function(line)
           return line.row.id
@@ -343,7 +455,7 @@ describe("changeset.render", function()
             children = { symbol({ id = "outer", name = "Outer", children = { inner } }), symbol({ name = "Next" }) },
           }),
         }
-        local lines = render.lines(rows, opts({ collapsed = collapsed_ids("outer") }))
+        local lines = file_lines(rows, opts({ collapsed = collapsed_ids("outer") }))
 
         assert.same({ "▎ F a.lua (src)", "  ├─S Outer", "  └─S Next" }, texts(lines))
       end)
@@ -352,7 +464,7 @@ describe("changeset.render", function()
     describe("fitting to the window width", function()
       it("trims a long symbol chain from the left so its stat stays on screen", function()
         local chain = symbol({ name = "SessionStore › refresh › deadline", added = 8, removed = 1 })
-        local lines = render.lines({ file({ children = { chain } }) }, opts({ width = 30 }))
+        local lines = file_lines({ file({ children = { chain } }) }, opts({ width = 30 }))
 
         assert.equal("  └─S … › deadline", lines[2].text)
         assert.not_nil(stat_mark(lines[2]))
@@ -361,7 +473,7 @@ describe("changeset.render", function()
       it("trims a long directory from the left, keeping the whole filename and the marker", function()
         local deleted = file({ status = "deleted", path = "very/long/dir/structure/deleted_file.lua" })
         deleted.added, deleted.removed = nil, nil
-        local lines = render.lines({ deleted }, opts({ width = 46 }))
+        local lines = file_lines({ deleted }, opts({ width = 46 }))
 
         assert.equal("▎ F deleted_file.lua (…/dir/structure) deleted", lines[1].text)
       end)
@@ -369,7 +481,7 @@ describe("changeset.render", function()
       it("drops the directory when the filename leaves no room for it", function()
         local deleted = file({ status = "deleted", path = "very/long/dir/structure/deleted_file.lua" })
         deleted.added, deleted.removed = nil, nil
-        local lines = render.lines({ deleted }, opts({ width = 30 }))
+        local lines = file_lines({ deleted }, opts({ width = 30 }))
 
         assert.equal("▎ F deleted_file.lua deleted", lines[1].text)
       end)
@@ -377,7 +489,7 @@ describe("changeset.render", function()
       it("trims an orphan hunk from the right, keeping its line range", function()
         local hunk = symbol({ kind = "orphan", name = "L4–6 local x = 1 + something long" })
         hunk.added, hunk.removed = nil, nil
-        local lines = render.lines({ file({ children = { hunk } }) }, opts({ width = 30 }))
+        local lines = file_lines({ file({ children = { hunk } }) }, opts({ width = 30 }))
 
         assert.equal("  └─S L4–6 local x = 1 + some…", lines[2].text)
       end)
@@ -386,7 +498,7 @@ describe("changeset.render", function()
 
   describe("filter highlighting", function()
     it("marks the characters a filter query matched", function()
-      local lines = render.lines({ file() }, opts({ query = "a.lua" }))
+      local lines = file_lines({ file() }, opts({ query = "a.lua" }))
 
       local mark = assert(mark_over(lines[1], "a.lua"))
 
@@ -398,7 +510,7 @@ describe("changeset.render", function()
     it("draws the match over the colour the row already carries", function()
       local rows = { file({ children = { symbol({ name = "Alpha", ancestor = true }) } }) }
 
-      local lines = render.lines(rows, opts({ query = "lph" }))
+      local lines = file_lines(rows, opts({ query = "lph" }))
 
       local match = assert(mark_over(lines[2], "lph"))
       local name = assert(mark_over(lines[2], "Alpha"))
@@ -408,7 +520,7 @@ describe("changeset.render", function()
     end)
 
     it("takes the query as plain text, not as a pattern", function()
-      local lines = render.lines({ file({ path = "a(b).lua" }) }, opts({ query = "(" }))
+      local lines = file_lines({ file({ path = "a(b).lua" }) }, opts({ query = "(" }))
 
       local mark = assert(mark_over(lines[1], "("))
 
@@ -416,7 +528,7 @@ describe("changeset.render", function()
     end)
 
     it("leaves the rows unmarked when nothing is being filtered", function()
-      local lines = render.lines({ file() }, opts())
+      local lines = file_lines({ file() }, opts())
 
       for _, mark in ipairs(lines[1].marks) do
         assert.not_equal(render.MATCH_HL, mark.hl)
