@@ -17,9 +17,10 @@ local function sidebar_text()
 end
 
 ---@param path string
+---@param timeout integer? Milliseconds.
 ---@return boolean
-local function wait_for_file(path)
-  return vim.wait(10000, function()
+local function wait_for_file(path, timeout)
+  return vim.wait(timeout or 10000, function()
     return vim.tbl_contains(paths_of(changeset._tree()), path)
   end, 25)
 end
@@ -131,7 +132,7 @@ describe("changeset tree", function()
       assert.is_true(wait_for_file("new.lua"))
     end)
 
-    it("refreshes on a gitsigns update while the sidebar is closed", function()
+    it("refreshes when gitsigns reports HEAD moved, while the sidebar is closed", function()
       changeset.build()
       assert.is_true(wait_for_file("mod.lua"))
 
@@ -139,6 +140,41 @@ describe("changeset tree", function()
       vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate" })
 
       assert.is_true(wait_for_file("new.lua"))
+    end)
+
+    it("refreshes once a buffer is written", function()
+      changeset.build()
+      assert.is_true(wait_for_file("mod.lua"))
+
+      vim.cmd.edit("new.lua")
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, { "return 3" })
+      vim.cmd("silent write")
+
+      assert.is_true(wait_for_file("new.lua"))
+    end)
+
+    for _, event in ipairs({ "FileChangedShellPost", "FocusGained" }) do
+      it("refreshes on " .. event .. ", when a change made outside Neovim can surface", function()
+        changeset.build()
+        assert.is_true(wait_for_file("mod.lua"))
+
+        vim.fn.writefile({ "return 3" }, "new.lua")
+        vim.api.nvim_exec_autocmds(event, {})
+
+        assert.is_true(wait_for_file("new.lua"))
+      end)
+    end
+
+    -- gitsigns fires a buffer's update on attach and on every hunk change while typing,
+    -- none of which moves the diff git reads from disk.
+    it("keeps the diff it has through a gitsigns update for one buffer", function()
+      changeset.build()
+      assert.is_true(wait_for_file("mod.lua"))
+
+      vim.fn.writefile({ "return 3" }, "new.lua")
+      vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate", data = { buffer = 0 } })
+
+      assert.is_false(wait_for_file("new.lua", 600))
     end)
   end)
 

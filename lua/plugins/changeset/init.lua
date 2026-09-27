@@ -17,9 +17,9 @@ local tree = require("plugins.changeset.tree")
 local view = require("plugins.changeset.view")
 local window = require("plugins.changeset.window")
 
--- gitsigns republishes on every sign refresh, several times per write. One
--- rebuild per burst is enough, and a rebuild mid-keypress is what the identity
--- re-anchoring exists to survive.
+-- `:wall` writes every buffer, and regaining focus reloads every file changed
+-- meanwhile. One rebuild per burst is enough, and a rebuild mid-keypress is what
+-- the identity re-anchoring exists to survive.
 local REFRESH_DEBOUNCE_MS = 250
 
 -- input() reads a line, so it can never hand one back: free to mean "cancelled".
@@ -1102,7 +1102,7 @@ function M.open()
   end, { desc = "Previous change (Changeset)" })
 
   draw()
-  -- A file changed with no buffer open fires no gitsigns update.
+  -- A kept tree misses what nothing announced, such as a file edited outside Neovim while it kept focus.
   if session == kept then
     M.refresh()
   end
@@ -1234,22 +1234,40 @@ vim.api.nvim_create_autocmd("LspAttach", {
   end,
 })
 
--- gitsigns publishes this on every sign refresh, so it doubles as a "the diff
--- may have moved" hook — a commit, a write, or a checkout made outside Neovim.
+local function refresh_soon()
+  if not session then
+    return
+  end
+  stop(session.timer)
+  session.timer = vim.defer_fn(function()
+    if session then
+      M.refresh()
+    end
+  end, REFRESH_DEBOUNCE_MS)
+end
+
+local watch = vim.api.nvim_create_augroup("changeset.watch", { clear = true })
+
+-- Fires: a write, a buffer reloaded after its file changed outside Neovim, and Neovim
+-- regaining focus — the moments the files git diffs from disk can have moved.
+-- Nothing else does: the diff reads the disk, so unwritten edits never move it.
+vim.api.nvim_create_autocmd({ "BufWritePost", "FileChangedShellPost", "FocusGained" }, {
+  group = watch,
+  desc = "changeset: rebuild the tree after the working tree changes",
+  callback = refresh_soon,
+})
+
+-- Fires: gitsigns seeing HEAD move, a checkout or rebase made anywhere, which it
+-- publishes without a buffer. The per-buffer ones fire on every attach and every
+-- hunk change while typing, and the symbol walk's own loads would restart it.
 vim.api.nvim_create_autocmd("User", {
   pattern = "GitSignsUpdate",
-  group = vim.api.nvim_create_augroup("changeset.watch", { clear = true }),
-  desc = "changeset: rebuild the tree after the working tree or branch changes",
-  callback = function()
-    if not session then
-      return
+  group = watch,
+  desc = "changeset: rebuild the tree after the branch changes",
+  callback = function(args)
+    if not (args.data and args.data.buffer) then
+      refresh_soon()
     end
-    stop(session.timer)
-    session.timer = vim.defer_fn(function()
-      if session then
-        M.refresh()
-      end
-    end, REFRESH_DEBOUNCE_MS)
   end,
 })
 
