@@ -202,6 +202,23 @@ describe("changeset sidebar", function()
     assert.equal(0, vim.fn.getwininfo(win)[1].textoff)
   end)
 
+  it("wraps the sentence it shows in place of an empty tree, but not the tree", function()
+    open_sidebar()
+    assert.is_false(vim.wo[assert(window.win())].wrap)
+
+    Fixture.git({ "checkout", "-q", "trunk" }, tmp)
+    changeset.open()
+    local buf = assert(window.buf())
+    assert(
+      vim.wait(5000, function()
+        return lines_of(buf)[1]:find("nothing to compare", 1, true) ~= nil
+      end, 10),
+      "the sidebar never emptied"
+    )
+
+    assert.is_true(vim.wo[assert(window.win())].wrap)
+  end)
+
   -- No language server runs under the specs, so neither fixture file gets an answer.
   it("asks again about a file no server answered for only once it changes", function()
     open_sidebar()

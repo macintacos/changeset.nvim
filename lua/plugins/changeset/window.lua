@@ -327,7 +327,8 @@ function M.open(buf)
   wo.statuscolumn = ""
   -- The selected row marks the cursor's line instead.
   wo.wrap, wo.cursorline, wo.foldcolumn = false, false, "0"
-  wo.list = false
+  -- For the sentence an empty tree shows, the one line `draw` lets wrap.
+  wo.list, wo.linebreak = false, true
   M.relayout()
 
   -- Opening a window is the editor's business to settle, and 'equalalways' is
