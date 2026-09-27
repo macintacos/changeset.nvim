@@ -121,34 +121,50 @@ describe("changeset row highlights", function()
     assert.truthy(line_with(render.HERE_HL):find("mod.lua", 1, true))
   end)
 
-  it("selects the row picked with <CR>, and keeps it through a jump to another changed file", function()
-    vim.cmd.edit("mod.lua")
-    open_sidebar()
-    sidebar_cursor_to("L8")
-
-    vim.cmd.normal(vim.keycode("<CR>"))
-    assert.truthy(line_with(render.SELECTED_HL):find("L8", 1, true))
-
-    vim.cmd.edit("other.lua")
-
-    assert.truthy(line_with(render.SELECTED_HL):find("L8", 1, true))
-    assert.truthy(line_with(render.HERE_HL):find("other.lua", 1, true))
-  end)
-
-  it("marks a folded section's header for where you are and for the selection", function()
+  it("marks a folded section's header for where you are", function()
     vim.cmd.edit("mod.lua")
     open_sidebar()
     sidebar_cursor_to("L2")
     vim.cmd.normal(vim.keycode("<CR>"))
     sidebar_cursor_to("Implementation")
-
     vim.cmd.normal("h")
 
+    vim.cmd.wincmd("p")
+
     assert.truthy(line_with(render.HERE_HL):find("Implementation", 1, true))
-    assert.truthy(line_with(render.SELECTED_HL):find("Implementation", 1, true))
   end)
 
-  it("clears where you are in a file outside the changeset, and keeps the selection", function()
+  it("selects the row under the sidebar's cursor while the sidebar has focus", function()
+    vim.cmd.edit("mod.lua")
+    open_sidebar()
+
+    sidebar_cursor_to("other.lua")
+
+    assert.truthy(line_with(render.SELECTED_HL):find("other.lua", 1, true))
+  end)
+
+  it("drops the selected row once focus leaves the sidebar", function()
+    vim.cmd.edit("mod.lua")
+    open_sidebar()
+    sidebar_cursor_to("other.lua")
+
+    vim.cmd.wincmd("p")
+
+    assert.is_nil(line_with(render.SELECTED_HL))
+  end)
+
+  it("marks only the selection on the row where you also are", function()
+    vim.cmd.edit("mod.lua")
+    vim.api.nvim_win_set_cursor(0, { 8, 0 })
+    open_sidebar()
+
+    changeset.toggle()
+
+    assert.truthy(line_with(render.SELECTED_HL):find("Other changes", 1, true))
+    assert.is_nil(line_with(render.HERE_HL))
+  end)
+
+  it("clears where you are in a file outside the changeset", function()
     vim.cmd.edit("mod.lua")
     open_sidebar()
     sidebar_cursor_to("L2")
@@ -157,17 +173,6 @@ describe("changeset row highlights", function()
     vim.cmd.edit("plain.lua")
 
     assert.is_nil(line_with(render.HERE_HL))
-    assert.truthy(line_with(render.SELECTED_HL):find("L2", 1, true))
-  end)
-
-  it("selects the row a preview showed once the cursor moves into it", function()
-    vim.cmd.edit("mod.lua")
-    open_sidebar()
-    sidebar_cursor_to("other.lua")
-
-    vim.cmd.wincmd("p")
-
-    assert.truthy(line_with(render.SELECTED_HL):find("other.lua", 1, true))
   end)
 
   it("leaves where you are alone while the sidebar previews another file", function()
@@ -180,26 +185,11 @@ describe("changeset row highlights", function()
     for _ = 1, 4 do
       vim.cmd.normal("]h")
     end
+    -- The main loop's, which `:normal` does not fire.
+    vim.api.nvim_exec_autocmds("CursorMoved", { buffer = window.buf() })
 
     assert.truthy(vim.api.nvim_get_current_line():find("other.lua", 1, true))
     assert.truthy(line_with(render.HERE_HL):find("mod.lua", 1, true))
-  end)
-
-  it("re-resolves the selection from its line when a rebuild drops its row", function()
-    vim.cmd.edit("mod.lua")
-    open_sidebar()
-    sidebar_cursor_to("L8")
-    vim.cmd.normal(vim.keycode("<CR>"))
-
-    vim.fn.writefile(numbered(10, { [2] = true }), "mod.lua")
-    vim.cmd("silent! checktime")
-    changeset.refresh()
-    vim.wait(5000, function()
-      local buf = assert(window.buf())
-      return not table.concat(lines_of(buf), "\n"):find("L8", 1, true)
-    end, 25)
-
-    assert.truthy(line_with(render.SELECTED_HL):find("mod.lua", 1, true))
   end)
 
   it("keeps tracking where you are while the sidebar is closed", function()

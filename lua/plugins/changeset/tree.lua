@@ -34,9 +34,6 @@ local SEP = " › "
 ---@field path string
 ---@field lnum integer
 
----@class changeset.Picked : changeset.Spot
----@field id string The row picked; `path` and `lnum` stand in for it once a rebuild drops it.
-
 ---Text of a line of `path` in the working tree, used to caption orphan hunks.
 ---@alias changeset.LineText fun(path: string, lnum: integer): string?
 
@@ -594,14 +591,6 @@ function M.find(rows, id)
       return found
     end
   end
-end
-
----The row a pick stands on now: itself while the tree still holds it, else the row its line resolves to.
----@param rows changeset.Row[]
----@param picked changeset.Picked
----@return changeset.Row?
-function M.relocate(rows, picked)
-  return M.find(rows, picked.id) or M.locate(rows, picked.path, picked.lnum)
 end
 
 return M

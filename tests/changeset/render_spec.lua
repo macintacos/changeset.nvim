@@ -305,7 +305,8 @@ describe("changeset.render", function()
         return {
           col = #line.text,
           pos = "right_align",
-          virt_text = { { "+" .. added, "GitSignsAdd" }, { " " }, { "-" .. removed, "GitSignsDelete" } },
+          hl_mode = "combine",
+          virt_text = { { "+" .. added, "GitSignsAdd" }, { " " }, { "-" .. removed, "GitSignsDelete" }, { "  " } },
         }
       end
 
@@ -344,6 +345,63 @@ describe("changeset.render", function()
         local lines = file_lines({ file({ children = { ancestor } }) }, opts())
 
         assert.is_nil(stat_mark(lines[2]))
+      end)
+    end)
+
+    describe("state_marks", function()
+      ---@param state "selected"|"here"
+      ---@return vim.api.keyset.set_extmark tint, vim.api.keyset.set_extmark glyph
+      local function marks(state)
+        local tint, glyph
+        for _, mark in ipairs(render.state_marks(state, 44)) do
+          if mark.virt_text then
+            glyph = mark
+          else
+            tint = mark
+          end
+        end
+        return assert(tint), assert(glyph)
+      end
+
+      it("tints the selected row to the window's edge, its glyph in the last column", function()
+        local tint, glyph = marks("selected")
+
+        assert.same(
+          { render.SELECTED_HL, true, render.SELECTED_ICON, 43 },
+          { tint.hl_group, tint.hl_eol, glyph.virt_text[1][1], glyph.virt_text_win_col }
+        )
+      end)
+
+      it("marks the row you are on the same way, in its own tint and glyph", function()
+        local tint, glyph = marks("here")
+
+        assert.same(
+          { render.HERE_HL, true, render.HERE_ICON, 43 },
+          { tint.hl_group, tint.hl_eol, glyph.virt_text[1][1], glyph.virt_text_win_col }
+        )
+      end)
+
+      it("tints beneath every row mark, so a filter match still shows over it", function()
+        local tint = marks("selected")
+
+        assert.is_true(tint.priority < render.MARK_PRIORITY)
+      end)
+
+      it("draws the glyph over the stat, whose blank tail would otherwise hide it", function()
+        local _, glyph = marks("selected")
+
+        assert.is_true(glyph.priority > render.MARK_PRIORITY)
+        assert.equal("combine", glyph.hl_mode)
+      end)
+
+      it("sets the glyph in the blank a row's stat ends with, a cell clear of the numbers", function()
+        local lines = file_lines({ file({ added = 12, removed = 3 }) }, opts({ width = 44 }))
+        local stat = assert(assert(stat_mark(lines[1])).virt_text)
+        local tail = stat[#stat][1]
+        local _, glyph = marks("selected")
+
+        assert.equal("", vim.trim(tail))
+        assert.is_true(glyph.virt_text_win_col > 44 - #tail and glyph.virt_text_win_col < 44)
       end)
     end)
 
@@ -475,7 +533,7 @@ describe("changeset.render", function()
         deleted.added, deleted.removed = nil, nil
         local lines = file_lines({ deleted }, opts({ width = 46 }))
 
-        assert.equal("▎ F deleted_file.lua (…/dir/structure) deleted", lines[1].text)
+        assert.equal("▎ F deleted_file.lua (…/structure) deleted", lines[1].text)
       end)
 
       it("drops the directory when the filename leaves no room for it", function()
@@ -491,7 +549,7 @@ describe("changeset.render", function()
         hunk.added, hunk.removed = nil, nil
         local lines = file_lines({ file({ children = { hunk } }) }, opts({ width = 30 }))
 
-        assert.equal("  └─S L4–6 local x = 1 + some…", lines[2].text)
+        assert.equal("  └─S L4–6 local x = 1 + so…", lines[2].text)
       end)
     end)
   end)
@@ -641,8 +699,8 @@ describe("changeset.render", function()
       assert.truthy(text(totals({ commits = 1 })):find("1 commit", 1, true))
     end)
 
-    it("sets the commits at the right edge, beside the line totals", function()
-      assert.truthy(vim.endswith(text(totals({ commits = 3 })), "3 commits  +142 -38"))
+    it("sets the commits beside the line totals", function()
+      assert.truthy(text(totals({ commits = 3 })):find("3 commits  +142 -38", 1, true))
     end)
 
     it("leaves commits out when there are none to count", function()
@@ -650,10 +708,14 @@ describe("changeset.render", function()
       assert.falsy(text(totals({ commits = 0 })):find("commit", 1, true))
     end)
 
-    it("hangs the line totals off the right edge, filling the width", function()
+    it("ends the line totals in the column the rows' stats end in, filling the width", function()
       local line = text(totals())
+      local row = file_lines({ file({ added = 142, removed = 38 }) }, opts({ width = 44 }))[1]
+      local stat = table.concat(vim.tbl_map(function(chunk)
+        return chunk[1]
+      end, assert(stat_mark(row)).virt_text))
 
-      assert.equal(" +142 -38", line:sub(-9))
+      assert.truthy(vim.endswith(line, " " .. stat))
       assert.equal(44, vim.fn.strdisplaywidth(line))
     end)
 
@@ -663,7 +725,7 @@ describe("changeset.render", function()
       assert.truthy(line:find("reading symbols 12/28", 1, true))
       assert.falsy(line:find("files", 1, true))
       assert.falsy(line:find("commit", 1, true))
-      assert.equal(" +142 -38", line:sub(-9))
+      assert.truthy(line:find(" +142 -38", 1, true))
     end)
 
     it("draws every chunk on the header's strip", function()
@@ -816,7 +878,17 @@ describe("changeset.render", function()
   end)
 
   describe("define_highlights", function()
-    local GROUP_NAMES = { "Comment", "CursorLine", "Visual", "DiagnosticWarn", "TabLine", "Directory", "StatusLine" }
+    local GROUP_NAMES = {
+      "Comment",
+      "CursorLine",
+      "Visual",
+      "DiagnosticWarn",
+      "TabLine",
+      "Directory",
+      "StatusLine",
+      "Statement",
+      "Normal",
+    }
     local saved
 
     ---@param name string
@@ -954,6 +1026,69 @@ describe("changeset.render", function()
 
       assert.same({ 0x336699, 0x222222 }, { group(render.FOOTER_HL).fg, group(render.FOOTER_HL).bg })
       assert.same({ 0xeeeeee, 0x222222 }, { group(render.FOOTER_KEY_HL).fg, group(render.FOOTER_KEY_HL).bg })
+    end)
+
+    ---@param color integer
+    ---@return integer[] rgb
+    local function channels(color)
+      return { bit.band(bit.rshift(color, 16), 0xff), bit.band(bit.rshift(color, 8), 0xff), bit.band(color, 0xff) }
+    end
+
+    -- A red-only accent over a grey background: a tint of it moves the red channel alone.
+    local BACKGROUND, RED = 0x101010, 0xf01010
+
+    it("tints the selected row part of the way from the background to the theme's accent", function()
+      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = BACKGROUND })
+      vim.api.nvim_set_hl(0, "Statement", { fg = RED })
+
+      render.define_highlights()
+
+      local r, g, b = unpack(channels(group(render.SELECTED_HL).bg))
+      assert.is_true(r > 0x10 and r < 0xf0)
+      assert.same({ 0x10, 0x10 }, { g, b })
+    end)
+
+    it("tints the row you are on more faintly than the selected one", function()
+      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = BACKGROUND })
+      vim.api.nvim_set_hl(0, "Statement", { fg = RED })
+
+      render.define_highlights()
+
+      local here, selected = channels(group(render.HERE_HL).bg), channels(group(render.SELECTED_HL).bg)
+      assert.is_true(here[1] > 0x10 and here[1] < selected[1])
+      assert.same({ 0x10, 0x10 }, { here[2], here[3] })
+    end)
+
+    it("tints over the theme's chrome when Normal is transparent", function()
+      vim.api.nvim_set_hl(0, "Statement", { fg = RED })
+      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = BACKGROUND })
+      render.define_highlights()
+      local opaque = group(render.SELECTED_HL).bg
+      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc })
+      vim.api.nvim_set_hl(0, "TabLine", { bg = BACKGROUND })
+
+      render.define_highlights()
+
+      assert.equal(opaque, group(render.SELECTED_HL).bg)
+    end)
+
+    it("tints toward Normal's text in a theme whose Statement has no colour", function()
+      vim.api.nvim_set_hl(0, "Normal", { fg = RED, bg = BACKGROUND })
+      vim.api.nvim_set_hl(0, "Statement", { bold = true })
+
+      render.define_highlights()
+
+      local r, g, b = unpack(channels(group(render.SELECTED_HL).bg))
+      assert.is_true(r > 0x10 and r < 0xf0)
+      assert.same({ 0x10, 0x10 }, { g, b })
+    end)
+
+    it("draws both state glyphs in the accent", function()
+      vim.api.nvim_set_hl(0, "Statement", { fg = 0xc8a0f0 })
+
+      render.define_highlights()
+
+      assert.same({ 0xc8a0f0, 0xc8a0f0 }, { group(render.SELECTED_ICON_HL).fg, group(render.HERE_ICON_HL).fg })
     end)
 
     it("strikes a hidden kind through as well as dimming it", function()

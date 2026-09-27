@@ -12,6 +12,7 @@ local symbols = require("plugins.mini-pickers.symbols")
 ---@field hl? string           Group over `col`..`end_col`; absent on virtual-text marks, whose chunks carry their own.
 ---@field virt_text? table[]   `nvim_buf_set_extmark` virtual-text chunks.
 ---@field pos? "inline"|"right_align" Where the virtual text is drawn.
+---@field hl_mode? "combine" Lays the virtual text over the line's background instead of blanking it.
 ---@field virt_lines? table[]  `nvim_buf_set_extmark` virtual lines, hung below the line.
 
 ---@class changeset.Line
@@ -105,13 +106,29 @@ M.FOOTER_HL = "ChangesetFooter"
 ---@type string
 M.FOOTER_KEY_HL = "ChangesetFooterKey"
 
----Background of the row last picked from the sidebar. Created by `define_highlights`.
+---Background of the row the sidebar's cursor is on, while it has focus. Created by `define_highlights`.
 ---@type string
 M.SELECTED_HL = "ChangesetSelected"
 
 ---Background of the row for the file and line the cursor is in. Created by `define_highlights`.
 ---@type string
 M.HERE_HL = "ChangesetHere"
+
+---Group for the selected row's glyph. Created by `define_highlights`.
+---@type string
+M.SELECTED_ICON_HL = "ChangesetSelectedIcon"
+
+---Group for the glyph on the row for where you are. Created by `define_highlights`.
+---@type string
+M.HERE_ICON_HL = "ChangesetHereIcon"
+
+---Glyph at the right edge of the selected row.
+---@type string
+M.SELECTED_ICON = "◀"
+
+---Glyph at the right edge of the row for where you are: the selection's, hollowed out.
+---@type string
+M.HERE_ICON = "◁"
 
 ---Group 'guicursor' draws the cursor in while it is in the sidebar. Created by `define_highlights`.
 ---@type string
@@ -130,11 +147,18 @@ M.MARK_PRIORITY = 199
 -- ancestor and a coloured symbol name alike.
 local MATCH_PRIORITY = M.MARK_PRIORITY + 1
 
----Row backgrounds draw beneath every row mark; a selection over "you are here".
----@type integer
-M.HERE_PRIORITY = M.MARK_PRIORITY - 2
----@type integer
-M.SELECTED_PRIORITY = M.MARK_PRIORITY - 1
+-- Beneath every row mark, so the rail, the row colours and a filter match stay on top.
+local TINT_PRIORITY = M.MARK_PRIORITY - 1
+
+-- Over the stat: its right-aligned text ends in the gutter's blanks, which would
+-- otherwise be drawn over the glyph.
+local GLYPH_PRIORITY = MATCH_PRIORITY + 1
+
+-- Cells every row leaves at the right edge for a state glyph: a gap, then the glyph.
+local GUTTER = 2
+
+-- How far each state's background moves from the window's toward the accent.
+local SELECTED_TINT, HERE_TINT = 0.2, 0.12
 
 -- Stands in at the tail of the preview band when the row names no destination.
 local HINT = "<CR> to open"
@@ -204,7 +228,8 @@ local function compose(row, chunks, stat)
     text = text .. piece
   end
   if stat then
-    marks[#marks + 1] = { col = #text, virt_text = stat, pos = "right_align" }
+    local padded = vim.list_extend(vim.list_slice(stat), { { (" "):rep(GUTTER) } })
+    marks[#marks + 1] = { col = #text, virt_text = padded, pos = "right_align", hl_mode = "combine" }
   end
   return { text = text, marks = marks, row = row }
 end
@@ -223,14 +248,28 @@ function M.stat_chunks(row)
   }
 end
 
----Cells a stat claims at the right edge, one more than its width for the gap before it.
+---The marks that show a row's state: its tint to the window's edge, and its glyph
+---in the gutter every row leaves there.
+---@param state "selected"|"here"
+---@param width integer The window's width.
+---@return vim.api.keyset.set_extmark[]
+function M.state_marks(state, width)
+  local selected = state == "selected"
+  local glyph = { selected and M.SELECTED_ICON or M.HERE_ICON, selected and M.SELECTED_ICON_HL or M.HERE_ICON_HL }
+  return {
+    { hl_group = selected and M.SELECTED_HL or M.HERE_HL, hl_eol = true, priority = TINT_PRIORITY },
+    { virt_text = { glyph }, virt_text_win_col = width - 1, hl_mode = "combine", priority = GLYPH_PRIORITY },
+  }
+end
+
+---Cells a row gives up at the right edge: the state gutter, then a stat and the gap before it.
 ---@param stat table[]? Virtual-text chunks.
 ---@return integer
 local function stat_cells(stat)
   if not stat then
-    return 0
+    return GUTTER
   end
-  local total = 1
+  local total = GUTTER + 1
   for _, chunk in ipairs(stat) do
     total = total + vim.fn.strdisplaywidth(chunk[1])
   end
@@ -570,6 +609,8 @@ function M.header_totals(summary, width)
     { "+" .. summary.added, { strip, "GitSignsAdd" } },
     { " ", strip },
     { "-" .. summary.removed, { strip, "GitSignsDelete" } },
+    -- Over the rows' state gutter, so the totals end in the column their stats do.
+    { (" "):rep(GUTTER), strip },
   })
 
   local chunks = vim.list_extend({ { " ", strip } }, left)
@@ -657,6 +698,20 @@ function M.empty_message(info)
   return ("%s matches %s. Nothing changed yet."):format(info.branch, info.ref)
 end
 
+---`amount` of the way from `from` to `to`, channel by channel.
+---@param from integer
+---@param to integer
+---@param amount number
+---@return integer
+local function mix(from, to, amount)
+  local out = 0
+  for _, place in ipairs({ 0x10000, 0x100, 1 }) do
+    local a, b = math.floor(from / place) % 256, math.floor(to / place) % 256
+    out = out + math.floor(a + (b - a) * amount + 0.5) * place
+  end
+  return out
+end
+
 ---Create the groups the sidebar draws with. `META_HL` is mixed from `Comment`
 ---rather than linked to it, which would drop the italics.
 function M.define_highlights()
@@ -678,8 +733,7 @@ function M.define_highlights()
   vim.api.nvim_set_hl(0, M.PREVIEW_LABEL_HL, { fg = warn.fg or comment.fg, reverse = true, bold = true })
   vim.api.nvim_set_hl(0, M.PREVIEW_HINT_HL, { fg = comment.fg, bg = band, italic = true })
   -- TabLine's background is what a colorscheme paints its own chrome with, so the
-  -- header reads as the panel's frame. Not the band's shade: the sidebar draws its
-  -- cursor line in exactly that, and a header the colour of a row is a row.
+  -- header reads as the panel's frame rather than as a preview band.
   local chrome = vim.api.nvim_get_hl(0, { name = "TabLine", link = false }).bg or band
   vim.api.nvim_set_hl(0, M.HEADER_HL, { bg = chrome })
   -- Directory's colour rather than the preview badge's warning yellow: these say
@@ -698,12 +752,16 @@ function M.define_highlights()
   -- Struck through as well as dimmed: dim on its own is what ancestor rows mean,
   -- and it reads as faint rather than as switched off in a light colourscheme.
   vim.api.nvim_set_hl(0, M.HIDDEN_HL, { fg = comment.fg, strikethrough = true })
-  vim.api.nvim_set_hl(0, M.SELECTED_HL, { bg = visual.bg or cursorline.bg })
-  -- ColorColumn before CursorLine for "here": the sidebar draws its own cursor line
-  -- in CursorLine, and a second row that shade reads as a second cursor.
-  vim.api.nvim_set_hl(0, M.HERE_HL, {
-    bg = vim.api.nvim_get_hl(0, { name = "ColorColumn", link = false }).bg or cursorline.bg,
-  })
+  -- Both states tint toward the theme's keyword colour, a hue nothing else on a row
+  -- carries, so a tinted row reads as a state rather than as another diff colour.
+  -- Mixed rather than linked: an opaque background keeps each token's own colour
+  -- legible on top. Over the chrome's background when Normal is transparent.
+  local accent = vim.api.nvim_get_hl(0, { name = "Statement", link = false }).fg or normal.fg or 0x808080
+  local base = normal.bg or chrome or 0
+  vim.api.nvim_set_hl(0, M.SELECTED_HL, { bg = mix(base, accent, SELECTED_TINT) })
+  vim.api.nvim_set_hl(0, M.HERE_HL, { bg = mix(base, accent, HERE_TINT) })
+  vim.api.nvim_set_hl(0, M.SELECTED_ICON_HL, { fg = accent })
+  vim.api.nvim_set_hl(0, M.HERE_ICON_HL, { fg = accent })
   -- Fully blended is the TUI's cue to hide the cursor outright. `nocombine` is only
   -- there to keep the group: one holding nothing but `blend` is stored as cleared.
   vim.api.nvim_set_hl(0, M.NO_CURSOR_HL, { blend = 100, nocombine = true })

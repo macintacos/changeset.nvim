@@ -28,7 +28,6 @@ local NO_CURSOR = "n-v:" .. render.NO_CURSOR_HL
 ---@field cursor integer[]
 ---@field winbar string
 ---@field standing_buf integer? The buffer a preview put here while the cursor stood in the window.
----@field pick any What the caller previewed here, handed back when the window is claimed.
 
 -- `notice_buf` outlives close() and is reused.
 ---@type { win: integer?, buf: integer?, notice_buf: integer?, borrowed: table<integer, changeset.Snapshot> }
@@ -168,14 +167,12 @@ end
 ---Put `buf` in the window a preview goes to, remembering what that window held.
 ---@param buf integer
 ---@param band changeset.Band
----@param pick any Handed back by `claim`; nil clears whatever the last preview here left.
 ---@return integer win
-local function borrow(buf, band, pick)
+local function borrow(buf, band)
   local win = target()
   local standing = win == vim.api.nvim_get_current_win()
   remember(win)
   sidebar.borrowed[win].standing_buf = standing and buf or nil
-  sidebar.borrowed[win].pick = pick
   show(win, buf)
   -- The band is for a window seen from the sidebar, never the one being read.
   if not standing then
@@ -272,7 +269,8 @@ function M.open(buf)
 
   local wo = vim.wo[sidebar.win]
   wo.number, wo.relativenumber, wo.signcolumn = false, false, "no"
-  wo.wrap, wo.cursorline, wo.foldcolumn = false, true, "0"
+  -- The selected row marks the cursor's line instead.
+  wo.wrap, wo.cursorline, wo.foldcolumn = false, false, "0"
   wo.winfixwidth = true
   wo.list = false
 
@@ -292,8 +290,7 @@ end
 ---@param path string
 ---@param lnum integer? A deletion hunk at the top of a file reports 0, so this is clamped.
 ---@param band changeset.Band What the band over the window says about the file.
----@param pick any Handed back by `claim` if the cursor arrives in the preview.
-function M.preview(path, lnum, band, pick)
+function M.preview(path, lnum, band)
   local buf = buffers.load(path)
   if not buf then
     return
@@ -304,7 +301,7 @@ function M.preview(path, lnum, band, pick)
   if ok then
     gitsigns.attach({ bufnr = buf })
   end
-  local win = borrow(buf, band, pick)
+  local win = borrow(buf, band)
   if lnum then
     local last = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
     vim.api.nvim_win_set_cursor(win, { M._clamp(lnum, last), 0 })
@@ -393,35 +390,30 @@ end
 ---@param path string
 ---@param lnum integer?
 ---@param how "reuse"|"vsplit"|"split"|"tab"
----@return boolean committed false when the file could not be opened.
 function M.commit(path, lnum, how)
   local buf = buffers.load(path)
   if not buf then
-    vim.notify("Changeset: cannot open " .. path, vim.log.levels.WARN)
-    return false
+    return vim.notify("Changeset: cannot open " .. path, vim.log.levels.WARN)
   end
   promote(target(), buf, lnum, how)
-  return true
 end
 
 ---Commit the focused window if the sidebar previewed into it from elsewhere:
 ---arriving at a preview by any route counts as choosing it, but one made where
 ---the cursor already stood was never arrived at.
----@return any pick What `preview` was given for the claimed window; nil when nothing was claimed.
 function M.claim()
   local win = vim.api.nvim_get_current_win()
   local snapshot = M.is_visible() and sidebar.borrowed[win]
   local buf = vim.api.nvim_win_get_buf(win)
   -- A notice stands in for a file that cannot be opened, so there is nothing to choose.
   if not snapshot or snapshot.standing_buf == buf or buf == sidebar.notice_buf then
-    return nil
+    return
   end
   -- The user may have scrolled the preview before reaching it; the swaps inside
   -- the promote would lose that view.
   local view = vim.fn.winsaveview()
   promote(win, buf, nil, "reuse")
   vim.fn.winrestview(view)
-  return snapshot.pick
 end
 
 ---Close the sidebar. Every window it previewed into goes back to the buffer and

@@ -70,7 +70,6 @@ local augroup = vim.api.nvim_create_augroup("changeset", { clear = true })
 ---@field timer uv.uv_timer_t?
 ---@field request table? The refresh whose answers this session is still listening for.
 ---@field here changeset.Spot? Where the cursor is, while that is a file in this repository.
----@field selected changeset.Picked? The row last picked from the sidebar.
 ---@field landing changeset.Landing? The row focusing the sidebar put its cursor on, until the user moves it.
 ---@field restoring changeset.Position? A restored session's position, until the tree can hold each half.
 
@@ -198,11 +197,11 @@ local function preview_current()
   end
   assert(session, "changeset: no open session")
   if row.lnum and row.kind ~= "file" then
-    window.preview(session.root .. "/" .. row.path, row.lnum, band_for(row), { row = row, session = session })
+    window.preview(session.root .. "/" .. row.path, row.lnum, band_for(row))
   elseif row.kind == "file" and row.status == "deleted" then
     window.preview_notice("This file was deleted on this branch", band_for(row))
   elseif row.kind == "file" then
-    window.preview(session.root .. "/" .. row.path, 1, band_for(row), { row = row, session = session })
+    window.preview(session.root .. "/" .. row.path, 1, band_for(row))
   end
 end
 
@@ -214,36 +213,40 @@ local function visible_ids()
   end, session.visible)
 end
 
----Lay `hl` over the line showing `row`, or its nearest ancestor on screen.
 ---@param buf integer
----@param ids string[]
----@param row changeset.Row?
----@param hl string
----@param priority integer
-local function paint_row(buf, ids, row, hl, priority)
-  local lnum = row and state._nearest(ids, row.id)
-  if lnum then
-    vim.api.nvim_buf_set_extmark(buf, rows_ns, lnum - 1, 0, {
-      end_row = lnum,
-      hl_group = hl,
-      hl_eol = true,
-      priority = priority,
-      strict = false,
-    })
+---@param lnum integer
+---@param marks vim.api.keyset.set_extmark[] From `render.state_marks`.
+local function mark_row(buf, lnum, marks)
+  for _, mark in ipairs(marks) do
+    vim.api.nvim_buf_set_extmark(
+      buf,
+      rows_ns,
+      lnum - 1,
+      0,
+      vim.tbl_extend("force", mark, { end_row = lnum, strict = false })
+    )
   end
 end
 
----Lay the "selected" and "you are here" backgrounds over the rows they resolve to.
+---Mark the row under the sidebar's cursor as selected while the sidebar has focus,
+---and the row for where you are, or its nearest ancestor on screen. A row both
+---would mark shows the selection.
 local function paint()
-  local buf = window.buf()
-  if not (session and buf) then
+  local buf, win = window.buf(), window.win()
+  if not (session and buf and win) then
     return
   end
   vim.api.nvim_buf_clear_namespace(buf, rows_ns, 0, -1)
-  local ids = visible_ids()
-  local here, picked = session.here, session.selected
-  paint_row(buf, ids, here and tree.locate(session.rows, here.path, here.lnum), render.HERE_HL, render.HERE_PRIORITY)
-  paint_row(buf, ids, picked and tree.relocate(session.rows, picked), render.SELECTED_HL, render.SELECTED_PRIORITY)
+  local width = vim.api.nvim_win_get_width(win)
+  local selected = window.is_focused() and row_at_cursor() and vim.api.nvim_win_get_cursor(win)[1]
+  local here = session.here and tree.locate(session.rows, session.here.path, session.here.lnum)
+  local here_lnum = here and state._nearest(visible_ids(), here.id)
+  if here_lnum and here_lnum ~= selected then
+    mark_row(buf, here_lnum, render.state_marks("here", width))
+  end
+  if selected then
+    mark_row(buf, selected, render.state_marks("selected", width))
+  end
 end
 
 local PASSING_BUFTYPES = { terminal = true, help = true }
@@ -305,14 +308,6 @@ local function land(win)
   session.landing = { id = (row_at_cursor() or {}).id }
 end
 
----Make `row` the selection. A folded chain is recorded by its tip, the symbol it jumps to.
----@param row changeset.Row
-local function pick(row)
-  assert(session, "changeset: no open session")
-  session.selected = { id = row.tip or row.id, path = row.path, lnum = row.lnum or 1 }
-  paint()
-end
-
 ---@param buf integer
 ---@param lines changeset.Line[] Rendered lines, each carrying its own marks.
 local function apply_marks(buf, lines)
@@ -323,6 +318,7 @@ local function apply_marks(buf, lines)
         hl_group = mark.hl,
         virt_text = mark.virt_text,
         virt_text_pos = mark.pos,
+        hl_mode = mark.hl_mode,
         virt_lines = mark.virt_lines,
         priority = mark.priority or render.MARK_PRIORITY,
       })
@@ -571,9 +567,7 @@ local function commit(how)
     return vim.notify(row.path .. " was deleted on this branch — :CodeDiff to read it", vim.log.levels.INFO)
   end
   assert(session, "changeset: no open session")
-  if window.commit(session.root .. "/" .. row.path, row.lnum or 1, how) then
-    pick(row)
-  end
+  window.commit(session.root .. "/" .. row.path, row.lnum or 1, how)
 end
 
 ---@param delta integer
@@ -994,6 +988,8 @@ function M.open()
   vim.bo[buf].modifiable = false
   -- The tree draws its own guides; a scope line would be a second set.
   vim.b[buf].miniindentscope_disable = true
+  -- The hidden cursor rests on each row's rail, which would wear the word underline.
+  vim.b[buf].minicursorword_disable = true
 
   render.define_highlights()
   local win = window.open(buf)
@@ -1017,6 +1013,16 @@ function M.open()
     buffer = buf,
     desc = "changeset: preview the row under the cursor without leaving the sidebar",
     callback = preview_current,
+  })
+  -- Fires: the sidebar's cursor moving. The selected row is the cursor's own marker,
+  -- the terminal's being hidden here, so it moves in step rather than a tick behind.
+  vim.api.nvim_create_autocmd("CursorMoved", {
+    group = augroup,
+    buffer = buf,
+    desc = "changeset: move the selected row with the cursor",
+    callback = function()
+      paint()
+    end,
   })
   -- Fires: the sidebar scrolling, by any means. Back at the top, the header's totals
   -- stay out of view unless they are scrolled in again. Only on the way up: scrolling
@@ -1062,21 +1068,18 @@ function M.open()
     group = augroup,
     nested = true,
     desc = "changeset: open a previewed file once the cursor enters its window",
-    callback = function()
-      local claimed = window.claim()
-      -- A build for another repository, base or branch replaces the session under a preview.
-      if claimed and claimed.session == session then
-        pick(claimed.row)
-      end
-    end,
+    callback = window.claim,
   })
   -- Fires: the cursor entering any window while the sidebar is open, so the cursor
-  -- hides on arriving in the sidebar and shows again on leaving it, for a float
-  -- opened from it too.
+  -- hides and the selected row appears on arriving in the sidebar, and both undo on
+  -- leaving it, for a float opened from it too.
   vim.api.nvim_create_autocmd("WinEnter", {
     group = augroup,
-    desc = "changeset: hide the cursor while it is in the sidebar",
-    callback = window.sync_cursor,
+    desc = "changeset: stand the selected row in for the cursor while it is in the sidebar",
+    callback = function()
+      window.sync_cursor()
+      paint()
+    end,
   })
   vim.keymap.set("n", STEP_KEYS[1], function()
     step(1)

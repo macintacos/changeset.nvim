@@ -713,22 +713,6 @@ describe("changeset.tree", function()
     end)
   end)
 
-  describe("relocate", function()
-    local rows = tree.build({ file(PATH, { hunk(5, 1) }) }, { [PATH] = { sym("load", "Method", 0, 3, 8) } })
-
-    it("keeps the picked row while the tree still holds it", function()
-      local picked = { id = FILE_ID .. "\0load", path = PATH, lnum = 30 }
-
-      assert.equal(FILE_ID .. "\0load", tree.relocate(rows, picked).id)
-    end)
-
-    it("resolves a picked row the tree dropped from its file and line", function()
-      local picked = { id = FILE_ID .. "\0save", path = PATH, lnum = 5 }
-
-      assert.equal(FILE_ID .. "\0load", tree.relocate(rows, picked).id)
-    end)
-  end)
-
   describe("inline tests", function()
     local RS = "src/session.rs"
     local IMPL_ID, TESTS_ID = "#implementation\0" .. RS, "#tests\0" .. RS
@@ -909,12 +893,6 @@ describe("changeset.tree", function()
 
       it("falls back to the only copy's file row", function()
         assert.equal(TESTS_ID, tree.locate(build({ hunk(33, 2) }), RS, 25).id)
-      end)
-
-      it("relocates a dropped pick into the Tests copy", function()
-        local picked = { id = IMPL_ID .. "\0tests\0refreshes", path = RS, lnum = 35 }
-
-        assert.equal(TESTS_ID .. "\0tests\0refreshes", tree.relocate(rows, picked).id)
       end)
     end)
   end)
