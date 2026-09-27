@@ -15,7 +15,7 @@ end, { desc = "Changeset (changed files & symbols)" })
 -- plugin/mini/sessions.lua has restored a session inside its own VimEnter —
 -- the tree then follows the restored buffer, not the bare one. Skipped without a
 -- UI and on git's own editor buffers (a commit message, a rebase todo): building
--- loads every changed file and starts its language server, which nobody there
+-- loads the changed files and starts their language servers, which nobody there
 -- will open the sidebar to see.
 vim.api.nvim_create_autocmd("VimEnter", {
   once = true,

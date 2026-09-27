@@ -128,6 +128,35 @@ describe("changeset.tree", function()
         assert.same({ 0, 1, 2 }, { section.depth, file_row.depth, group.depth })
       end)
 
+      it("renders Generated last, with the build icon", function()
+        local rows = tree.build({
+          file("go.sum", { hunk(1, 1) }),
+          file("lua/a.lua", { hunk(1, 1) }),
+          file("tests/a_spec.lua", { hunk(1, 1) }),
+        }, {})
+
+        assert.same({ "Implementation", "Tests", "Generated" }, names(rows))
+        assert.equal("build", rows[3].icon)
+      end)
+
+      it("files a file the diff edge marked generated under Generated", function()
+        local rows = tree.build({ vim.tbl_extend("force", file("api.go", { hunk(1, 1) }), { generated = true }) }, {})
+
+        assert.same({ "Generated" }, names(rows))
+      end)
+
+      it("gives a resolved Generated file no children, where another file gets its orphans", function()
+        local rows = tree.build(
+          { file("lua/a.lua", { hunk(1, 1) }), file("go.sum", { hunk(1, 1) }) },
+          { ["lua/a.lua"] = {}, ["go.sum"] = {} }
+        )
+        local go_sum = rows[2].children[1]
+
+        assert.same({ "Other changes" }, names(rows[1].children[1].children))
+        assert.is_true(go_sum.resolved)
+        assert.same({}, go_sum.children)
+      end)
+
       it("totals the whole section, a deleted file's numbers included", function()
         local section = tree.build({
           file("a.lua", { hunk(1, 3, 1) }),

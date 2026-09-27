@@ -2,6 +2,16 @@ local sections = require("plugins.changeset.sections")
 
 ---@type table<changeset.SectionKey, string[]>
 local cases = {
+  generated = {
+    "package-lock.json",
+    "tests/fixtures/package-lock.json",
+    "pnpm-lock.yaml",
+    "Cargo.lock",
+    "yarn.lock",
+    "go.sum",
+    "nvim-pack-lock.json",
+    ".github/flake.lock",
+  },
   tests = {
     "tests/fixtures/data.json",
     "tests/README.md",
@@ -47,6 +57,7 @@ local cases = {
     "pyproject.toml",
     "Cargo.toml",
     "tsconfig.json",
+    "lock.json",
   },
   implementation = {
     "plugin/lsp.lua",
@@ -176,9 +187,16 @@ describe("sections", function()
     end
   end)
 
-  it("orders implementation, tests, docs, config", function()
+  it("puts a marked path under generated whatever else it is", function()
+    assert.equal("generated", sections.classify("tests/a_spec.lua", true))
+    assert.equal("generated", sections.classify("README.md", true))
+    assert.equal("generated", sections.classify("api.go", true))
+    assert.equal("implementation", sections.classify("api.go", false))
+  end)
+
+  it("orders implementation, tests, docs, config, generated", function()
     assert.same(
-      { "implementation", "tests", "docs", "config" },
+      { "implementation", "tests", "docs", "config", "generated" },
       vim.tbl_map(function(section)
         return section.key
       end, sections.ORDER)

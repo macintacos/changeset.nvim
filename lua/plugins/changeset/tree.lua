@@ -326,9 +326,10 @@ local function file_row(file, resolved, section)
   }
 end
 
----@param key string
+---A section row's id.
+---@param key changeset.SectionKey
 ---@return string
-local function section_id(key)
+function M.section_id(key)
   return "#" .. key
 end
 
@@ -336,7 +337,7 @@ end
 ---@return string[]
 function M.section_ids()
   return vim.tbl_map(function(section)
-    return section_id(section.key)
+    return M.section_id(section.key)
   end, sections.ORDER)
 end
 
@@ -344,7 +345,7 @@ end
 ---@return changeset.Row
 local function section_row(section)
   return {
-    id = section_id(section.key),
+    id = M.section_id(section.key),
     kind = "section",
     depth = 0,
     name = section.label,
@@ -377,9 +378,10 @@ end
 ---@param symbols MiniPickers.Symbol[]? nil while the file is still resolving.
 ---@param line_text changeset.LineText?
 local function add_file(section_rows, file, symbols, line_text)
-  local section = section_rows[sections.classify(file.path)]
+  local key = sections.classify(file.path, file.generated)
+  local section = section_rows[key]
   local path_copy = file_row(file, symbols ~= nil, section)
-  if not symbols or file.status == "deleted" then
+  if not symbols or file.status == "deleted" or key == "generated" then
     return append(section, path_copy, file)
   end
   local is_test = sections.test_rule(file.path)
@@ -412,7 +414,8 @@ end
 ---under Tests too, holding just those tests, or only there when every change is a test.
 ---
 ---A file absent from `symbols_by_path` is still resolving and gets no children; a file mapped to `{}`
----has no symbols, so all its hunks are orphans. A deleted file never gets children.
+---has no symbols, so all its hunks are orphans. A deleted or Generated file never gets children: a Generated
+---file's hunks are not worth a row each.
 ---@param files changeset.File[] Hunks ascending by line, as `git diff` emits them.
 ---@param symbols_by_path table<string, MiniPickers.Symbol[]> Flat `symbols.flatten` output by file path.
 ---@param line_text changeset.LineText? Captions orphan hunks; without it they are named by line range alone.

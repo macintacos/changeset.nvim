@@ -77,10 +77,20 @@ sections — not a row, so the cursor cannot land on it.
 `h` / `l` on a section header fold and unfold the section, and the fold is remembered per
 repo like a file's. `]]` / `[[` move from header to header, a folded one included.
 
-Classification starts from the path. Rules run Tests → Docs → Config and the first match
-wins; anything unmatched is Implementation. A directory rule matches any directory
-segment, not just the first.
+Generated renders last and starts folded the first time a repository shows it; `l` unfolds
+it and that is remembered like any other fold, and, like every section, `L` leaves it as it
+is. Its files are never sent to a language server, so they show no `reading symbols` row
+and no symbols — a Generated file is one line.
 
+Classification starts from the path, plus whether the file's Go header or
+`.gitattributes` marks it generated. Generated is checked first and beats every other
+rule; then Tests → Docs → Config, and the first match wins; anything unmatched is
+Implementation. A directory rule matches any directory segment, not just the first.
+
+- **Generated** — `*.lock`, `*-lock.json`, `*-lock.yaml`, `go.sum`,
+  `nvim-pack-lock.json`; a `.go` file with a `// Code generated … DO NOT EDIT.` line before
+  its `package` clause; or a path `.gitattributes` marks `linguist-generated`. A deleted
+  file goes by name and attribute alone.
 - **Tests** — a `tests`, `test`, `spec`, `__tests__` or `testdata` directory; or a file
   named `*_spec.*`, `*_test.*`, `*.test.*`, `*.spec.*`, `test_*.py`, `conftest.py` or
   `*.bats`.
@@ -92,7 +102,7 @@ segment, not just the first.
 
 So `plugin/lsp.lua` is Implementation although it configures something, and so is
 `.mise/tasks/test`: `test` there is a file name, not a directory, and a dotted directory
-is not a dotfile.
+is not a dotfile. And `tests/fixtures/package-lock.json` is Generated, not Tests.
 
 Rust, Python and TypeScript keep tests inside implementation files, so for those a
 file's symbols get a second look — only when the path rules put it in Implementation, and
@@ -125,8 +135,8 @@ symbol rules: their tests live in files the path rules already catch.
 - Symbol rows: `MiniIcons.get("lsp", kind)` — the exact call `outline.lua` makes, so a
   method is the same glyph in the same hue in both the picker and the sidebar.
 - File rows: `MiniIcons.get("file", path)`.
-- Section headers: `MiniIcons.get("directory", …)` with `src`, `tests`, `docs` and
-  `.config`, so each header wears the icon its kind of directory already has.
+- Section headers: `MiniIcons.get("directory", …)` with `src`, `tests`, `docs`,
+  `.config` and `build`, so each header wears the icon its kind of directory already has.
 - Orphan-hunk groups: the `lsp`/`Text` icon, dimmed. Not a bespoke glyph.
 
 A future icon-set change propagates everywhere at once. That is the point.
@@ -289,7 +299,8 @@ The second row counts what the branch holds, the numbers lit and their nouns dim
 on the left, commits at the right beside the line totals, which sit flush with the right
 edge — the column the per-row stats already occupy, so the branch's numbers and each file's
 read down one edge instead of two. While symbols are being read, `⋯ reading symbols 12/28`
-takes the file count's place and the commits give it their room.
+takes the file count's place and the commits give it their room; Generated files count as
+read from the start.
 
 A split has one winbar row, so the second row is a virtual line above the tree's first, with
 a blank one under it. Neovim treats lines above the first as filler and leaves them out of
@@ -374,10 +385,10 @@ the first `<leader>gp` opens onto a built tree rather than starting the work. A 
 waiting on its first diff opens blank rather than claiming nothing changed. The tree is
 rebuilt for a different repository, fork point or branch, and a build that finds no fork
 point keeps the tree it had. Reading symbols loads each changed file the cache
-can't answer, so those buffers and their language servers arrive at startup rather than on
-the first open. Outside a repository, or with nothing to fork from, startup builds nothing
-and says nothing; without a UI, or on git's own commit-message and rebase-todo buffers, it
-does not try.
+can't answer, Generated ones aside, so those buffers and their language servers arrive at
+startup rather than on the first open. Outside a repository, or with nothing to fork
+from, startup builds nothing and says nothing; without a UI, or on git's own
+commit-message and rebase-todo buffers, it does not try.
 
 Asking a language server about every changed file is what makes a cold build slow: 28
 files take about nine seconds in this repo, and the tree fills a row at a time while it
@@ -390,8 +401,9 @@ fields the tree reads from a symbol. Every refresh narrows it to the files the c
 touches, so it stays the size of a branch rather than growing with every branch ever
 reviewed, and losing it costs one slow build. Folds — a section's as well as a file's —
 are remembered per repository for as long as Neovim is running, so reopening looks like
-you left it; a restart starts expanded. Per repository because a row is identified by a
-repo-relative path, which two checkouts can easily both have.
+you left it; a restart starts expanded, except Generated, which starts folded. Per
+repository because a row is identified by a repo-relative path, which two checkouts can
+easily both have.
 
 ## Settings
 

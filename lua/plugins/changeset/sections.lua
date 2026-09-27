@@ -1,8 +1,8 @@
----Which part of a change a file, or a symbol inside it, belongs to.
+---Which part of a change a file, or a symbol inside it, belongs to; a file by its path and whether its content or `.gitattributes` marks it generated.
 
 local M = {}
 
----@alias changeset.SectionKey "implementation"|"tests"|"docs"|"config"
+---@alias changeset.SectionKey "implementation"|"tests"|"docs"|"config"|"generated"
 
 ---@class changeset.Section
 ---@field key changeset.SectionKey
@@ -15,8 +15,10 @@ M.ORDER = {
   { key = "tests", label = "Tests", icon = "tests" },
   { key = "docs", label = "Docs", icon = "docs" },
   { key = "config", label = "Config", icon = ".config" },
+  { key = "generated", label = "Generated", icon = "build" },
 }
 
+local GENERATED_FILES = vim.glob.to_lpeg("{*.lock,*-lock.json,*-lock.yaml,go.sum}")
 local TEST_DIRS = { tests = true, test = true, spec = true, __tests__ = true, testdata = true }
 local TEST_FILES = vim.glob.to_lpeg("{*_spec.*,*_test.*,*.test.*,*.spec.*,test_*.py,conftest.py,*.bats}")
 local DOC_FILES = vim.glob.to_lpeg("{*.md,*.mdx,*.rst,README*,CHANGELOG*}")
@@ -34,12 +36,16 @@ local function has_dir(dirs, names)
   end)
 end
 
----The section `path` belongs in. Rules run Tests → Docs → Config and the first match wins, so `tests/README.md` is a test; anything unmatched is Implementation.
+---The section `path` belongs in. Generated beats every other rule; then Tests → Docs → Config, and the first match wins, so `tests/README.md` is a test; anything unmatched is Implementation.
 ---@param path string Repo-relative, `/`-separated.
+---@param marked boolean? Whether its Go header or `.gitattributes` marks it generated.
 ---@return changeset.SectionKey
-function M.classify(path)
+function M.classify(path, marked)
   local dirs = vim.split(path, "/", { plain = true })
   local name = table.remove(dirs)
+  if marked or GENERATED_FILES:match(name) then
+    return "generated"
+  end
   if has_dir(dirs, TEST_DIRS) or TEST_FILES:match(name) then
     return "tests"
   end
