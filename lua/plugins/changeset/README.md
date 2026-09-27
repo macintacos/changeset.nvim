@@ -188,22 +188,27 @@ The runs are found in the rendered line rather than in the row's name, so a dire
 trimmed to `(…/plugins/changeset)` still lights the part you can actually see. They
 last as long as the filter does, not as long as the prompt.
 
-### Two rows say what is selected and where you are
+### Three rows say what is selected, where you are and what you opened
 
 ```text
 ▎ 󰢱 more.lua                         +7 -0 ◀
+  ├─ M.setup                        +3 -1 •
   └─ Other changes                  +1 -1 ◁
 ```
 
 The only row highlights the tree has. **Selected** is the row under the sidebar's cursor,
 shown only while the sidebar has focus. **You are here** is the row for the file and line
-the cursor is in, shown always. On a row both would mark, the selection wins.
+the cursor is in, shown always. **Picked** is the row last opened from the sidebar —
+`<CR>`, a split or tab key, or moving into a preview — which stays put as you move around
+the file it opened. A row several would mark shows the first of those, so right after a
+pick its row shows you are here, and the pick appears once you move off it.
 
-Both tint the whole row toward the theme's keyword colour (`Statement`, mauve in
+All three tint the whole row toward the theme's keyword colour (`Statement`, mauve in
 catppuccin), a hue nothing else on a row carries, so a tinted row reads as a state rather
-than as another diff colour. You are here is the fainter of the two, and wears the
-selection's glyph hollowed out: `◀` for the selection, `◁` for you, in a two-cell gutter
-every row leaves at its right edge, past the stat. The tint is mixed over `Normal`'s
+than as another diff colour, each fainter than the one before. You are here wears the
+selection's glyph hollowed out and the pick a dot: `◀` for the selection, `◁` for you, `•`
+for the pick, in a two-cell gutter every row leaves at its right edge, past the stat. The
+tint is mixed over `Normal`'s
 background, or `TabLine`'s when `Normal` is transparent, rather than linked, so every
 token keeps its own colour on top. It draws beneath every row mark, so the rail, the row
 colours and a filter match stay on top; the glyph draws over the stat's blank tail.
@@ -521,6 +526,10 @@ repository's deliberate choice is none of that save's business.
   tracker reads focus on the next tick, after a preview's buffer swap inside the borrowed
   window has finished, and ignores the sidebar and floats. It runs whether or not the
   sidebar is showing, and each redraw resolves "you are here" against the rebuilt tree.
+- **Only a pick moves the pick.** `gd`, a picker or `:edit` into another changed file moves
+  "you are here" and leaves the pick where it was. Each redraw resolves it against the
+  rebuilt tree, so a picked row that a rebuild removed is found again from its file and
+  line.
 - **Landing happens on arrival, not on every move.** It hangs off `WinEnter` on the
   sidebar, never `CursorMoved`, so the cursor moves freely once you are there. It sets
   the cursor, and remembers the row so a rebuild can follow you deeper; only a rebuild
