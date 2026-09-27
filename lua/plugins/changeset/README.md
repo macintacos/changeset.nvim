@@ -394,6 +394,8 @@ moment that window takes focus or a buffer.
 | Symbols still resolving | `⋯ reading symbols` under the file row |
 | No LSP for a file | nothing special — the file renders with its orphan-hunk group |
 
+The two sentences wrap at the sidebar's edge, which no row does: a row is trimmed to fit.
+
 What an empty subtree means is carried by the row, not inferred from it. A file row is
 `resolved` once a server has answered for it, and only an unresolved row gets the
 placeholder. That keeps three cases apart which all render childless: still waiting, a
