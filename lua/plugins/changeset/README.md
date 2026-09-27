@@ -404,19 +404,24 @@ binary change.
 
 ## What it remembers
 
-The tree is built just after startup — the fork point is measured before the first
-keypress is read, the diff and symbols in the background — for the repository of the
-buffer Neovim starts on, or of the buffer a restored session lands on, and `GitSignsUpdate`
-keeps it fresh whether or not the sidebar is showing. Opening the sidebar draws that tree
-and refreshes its diff in the background, and closing it lets go of the window only, so
-the first `<leader>gp` opens onto a built tree rather than starting the work. A tree still
-waiting on its first diff opens blank rather than claiming nothing changed. The tree is
-rebuilt for a different repository, fork point or branch, and a build that finds no fork
-point keeps the tree it had. Reading symbols loads each changed file the cache
-can't answer, Generated ones aside, so those buffers and their language servers arrive at
-startup rather than on the first open. Outside a repository, or with nothing to fork
-from, startup builds nothing and says nothing; without a UI, or on git's own
-commit-message and rebase-todo buffers, it does not try.
+The tree is built the first time something asks for it — `<leader>gp`, `<leader>gj`, or a
+restored session refilling the sidebar — for the current buffer's repository: the fork
+point is measured at once, the diff and symbols in the background. Reading symbols loads
+each changed file the cache can't answer, Generated ones aside, so those buffers and their
+language servers arrive with that first ask, and a session that never asks starts none.
+The picker waits a moment for the diff, which it has no way to fill in behind. The sidebar
+opens at once: a tree still waiting on its first diff opens blank rather than claiming
+nothing changed. Closing the sidebar lets go of the window only, and opening it again
+draws the tree it kept and refreshes its diff in the background. The tree is rebuilt for a
+different repository, fork point or branch, and a build that finds no fork point keeps the
+tree it had.
+
+Once built, the tree re-reads the diff whenever the files it diffs can have moved, whether
+or not the sidebar is showing: after a write, when a buffer is reloaded because its file
+changed outside Neovim, when Neovim regains focus, and when gitsigns sees HEAD move. Its
+per-buffer `GitSignsUpdate` is not one of them. It fires on every attach and every hunk
+change while typing, none of which moves a diff git reads from disk, and the symbol walk's
+own buffer loads would fire it too, restarting the walk they came from.
 
 Asking a language server about every changed file is what makes a cold build slow: 28
 files take about nine seconds in this repo, and the tree fills a row at a time while it
@@ -521,7 +526,7 @@ repository's deliberate choice is none of that save's business.
   the cursor, and remembers the row so a rebuild can follow you deeper; only a rebuild
   (new rows) follows, never a fold or filter redraw. The preview comes from the
   sidebar's own `CursorMoved`, which Neovim fires once the cursor is in a new window.
-- **Refresh re-anchors by identity, not line.** A rebuild keyed on `GitSignsUpdate` must
+- **Refresh re-anchors by identity, not line.** A rebuild must
   restore the cursor to the same row *identity* and preserve collapse state, including an
   `l`-expanded chain. One key scheme serves all three. Every redraw re-anchors the same
   way; when the cursor's file row is gone from screen — its changes all turned out to be
@@ -545,15 +550,16 @@ repository's deliberate choice is none of that save's business.
   comes back with the symbol.
 - **Stamp a file before asking about it, not after.** A file edited while its symbols are
   being read has to fail the freshness check next time; stamping afterwards would file
-  the answer under the content that replaced it.
+  the answer under the content that replaced it. The same stamp is why an answer is filed
+  even after a newer refresh has replaced the one that asked: it still describes what the
+  server read, so a refresh never throws away a walk's progress.
 - **Only an answer is cached.** A server that never attached, and a file whose buffer held
   unwritten edits when it was read, are both left out: a stamp taken off the file on disk
   cannot describe either, and either one filed as fresh would outlive the edit that made
   it wrong — across restarts, until the file next moves.
 - **No answer is remembered, but only in memory.** A file no server answers for — `go.sum`,
   a `Makefile` — is not asked about again on every refresh, each of which would wait out
-  the attach timeout under a `reading symbols` row. Previewing a file for the first time
-  is enough to cause one: gitsigns attaches, and every `GitSignsUpdate` refreshes the tree.
+  the attach timeout under a `reading symbols` row, and every write refreshes the tree.
   The file is asked about again once it moves, or once a server that lists symbols
   attaches to it, which is how a slow or newly installed server still gets heard.
 - **One line is one row, one level below its parent.** `h` and the cursor anchor both read
