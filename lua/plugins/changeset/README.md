@@ -75,7 +75,7 @@ stays in column 0, where the eye already scans for it. A blank virtual line hang
 sections — not a row, so the cursor cannot land on it.
 
 `h` / `l` on a section header fold and unfold the section, and the fold is remembered per
-repo like a file's.
+repo like a file's. `]]` / `[[` move from header to header, a folded one included.
 
 Classification reads the path alone. Rules run Tests → Docs → Config and the first match
 wins; anything unmatched is Implementation. A directory rule matches any directory
@@ -394,6 +394,7 @@ repository's deliberate choice is none of that save's business.
 | `q` | sidebar | close, restore focus and put back whatever the previews borrowed |
 | `h` / `l` | sidebar | collapse / expand; on a header, fold / unfold its section; `h` with nothing left to shut steps out to the parent, so repeated `h` walks up to the filename and then its section header; `l` on a compressed chain expands it to full nesting |
 | `H` / `L` | sidebar | collapse / expand every file, the whole-tree form of `h` / `l`; never folds or unfolds a section |
+| `]]` / `[[` | sidebar | move to the next / previous section header, a folded one included; stays put when there is none that way |
 | `F` | sidebar | open the symbol-kind menu |
 | `x` | kind menu | hide or show the kind under the cursor, redrawing the tree at once |
 | `<CR>` / `r` / `b` | kind menu | remember this set everywhere / for this repository / for this branch, then close |

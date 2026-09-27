@@ -250,6 +250,68 @@ describe("changeset sidebar", function()
       end, 25))
     end
 
+    it("moves between section headers with ]] and [[, stopping at either end", function()
+      local buf = open_sidebar()
+      vim.api.nvim_set_current_win((assert(window.win())))
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+
+      press("]]")
+      assert.equal(line_of(buf, "Docs"), vim.api.nvim_win_get_cursor(0)[1])
+      press("]]")
+      assert.equal(line_of(buf, "Docs"), vim.api.nvim_win_get_cursor(0)[1])
+      press("[[")
+      assert.equal(1, vim.api.nvim_win_get_cursor(0)[1])
+      press("[[")
+      assert.equal(1, vim.api.nvim_win_get_cursor(0)[1])
+    end)
+
+    it("lands on a folded section's header", function()
+      local buf = open_sidebar()
+      vim.api.nvim_set_current_win((assert(window.win())))
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+      press("h")
+      vim.api.nvim_win_set_cursor(0, { line_of(buf, "README.md"), 0 })
+
+      press("[[")
+      assert.equal(line_of(buf, "Docs"), vim.api.nvim_win_get_cursor(0)[1])
+      press("[[")
+      assert.equal(1, vim.api.nvim_win_get_cursor(0)[1])
+      press("]]")
+      assert.equal(line_of(buf, "Docs"), vim.api.nvim_win_get_cursor(0)[1])
+    end)
+
+    it("keeps ]] over a buffer-local ]] another plugin sets at FileType", function()
+      local group = vim.api.nvim_create_augroup("changeset.spec.filetype_map", { clear = true })
+      -- Stands in for illuminate, which maps `]]` on every buffer as its filetype is set.
+      vim.api.nvim_create_autocmd("FileType", {
+        group = group,
+        callback = function(args)
+          vim.keymap.set("n", "]]", "<Nop>", { buffer = args.buf })
+        end,
+      })
+      local buf = open_sidebar()
+      vim.api.nvim_del_augroup_by_id(group)
+      vim.api.nvim_set_current_win((assert(window.win())))
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+
+      press("]]")
+
+      assert.equal(line_of(buf, "Docs"), vim.api.nvim_win_get_cursor(0)[1])
+    end)
+
+    it("lists ]] and [[ under ?", function()
+      open_sidebar()
+
+      press("?")
+
+      local float = vim.iter(vim.api.nvim_list_wins()):find(function(win)
+        return vim.api.nvim_win_get_config(win).relative ~= ""
+      end)
+      local text = table.concat(lines_of(vim.api.nvim_win_get_buf((assert(float)))), "\n")
+      assert.truthy(text:find("%]%]%s+Next section"))
+      assert.truthy(text:find("%[%[%s+Previous section"))
+    end)
+
     it("leaves a folded section folded under L", function()
       local buf = open_sidebar()
       vim.api.nvim_set_current_win((assert(window.win())))
