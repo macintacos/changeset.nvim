@@ -185,23 +185,33 @@ The runs are found in the rendered line rather than in the row's name, so a dire
 trimmed to `(…/plugins/changeset)` still lights the part you can actually see. They
 last as long as the filter does, not as long as the prompt.
 
-### Two rows say where you are and what you picked
+### Two rows say what is selected and where you are
 
-Two full-line backgrounds, the only row highlights the tree has. **Selected** is the row
-last picked from the sidebar — `<CR>`, a split or tab key, or moving into a preview — in
-`Visual`'s background. **You are here** is the row for the file and line the cursor is in,
-in `ColorColumn`'s: lighter, and never `CursorLine` first, because the sidebar draws its
-own cursor line in that and a second row of the same shade reads as a second cursor.
-Either falls back to `CursorLine`'s background when a theme leaves its own unset. Back in
-the file you picked, both sit on one row and the selection wins. Both draw beneath every
-row mark, so the rail, the row colours and a filter match stay on top.
+```text
+▎ 󰢱 more.lua                         +7 -0 ◀
+  └─ Other changes                  +1 -1 ◁
+```
 
-The cursor itself is hidden while it is in the sidebar, and the cursor line alone marks
-the row: the cursor would sit on each row's first cell, which on a section header is its
-icon. Only in normal and visual mode, so a prompt on the command line still shows one. It
-hides through a `'guicursor'` entry whose group is fully blended, which needs
-`termguicolors`; a plugin that appends its own entry on entering a window, as modes.nvim
-does, has to skip the `changeset` filetype or its entry wins.
+The only row highlights the tree has. **Selected** is the row under the sidebar's cursor,
+shown only while the sidebar has focus. **You are here** is the row for the file and line
+the cursor is in, shown always. On a row both would mark, the selection wins.
+
+Both tint the whole row toward the theme's keyword colour (`Statement`, mauve in
+catppuccin), a hue nothing else on a row carries, so a tinted row reads as a state rather
+than as another diff colour. You are here is the fainter of the two, and wears the
+selection's glyph hollowed out: `◀` for the selection, `◁` for you, in a two-cell gutter
+every row leaves at its right edge, past the stat. The tint is mixed over `Normal`'s
+background, or `TabLine`'s when `Normal` is transparent, rather than linked, so every
+token keeps its own colour on top. It draws beneath every row mark, so the rail, the row
+colours and a filter match stay on top; the glyph draws over the stat's blank tail.
+
+The cursor itself is hidden while it is in the sidebar, and the selected row stands in for
+it: the cursor would sit on each row's first cell, which on a section header is its icon.
+Only in normal and visual mode, so a prompt on the command line still shows one. It hides
+through a `'guicursor'` entry whose group is fully blended, which needs `termguicolors`; a
+plugin that appends its own entry on entering a window, as modes.nvim does, has to skip
+the `changeset` filetype or its entry wins. mini.cursorword is off in the sidebar, as the
+hidden cursor rests on each row's rail and it would underline that.
 
 A line belongs to the deepest symbol row whose body holds it, else to the file's
 `Other changes` row when one of its hunks does, else to the file row. A file shown in two
@@ -297,8 +307,7 @@ new file to split on, so a hunk's `-N` goes wholly to the first symbol it reache
 ```
 
 Two rows on one strip, the strip `TabLine`'s background: what a colorscheme paints its own
-chrome with, and not the shade the sidebar draws its cursor line in — a header the colour
-of a row is a row.
+chrome with, so the header reads as the panel's frame.
 
 The first row states the ref the tree is compared against, because "changed relative to
 what" is the one question the rows themselves cannot answer. It leads with mini.statusline's
@@ -309,8 +318,8 @@ by how their names start, which is why the cut is made here rather than by the s
 measured against the branch that PR merges into.
 
 The second row counts what the branch holds, the numbers lit and their nouns dimmed: files
-on the left, commits at the right beside the line totals, which sit flush with the right
-edge — the column the per-row stats already occupy, so the branch's numbers and each file's
+on the left, commits at the right beside the line totals, which end in the column the
+per-row stats end in, short of the state gutter, so the branch's numbers and each file's
 read down one edge instead of two. While symbols are being read, `⋯ reading symbols 12/28`
 takes the file count's place and the commits give it their room; Generated files count as
 read from the start.
@@ -495,13 +504,12 @@ repository's deliberate choice is none of that save's business.
   keys, so pressing one from inside the popup still works. `]h` / `[h` are global rather
   than buffer-local, so they are looked up by name and added to that buffer, or they would
   be the two keys the reference never mentions.
-- **Only a pick moves the selection.** `gd`, a picker or `:edit` into another changed
-  file moves "you are here" and leaves "selected" where it was. Previews never count as
-  being somewhere: the tracker reads focus on the next tick, after a preview's buffer swap
-  inside the borrowed window has finished, and ignores the sidebar and floats. It runs
-  whether or not the sidebar is showing, and each redraw resolves both highlights against
-  the rebuilt tree, so a selected row that a rebuild removed is found again from its file
-  and line.
+- **The selection is the focused sidebar's cursor.** It moves with the cursor, in step
+  rather than a tick behind, and goes when focus leaves the sidebar, for a float opened
+  from it too, leaving "you are here". Previews never count as being somewhere: the
+  tracker reads focus on the next tick, after a preview's buffer swap inside the borrowed
+  window has finished, and ignores the sidebar and floats. It runs whether or not the
+  sidebar is showing, and each redraw resolves "you are here" against the rebuilt tree.
 - **Landing happens on arrival, not on every move.** It hangs off `WinEnter` on the
   sidebar, never `CursorMoved`, so the cursor moves freely once you are there. It sets
   the cursor, and remembers the row so a rebuild can follow you deeper; only a rebuild
