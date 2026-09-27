@@ -593,6 +593,43 @@ describe("changeset sidebar", function()
         assert.equal(6, vim.api.nvim_win_get_cursor(target)[1])
       end)
     end)
+
+    it("files a cached symbol the syntax marked under Tests without asking about the file again", function()
+      local cache = require("plugins.changeset.cache")
+      local root = assert(vim.uv.fs_realpath(tmp))
+      local cache_file = cache.path(root)
+      cache.save(cache_file, {
+        ["src/session.rs"] = {
+          stamp = assert(cache.stamp(root .. "/src/session.rs")),
+          symbols = {
+            { name = "load", kind = "Function", depth = 0, lnum = 1, range_lnum = 1, range_end_lnum = 3, test = true },
+            { name = "tests", kind = "Module", depth = 0, lnum = 5, range_lnum = 5, range_end_lnum = 9 },
+            { name = "refreshes", kind = "Function", depth = 1, lnum = 6, range_lnum = 6, range_end_lnum = 8 },
+          },
+        },
+      })
+      local asked = {}
+      resolve.start = function(_, files, on_file)
+        answer = on_file
+        for _, f in ipairs(files) do
+          asked[#asked + 1] = f.path
+        end
+        return function() end
+      end
+
+      local ok, err = pcall(function()
+        open_unanswered()
+        for _, path in ipairs(asked) do
+          answer(path, {})
+        end
+        flush()
+
+        assert.truthy(tests_header() < line_of(assert(window.buf()), "load"))
+        assert.is_false(vim.tbl_contains(asked, "src/session.rs"))
+      end)
+      vim.fn.delete(cache_file)
+      assert(ok, err)
+    end)
   end)
 
   describe("with generated files", function()

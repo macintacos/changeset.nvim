@@ -4,6 +4,7 @@
 ---flattened trees back. Everything it learns goes to `changeset.tree`, which does
 ---the thinking without touching the editor.
 
+local attributes = require("plugins.changeset.attributes")
 local buffers = require("plugins.changeset.buffers")
 local kinds = require("plugins.mini-pickers.kinds")
 local symbols = require("plugins.mini-pickers.symbols")
@@ -80,7 +81,7 @@ local function await_client(bufnr, on_client)
   end, ATTACH_TIMEOUT_MS)
 end
 
----Flattened symbols for one loaded buffer.
+---Flattened symbols for one loaded buffer, with the inline tests its syntax marks flagged.
 ---@param bufnr integer
 ---@param path string
 ---@param on_done fun(items: MiniPickers.Symbol[]?)
@@ -93,6 +94,9 @@ local function request(bufnr, path, on_done)
   end
   local keep = kinds.for_filetype(vim.bo[bufnr].filetype)
   local params = { textDocument = vim.lsp.util.make_text_document_params(bufnr) }
+  -- What the server is about to answer for: attribute lines have to match its symbols' lines, which an
+  -- unwritten edit would move away from the file on disk.
+  local source = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
   vim.lsp.buf_request_all(bufnr, "textDocument/documentSymbol", params, function(results)
     local items = {}
     for id, res in pairs(results) do
@@ -107,6 +111,7 @@ local function request(bufnr, path, on_done)
         })
       )
     end
+    attributes.mark(items, path, source)
     on_done(items)
   end)
 end
@@ -169,7 +174,8 @@ function M._walk(queue, run, on_file)
   end
 end
 
----Resolve every changed file's symbols, reporting each as it lands.
+---Resolve every changed file's symbols, reporting each as it lands. Each item carries `test` when its syntax
+---marks it an inline test.
 ---@param root string
 ---@param files changeset.File[]
 ---@param on_file fun(path: string, items: MiniPickers.Symbol[]?)

@@ -59,7 +59,7 @@ function M.classify(path, marked)
 end
 
 ---Whether a symbol is an inline test; one that is takes everything beneath it to Tests.
----@alias changeset.SymbolRule fun(sym: { name: string, kind: string }): boolean
+---@alias changeset.SymbolRule fun(sym: { name: string, kind: string, test: true? }): boolean
 
 local TEST_MODULES = { test = true, tests = true }
 local TEST_CALLS = { describe = true, it = true, test = true }
@@ -93,15 +93,19 @@ local TEST_SYMBOLS = {
   cts = ts_test,
 }
 
----The rule marking `path`'s inline test symbols: one it accepts goes to Tests with everything beneath it.
----Only Rust, Python and TypeScript files the path rules put in Implementation get one.
+---The rule marking `path`'s inline test symbols: one it accepts goes to Tests with everything beneath it. A symbol
+---flagged `test` (`changeset.attributes`) counts whatever its name. Only Rust, Python and TypeScript files
+---the path rules put in Implementation get one.
 ---@param path string Repo-relative, `/`-separated.
 ---@return changeset.SymbolRule?
 function M.test_rule(path)
   if M.classify(path) ~= "implementation" then
     return nil
   end
-  return TEST_SYMBOLS[path:match("%.(%w+)$")]
+  local by_name = TEST_SYMBOLS[path:match("%.(%w+)$")]
+  return by_name and function(sym)
+    return sym.test == true or by_name(sym)
+  end
 end
 
 return M

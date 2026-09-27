@@ -185,6 +185,28 @@ describe("sections", function()
         end
       end)
     end
+
+    describe("a symbol the syntax marked", function()
+      for _, path in ipairs({
+        "src/session.rs",
+        "src/session.ts",
+        "src/session.tsx",
+        "src/session.mts",
+        "src/session.cts",
+      }) do
+        describe(path, function()
+          it("accepts it whatever its name", function()
+            local rule = assert(sections.test_rule(path))
+            assert.is_true(rule({ name = "refreshes_token", kind = "Function", test = true }))
+            assert.is_true(rule({ name = "integration", kind = "Module", test = true }))
+          end)
+
+          it("rejects the same symbol unmarked", function()
+            assert.is_false(sections.test_rule(path)({ name = "refreshes_token", kind = "Function" }))
+          end)
+        end)
+      end
+    end)
   end)
 
   it("puts a marked path under generated whatever else it is", function()

@@ -162,5 +162,101 @@ describe("changeset.resolve", function()
         assert.same({}, reported_at_once())
       end)
     end
+
+    ---Enable an in-process server for `filetype` that answers `symbols` for every file.
+    ---@param name string
+    ---@param filetype string
+    ---@param symbols table[] LSP DocumentSymbols.
+    local function serve(name, filetype, symbols)
+      local answers = {
+        initialize = { capabilities = { documentSymbolProvider = true } },
+        ["textDocument/documentSymbol"] = symbols,
+      }
+      vim.lsp.config(name, {
+        filetypes = { filetype },
+        root_dir = root,
+        cmd = function()
+          return {
+            request = function(method, _, callback)
+              vim.schedule(function()
+                callback(nil, answers[method])
+              end)
+              return true, 1
+            end,
+            notify = function() end,
+            is_closing = function()
+              return false
+            end,
+            terminate = function() end,
+          }
+        end,
+      })
+      vim.lsp.enable(name)
+      enabled = name
+    end
+
+    ---@param name_line integer 0-based
+    ---@param first_line integer 0-based line the range starts on
+    local function fn_symbol(name, name_line, first_line)
+      return {
+        name = name,
+        kind = 12,
+        range = { start = { line = first_line, character = 0 }, ["end"] = { line = name_line, character = 20 } },
+        selectionRange = {
+          start = { line = name_line, character = 3 },
+          ["end"] = { line = name_line, character = 3 + #name },
+        },
+      }
+    end
+
+    ---Resolve `path` and wait for its answer.
+    ---@return table<string, { test: true? }>? by name
+    local function resolved(path)
+      local answer, done
+      resolve.start(
+        root,
+        { { path = path, status = "modified", added = 1, removed = 0, hunks = {} } },
+        function(_, items)
+          answer, done = items, true
+        end
+      )
+      vim.wait(2000, function()
+        return done
+      end)
+      if not answer then
+        return nil
+      end
+      local by_name = {}
+      for _, item in ipairs(answer) do
+        by_name[item.name] = item
+      end
+      return by_name
+    end
+
+    it("marks a test its attribute names in a file no one opened", function()
+      serve("stub_rust", "rust", { fn_symbol("refreshes_token", 1, 0), fn_symbol("load", 2, 2) })
+      vim.fn.mkdir(root .. "/src", "p")
+      vim.fn.writefile({ "#[test]", "fn refreshes_token() {}", "fn load() {}" }, root .. "/src/session.rs")
+
+      local items = assert(resolved("src/session.rs"))
+
+      assert.is_true(items.refreshes_token.test)
+      assert.is_nil(items.load.test)
+    end)
+
+    it("marks by the text the server read, unwritten edits included", function()
+      serve("stub_rust", "rust", { fn_symbol("refreshes_token", 1, 0), fn_symbol("load", 2, 2) })
+      vim.fn.mkdir(root .. "/src", "p")
+      local path = root .. "/src/session.rs"
+      vim.fn.writefile({ "fn refreshes_token() {}", "fn load() {}" }, path)
+      local buf = vim.fn.bufadd(path)
+      vim.fn.bufload(buf)
+      vim.bo[buf].filetype = "rust"
+      vim.api.nvim_buf_set_lines(buf, 0, 0, false, { "#[test]" })
+
+      local items = assert(resolved("src/session.rs"))
+
+      assert.is_true(items.refreshes_token.test)
+    end)
   end)
 end)

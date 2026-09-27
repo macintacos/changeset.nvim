@@ -78,6 +78,14 @@ describe("changeset.cache", function()
         { name = "send", kind = "Function", depth = 1, lnum = 12, range_lnum = 12, range_end_lnum = 30 },
       }, projected)
     end)
+
+    it("keeps the test flag the syntax gave a symbol", function()
+      local projected = cache.project({
+        { name = "load", kind = "Function", depth = 0, lnum = 1, range_lnum = 1, range_end_lnum = 3, test = true },
+      })
+
+      assert.is_true(projected[1].test)
+    end)
   end)
 
   describe("the file on disk", function()
