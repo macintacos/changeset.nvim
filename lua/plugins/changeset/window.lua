@@ -322,6 +322,9 @@ function M.open(buf)
 
   local wo = vim.wo[sidebar.win]
   wo.number, wo.relativenumber, wo.signcolumn = false, false, "no"
+  -- Rows are sized to the window's full width, and a global one draws even with
+  -- every column above switched off.
+  wo.statuscolumn = ""
   -- The selected row marks the cursor's line instead.
   wo.wrap, wo.cursorline, wo.foldcolumn = false, false, "0"
   wo.list = false

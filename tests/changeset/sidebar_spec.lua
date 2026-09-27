@@ -190,6 +190,18 @@ describe("changeset sidebar", function()
     assert.equal(100, width)
   end)
 
+  it("keeps the tree clear of a statuscolumn, whose cells its rows are sized over", function()
+    local statuscolumn = vim.o.statuscolumn
+    vim.o.statuscolumn = "%l "
+    open_sidebar()
+    -- `textoff` is measured as the window is drawn.
+    vim.cmd.redraw({ bang = true })
+    vim.o.statuscolumn = statuscolumn
+    local win = window.win()
+
+    assert.equal(0, vim.fn.getwininfo(win)[1].textoff)
+  end)
+
   -- No language server runs under the specs, so neither fixture file gets an answer.
   it("asks again about a file no server answered for only once it changes", function()
     open_sidebar()
