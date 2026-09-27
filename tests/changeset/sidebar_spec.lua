@@ -70,6 +70,19 @@ local function open_sidebar()
   return buf
 end
 
+---The branch totals drawn above the tree.
+---@param buf integer
+---@return string
+local function totals(buf)
+  local above = vim.tbl_filter(function(mark)
+    return mark[4].virt_lines_above
+  end, vim.api.nvim_buf_get_extmarks(buf, ns, 0, 0, { details = true }))
+  assert.equal(1, #above)
+  return table.concat(vim.tbl_map(function(chunk)
+    return chunk[1]
+  end, above[1][4].virt_lines[1]))
+end
+
 ---@param key string
 local function press(key)
   local win = assert(window.win())
@@ -159,16 +172,22 @@ describe("changeset sidebar", function()
   it("totals the branch above the tree, scrolled into view", function()
     local buf = open_sidebar()
 
-    local above = vim.tbl_filter(function(mark)
-      return mark[4].virt_lines_above
-    end, vim.api.nvim_buf_get_extmarks(buf, ns, 0, 0, { details = true }))
-    assert.equal(1, #above)
-    local text = table.concat(vim.tbl_map(function(chunk)
-      return chunk[1]
-    end, above[1][4].virt_lines[1]))
-    assert.truthy(text:find("2 files", 1, true))
+    assert.truthy(totals(buf):find("2 files", 1, true))
     -- Lines above the first only show as filler, which nothing scrolls in unasked.
     assert.truthy(vim.api.nvim_win_call(assert(window.win()), vim.fn.winsaveview).topfill > 0)
+  end)
+
+  it("redraws the tree across the bottom of the editor once it narrows", function()
+    local columns = vim.o.columns
+    vim.o.columns = 200
+    local buf = open_sidebar()
+
+    vim.o.columns = 100
+    vim.api.nvim_exec_autocmds("VimResized", {})
+    local width = vim.fn.strdisplaywidth(totals(buf))
+    vim.o.columns = columns
+
+    assert.equal(100, width)
   end)
 
   -- No language server runs under the specs, so neither fixture file gets an answer.

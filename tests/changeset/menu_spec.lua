@@ -193,5 +193,19 @@ describe("changeset.menu", function()
       assert.equal(sidebar_left - 2, width)
       assert.equal(sidebar_left, config.col + width + 1)
     end)
+
+    it("stands the float on top of a sidebar with no room to its left", function()
+      vim.api.nvim_win_set_config(
+        sidebar,
+        { relative = "editor", row = 16, col = 0, width = 60, height = 4, border = "none" }
+      )
+
+      local _, menu_win = open_menu({}, { counts = { Variable = 31 } })
+
+      local config = vim.api.nvim_win_get_config(menu_win)
+      -- Two border rows: the menu's bottom one lands on the row just above the sidebar.
+      assert.equal(16, config.row + vim.api.nvim_win_get_height(menu_win) + 2)
+      assert.equal(0, config.col)
+    end)
   end)
 end)

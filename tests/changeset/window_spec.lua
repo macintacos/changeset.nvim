@@ -13,6 +13,18 @@ local function only(ok)
   end
 end
 
+---The edge of the editor `win` runs the whole length of, if any.
+---@param win integer
+---@return "bottom"|"right"|nil
+local function edge(win)
+  local layout = vim.fn.winlayout()
+  local last = layout[2][#layout[2]]
+  if last[1] ~= "leaf" or last[2] ~= win then
+    return nil
+  end
+  return ({ col = "bottom", row = "right" })[layout[1]]
+end
+
 describe("changeset.window", function()
   describe("_clamp", function()
     it("keeps a line that is already inside the buffer", function()
@@ -129,6 +141,61 @@ describe("changeset.window", function()
       window.open(vim.api.nvim_create_buf(false, true))
 
       assert.is_nil(window.placeholder())
+    end)
+
+    it("opens along the bottom when the editor is too narrow to stand it beside the files", function()
+      vim.o.columns = 100
+      vim.cmd("vsplit")
+
+      local win = window.open(vim.api.nvim_create_buf(false, true))
+
+      assert.equal("bottom", edge(win))
+    end)
+
+    it("moves along the bottom when the editor narrows, keeping its window", function()
+      vim.cmd("vsplit")
+      local win = window.open(vim.api.nvim_create_buf(false, true))
+
+      vim.o.columns = 100
+      window.relayout()
+
+      assert.equal(win, window.win())
+      assert.equal("bottom", edge(win))
+    end)
+
+    it("moves back beside the files at its own width when the editor widens", function()
+      vim.o.columns = 100
+      vim.cmd("vsplit")
+      local win = window.open(vim.api.nvim_create_buf(false, true))
+
+      vim.o.columns = 200
+      window.relayout()
+
+      assert.equal("right", edge(win))
+      assert.equal(44, vim.api.nvim_win_get_width(win))
+      local widths = others()
+      assert.is_true(widths[2] - widths[1] <= 1)
+    end)
+
+    it("stays put as the only window when the editor narrows", function()
+      local outside = vim.api.nvim_get_current_win()
+      window.open(vim.api.nvim_create_buf(false, true))
+      vim.api.nvim_win_close(outside, true)
+
+      vim.o.columns = 100
+
+      assert.no_errors(window.relayout)
+    end)
+
+    it("comes back along the bottom from a session saved beside the files, when the editor is narrow", function()
+      local stale = vim.api.nvim_create_buf(true, false)
+      vim.api.nvim_buf_set_name(stale, "changeset://tree")
+      local placeholder = vim.api.nvim_open_win(stale, false, { split = "right", win = -1, width = 44 })
+      vim.o.columns = 100
+
+      window.open(vim.api.nvim_create_buf(false, true))
+
+      assert.equal("bottom", edge(placeholder))
     end)
   end)
 
@@ -425,6 +492,19 @@ describe("changeset.window", function()
 
       assert.equal(vim.fn.resolve(two), showing(right))
       assert.equal("mine", vim.wo[right].winbar)
+    end)
+
+    it("gives a file a window above the drawer when the drawer is the only one", function()
+      local columns = vim.o.columns
+      vim.o.columns = 100
+      local outside = vim.api.nvim_get_current_win()
+      local win = window.open(vim.api.nvim_create_buf(false, true))
+      vim.api.nvim_win_close(outside, true)
+
+      window.preview(fixture("one"), 1, BAND)
+      vim.o.columns = columns
+
+      assert.equal("bottom", edge(win))
     end)
 
     it("puts back every window it previewed into", function()

@@ -1037,6 +1037,17 @@ function M.open()
       end
     end,
   })
+  -- Fires: the editor being resized. Moves the tree below the files when the editor
+  -- gets too narrow to keep it beside them, and back once it is wide enough; redrawn
+  -- either way, since rows are trimmed to the window's width.
+  vim.api.nvim_create_autocmd("VimResized", {
+    group = augroup,
+    desc = "changeset: move the tree beside or below the files as the editor's width allows",
+    callback = function()
+      window.relayout()
+      draw()
+    end,
+  })
   -- Fires: leaving any window while the sidebar is open. Remembers whether it was a
   -- float, so the sidebar's `WinEnter` can tell a return from one from an arrival.
   vim.api.nvim_create_autocmd("WinLeave", {

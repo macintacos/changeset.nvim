@@ -242,20 +242,23 @@ function M.open(opts)
 
   local footer = M._footer(hidden, saved, scope)
   local top, left = unpack(vim.api.nvim_win_get_position(opts.sidebar))
-  local width = width_for(rows, footer, left - 2)
+  -- A drawer starts at the editor's left edge, so the menu stands on top of it instead.
+  local beside = left - 2 >= MIN_WIDTH
+  local width = width_for(rows, footer, beside and left - 2 or vim.api.nvim_win_get_width(opts.sidebar) - 2)
+  local height = math.min(#rows, MAX_HEIGHT)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].modifiable = false
 
   -- Placed in editor cells rather than against the sidebar's own corner, because a
   -- float's border is drawn outside the size it is given: only arithmetic that
-  -- counts it lands the right border on the cell the sidebar starts after, which is
-  -- what docks the two together instead of leaving a gap.
+  -- counts it lands the border on the cell next to the sidebar, which is what
+  -- docks the two together instead of leaving a gap.
   local win = vim.api.nvim_open_win(buf, true, {
     relative = "editor",
-    row = top + 1,
-    col = math.max(left - width - 1, 1),
+    row = beside and top + 1 or math.max(top - height - 2, 0),
+    col = beside and math.max(left - width - 1, 1) or left,
     width = width,
-    height = math.min(#rows, MAX_HEIGHT),
+    height = height,
     style = "minimal",
     border = "rounded",
     title = " Symbol kinds ",

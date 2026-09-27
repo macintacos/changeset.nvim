@@ -7,6 +7,9 @@ local render = require("plugins.changeset.render")
 local M = {}
 
 local SIDEBAR_WIDTH = 44
+-- Narrower than this beside the sidebar, the files get the width and the tree moves below them.
+local MIN_FILE_WIDTH = 80
+local MIN_DRAWER_HEIGHT = 10
 
 -- A session records the layout but not a scratch buffer's contents, so a
 -- restored session brings the sidebar's window back empty. The buffer's name is
@@ -29,9 +32,37 @@ local NO_CURSOR = "n-v:" .. render.NO_CURSOR_HL
 ---@field winbar string
 ---@field standing_buf integer? The buffer a preview put here while the cursor stood in the window.
 
+---Beside the files, or below them as a drawer.
+---@alias changeset.Layout "sidebar"|"drawer"
+
 -- `notice_buf` outlives close() and is reused.
----@type { win: integer?, buf: integer?, notice_buf: integer?, borrowed: table<integer, changeset.Snapshot> }
+---@type { win: integer?, buf: integer?, notice_buf: integer?, layout: changeset.Layout?, borrowed: table<integer, changeset.Snapshot> }
 local sidebar = { borrowed = {} }
+
+---@param columns integer The editor's width.
+---@return changeset.Layout
+local function layout_for(columns)
+  return columns - SIDEBAR_WIDTH < MIN_FILE_WIDTH and "drawer" or "sidebar"
+end
+
+---Where `layout` splits the tree off, as `nvim_open_win` and `nvim_win_set_config` take it.
+---@param layout changeset.Layout
+---@param lines integer The editor's height.
+---@return vim.api.keyset.win_config
+local function split_for(layout, lines)
+  if layout == "drawer" then
+    return { split = "below", win = -1, height = math.max(MIN_DRAWER_HEIGHT, math.floor(lines / 3)) }
+  end
+  return { split = "right", win = -1, width = SIDEBAR_WIDTH }
+end
+
+---Keep the size `layout` gave `win` when other windows open and close.
+---@param win integer
+---@param layout changeset.Layout
+local function pin(win, layout)
+  vim.wo[win].winfixwidth = layout == "sidebar"
+  vim.wo[win].winfixheight = layout == "drawer"
+end
 
 ---Windows a preview could go to, most recently used first.
 ---
@@ -124,7 +155,7 @@ local function target()
   -- file a split of its own rather than borrowing the sidebar. Split from inside
   -- `nvim_win_call`, which hands focus back without a `WinEnter` on the sidebar.
   return vim.api.nvim_win_call(sidebar.win, function()
-    vim.cmd("leftabove vsplit")
+    vim.cmd(sidebar.layout == "drawer" and "leftabove split" or "leftabove vsplit")
     return vim.api.nvim_get_current_win()
   end)
 end
@@ -249,6 +280,24 @@ function M.placeholder()
   return nil
 end
 
+---Move the tree beside the files when the editor is wide enough for both, and below
+---them when it is not. The window is moved, not reopened, so it keeps its id.
+function M.relayout()
+  local layout = layout_for(vim.o.columns)
+  if not M.is_visible() or layout == sidebar.layout then
+    return
+  end
+  sidebar.layout = layout
+  pin(sidebar.win, layout)
+  -- Neovim refuses to move the last window, which has no layout to change anyway.
+  if #panes() > 1 then
+    vim.api.nvim_win_set_config(sidebar.win, split_for(layout, vim.o.lines))
+    if vim.o.equalalways then
+      vim.cmd("wincmd =")
+    end
+  end
+end
+
 ---Open the sidebar.
 ---@param buf integer Scratch buffer holding the tree.
 ---@return integer win
@@ -261,8 +310,12 @@ function M.open(buf)
     sidebar.win = placeholder
     vim.api.nvim_win_set_buf(placeholder, buf)
     pcall(vim.api.nvim_buf_delete, stale, { force = true })
+    -- Laid out as the session was saved, which `relayout` below settles for this editor.
+    sidebar.layout = nil
   else
-    sidebar.win = vim.api.nvim_open_win(buf, false, { split = "right", win = -1, width = SIDEBAR_WIDTH })
+    sidebar.layout = layout_for(vim.o.columns)
+    sidebar.win = vim.api.nvim_open_win(buf, false, split_for(sidebar.layout, vim.o.lines))
+    pin(sidebar.win, sidebar.layout)
   end
   sidebar.buf = buf
   vim.api.nvim_buf_set_name(buf, NAME .. buf)
@@ -271,12 +324,12 @@ function M.open(buf)
   wo.number, wo.relativenumber, wo.signcolumn = false, false, "no"
   -- The selected row marks the cursor's line instead.
   wo.wrap, wo.cursorline, wo.foldcolumn = false, false, "0"
-  wo.winfixwidth = true
   wo.list = false
+  M.relayout()
 
   -- Opening a window is the editor's business to settle, and 'equalalways' is
-  -- where the user said how. `winfixwidth` is already set, so the sidebar keeps
-  -- its width and only the windows that were there share out what is left.
+  -- where the user said how. The sidebar's size is already pinned, so it keeps
+  -- it and only the windows that were there share out what is left.
   if not placeholder and vim.o.equalalways then
     vim.cmd("wincmd =")
   end
