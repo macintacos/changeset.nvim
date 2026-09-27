@@ -114,4 +114,53 @@ describe("changeset.resolve", function()
       assert.same({ "api.ts", "auth.ts" }, seen)
     end)
   end)
+
+  describe("start", function()
+    local root, enabled
+
+    before_each(function()
+      root = vim.fn.tempname()
+      vim.fn.mkdir(root, "p")
+      vim.fn.writefile({ "return {}" }, root .. "/mod.lua")
+    end)
+
+    after_each(function()
+      if enabled then
+        vim.lsp.enable(enabled, false)
+        enabled = nil
+      end
+      vim.cmd("silent! %bwipeout!")
+      vim.fn.delete(root, "rf")
+    end)
+
+    ---Resolve `mod.lua`, returning the paths reported before `start` returned.
+    ---@return string[]
+    local function reported_at_once()
+      local seen = {}
+      local file = { path = "mod.lua", status = "modified", added = 1, removed = 0, hunks = {} }
+      local cancel = resolve.start(root, { file }, function(path)
+        seen[#seen + 1] = path
+      end)
+      cancel()
+      return seen
+    end
+
+    it("reports a file no enabled server covers without waiting for one to attach", function()
+      assert.same({ "mod.lua" }, reported_at_once())
+    end)
+
+    for _, case in ipairs({
+      { name = "stub_lua", covers = "its filetype", filetypes = { "lua" } },
+      { name = "stub_any", covers = "every filetype" },
+    }) do
+      it("waits on a server enabled for " .. case.covers, function()
+        -- A root_dir that never answers keeps the server enabled but never started.
+        vim.lsp.config(case.name, { cmd = function() end, filetypes = case.filetypes, root_dir = function() end })
+        vim.lsp.enable(case.name)
+        enabled = case.name
+
+        assert.same({}, reported_at_once())
+      end)
+    end
+  end)
 end)

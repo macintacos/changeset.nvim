@@ -13,8 +13,8 @@ local symbols = require("plugins.mini-pickers.symbols")
 -- makes the tree fill in reading order, which is the order it is being read in.
 local CONCURRENCY = 4
 
--- A server that never attaches (no client for the filetype) must not leave the
--- file showing its resolving placeholder forever.
+-- An enabled server that never attaches (binary missing, no root found) must not
+-- leave the file showing its resolving placeholder forever.
 local ATTACH_TIMEOUT_MS = 2000
 
 local M = {}
@@ -32,12 +32,26 @@ function M._resolvable(files)
   return out
 end
 
+---Whether a server enabled through `vim.lsp.enable` may yet attach to `bufnr`. One
+---started by hand is missed, but the sidebar asks again once it attaches.
+---@param bufnr integer
+---@return boolean
+local function server_expected(bufnr)
+  local filetype = vim.bo[bufnr].filetype
+  return vim.iter(vim.lsp.get_configs({ enabled = true })):any(function(config)
+    return not config.filetypes or vim.list_contains(config.filetypes, filetype)
+  end)
+end
+
 ---@param bufnr integer
 ---@param on_client fun(ok: boolean)
 local function await_client(bufnr, on_client)
   local method = "textDocument/documentSymbol"
   if #vim.lsp.get_clients({ bufnr = bufnr, method = method }) > 0 then
     return on_client(true)
+  end
+  if not server_expected(bufnr) then
+    return on_client(false)
   end
 
   local done = false
