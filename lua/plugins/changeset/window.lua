@@ -31,6 +31,7 @@ local NO_CURSOR = "n-v:" .. render.NO_CURSOR_HL
 ---@field cursor integer[]
 ---@field winbar string
 ---@field standing_buf integer? The buffer a preview put here while the cursor stood in the window.
+---@field pick any What the caller previewed here, handed back when the window is claimed.
 
 ---Beside the files, or below them as a drawer.
 ---@alias changeset.Layout "sidebar"|"drawer"
@@ -198,12 +199,14 @@ end
 ---Put `buf` in the window a preview goes to, remembering what that window held.
 ---@param buf integer
 ---@param band changeset.Band
+---@param pick any Handed back by `claim`; nil clears whatever the last preview here left.
 ---@return integer win
-local function borrow(buf, band)
+local function borrow(buf, band, pick)
   local win = target()
   local standing = win == vim.api.nvim_get_current_win()
   remember(win)
   sidebar.borrowed[win].standing_buf = standing and buf or nil
+  sidebar.borrowed[win].pick = pick
   show(win, buf)
   -- The band is for a window seen from the sidebar, never the one being read.
   if not standing then
@@ -347,7 +350,8 @@ end
 ---@param path string
 ---@param lnum integer? A deletion hunk at the top of a file reports 0, so this is clamped.
 ---@param band changeset.Band What the band over the window says about the file.
-function M.preview(path, lnum, band)
+---@param pick any Handed back by `claim` if the cursor arrives in the preview.
+function M.preview(path, lnum, band, pick)
   local buf = buffers.load(path)
   if not buf then
     return
@@ -358,7 +362,7 @@ function M.preview(path, lnum, band)
   if ok then
     gitsigns.attach({ bufnr = buf })
   end
-  local win = borrow(buf, band)
+  local win = borrow(buf, band, pick)
   if lnum then
     local last = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
     vim.api.nvim_win_set_cursor(win, { M._clamp(lnum, last), 0 })
@@ -447,17 +451,21 @@ end
 ---@param path string
 ---@param lnum integer?
 ---@param how "reuse"|"vsplit"|"split"|"tab"
+---@return boolean committed false when the file could not be opened.
 function M.commit(path, lnum, how)
   local buf = buffers.load(path)
   if not buf then
-    return vim.notify("Changeset: cannot open " .. path, vim.log.levels.WARN)
+    vim.notify("Changeset: cannot open " .. path, vim.log.levels.WARN)
+    return false
   end
   promote(target(), buf, lnum, how)
+  return true
 end
 
 ---Commit the focused window if the sidebar previewed into it from elsewhere:
 ---arriving at a preview by any route counts as choosing it, but one made where
 ---the cursor already stood was never arrived at.
+---@return any pick What `preview` was given for the claimed window; nil when nothing was claimed.
 function M.claim()
   local win = vim.api.nvim_get_current_win()
   local snapshot = M.is_visible() and sidebar.borrowed[win]
@@ -471,6 +479,7 @@ function M.claim()
   local view = vim.fn.winsaveview()
   promote(win, buf, nil, "reuse")
   vim.fn.winrestview(view)
+  return snapshot.pick
 end
 
 ---Close the sidebar. Every window it previewed into goes back to the buffer and

@@ -73,6 +73,7 @@ local augroup = vim.api.nvim_create_augroup("changeset", { clear = true })
 ---@field timer uv.uv_timer_t?
 ---@field request table? The refresh whose answers this session is still listening for.
 ---@field here changeset.Spot? Where the cursor is, while that is a file in this repository.
+---@field picked changeset.Picked? The row last opened from the sidebar.
 ---@field landing changeset.Landing? The row focusing the sidebar put its cursor on, until the user moves it.
 ---@field restoring changeset.Position? A restored session's position, until the tree can hold each half.
 
@@ -199,11 +200,11 @@ local function preview_current()
   end
   assert(session, "changeset: no open session")
   if row.lnum and row.kind ~= "file" then
-    window.preview(session.root .. "/" .. row.path, row.lnum, band_for(row))
+    window.preview(session.root .. "/" .. row.path, row.lnum, band_for(row), { row = row, session = session })
   elseif row.kind == "file" and row.status == "deleted" then
     window.preview_notice("This file was deleted on this branch", band_for(row))
   elseif row.kind == "file" then
-    window.preview(session.root .. "/" .. row.path, 1, band_for(row))
+    window.preview(session.root .. "/" .. row.path, 1, band_for(row), { row = row, session = session })
   end
 end
 
@@ -231,23 +232,33 @@ local function mark_row(buf, lnum, marks)
 end
 
 ---Mark the row under the sidebar's cursor as selected while the sidebar has focus,
----and the row for where you are, or its nearest ancestor on screen. A row both
----would mark shows the selection.
+---the row for where you are, and the row last opened, each of the last two on its
+---nearest ancestor on screen. A row several would mark shows the first of those.
 local function paint()
   local buf, win = window.buf(), window.win()
   if not (session and buf and win) then
     return
   end
   vim.api.nvim_buf_clear_namespace(buf, rows_ns, 0, -1)
-  local width = vim.api.nvim_win_get_width(win)
-  local selected = window.is_focused() and row_at_cursor() and vim.api.nvim_win_get_cursor(win)[1]
-  local here = session.here and tree.locate(session.rows, session.here.path, session.here.lnum)
-  local here_lnum = here and state._nearest(visible_ids(), here.id)
-  if here_lnum and here_lnum ~= selected then
-    mark_row(buf, here_lnum, render.state_marks("here", width))
+  local ids = visible_ids()
+  ---@param row changeset.Row?
+  ---@return integer?
+  local function on_screen(row)
+    return row and state._nearest(ids, row.id)
   end
-  if selected then
-    mark_row(buf, selected, render.state_marks("selected", width))
+  local here, picked = session.here, session.picked
+  local states = {
+    { "selected", window.is_focused() and row_at_cursor() and vim.api.nvim_win_get_cursor(win)[1] },
+    { "here", on_screen(here and tree.locate(session.rows, here.path, here.lnum)) },
+    { "picked", on_screen(picked and tree.relocate(session.rows, picked)) },
+  }
+  local width, taken = vim.api.nvim_win_get_width(win), {}
+  for _, entry in ipairs(states) do
+    local kind, lnum = entry[1], entry[2]
+    if lnum and not taken[lnum] then
+      taken[lnum] = true
+      mark_row(buf, lnum, render.state_marks(kind, width))
+    end
   end
 end
 
@@ -308,6 +319,14 @@ local function land(win)
     vim.api.nvim_win_set_cursor(win, { lnum, 0 })
   end
   session.landing = { id = (row_at_cursor() or {}).id }
+end
+
+---Make `row` the one last opened. A folded chain is recorded by its tip, the symbol it jumps to.
+---@param row changeset.Row
+local function pick(row)
+  assert(session, "changeset: no open session")
+  session.picked = { id = row.tip or row.id, path = row.path, lnum = row.lnum or 1 }
+  paint()
 end
 
 ---@param buf integer
@@ -571,7 +590,9 @@ local function commit(how)
     return vim.notify(row.path .. " was deleted on this branch", vim.log.levels.INFO)
   end
   assert(session, "changeset: no open session")
-  window.commit(session.root .. "/" .. row.path, row.lnum or 1, how)
+  if window.commit(session.root .. "/" .. row.path, row.lnum or 1, how) then
+    pick(row)
+  end
 end
 
 ---@param delta integer
@@ -1099,7 +1120,13 @@ function M.open()
     group = augroup,
     nested = true,
     desc = "changeset: open a previewed file once the cursor enters its window",
-    callback = window.claim,
+    callback = function()
+      local claimed = window.claim()
+      -- A build for another repository, base or branch replaces the session under a preview.
+      if claimed and claimed.session == session then
+        pick(claimed.row)
+      end
+    end,
   })
   -- Fires: the cursor entering any window while the sidebar is open, so the cursor
   -- hides and the selected row appears on arriving in the sidebar, and both undo on

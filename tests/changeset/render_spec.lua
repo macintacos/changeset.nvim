@@ -349,7 +349,7 @@ describe("changeset.render", function()
     end)
 
     describe("state_marks", function()
-      ---@param state "selected"|"here"
+      ---@param state "selected"|"here"|"picked"
       ---@return vim.api.keyset.set_extmark tint, vim.api.keyset.set_extmark glyph
       local function marks(state)
         local tint, glyph
@@ -377,6 +377,15 @@ describe("changeset.render", function()
 
         assert.same(
           { render.HERE_HL, true, render.HERE_ICON, 43 },
+          { tint.hl_group, tint.hl_eol, glyph.virt_text[1][1], glyph.virt_text_win_col }
+        )
+      end)
+
+      it("marks the row you last opened the same way, in its own tint and glyph", function()
+        local tint, glyph = marks("picked")
+
+        assert.same(
+          { render.PICKED_HL, true, render.PICKED_ICON, 43 },
           { tint.hl_group, tint.hl_eol, glyph.virt_text[1][1], glyph.virt_text_win_col }
         )
       end)
@@ -1059,6 +1068,17 @@ describe("changeset.render", function()
       assert.same({ 0x10, 0x10 }, { here[2], here[3] })
     end)
 
+    it("tints the row you last opened more faintly than the row you are on", function()
+      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = BACKGROUND })
+      vim.api.nvim_set_hl(0, "Statement", { fg = RED })
+
+      render.define_highlights()
+
+      local picked, here = channels(group(render.PICKED_HL).bg), channels(group(render.HERE_HL).bg)
+      assert.is_true(picked[1] > 0x10 and picked[1] < here[1])
+      assert.same({ 0x10, 0x10 }, { picked[2], picked[3] })
+    end)
+
     it("tints over the theme's chrome when Normal is transparent", function()
       vim.api.nvim_set_hl(0, "Statement", { fg = RED })
       vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = BACKGROUND })
@@ -1083,12 +1103,15 @@ describe("changeset.render", function()
       assert.same({ 0x10, 0x10 }, { g, b })
     end)
 
-    it("draws both state glyphs in the accent", function()
+    it("draws every state glyph in the accent", function()
       vim.api.nvim_set_hl(0, "Statement", { fg = 0xc8a0f0 })
 
       render.define_highlights()
 
-      assert.same({ 0xc8a0f0, 0xc8a0f0 }, { group(render.SELECTED_ICON_HL).fg, group(render.HERE_ICON_HL).fg })
+      assert.same(
+        { 0xc8a0f0, 0xc8a0f0, 0xc8a0f0 },
+        { group(render.SELECTED_ICON_HL).fg, group(render.HERE_ICON_HL).fg, group(render.PICKED_ICON_HL).fg }
+      )
     end)
 
     it("strikes a hidden kind through as well as dimming it", function()

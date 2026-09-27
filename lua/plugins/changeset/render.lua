@@ -114,6 +114,10 @@ M.SELECTED_HL = "ChangesetSelected"
 ---@type string
 M.HERE_HL = "ChangesetHere"
 
+---Background of the row last opened from the sidebar. Created by `define_highlights`.
+---@type string
+M.PICKED_HL = "ChangesetPicked"
+
 ---Group for the selected row's glyph. Created by `define_highlights`.
 ---@type string
 M.SELECTED_ICON_HL = "ChangesetSelectedIcon"
@@ -122,6 +126,10 @@ M.SELECTED_ICON_HL = "ChangesetSelectedIcon"
 ---@type string
 M.HERE_ICON_HL = "ChangesetHereIcon"
 
+---Group for the glyph on the row last opened from the sidebar. Created by `define_highlights`.
+---@type string
+M.PICKED_ICON_HL = "ChangesetPickedIcon"
+
 ---Glyph at the right edge of the selected row.
 ---@type string
 M.SELECTED_ICON = "◀"
@@ -129,6 +137,10 @@ M.SELECTED_ICON = "◀"
 ---Glyph at the right edge of the row for where you are: the selection's, hollowed out.
 ---@type string
 M.HERE_ICON = "◁"
+
+---Glyph at the right edge of the row last opened from the sidebar.
+---@type string
+M.PICKED_ICON = "•"
 
 ---Group 'guicursor' draws the cursor in while it is in the sidebar. Created by `define_highlights`.
 ---@type string
@@ -158,7 +170,7 @@ local GLYPH_PRIORITY = MATCH_PRIORITY + 1
 local GUTTER = 2
 
 -- How far each state's background moves from the window's toward the accent.
-local SELECTED_TINT, HERE_TINT = 0.2, 0.12
+local SELECTED_TINT, HERE_TINT, PICKED_TINT = 0.2, 0.12, 0.06
 
 -- Stands in at the tail of the preview band when the row names no destination.
 local HINT = "<CR> to open"
@@ -250,15 +262,23 @@ end
 
 ---The marks that show a row's state: its tint to the window's edge, and its glyph
 ---in the gutter every row leaves there.
----@param state "selected"|"here"
+---@param state "selected"|"here"|"picked"
 ---@param width integer The window's width.
 ---@return vim.api.keyset.set_extmark[]
 function M.state_marks(state, width)
-  local selected = state == "selected"
-  local glyph = { selected and M.SELECTED_ICON or M.HERE_ICON, selected and M.SELECTED_ICON_HL or M.HERE_ICON_HL }
+  local look = ({
+    selected = { M.SELECTED_HL, M.SELECTED_ICON, M.SELECTED_ICON_HL },
+    here = { M.HERE_HL, M.HERE_ICON, M.HERE_ICON_HL },
+    picked = { M.PICKED_HL, M.PICKED_ICON, M.PICKED_ICON_HL },
+  })[state]
   return {
-    { hl_group = selected and M.SELECTED_HL or M.HERE_HL, hl_eol = true, priority = TINT_PRIORITY },
-    { virt_text = { glyph }, virt_text_win_col = width - 1, hl_mode = "combine", priority = GLYPH_PRIORITY },
+    { hl_group = look[1], hl_eol = true, priority = TINT_PRIORITY },
+    {
+      virt_text = { { look[2], look[3] } },
+      virt_text_win_col = width - 1,
+      hl_mode = "combine",
+      priority = GLYPH_PRIORITY,
+    },
   }
 end
 
@@ -752,7 +772,7 @@ function M.define_highlights()
   -- Struck through as well as dimmed: dim on its own is what ancestor rows mean,
   -- and it reads as faint rather than as switched off in a light colourscheme.
   vim.api.nvim_set_hl(0, M.HIDDEN_HL, { fg = comment.fg, strikethrough = true })
-  -- Both states tint toward the theme's keyword colour, a hue nothing else on a row
+  -- Every state tints toward the theme's keyword colour, a hue nothing else on a row
   -- carries, so a tinted row reads as a state rather than as another diff colour.
   -- Mixed rather than linked: an opaque background keeps each token's own colour
   -- legible on top. Over the chrome's background when Normal is transparent.
@@ -760,8 +780,10 @@ function M.define_highlights()
   local base = normal.bg or chrome or 0
   vim.api.nvim_set_hl(0, M.SELECTED_HL, { bg = mix(base, accent, SELECTED_TINT) })
   vim.api.nvim_set_hl(0, M.HERE_HL, { bg = mix(base, accent, HERE_TINT) })
+  vim.api.nvim_set_hl(0, M.PICKED_HL, { bg = mix(base, accent, PICKED_TINT) })
   vim.api.nvim_set_hl(0, M.SELECTED_ICON_HL, { fg = accent })
   vim.api.nvim_set_hl(0, M.HERE_ICON_HL, { fg = accent })
+  vim.api.nvim_set_hl(0, M.PICKED_ICON_HL, { fg = accent })
   -- Fully blended is the TUI's cue to hide the cursor outright. `nocombine` is only
   -- there to keep the group: one holding nothing but `blend` is stored as cleared.
   vim.api.nvim_set_hl(0, M.NO_CURSOR_HL, { blend = 100, nocombine = true })

@@ -164,6 +164,70 @@ describe("changeset row highlights", function()
     assert.is_nil(line_with(render.HERE_HL))
   end)
 
+  it("marks the row opened with <CR>, and keeps it through a jump to another changed file", function()
+    vim.cmd.edit("mod.lua")
+    open_sidebar()
+    sidebar_cursor_to("L8")
+
+    vim.cmd.normal(vim.keycode("<CR>"))
+    assert.truthy(line_with(render.PICKED_HL):find("L8", 1, true))
+
+    vim.cmd.edit("other.lua")
+
+    assert.truthy(line_with(render.PICKED_HL):find("L8", 1, true))
+  end)
+
+  it("marks the row a preview showed once the cursor moves into it", function()
+    vim.cmd.edit("mod.lua")
+    open_sidebar()
+    sidebar_cursor_to("L8")
+
+    vim.cmd.wincmd("p")
+
+    assert.truthy(line_with(render.PICKED_HL):find("L8", 1, true))
+  end)
+
+  it("marks only where you are on the row you last opened", function()
+    vim.cmd.edit("mod.lua")
+    open_sidebar()
+    sidebar_cursor_to("Other changes")
+
+    vim.cmd.normal(vim.keycode("<CR>"))
+
+    assert.truthy(line_with(render.HERE_HL):find("Other changes", 1, true))
+    assert.is_nil(line_with(render.PICKED_HL))
+  end)
+
+  it("marks only the selection on the row you last opened", function()
+    vim.cmd.edit("mod.lua")
+    open_sidebar()
+    sidebar_cursor_to("L8")
+    vim.cmd.normal(vim.keycode("<CR>"))
+
+    sidebar_cursor_to("L8")
+
+    assert.truthy(line_with(render.SELECTED_HL):find("L8", 1, true))
+    assert.is_nil(line_with(render.PICKED_HL))
+  end)
+
+  it("re-resolves the row you last opened from its line when a rebuild drops it", function()
+    vim.cmd.edit("mod.lua")
+    open_sidebar()
+    sidebar_cursor_to("L8")
+    vim.cmd.normal(vim.keycode("<CR>"))
+    vim.cmd.edit("other.lua")
+
+    vim.fn.writefile(numbered(10, { [2] = true }), "mod.lua")
+    vim.cmd("silent! checktime")
+    changeset.refresh()
+    vim.wait(5000, function()
+      local buf = assert(window.buf())
+      return not table.concat(lines_of(buf), "\n"):find("L8", 1, true)
+    end, 25)
+
+    assert.truthy(line_with(render.PICKED_HL):find("mod.lua", 1, true))
+  end)
+
   it("clears where you are in a file outside the changeset", function()
     vim.cmd.edit("mod.lua")
     open_sidebar()
