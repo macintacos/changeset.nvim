@@ -35,6 +35,20 @@ local function lines_of(buf)
   return vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 end
 
+---The first sidebar line containing `text` below line `after`.
+---@param buf integer
+---@param text string
+---@param after integer?
+---@return integer
+local function line_of(buf, text, after)
+  for i, line in ipairs(lines_of(buf)) do
+    if i > (after or 0) and line:find(text, 1, true) then
+      return i
+    end
+  end
+  error("no sidebar line contains " .. text)
+end
+
 ---@return integer buf
 local function open_sidebar()
   vim.cmd.edit("mod.lua")
@@ -228,18 +242,6 @@ describe("changeset sidebar", function()
       Fixture.commit("docs", tmp)
     end)
 
-    ---@param buf integer
-    ---@param text string
-    ---@return integer
-    local function line_of(buf, text)
-      for i, line in ipairs(lines_of(buf)) do
-        if line:find(text, 1, true) then
-          return i
-        end
-      end
-      error("no sidebar line contains " .. text)
-    end
-
     ---Rebuild the tree and wait until the Docs section is drawn or gone.
     ---@param buf integer
     ---@param shown boolean
@@ -366,6 +368,230 @@ describe("changeset sidebar", function()
 
       assert.equal(line_of(buf, "README.md"), vim.api.nvim_win_get_cursor(0)[1])
       assert.truthy(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(target)):find("README.md$"))
+    end)
+  end)
+
+  describe("with inline tests", function()
+    local resolve = require("plugins.changeset.resolve")
+    local real_start = resolve.start
+    ---@type fun(path: string, items: table[]?)
+    local answer
+
+    ---A symbol spanning `first`..`last` of `path`, as a server would report it.
+    ---@param s { path: string, name: string, kind: string, depth: integer, first: integer, last: integer }
+    local function sym(s)
+      return {
+        name = s.name,
+        text = s.name,
+        kind = s.kind,
+        path = s.path,
+        lnum = s.first,
+        col = 1,
+        end_lnum = s.first,
+        end_col = #s.name + 1,
+        depth = s.depth,
+        guides = "",
+        range_lnum = s.first,
+        range_end_lnum = s.last,
+      }
+    end
+
+    local SESSION = {
+      sym({ path = "src/session.rs", name = "load", kind = "Function", depth = 0, first = 1, last = 3 }),
+      sym({ path = "src/session.rs", name = "tests", kind = "Module", depth = 0, first = 5, last = 9 }),
+      sym({ path = "src/session.rs", name = "refreshes", kind = "Function", depth = 1, first = 6, last = 8 }),
+    }
+    local ONLY_TESTS = {
+      sym({ path = "src/only_tests.rs", name = "tests", kind = "Module", depth = 0, first = 1, last = 5 }),
+      sym({ path = "src/only_tests.rs", name = "works", kind = "Function", depth = 1, first = 2, last = 4 }),
+    }
+
+    ---@return integer
+    local function tests_header()
+      return line_of(assert(window.buf()), "Tests")
+    end
+
+    ---@param lnum integer
+    local function cursor_to(lnum)
+      local win = assert(window.win())
+      vim.api.nvim_set_current_win(win)
+      vim.api.nvim_win_set_cursor(win, { lnum, 0 })
+    end
+
+    ---@return integer
+    local function cursor_line()
+      return vim.api.nvim_win_get_cursor((assert(window.win())))[1]
+    end
+
+    local function flush()
+      local flushed = false
+      vim.schedule(function()
+        flushed = true
+      end)
+      vim.wait(1000, function()
+        return flushed
+      end)
+    end
+
+    ---Open from `mod.lua` so "you are here" stays out of the `.rs` files, and wait for the diff alone.
+    local function open_unanswered()
+      vim.cmd.edit("mod.lua")
+      changeset.open()
+      assert(
+        vim.wait(10000, function()
+          local buf = window.buf()
+          return buf ~= nil and table.concat(lines_of(buf), "\n"):find("session.rs", 1, true) ~= nil
+        end, 25),
+        "the diff never arrived"
+      )
+    end
+
+    local function answer_all()
+      answer("mod.lua", {})
+      answer("other.lua", {})
+      answer("src/only_tests.rs", ONLY_TESTS)
+      answer("src/session.rs", SESSION)
+      flush()
+    end
+
+    ---@return string
+    local function footer()
+      local win = assert(window.win())
+      return vim.api.nvim_eval_statusline(vim.wo[win].statusline, { winid = win }).str
+    end
+
+    before_each(function()
+      vim.fn.mkdir("src", "p")
+      write("src/session.rs", {
+        "fn load() {",
+        "    let a = 1;",
+        "}",
+        "",
+        "mod tests {",
+        "    fn refreshes() {",
+        "        let b = 1;",
+        "    }",
+        "}",
+      })
+      write("src/only_tests.rs", { "mod tests {", "    fn works() {", "        let c = 1;", "    }", "}" })
+      Fixture.commit("rust", tmp)
+      resolve.start = function(_, _, on_file)
+        answer = on_file
+        return function() end
+      end
+    end)
+
+    after_each(function()
+      resolve.start = real_start
+    end)
+
+    it("keeps the cursor on a split file's own copy when its tests land under Tests", function()
+      open_unanswered()
+      cursor_to(line_of(assert(window.buf()), "session.rs"))
+
+      answer("src/session.rs", SESSION)
+      flush()
+
+      assert.truthy(tests_header() < line_of(assert(window.buf()), "session.rs", tests_header()))
+      assert.equal(line_of(assert(window.buf()), "session.rs"), cursor_line())
+      assert.truthy(cursor_line() < tests_header())
+    end)
+
+    it("follows a file whose changes are all tests into Tests", function()
+      open_unanswered()
+      cursor_to(line_of(assert(window.buf()), "only_tests.rs"))
+
+      answer("src/only_tests.rs", ONLY_TESTS)
+      flush()
+
+      assert.equal(line_of(assert(window.buf()), "only_tests.rs"), cursor_line())
+      assert.truthy(cursor_line() > tests_header())
+    end)
+
+    it("folds each copy of a split file on its own", function()
+      open_unanswered()
+      answer_all()
+
+      cursor_to(line_of(assert(window.buf()), "session.rs", tests_header()))
+      press("h")
+      line_of(assert(window.buf()), "load")
+      assert.has_error(function()
+        line_of(assert(window.buf()), "refreshes")
+      end)
+
+      press("l")
+      cursor_to(line_of(assert(window.buf()), "session.rs"))
+      press("h")
+      line_of(assert(window.buf()), "refreshes")
+      assert.has_error(function()
+        line_of(assert(window.buf()), "load")
+      end)
+    end)
+
+    it("numbers a split file once, at its first row, on both copies", function()
+      open_unanswered()
+      answer_all()
+
+      local impl = line_of(assert(window.buf()), "session.rs")
+      assert.truthy(line_of(assert(window.buf()), "mod.lua") < line_of(assert(window.buf()), "other.lua"))
+      assert.truthy(line_of(assert(window.buf()), "other.lua") < impl and impl < tests_header())
+      assert.truthy(tests_header() < line_of(assert(window.buf()), "only_tests.rs"))
+      assert.truthy(
+        line_of(assert(window.buf()), "only_tests.rs") < line_of(assert(window.buf()), "session.rs", tests_header())
+      )
+
+      cursor_to(impl)
+      assert.truthy(footer():find("file 3 of 4", 1, true))
+      cursor_to(line_of(assert(window.buf()), "session.rs", tests_header()))
+      assert.truthy(footer():find("file 3 of 4", 1, true))
+    end)
+
+    describe("on the Tests copy's symbol", function()
+      it("opens its line on <CR>", function()
+        open_unanswered()
+        answer_all()
+        cursor_to(line_of(assert(window.buf()), "refreshes"))
+
+        press(vim.keycode("<CR>"))
+
+        assert.truthy(vim.api.nvim_buf_get_name(0):find("src/session.rs$"))
+        assert.equal(6, vim.api.nvim_win_get_cursor(0)[1])
+      end)
+
+      it("yanks the file's path and its line, as the other copy's rows do", function()
+        open_unanswered()
+        answer_all()
+        local Paths = require("helpers.paths")
+        local copy = Paths.copy
+        local yanked = {}
+        Paths.copy = function(text)
+          table.insert(yanked, text)
+        end
+
+        local ok, err = pcall(function()
+          cursor_to(line_of(assert(window.buf()), "refreshes"))
+          press("y")
+          cursor_to(line_of(assert(window.buf()), "session.rs"))
+          press("y")
+          cursor_to(line_of(assert(window.buf()), "session.rs", tests_header()))
+          press("y")
+        end)
+        Paths.copy = copy
+        assert(ok, err)
+        assert.same({ "src/session.rs:6", "src/session.rs:1", "src/session.rs:1" }, yanked)
+      end)
+
+      it("previews its line", function()
+        local target = vim.api.nvim_get_current_win()
+        open_unanswered()
+        answer_all()
+
+        cursor_to(line_of(assert(window.buf()), "refreshes"))
+        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = window.buf() })
+
+        assert.truthy(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(target)):find("src/session.rs$"))
+        assert.equal(6, vim.api.nvim_win_get_cursor(target)[1])
+      end)
     end)
   end)
 

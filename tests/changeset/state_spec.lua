@@ -59,26 +59,49 @@ describe("changeset.state", function()
   end)
 
   describe("_reanchor", function()
-    it("follows a row to its new line when the rebuild moved it", function()
-      local ids = { "api.ts", "auth.ts", "session.ts" }
+    local impl = { id = "#implementation\0session.rs", kind = "file", depth = 1, path = "session.rs" }
+    local tests = { id = "#tests\0session.rs", kind = "file", depth = 1, path = "session.rs" }
+    local other = { id = "#implementation\0api.rs", kind = "file", depth = 1, path = "api.rs" }
 
-      assert.equal(3, state._reanchor(ids, "session.ts", 2))
+    ---Rows carrying only the id `_reanchor` matches on first.
+    ---@param ... string
+    ---@return changeset.Row[]
+    local function with_ids(...)
+      return vim.tbl_map(function(id)
+        return { id = id }
+      end, { ... })
+    end
+
+    it("puts the cursor on its row's new line when the redraw moved it", function()
+      assert.equal(3, state._reanchor({ other, tests, impl }, impl, 2))
     end)
 
     it("holds the cursor's line when the row it sat on is gone", function()
-      local ids = { "api.ts", "auth.ts", "session.ts" }
-
-      assert.equal(2, state._reanchor(ids, "deleted.ts", 2))
+      assert.equal(2, state._reanchor(with_ids("a", "b", "c"), with_ids("gone")[1], 2))
     end)
 
     it("clamps to the last row when the tree shrank past the cursor", function()
-      local ids = { "api.ts" }
-
-      assert.equal(1, state._reanchor(ids, "gone.ts", 7))
+      assert.equal(1, state._reanchor({ other }, with_ids("gone")[1], 7))
     end)
 
     it("lands on the first row when the tree was empty before", function()
-      assert.equal(1, state._reanchor({ "api.ts" }, nil, 0))
+      assert.equal(1, state._reanchor({ other }, nil, 0))
+    end)
+
+    it("moves a file row gone from screen to its path's row under another section", function()
+      assert.equal(2, state._reanchor({ other, tests }, impl, 1))
+    end)
+
+    it("holds the line for a gone symbol row even when its file shows elsewhere", function()
+      local sym = { id = impl.id .. "\0refresh", kind = "symbol", depth = 2, path = "session.rs" }
+
+      assert.equal(1, state._reanchor({ other, tests }, sym, 1))
+    end)
+
+    it("holds the line for a gone reading-symbols placeholder, which is a file-kind row below depth 1", function()
+      local placeholder = { id = impl.id .. "\0#pending", kind = "file", depth = 2, path = "session.rs" }
+
+      assert.equal(1, state._reanchor({ other, tests }, placeholder, 1))
     end)
   end)
 

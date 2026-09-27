@@ -155,13 +155,13 @@ describe("changeset.view", function()
     -- first with a symbol nested two deep, then a second header over a third file.
     local lines = {
       { depth = 0 },
-      { depth = 1 },
+      { depth = 1, path = "a.lua" },
       { depth = 2 },
       { depth = 3 },
-      { depth = 1 },
+      { depth = 1, path = "b.lua" },
       { depth = 2 },
       { depth = 0 },
-      { depth = 1 },
+      { depth = 1, path = "c.lua" },
     }
 
     it("places a line under the file it belongs to", function()
@@ -177,7 +177,34 @@ describe("changeset.view", function()
     end)
 
     it("leaves a folded section's files out of the total", function()
-      assert.same({ 1, 1 }, { view.position({ { depth = 0 }, { depth = 0 }, { depth = 1 } }, 3) })
+      assert.same({ 1, 1 }, { view.position({ { depth = 0 }, { depth = 0 }, { depth = 1, path = "a.lua" } }, 3) })
+    end)
+
+    describe("with a file shown in two sections", function()
+      local split = {
+        { depth = 0 },
+        { depth = 1, path = "a.rs" },
+        { depth = 1, path = "b.rs" },
+        { depth = 0 },
+        { depth = 1, path = "a.rs" },
+        { depth = 2 },
+      }
+
+      it("counts the file once", function()
+        assert.equal(2, select(2, view.position(split, 1)))
+      end)
+
+      it("numbers the second copy as the file's first", function()
+        assert.equal(1, (view.position(split, 5)))
+      end)
+
+      it("places a symbol under the second copy on that file", function()
+        assert.equal(1, (view.position(split, 6)))
+      end)
+
+      it("names no file on the second header", function()
+        assert.is_nil((view.position(split, 4)))
+      end)
     end)
 
     it("has no position on an empty tree", function()

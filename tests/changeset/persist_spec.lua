@@ -1,4 +1,5 @@
 local changeset = require("plugins.changeset")
+local render = require("plugins.changeset.render")
 local window = require("plugins.changeset.window")
 local Fixture = require("support.git")
 
@@ -53,6 +54,22 @@ local function flush()
   vim.wait(1000, function()
     return flushed
   end)
+end
+
+---The one sidebar line wearing `hl`, once the scheduled paint has run.
+---@param hl string
+---@return string?
+local function line_with(hl)
+  flush()
+  local ns = vim.api.nvim_get_namespaces()["changeset.rows"]
+  local found = {}
+  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(assert(window.buf()), ns, 0, -1, { details = true })) do
+    if mark[4].hl_group == hl then
+      table.insert(found, sidebar_lines()[mark[2] + 1])
+    end
+  end
+  assert(#found <= 1, ("%d lines wear %s"):format(#found, hl))
+  return found[1]
 end
 
 ---Put the sidebar's cursor on the first line containing `text`, as `j`/`k` would.
@@ -248,18 +265,23 @@ describe("changeset position in a session", function()
     ---@type fun(path: string, items: table[]?)
     local answer
 
-    ---A function spanning `first`..`last` of `mod.lua`, as a server would report it.
-    local function symbol(name, first, last)
+    ---A symbol spanning `first`..`last` of `path` (a top-level `mod.lua` function unless told otherwise).
+    ---@param name string
+    ---@param first integer
+    ---@param last integer
+    ---@param opts { kind: string?, depth: integer?, path: string? }?
+    local function symbol(name, first, last, opts)
+      opts = opts or {}
       return {
         name = name,
         text = name,
-        kind = "Function",
-        path = "mod.lua",
+        kind = opts.kind or "Function",
+        path = opts.path or "mod.lua",
         lnum = first,
         col = 1,
         end_lnum = first,
         end_col = #name + 1,
-        depth = 0,
+        depth = opts.depth or 0,
         guides = "",
         range_lnum = first,
         range_end_lnum = last,
@@ -324,6 +346,37 @@ describe("changeset position in a session", function()
       answer("mod.lua", {})
 
       assert.truthy(sidebar_cursor_line():find("other.lua", 1, true))
+    end)
+
+    it("restores a split file's row onto its own copy and paints you there on the Tests copy", function()
+      vim.fn.mkdir("src", "p")
+      vim.fn.writefile({ "fn load() {}", "", "mod tests {", "    fn refreshes() {", "    }", "}" }, "src/session.rs")
+      Fixture.commit("rust", tmp)
+      vim.cmd.edit("other.lua")
+      focus_terminal()
+      restore_session({
+        here = { path = "src/session.rs", lnum = 4 },
+        row = { id = "#implementation\0src/session.rs", path = "src/session.rs" },
+      })
+      diff_arrived()
+
+      answer("mod.lua", {})
+      answer("other.lua", {})
+      answer("src/session.rs", {
+        symbol("load", 1, 1, { path = "src/session.rs" }),
+        symbol("tests", 3, 6, { kind = "Module", path = "src/session.rs" }),
+        symbol("refreshes", 4, 5, { depth = 1, path = "src/session.rs" }),
+      })
+      flush()
+
+      local lines = sidebar_lines()
+      local cursor = vim.api.nvim_win_get_cursor((assert(window.win())))[1]
+      local tests = assert(vim.iter(ipairs(lines)):find(function(_, line)
+        return line:find("Tests", 1, true) ~= nil
+      end))
+      assert.truthy(lines[cursor]:find("session.rs", 1, true))
+      assert.truthy(cursor < tests)
+      assert.truthy(line_with(render.HERE_HL):find("refreshes", 1, true))
     end)
   end)
 end)

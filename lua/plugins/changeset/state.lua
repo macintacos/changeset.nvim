@@ -74,18 +74,31 @@ function M.set_chain_open(st, id, open)
   st.chains[id] = open or nil
 end
 
----The line to put the cursor on after a rebuild.
----@param ids string[] Row ids, in display order.
----@param wanted string? Id the cursor sat on before the rebuild.
----@param fallback integer Line to keep when that id is gone.
----@return integer lnum 1-based, always within `ids`.
-function M._reanchor(ids, wanted, fallback)
-  for lnum, id in ipairs(ids) do
-    if id == wanted then
+---The line to put the cursor on after any redraw: the row it sat on, else, for a file row, the first file row
+---with the same path (a file whose changes all turn out to be tests moves to Tests; a filter can keep one copy
+---and drop the other), else `fallback`.
+---@param rows changeset.Row[] On screen, in display order.
+---@param previous_row changeset.Row? The row the cursor sat on before the redraw.
+---@param fallback integer Line to keep when nothing matches.
+---@return integer lnum 1-based, always within `rows`.
+function M._reanchor(rows, previous_row, fallback)
+  local same_file
+  for lnum, row in ipairs(rows) do
+    if previous_row and row.id == previous_row.id then
       return lnum
     end
+    if
+      not same_file
+      and previous_row
+      and previous_row.kind == "file"
+      and previous_row.depth == 1
+      and row.kind == "file"
+      and row.path == previous_row.path
+    then
+      same_file = lnum
+    end
   end
-  return math.max(1, math.min(fallback, #ids))
+  return same_file or math.max(1, math.min(fallback, #rows))
 end
 
 ---The line showing the row with `id`, or else its deepest ancestor on screen.

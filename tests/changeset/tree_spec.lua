@@ -699,4 +699,194 @@ describe("changeset.tree", function()
       assert.equal(FILE_ID .. "\0load", tree.relocate(rows, picked).id)
     end)
   end)
+
+  describe("inline tests", function()
+    local RS = "src/session.rs"
+    local IMPL_ID, TESTS_ID = "#implementation\0" .. RS, "#tests\0" .. RS
+    -- A struct holding one method, then a test module holding one test.
+    local SYMBOLS = {
+      sym("SessionStore", "Struct", 0, 1, 20),
+      sym("refresh", "Method", 1, 5, 12),
+      sym("tests", "Module", 0, 30, 60),
+      sym("refreshes", "Function", 1, 32, 40),
+    }
+    -- `session` holding a changed function and a nested test module.
+    local NESTED = {
+      sym("session", "Module", 0, 1, 60),
+      sym("open", "Function", 1, 5, 10),
+      sym("tests", "Module", 1, 30, 50),
+      sym("refreshes", "Function", 2, 32, 40),
+    }
+
+    ---@param hunks changeset.Hunk[]
+    ---@param symbols table[]?
+    ---@return changeset.Row[] sections
+    local function build(hunks, symbols)
+      return tree.build({ file(RS, hunks) }, { [RS] = symbols or SYMBOLS })
+    end
+
+    it("lists a file's test symbols under Tests and the rest under its path's section", function()
+      local rows = build({ hunk(6, 2, 1), hunk(33, 3, 2), hunk(70, 1) })
+
+      assert.same({ "Implementation", "Tests" }, names(rows))
+      assert.same(
+        { IMPL_ID },
+        vim.tbl_map(function(r)
+          return r.id
+        end, rows[1].children)
+      )
+      assert.same({ "SessionStore", "Other changes" }, names(rows[1].children[1].children))
+      assert.same({ "refresh" }, names(rows[1].children[1].children[1].children))
+      assert.same({ TESTS_ID, TESTS_ID .. "\0tests", TESTS_ID .. "\0tests\0refreshes" }, ids(rows[2].children))
+    end)
+
+    it("splits the file's stat between its copies", function()
+      local rows = build({ hunk(6, 2, 1), hunk(33, 3, 2), hunk(70, 1) })
+      local impl, tests = rows[1].children[1], rows[2].children[1]
+
+      assert.same({ 3, 1 }, { impl.added, impl.removed })
+      assert.same({ 3, 2 }, { tests.added, tests.removed })
+    end)
+
+    it("counts a hunk's lines inside a test module but outside its test on the Tests side", function()
+      local rows = build({ hunk(31, 3), hunk(6, 1) })
+
+      assert.same({ 3, 1 }, { rows[2].children[1].added, rows[1].children[1].added })
+    end)
+
+    it("splits a hunk crossing into a test module between its copies", function()
+      local rows = build({ hunk(10, 25, 3) })
+
+      assert.same({ 20, 3 }, { rows[1].children[1].added, rows[1].children[1].removed })
+      assert.same({ 5, 0 }, { rows[2].children[1].added, rows[2].children[1].removed })
+    end)
+
+    it("counts removed lines handed to a test on the Tests side", function()
+      local rows = build({ hunk(34, 0, 4), hunk(6, 1, 1) })
+
+      assert.same({ 0, 4 }, { rows[2].children[1].added, rows[2].children[1].removed })
+      assert.same({ 1, 1 }, { rows[1].children[1].added, rows[1].children[1].removed })
+    end)
+
+    it("totals both copies into their sections", function()
+      local rows = build({ hunk(6, 2, 1), hunk(33, 3, 2) })
+
+      assert.same({ 1, 2, 1 }, { rows[1].files, rows[1].added, rows[1].removed })
+      assert.same({ 1, 3, 2 }, { rows[2].files, rows[2].added, rows[2].removed })
+    end)
+
+    it("places a test nested under a non-test symbol beneath that symbol as an ancestor", function()
+      local rows = build({ hunk(6, 1), hunk(33, 2, 1) }, NESTED)
+      local impl, tests = rows[1].children[1], rows[2].children[1]
+
+      assert.same({ IMPL_ID, IMPL_ID .. "\0session", IMPL_ID .. "\0session\0open" }, ids({ impl }))
+      assert.same({
+        TESTS_ID,
+        TESTS_ID .. "\0session",
+        TESTS_ID .. "\0session\0tests",
+        TESTS_ID .. "\0session\0tests\0refreshes",
+      }, ids({ tests }))
+      assert.is_true(tests.children[1].ancestor)
+      assert.is_nil(tests.children[1].added)
+      assert.same({ 2, 1 }, { tests.added, tests.removed })
+      assert.same({ 1, 0 }, { impl.added, impl.removed })
+    end)
+
+    it("shows a file whose changes are all in tests under Tests alone", function()
+      local rows = build({ hunk(33, 2, 1) })
+
+      assert.same({ "Tests" }, names(rows))
+      assert.same({ TESTS_ID }, { rows[1].children[1].id })
+      assert.same({ 2, 1 }, { rows[1].children[1].added, rows[1].children[1].removed })
+    end)
+
+    it("keeps one copy of a file that cannot split", function()
+      local module = { sym("tests", "Module", 0, 1, 20) }
+      local cases = {
+        { file(RS, { hunk(5, 1) }), nil },
+        { file(RS, { hunk(0, 0, 5) }, "deleted"), module },
+        { file(RS, {}), module },
+        { file("src/lib.lua", { hunk(5, 1) }), module },
+        { file("src/main.go", { hunk(5, 1) }), { sym("TestRefresh", "Function", 0, 1, 20) } },
+        { file("config/app.yaml", { hunk(5, 1) }), module },
+        { file("tests/session_test.py", { hunk(5, 1) }), { sym("test_refresh", "Function", 0, 1, 20) } },
+      }
+      for _, case in ipairs(cases) do
+        local rows = tree.build({ case[1] }, { [case[1].path] = case[2] })
+
+        assert.equal(1, #tree.files(rows), case[1].path)
+      end
+    end)
+
+    it("splits Python test functions and test classes", function()
+      local path = "pkg/session.py"
+      local rows = tree.build({ file(path, { hunk(2, 1), hunk(13, 1), hunk(26, 1) }) }, {
+        [path] = {
+          sym("test_refresh", "Function", 0, 1, 5),
+          sym("TestStore", "Class", 0, 10, 20),
+          sym("test_open", "Method", 1, 12, 15),
+          sym("open", "Function", 0, 25, 30),
+        },
+      })
+
+      assert.same({ "open" }, names(rows[1].children[1].children))
+      assert.same({ "test_refresh", "TestStore" }, names(rows[2].children[1].children))
+    end)
+
+    it("splits TypeScript describe and it callbacks", function()
+      local path = "src/session.ts"
+      local rows = tree.build({ file(path, { hunk(4, 1), hunk(26, 1) }) }, {
+        [path] = {
+          sym("describe('refresh') callback", "Function", 0, 1, 20),
+          sym("it('refreshes') callback", "Function", 1, 3, 8),
+          sym("refresh", "Function", 0, 25, 30),
+        },
+      })
+
+      assert.same({ "refresh" }, names(rows[1].children[1].children))
+      assert.same({ "describe('refresh') callback" }, names(rows[2].children[1].children))
+    end)
+
+    describe("locate", function()
+      local rows = build({ hunk(6, 2, 1), hunk(33, 3, 2), hunk(70, 1) })
+
+      it("finds a test symbol in the Tests copy", function()
+        assert.equal(TESTS_ID .. "\0tests\0refreshes", tree.locate(rows, RS, 35).id)
+      end)
+
+      it("finds an implementation symbol in the path section's copy", function()
+        assert.equal(IMPL_ID .. "\0SessionStore\0refresh", tree.locate(rows, RS, 8).id)
+      end)
+
+      it("finds an orphan hunk in the path section's copy", function()
+        assert.equal(IMPL_ID .. "\0#orphans", tree.locate(rows, RS, 70).id)
+      end)
+
+      it("falls back to the path section's file row", function()
+        assert.equal(IMPL_ID, tree.locate(rows, RS, 25).id)
+      end)
+
+      it("prefers the copy with the deeper match", function()
+        local nested = build({ hunk(6, 1), hunk(33, 2) }, NESTED)
+
+        assert.equal(TESTS_ID .. "\0session\0tests", tree.locate(nested, RS, 45).id)
+      end)
+
+      it("breaks an equal-depth tie toward the path section's copy", function()
+        local nested = build({ hunk(6, 1), hunk(33, 2) }, NESTED)
+
+        assert.equal(IMPL_ID .. "\0session", tree.locate(nested, RS, 20).id)
+      end)
+
+      it("falls back to the only copy's file row", function()
+        assert.equal(TESTS_ID, tree.locate(build({ hunk(33, 2) }), RS, 25).id)
+      end)
+
+      it("relocates a dropped pick into the Tests copy", function()
+        local picked = { id = IMPL_ID .. "\0tests\0refreshes", path = RS, lnum = 35 }
+
+        assert.equal(TESTS_ID .. "\0tests\0refreshes", tree.relocate(rows, picked).id)
+      end)
+    end)
+  end)
 end)

@@ -406,7 +406,7 @@ local function draw()
   end
   assert(session, "changeset: no open session")
 
-  local wanted = (row_at_cursor() or {}).id
+  local previous_row = row_at_cursor()
   local previous_line = vim.api.nvim_win_get_cursor(win)[1]
   local width = vim.api.nvim_win_get_width(win)
 
@@ -451,7 +451,7 @@ local function draw()
   apply_marks(buf, lines)
   hidden_note_line(buf, #text - 1, width, view.hiding(view.kind_counts(session.rows), session.hidden))
 
-  vim.api.nvim_win_set_cursor(win, { state._reanchor(visible_ids(), wanted, previous_line), 0 })
+  vim.api.nvim_win_set_cursor(win, { state._reanchor(session.visible, previous_row, previous_line), 0 })
 
   draw_header(buf, win, width)
   paint()

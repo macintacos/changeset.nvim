@@ -81,6 +81,101 @@ describe("sections", function()
     end
   end)
 
+  describe("test_rule", function()
+    local ungated = {
+      "src/main.go",
+      "src/lib.lua",
+      "scripts/run.sh",
+      "config/app.yaml",
+      "docs/guide.md",
+      "tests/test_session.py",
+      "src/session_test.rs",
+      "src/session.test.ts",
+      "src/app.js",
+    }
+    for _, path in ipairs(ungated) do
+      it(("gives %s no rule"):format(path), function()
+        assert.is_nil(sections.test_rule(path))
+      end)
+    end
+
+    local modules_in = {
+      { name = "tests", kind = "Module" },
+      { name = "test", kind = "Module" },
+      { name = "tests", kind = "Namespace" },
+    }
+    local modules_out = {
+      { name = "tests", kind = "Function" },
+      { name = "testing", kind = "Module" },
+      { name = "session", kind = "Module" },
+    }
+
+    local function cb(name)
+      return { name = name, kind = "Function" }
+    end
+
+    ---@type table<string, { accepts: { name: string, kind: string }[], rejects: { name: string, kind: string }[] }>
+    local rules = {
+      ["src/session.rs"] = {
+        accepts = {},
+        rejects = {
+          { name = "test_refresh", kind = "Function" },
+          { name = "TestSessionStore", kind = "Class" },
+          cb("describe('x') callback"),
+        },
+      },
+      ["pkg/session.py"] = {
+        accepts = {
+          { name = "test_refresh", kind = "Function" },
+          { name = "TestSessionStore", kind = "Class" },
+        },
+        rejects = {
+          { name = "refresh", kind = "Function" },
+          { name = "testing", kind = "Function" },
+          { name = "test_refresh", kind = "Variable" },
+          { name = "Tester", kind = "Function" },
+          cb("describe('x') callback"),
+        },
+      },
+    }
+    local ts = {
+      accepts = {
+        cb("describe('refresh') callback"),
+        cb("it('refreshes') callback"),
+        cb('test("reads the cache") callback'),
+        cb("it.only('x') callback"),
+      },
+      rejects = {
+        cb("setup('x') callback"),
+        cb("items.forEach() callback"),
+        cb("describe"),
+        cb("itemize('x') callback"),
+        cb("test_refresh"),
+        { name = "TestSessionStore", kind = "Class" },
+      },
+    }
+    for _, ext in ipairs({ "ts", "tsx", "mts", "cts" }) do
+      rules["src/session." .. ext] = ts
+    end
+
+    for path, rule in pairs(rules) do
+      describe(path, function()
+        local accepts = vim.list_extend(vim.list_extend({}, modules_in), rule.accepts)
+        local rejects = vim.list_extend(vim.list_extend({}, modules_out), rule.rejects)
+        for _, sym in ipairs(accepts) do
+          it(("accepts %s %s"):format(sym.kind, sym.name), function()
+            assert.is_true(sections.test_rule(path)(sym))
+          end)
+        end
+        for _, sym in ipairs(rejects) do
+          it(("rejects %s %s"):format(sym.kind, sym.name), function()
+            assert.is_false(sections.test_rule(path)(sym))
+          end)
+        end
+      end)
+    end
+  end)
+
   it("orders implementation, tests, docs, config", function()
     assert.same(
       { "implementation", "tests", "docs", "config" },
