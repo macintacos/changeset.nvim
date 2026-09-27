@@ -564,7 +564,7 @@ local function commit(how)
     return
   end
   if row.kind == "file" and row.status == "deleted" then
-    return vim.notify(row.path .. " was deleted on this branch — :CodeDiff to read it", vim.log.levels.INFO)
+    return vim.notify(row.path .. " was deleted on this branch", vim.log.levels.INFO)
   end
   assert(session, "changeset: no open session")
   window.commit(session.root .. "/" .. row.path, row.lnum or 1, how)
