@@ -113,6 +113,10 @@ M.SELECTED_HL = "ChangesetSelected"
 ---@type string
 M.HERE_HL = "ChangesetHere"
 
+---Group 'guicursor' draws the cursor in while it is in the sidebar. Created by `define_highlights`.
+---@type string
+M.NO_CURSOR_HL = "ChangesetNoCursor"
+
 ---Group for the filetype glyph on the preview band. Recoloured by `band_icon`.
 ---@type string
 M.PREVIEW_ICON_HL = "ChangesetPreviewIcon"
@@ -700,6 +704,9 @@ function M.define_highlights()
   vim.api.nvim_set_hl(0, M.HERE_HL, {
     bg = vim.api.nvim_get_hl(0, { name = "ColorColumn", link = false }).bg or cursorline.bg,
   })
+  -- Fully blended is the TUI's cue to hide the cursor outright. `nocombine` is only
+  -- there to keep the group: one holding nothing but `blend` is stored as cleared.
+  vim.api.nvim_set_hl(0, M.NO_CURSOR_HL, { blend = 100, nocombine = true })
   -- Last, over the band it is drawn on: a glyph left on the old theme's colour is
   -- the one thing here that can come out invisible rather than merely off-key.
   if band_hl then

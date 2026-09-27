@@ -1070,6 +1070,14 @@ function M.open()
       end
     end,
   })
+  -- Fires: the cursor entering any window while the sidebar is open, so the cursor
+  -- hides on arriving in the sidebar and shows again on leaving it, for a float
+  -- opened from it too.
+  vim.api.nvim_create_autocmd("WinEnter", {
+    group = augroup,
+    desc = "changeset: hide the cursor while it is in the sidebar",
+    callback = window.sync_cursor,
+  })
   vim.keymap.set("n", STEP_KEYS[1], function()
     step(1)
   end, { desc = "Next change (Changeset)" })

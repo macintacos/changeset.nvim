@@ -2,6 +2,7 @@ local changeset = require("plugins.changeset")
 local render = require("plugins.changeset.render")
 local window = require("plugins.changeset.window")
 local Fixture = require("support.git")
+local Cursor = require("support.cursor")
 
 ---@param count integer
 ---@param changed table<integer, true>? Lines to rewrite.
@@ -174,6 +175,15 @@ describe("changeset position in a session", function()
 
     assert.same({ path = "mod.lua", lnum = 8 }, changeset._tree().here)
     assert.truthy(sidebar_cursor_line():find("other.lua", 1, true))
+  end)
+
+  it("hides the cursor when a session reopens the sidebar with focus in it", function()
+    vim.cmd.edit("mod.lua")
+
+    restore_session({ here = { path = "mod.lua", lnum = 8 } }, true)
+
+    assert.equal(window.win(), vim.api.nvim_get_current_win())
+    assert.is_true(Cursor.hidden())
   end)
 
   it("carries the recorded position through :mksession", function()

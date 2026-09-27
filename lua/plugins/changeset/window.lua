@@ -19,6 +19,10 @@ local SPLIT_CMD = { vsplit = "vsplit", split = "split", tab = "tabnew" }
 
 local notice_ns = vim.api.nvim_create_namespace("changeset.notice")
 
+-- Normal and visual mode only: the filter prompt on the command line still needs
+-- a cursor to type at.
+local NO_CURSOR = "n-v:" .. render.NO_CURSOR_HL
+
 ---@class changeset.Snapshot What a window held before the sidebar borrowed it.
 ---@field buf integer
 ---@field cursor integer[]
@@ -226,6 +230,16 @@ function M.win()
   return M.is_visible() and sidebar.win or nil
 end
 
+---Hide the cursor while it is in the sidebar, where the cursor line marks the row
+---and the cursor itself would sit on the row's icon.
+function M.sync_cursor()
+  if M.is_focused() then
+    vim.opt.guicursor:append(NO_CURSOR)
+  else
+    vim.opt.guicursor:remove(NO_CURSOR)
+  end
+end
+
 ---The window a restored session left standing where the sidebar was.
 ---@return integer?
 function M.placeholder()
@@ -268,6 +282,9 @@ function M.open(buf)
   if not placeholder and vim.o.equalalways then
     vim.cmd("wincmd =")
   end
+  -- A restored session can leave focus in the placeholder, which the sidebar
+  -- takes over without a `WinEnter`.
+  M.sync_cursor()
   return sidebar.win
 end
 
@@ -445,6 +462,7 @@ function M.close()
   if focus and vim.api.nvim_win_is_valid(focus) then
     vim.api.nvim_set_current_win(focus)
   end
+  M.sync_cursor()
 end
 
 ---Move focus into the sidebar.

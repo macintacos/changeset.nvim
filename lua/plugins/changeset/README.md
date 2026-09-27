@@ -196,6 +196,13 @@ Either falls back to `CursorLine`'s background when a theme leaves its own unset
 the file you picked, both sit on one row and the selection wins. Both draw beneath every
 row mark, so the rail, the row colours and a filter match stay on top.
 
+The cursor itself is hidden while it is in the sidebar, and the cursor line alone marks
+the row: the cursor would sit on each row's first cell, which on a section header is its
+icon. Only in normal and visual mode, so a prompt on the command line still shows one. It
+hides through a `'guicursor'` entry whose group is fully blended, which needs
+`termguicolors`; a plugin that appends its own entry on entering a window, as modes.nvim
+does, has to skip the `changeset` filetype or its entry wins.
+
 A line belongs to the deepest symbol row whose body holds it, else to the file's
 `Other changes` row when one of its hunks does, else to the file row. A file shown in two
 sections answers from the copy with the deeper match, and falls back to the path

@@ -1,6 +1,7 @@
 local changeset = require("plugins.changeset")
 local window = require("plugins.changeset.window")
 local Fixture = require("support.git")
+local Cursor = require("support.cursor")
 
 ---@param count integer
 ---@param changed table<integer, true>? Lines to rewrite.
@@ -289,6 +290,34 @@ describe("changeset sidebar focus", function()
 
       assert.truthy(sidebar_cursor_line():find("mod.lua", 1, true))
     end)
+  end)
+
+  it("hides the cursor while focus is in the sidebar", function()
+    vim.cmd.edit("mod.lua")
+    changeset.toggle()
+    settle()
+
+    assert.is_true(Cursor.hidden())
+  end)
+
+  it("shows the cursor once focus leaves the sidebar", function()
+    vim.cmd.edit("mod.lua")
+    changeset.toggle()
+    settle()
+
+    vim.cmd.wincmd("p")
+
+    assert.is_false(Cursor.hidden())
+  end)
+
+  it("shows the cursor once the focused sidebar closes", function()
+    vim.cmd.edit("mod.lua")
+    changeset.toggle()
+    settle()
+
+    changeset.close()
+
+    assert.is_false(Cursor.hidden())
   end)
 
   it("closes the focused sidebar on <leader>gp and hands focus back", function()
