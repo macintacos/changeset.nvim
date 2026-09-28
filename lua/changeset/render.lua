@@ -764,9 +764,8 @@ local function mix(from, to, amount)
   return out
 end
 
----Create the groups the sidebar draws with, as defaults that a colorscheme's or the
----user's own definition of the same group overrides. `META_HL` is mixed from `Comment`
----rather than linked to it, which would drop the italics.
+---Create the groups the sidebar draws with, as overridable defaults. `META_HL` is mixed
+---from `Comment` rather than linked to it, which would drop the italics.
 function M.define_highlights()
   local comment = vim.api.nvim_get_hl(0, { name = "Comment", link = false })
   set_default(M.META_HL, { fg = comment.fg, italic = true })
