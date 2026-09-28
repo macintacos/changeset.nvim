@@ -23,11 +23,21 @@ local function group(name)
 end
 
 describe("highlight overrides", function()
+  -- First: every later spec switches colorscheme, and `hi clear` wipes the group set above.
   it("keeps a group the user defined before the plugin loaded", function()
     render.define_highlights()
 
     assert.equal(0x0a0b0c, group("ChangesetHeaderRef").fg)
     assert.is_true(group(render.META_HL).italic)
+  end)
+
+  it("keeps the match group linked to Search across redefinitions", function()
+    render.define_highlights()
+    render.define_highlights()
+    assert.equal("Search", vim.api.nvim_get_hl(0, { name = render.MATCH_HL }).link)
+
+    colorscheme("zero", { 'vim.cmd.highlight("clear")', 'vim.g.colors_name = "zero"' })
+    assert.equal("Search", vim.api.nvim_get_hl(0, { name = render.MATCH_HL }).link)
   end)
 
   it("recomputes the derived colours on each colorscheme switch, even without hi clear", function()
@@ -40,6 +50,7 @@ describe("highlight overrides", function()
 
     colorscheme("two", {
       'vim.g.colors_name = "two"',
+      'vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc })',
       'vim.api.nvim_set_hl(0, "Comment", { fg = 0x222222 })',
     })
     assert.equal(0x222222, group(render.META_HL).fg)

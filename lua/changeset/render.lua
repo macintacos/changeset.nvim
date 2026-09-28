@@ -54,8 +54,8 @@ local symbols = require("changeset.symbols")
 
 local M = {}
 
--- The highlight groups: defaults `define_highlights` derives from the colorscheme,
--- each kept as it is when a colorscheme or the user defines it first.
+-- The highlight groups. Each is only a default: a colorscheme's or the user's own
+-- definition of one wins, whenever it is made.
 
 ---Group for text that is not content: `Comment` with italics. Created by `define_highlights`.
 ---@type string
@@ -137,7 +137,8 @@ M.PICKED_ICON_HL = "ChangesetPickedIcon"
 ---@type string
 M.NO_CURSOR_HL = "ChangesetNoCursor"
 
----Group for the filetype glyph on the preview band. Recoloured by `band_icon`.
+---Group for the filetype glyph on the preview band. Recoloured by `band_icon` for each
+---file; defining it yourself draws every file's glyph in one colour.
 ---@type string
 M.PREVIEW_ICON_HL = "ChangesetPreviewIcon"
 
@@ -691,7 +692,7 @@ function M.is_preview_winbar(winbar)
   return winbar:find(("%%#%s# Preview "):format(M.PREVIEW_LABEL_HL), 1, true) ~= nil
 end
 
----What `set_default` last gave each group, as `nvim_get_hl` read it back.
+---What `set_default` last gave each group, as `definition` read it back.
 ---@type table<string, vim.api.keyset.get_hl_info>
 local ours = {}
 
@@ -706,18 +707,16 @@ local function definition(name)
 end
 
 ---Give `name` the default `attrs` unless a colorscheme or the user has defined it. A
----group still holding what this module last gave it is cleared first: `default = true`
----alone would keep the old theme's colours.
+---group still holding what this module last gave it is forced over: `default` alone
+---would keep the old theme's colours.
 ---@param name string
 ---@param attrs vim.api.keyset.highlight
 local function set_default(name, attrs)
   local current = definition(name)
-  if vim.deep_equal(current, ours[name]) then
-    vim.api.nvim_set_hl(0, name, {})
-  elseif next(current) then
+  if not vim.tbl_isempty(current) and not vim.deep_equal(current, ours[name]) then
     return
   end
-  vim.api.nvim_set_hl(0, name, vim.tbl_extend("force", attrs, { default = true }))
+  vim.api.nvim_set_hl(0, name, vim.tbl_extend("force", attrs, { default = true, force = true }))
   ours[name] = definition(name)
 end
 
