@@ -16,6 +16,8 @@ describe("changeset.pick without mini.pick", function()
 
   it("runs where mini.pick is neither installed nor set up", function()
     assert.is_false((pcall(require, "mini.pick")))
+    -- mini.nvim exposes a set-up module only as a global.
+    -- selene: allow(global_usage)
     assert.is_nil(rawget(_G, "MiniPick"))
   end)
 
@@ -46,6 +48,8 @@ describe("changeset.pick without mini.pick", function()
 
     it("warns once that the picker needs mini.pick set up", function()
       assert.is_true((pcall(require, "mini.pick")))
+      -- mini.nvim exposes a set-up module only as a global.
+      -- selene: allow(global_usage)
       assert.is_nil(rawget(_G, "MiniPick"))
 
       require("changeset.pick").pick()

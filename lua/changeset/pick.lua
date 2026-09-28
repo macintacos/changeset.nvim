@@ -147,6 +147,8 @@ M._show = show
 function M.pick()
   -- `require` first so a lazy-loading manager can load and set mini.pick up; then
   -- `_G.MiniPick`, which only `setup()` creates and `MiniPick.start` needs.
+  -- mini.nvim exposes a set-up module only as a global.
+  -- selene: allow(global_usage)
   if not (pcall(require, "mini.pick") and rawget(_G, "MiniPick")) then
     return vim.notify("Changeset: the picker needs mini.pick set up", vim.log.levels.WARN)
   end

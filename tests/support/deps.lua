@@ -68,11 +68,23 @@ end
 ---Sync every dependency to its pin, raising if any failed.
 function M.install()
   local pins = {
-    ["plenary.nvim"] = { src = "https://github.com/nvim-lua/plenary.nvim", rev = "74b06c6c75e4eeb3108ec01852001636d85a932b" },
-    ["mini.icons"] = { src = "https://github.com/nvim-mini/mini.icons", rev = "e56797f90192d81f1fda02e662fc3e8e3d775027" },
-    ["nvim-web-devicons"] = { src = "https://github.com/nvim-tree/nvim-web-devicons", rev = "58447c1fca354bbf184425e4a8d01deecbd6f3c4" },
+    ["plenary.nvim"] = {
+      src = "https://github.com/nvim-lua/plenary.nvim",
+      rev = "74b06c6c75e4eeb3108ec01852001636d85a932b",
+    },
+    ["mini.icons"] = {
+      src = "https://github.com/nvim-mini/mini.icons",
+      rev = "e56797f90192d81f1fda02e662fc3e8e3d775027",
+    },
+    ["nvim-web-devicons"] = {
+      src = "https://github.com/nvim-tree/nvim-web-devicons",
+      rev = "58447c1fca354bbf184425e4a8d01deecbd6f3c4",
+    },
     ["mini.pick"] = { src = "https://github.com/nvim-mini/mini.pick", rev = "8c1f75f8ddd8c9f75d07ed2ab5718d2c3cb65a66" },
-    ["gitsigns.nvim"] = { src = "https://github.com/lewis6991/gitsigns.nvim", rev = "070a5d7b985546cc57e1fc61e5bc507fecac6045" },
+    ["gitsigns.nvim"] = {
+      src = "https://github.com/lewis6991/gitsigns.nvim",
+      rev = "070a5d7b985546cc57e1fc61e5bc507fecac6045",
+    },
     luacov = { src = "https://github.com/lunarmodules/luacov", rev = "b1f9eae400da976b93edb7f94cf5d05f538a0655" }, -- v0.17.0
   }
   local errors = M.sync(pins, M.dir)
