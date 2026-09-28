@@ -679,6 +679,28 @@ describe("changeset sidebar", function()
       vim.fn.delete(cache_file)
       assert(ok, err)
     end)
+
+    it("notes under the tree which kinds it is hiding", function()
+      local prefs = require("changeset.prefs")
+      local file = prefs.path()
+      assert(prefs.save(file, { global = { "Function" } }), "could not save the hidden kinds")
+
+      local ok, err = pcall(function()
+        open_unanswered()
+        answer_all()
+        local buf, win = assert(window.buf()), assert(window.win())
+        local expected = " " .. assert(render.hidden_note({ "Function" }, vim.api.nvim_win_get_width(win) - 1))
+
+        local notes = vim.tbl_filter(function(mark)
+          local lines = mark[4].virt_lines
+          return lines ~= nil and #lines == 2 and lines[2][1][1] == expected
+        end, vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true }))
+        assert.equal(1, #notes)
+        assert.equal(#lines_of(buf) - 1, notes[1][2])
+      end)
+      vim.fn.delete(file)
+      assert(ok, err)
+    end)
   end)
 
   describe("with generated files", function()
