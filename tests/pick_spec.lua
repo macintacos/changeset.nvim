@@ -4,6 +4,8 @@ require("mini.pick").setup()
 require("mini.icons").setup()
 
 local changeset = require("changeset.pick")
+local Fixture = require("support.git")
+require("support.gh")
 
 ---A changeset row with the fields the picker reads.
 ---@param fields table
@@ -18,6 +20,37 @@ local function texts(items)
   return vim.tbl_map(function(item)
     return item.text
   end, items)
+end
+
+---A float holding `lines`, with a `virt_lines_above` mark on its first line.
+---@param lines string[]
+---@return integer win, integer buf
+local function float_with_trail(lines)
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  local win = vim.api.nvim_open_win(buf, false, {
+    relative = "editor",
+    row = 1,
+    col = 1,
+    width = 40,
+    height = 6,
+    style = "minimal",
+  })
+  vim.wo[win].wrap = false
+  vim.wo[win].scrolloff = 0
+  vim.api.nvim_buf_set_extmark(buf, changeset.ns, 0, 0, {
+    virt_lines = { { { "trail", "Comment" } } },
+    virt_lines_above = true,
+  })
+  return win, buf
+end
+
+---@param win integer
+---@return integer
+local function topfill(win)
+  return vim.api.nvim_win_call(win, function()
+    return vim.fn.winsaveview().topfill
+  end)
 end
 
 describe("changeset.pick", function()
@@ -108,6 +141,84 @@ describe("changeset.pick", function()
       end
       assert.same({ 0 }, headed)
       vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+  end)
+  describe("_reserve_trail_row", function()
+    it("reserves the display row Neovim would otherwise clip the trail into, before returning", function()
+      local win, buf = float_with_trail({ "one", "two", "three" })
+      -- Neovim draws no filler above the topline on its own, which is exactly
+      -- why a trail on the first row goes missing.
+      assert.equal(0, topfill(win))
+
+      -- Checked straight away: mini.pick draws the frame as soon as `source.show`
+      -- returns, so a reservation that lands any later paints the list a row
+      -- off first.
+      changeset._reserve_trail_row(win, true)
+
+      assert.equal(1, topfill(win))
+      vim.api.nvim_win_close(win, true)
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("releases the row when the first line carries no trail", function()
+      local win, buf = float_with_trail({ "one", "two", "three" })
+      changeset._reserve_trail_row(win, true)
+      changeset._reserve_trail_row(win, false)
+
+      assert.equal(0, topfill(win))
+      vim.api.nvim_win_close(win, true)
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("does not error once the window is gone", function()
+      local win, buf = float_with_trail({ "one" })
+      vim.api.nvim_win_close(win, true)
+      vim.api.nvim_buf_delete(buf, { force = true })
+
+      assert.no_errors(function()
+        changeset._reserve_trail_row(win, true)
+      end)
+    end)
+  end)
+
+  describe("pick", function()
+    local tmp, previous_dir
+
+    before_each(function()
+      tmp = vim.fn.tempname()
+      vim.fn.mkdir(tmp, "p")
+      previous_dir = vim.fn.chdir(tmp)
+      assert(previous_dir ~= "", "could not enter the fixture directory")
+      Fixture.init_repo("trunk", tmp)
+      vim.fn.writefile({ "return 1" }, "mod.lua")
+      Fixture.commit("base", tmp)
+      Fixture.git({ "checkout", "-q", "-b", "feature" }, tmp)
+      vim.fn.writefile({ "return 2" }, "mod.lua")
+      vim.cmd.edit("mod.lua")
+    end)
+
+    after_each(function()
+      require("changeset").close()
+      vim.cmd("silent! %bwipeout!")
+      vim.fn.chdir(previous_dir)
+      vim.fn.delete(tmp, "rf")
+    end)
+
+    it("opens the changeset picker against the base branch when mini.pick is loaded", function()
+      local name
+      -- `pick()` blocks until the picker closes, so the step polls for it.
+      local function step()
+        if not MiniPick.is_picker_active() then
+          return vim.defer_fn(step, 20)
+        end
+        name = MiniPick.get_picker_opts().source.name
+        MiniPick.stop()
+      end
+      vim.defer_fn(step, 20)
+
+      changeset.pick()
+
+      assert.are.equal("Changeset (vs trunk)", name)
     end)
   end)
 end)
