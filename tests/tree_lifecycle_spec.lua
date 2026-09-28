@@ -77,6 +77,39 @@ describe("changeset tree", function()
       )
     end)
 
+    it("hands over each file row's path, name, stats and place in the tree", function()
+      local tree, err = changeset.rows()
+
+      assert.is_nil(err)
+      tree = assert(tree)
+      assert.is_string(tree.root)
+      assert.equal("trunk", tree.ref)
+      local row = tree.rows[1]
+      assert.is_string(row.id)
+      assert.is_table(row.children)
+      assert.same({
+        kind = "file",
+        path = "mod.lua",
+        name = "mod.lua",
+        depth = 1,
+        lnum = 1,
+        added = 1,
+        removed = 1,
+        ancestor = false,
+        status = "modified",
+      }, {
+        kind = row.kind,
+        path = row.path,
+        name = row.name,
+        depth = row.depth,
+        lnum = row.lnum,
+        added = row.added,
+        removed = row.removed,
+        ancestor = row.ancestor,
+        status = row.status,
+      })
+    end)
+
     it("keeps the tree it already built for the same fork point", function()
       changeset.build()
       local tree = changeset._tree()

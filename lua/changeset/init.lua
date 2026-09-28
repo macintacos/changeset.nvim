@@ -968,7 +968,7 @@ function M.footer()
   return render.footer({ file = file, files = files, query = session.query })
 end
 
----The file rows under the sidebar's sections, less the kinds it hides, for the current buffer's repository.
+---Public API: the file rows under the sidebar's sections, less the kinds it hides, for the current buffer's repository.
 ---@return { rows: changeset.Row[], root: string, ref: string }? tree
 ---@return string? err Why there is no tree yet.
 function M.rows()
