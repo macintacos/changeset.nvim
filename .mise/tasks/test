@@ -4,13 +4,9 @@
 
 set -euo pipefail
 
-# -u applies to the *outer* nvim, which needs plenary on its runtimepath for
-# :PlenaryBustedDirectory to exist at all. The child processes plenary spawns get
-# the same init via minimal_init.
-#
-# Each spec goes through PlenaryBustedDirectory, whose find accepts a file:
-# :PlenaryBustedFile accepts no options, so the nvim it spawns gets no -u and
-# would not load minimal_init.
+# -u gives the outer nvim plenary; minimal_init gives it to the children.
+# PlenaryBustedDirectory, not :PlenaryBustedFile, even for one file: the latter
+# takes no options, so its child would skip minimal_init.
 #
 # ponytail: one nvim per spec file — PlenaryBustedDirectory recurses into tests/gitsigns/ and
 # tests/mini-pickers/, which the PR Review and picker ports own; go back to one

@@ -6,15 +6,10 @@ vim.opt.rtp:remove(vim.fn.stdpath("config"))
 vim.opt.rtp:remove(vim.fn.stdpath("config") .. "/after")
 vim.opt.packpath:remove(vim.fn.stdpath("config"))
 vim.opt.packpath:remove(vim.fn.stdpath("config") .. "/after")
--- Headless test nvims must never touch the shared ShaDa file. Without this,
--- every spec's child nvim reads and writes ~/.local/state/nvim/*/shada/main.shada
--- alongside the interactive editor; concurrent or signal-killed children
--- interleave their writes and corrupt it (E576, then E136 on every later write).
+-- Concurrent or killed test nvims corrupt the editor's shared ShaDa file (E576, E136).
 vim.o.shadafile = "NONE"
--- Nor may they write swap files. A `[No Name]` buffer names its swap after the
--- current directory, so every child plenary runs in parallel wants the same one;
--- the rotation runs out after a dozen or so and the loser dies with E303 in
--- whichever spec happened to call `enew`.
+-- A `[No Name]` swap is named after the cwd, so parallel specs exhaust its
+-- rotation and one dies with E303 on `enew`.
 vim.o.swapfile = false
 -- Keep stdpath("state") and stdpath("cache") consumers, such as changeset's
 -- preferences and tree cache, isolated per test process.
