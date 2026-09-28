@@ -135,6 +135,24 @@ describe("changeset setup", function()
     assert.falsy(help_text():find("Rebuild the tree", 1, true))
   end)
 
+  it("lists under ? exactly the keys bound on the sidebar", function()
+    local buf = open_sidebar()
+    local bound = vim.tbl_map(function(keymap)
+      return keymap.lhs
+    end, vim.api.nvim_buf_get_keymap(buf, "n"))
+    table.sort(bound)
+
+    press("?")
+    local listed = {}
+    for line in help_text():gmatch("[^\n]+") do
+      table.insert(listed, (assert(line:match("^(%S+)%s%s"), line)))
+    end
+    table.sort(listed)
+
+    assert.equal(17, #bound)
+    assert.same(bound, listed)
+  end)
+
   it("binds next/prev while open, then puts back the user's mapping", function()
     vim.keymap.set("n", "]h", function() end, { desc = "user ]h" })
     changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
