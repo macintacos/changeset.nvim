@@ -101,8 +101,13 @@ require("changeset").setup({ keymaps = { next = "]h", prev = "[h" } })
 
 ## Options
 
-Pass any of these to `require("changeset").setup()` as nested tables
-(`{ keymaps = { jump = "o" } }`). Any `keymaps` entry may be `false` to leave it unbound.
+Pass any of these to `require("changeset").setup()` as nested tables:
+
+```lua
+require("changeset").setup({ keymaps = { jump = "o" } })
+```
+
+Any `keymaps` entry may be `false` to leave it unbound.
 
 <!-- The separator rows' dash counts set the vimdoc's column widths; keep their ratios. -->
 
@@ -229,7 +234,7 @@ the sidebar: either works without the other.
 ## Picker
 
 With mini.pick set up, `require("changeset.pick").pick()` searches the same rows as the
-sidebar. When mini.pick was set up by the end of startup, `:Pick changeset` does too. A
+sidebar. `:Pick changeset` does too when mini.pick was set up by the end of startup. A
 mini.pick set up later misses that registration; add it yourself:
 
 ```lua

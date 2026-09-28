@@ -129,9 +129,13 @@ The plugin maps nothing outside the sidebar. A suggested setup:
 
 OPTIONS                                               *changeset.nvim-options*
 
-Pass any of these to `require("changeset").setup()` as nested tables (`{
-keymaps = { jump = "o" } }`). Any `keymaps` entry may be `false` to leave it
-unbound.
+Pass any of these to `require("changeset").setup()` as nested tables:
+
+>lua
+    require("changeset").setup({ keymaps = { jump = "o" } })
+<
+
+Any `keymaps` entry may be `false` to leave it unbound.
 
   -------------------------------------------------------------------------
   Option                  Default   Description
@@ -366,8 +370,8 @@ works without the other.
 PICKER                                                 *changeset.nvim-picker*
 
 With mini.pick set up, `require("changeset.pick").pick()` searches the same
-rows as the sidebar. When mini.pick was set up by the end of startup, `:Pick
-changeset` does too. A mini.pick set up later misses that registration; add it
+rows as the sidebar. `:Pick changeset` does too when mini.pick was set up by
+the end of startup. A mini.pick set up later misses that registration; add it
 yourself:
 
 >lua
