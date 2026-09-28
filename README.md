@@ -4,7 +4,7 @@ A read-only sidebar mapping what this branch changed, nested by symbol.
 
 `<leader>gp` opens the *map* of what this branch changed. `<leader>gP` puts the *gutter*
 in PR Review Mode over the same range. Neither drives the other. `<leader>gj` searches the
-same changes in a picker (`MiniPick.registry.changeset`, in `mini-pickers`).
+same changes in a picker (`require("changeset.pick").pick()`, when mini.pick is loaded).
 
 In an editor too narrow to leave the files 80 columns beside it, the sidebar opens as a
 drawer along the bottom instead, and moves between the two as the editor is resized.

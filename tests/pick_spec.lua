@@ -3,8 +3,7 @@ vim.opt.rtp:prepend(require("support.deps").path("mini.icons"))
 require("mini.pick").setup()
 require("mini.icons").setup()
 
-local changeset = require("plugins.mini-pickers.changeset")
-local render = require("plugins.mini-pickers.render")
+local changeset = require("changeset.pick")
 
 ---A changeset row with the fields the picker reads.
 ---@param fields table
@@ -21,7 +20,7 @@ local function texts(items)
   end, items)
 end
 
-describe("mini-pickers.changeset", function()
+describe("changeset.pick", function()
   describe("_items", function()
     it("lists a changed symbol under the file and ancestors that place it", function()
       local rows = {
@@ -102,7 +101,7 @@ describe("mini-pickers.changeset", function()
       changeset._show(buf, items, {})
 
       local headed = {}
-      for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, render.ns, 0, -1, { details = true })) do
+      for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, changeset.ns, 0, -1, { details = true })) do
         if mark[4].virt_lines then
           headed[#headed + 1] = mark[2]
         end
