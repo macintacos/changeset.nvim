@@ -55,7 +55,7 @@ describe("changeset.health", function()
     end
   end
 
-  ---Runs `fn` with each of `names` forced to `state` ("installed"/"absent"), then restores them.
+  ---Runs `fn` with each module in `modules` forced to its state ("installed"/"absent"), then restores them.
   local function with_modules(modules, fn)
     local saved = {}
     for name, state in pairs(modules) do
