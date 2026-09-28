@@ -55,7 +55,11 @@ end
 ---@return string glyph
 ---@return string hl
 local function icon(category, name)
-  local ok, glyph, hl = pcall(MiniIcons.get, category, name)
+  -- The call is wrapped, not `MiniIcons.get`: an argument is evaluated before `pcall`
+  -- runs, so indexing a missing mini.icons would raise past the fallback below.
+  local ok, glyph, hl = pcall(function()
+    return MiniIcons.get(category, name)
+  end)
   return ok and glyph or " ", ok and hl or "Normal"
 end
 
@@ -151,6 +155,10 @@ M._show = show
 
 ---Open the picker on the changeset of the current buffer's repository.
 function M.pick()
+  if not rawget(_G, "MiniPick") then
+    vim.notify("Changeset: the picker needs mini.pick", vim.log.levels.WARN)
+    return
+  end
   local tree, err = require("changeset").rows()
   if not tree then
     return vim.notify("Changeset: " .. err, vim.log.levels.WARN)
