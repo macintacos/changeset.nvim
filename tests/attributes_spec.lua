@@ -36,6 +36,10 @@ local VITEST = {
 }
 
 describe("attributes", function()
+  it("lists the treesitter languages it marks test symbols in", function()
+    assert.are.same({ "rust", "tsx", "typescript" }, attributes.languages())
+  end)
+
   it("has the rust, typescript and tsx parsers", function()
     for _, lang in ipairs({ "rust", "typescript", "tsx" }) do
       assert.is_true(

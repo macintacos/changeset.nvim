@@ -7,16 +7,27 @@ local M = {}
 ---@type changeset.IconProvider?
 local provider
 
+---The provider `get` would pick now; probes afresh, unlike `get`, which keeps its first pick.
+---@return "mini.icons"|"nvim-web-devicons"|nil
+function M.source()
+  -- First: a devicons shim (LazyVim's) sets mini.icons up as it loads.
+  local ok = pcall(require, "nvim-web-devicons")
+  if MiniIcons then
+    return "mini.icons"
+  end
+  return ok and "nvim-web-devicons" or nil
+end
+
 ---@return changeset.IconProvider
 local function detect()
-  -- First: a devicons shim (LazyVim's) sets mini.icons up as it loads.
-  local ok, devicons = pcall(require, "nvim-web-devicons")
-  if MiniIcons then
+  local source = M.source()
+  if source == "mini.icons" then
     return MiniIcons.get
   end
-  if not ok then
+  if not source then
     return function() end
   end
+  local devicons = require("nvim-web-devicons")
   -- devicons knows files only; directories and LSP kinds fall through to the blank.
   return function(category, name)
     if category == "file" then

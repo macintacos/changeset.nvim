@@ -84,4 +84,14 @@ function M.mark(items, path, source)
   end
 end
 
+---@return string[]
+function M.languages()
+  local langs = vim.tbl_keys(vim.iter(vim.tbl_values(LANGS)):fold({}, function(set, lang)
+    set[lang] = true
+    return set
+  end))
+  table.sort(langs)
+  return langs
+end
+
 return M
