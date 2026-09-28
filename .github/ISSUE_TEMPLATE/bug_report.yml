@@ -1,0 +1,39 @@
+name: Bug report
+description: Something in changeset.nvim does not work as documented.
+labels: [bug]
+body:
+  - type: textarea
+    id: nvim-version
+    attributes:
+      label: Neovim version
+      description: The output of `nvim --version`.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: health
+    attributes:
+      label: Health check
+      description: The full output of `:checkhealth changeset`.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Minimal config
+      description: The smallest config that reproduces the bug. Save it as `repro.lua` and start Neovim with `nvim --clean -u repro.lua`.
+      render: lua
+      placeholder: |
+        vim.pack.add({ "https://github.com/macintacos/changeset.nvim" })
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: What you did, what you expected, and what happened instead.
+      placeholder: |
+        1. nvim --clean -u repro.lua in a repository, on a branch with commits
+        2. :Changeset
+        3. ...
+    validations:
+      required: true
