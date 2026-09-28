@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#MISE description="Run the plenary test suite, or the spec files given"
+#MISE depends=["deps"]
+
+set -euo pipefail
+
+# -u applies to the *outer* nvim, which needs plenary on its runtimepath for
+# :PlenaryBustedDirectory to exist at all. The child processes plenary spawns get
+# the same init via minimal_init.
+#
+# A single file goes through PlenaryBustedDirectory too — it shells out to `find`,
+# which takes one. :PlenaryBustedFile accepts no options, so the nvim it spawns
+# gets no -u and would not load minimal_init.
+#
+# ponytail: one nvim per spec file — PlenaryBustedDirectory recurses into tests/gitsigns/ and
+# tests/mini-pickers/, which the PR Review and picker ports own; go back to one
+# `PlenaryBustedDirectory tests/` (and its parallelism) once those specs sit flat in tests/.
+# --noplugin: plugin/gitsigns.lua runs vim.pack.add at load.
+specs=("$@")
+(($#)) || specs=(tests/*_spec.lua)
+status=0
+for spec in "${specs[@]}"; do
+	nvim --headless --noplugin -u tests/minimal_init.lua \
+		-c "PlenaryBustedDirectory $spec {minimal_init = 'tests/minimal_init.lua'}" || status=1
+done
+exit "$status"
