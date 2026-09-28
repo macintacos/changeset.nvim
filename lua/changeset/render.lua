@@ -54,6 +54,9 @@ local symbols = require("changeset.symbols")
 
 local M = {}
 
+-- The highlight groups: defaults `define_highlights` derives from the colorscheme,
+-- each kept as it is when a colorscheme or the user defines it first.
+
 ---Group for text that is not content: `Comment` with italics. Created by `define_highlights`.
 ---@type string
 M.META_HL = "ChangesetMeta"
@@ -130,6 +133,14 @@ M.HERE_ICON_HL = "ChangesetHereIcon"
 ---@type string
 M.PICKED_ICON_HL = "ChangesetPickedIcon"
 
+---Group 'guicursor' draws the cursor in while it is in the sidebar. Created by `define_highlights`.
+---@type string
+M.NO_CURSOR_HL = "ChangesetNoCursor"
+
+---Group for the filetype glyph on the preview band. Recoloured by `band_icon`.
+---@type string
+M.PREVIEW_ICON_HL = "ChangesetPreviewIcon"
+
 ---Glyph at the right edge of the selected row.
 ---@type string
 M.SELECTED_ICON = "◀"
@@ -141,14 +152,6 @@ M.HERE_ICON = "◁"
 ---Glyph at the right edge of the row last opened from the sidebar.
 ---@type string
 M.PICKED_ICON = "•"
-
----Group 'guicursor' draws the cursor in while it is in the sidebar. Created by `define_highlights`.
----@type string
-M.NO_CURSOR_HL = "ChangesetNoCursor"
-
----Group for the filetype glyph on the preview band. Recoloured by `band_icon`.
----@type string
-M.PREVIEW_ICON_HL = "ChangesetPreviewIcon"
 
 ---The priority a mark draws at when it carries none of its own. The magnitude is
 ---arbitrary — only the steps to the row backgrounds below and the match above matter.
