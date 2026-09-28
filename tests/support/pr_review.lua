@@ -1,22 +1,17 @@
----What the PR Review Mode specs share: gitsigns with this config's plugin file
----sourced over it, a fake gh, and waits on the base each buffer diffs against.
+---What the PR Review Mode specs share: gitsigns with `changeset.review`
+---activated over it, a fake gh, and waits on the base each buffer diffs against.
 ---Requiring it is what loads them; each spec runs in its own nvim.
 local support = require("support.git")
 
 vim.opt.rtp:prepend(require("support.deps").path("gitsigns.nvim"))
 
-local root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h:h")
--- The plugin file registers an un-grouped autocmd and keeps its state at file
--- scope, so it is sourced once. `want`, `toplevel`, `ours` and `moving` are tied
--- to a fixture repo each teardown deletes, so they own nothing in the next case;
--- `dismissed` and the branch memo `applied` persist, so each case opens its
--- first buffer on a branch other than the one the case before it ended on. A gh
--- lookup still in flight is dropped by the next case's first apply.
-local pack_add = vim.pack.add
-vim.pack.add = function() end
-local ok, err = pcall(dofile, root .. "/plugin/gitsigns.lua")
-vim.pack.add = pack_add
-assert(ok, err)
+-- The module keeps its state at module scope. `want`, `toplevel`, `ours` and
+-- `moving` are tied to a fixture repo each teardown deletes, so they own nothing in
+-- the next case; `dismissed` and the branch memo `applied` persist, so each case
+-- opens its first buffer on a branch other than the one the case before it ended
+-- on. A gh lookup still in flight is dropped by the next case's first apply.
+require("gitsigns").setup()
+require("changeset.review").activate()
 
 require("support.gh")
 
