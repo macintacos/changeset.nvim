@@ -8,14 +8,15 @@ set -euo pipefail
 # :PlenaryBustedDirectory to exist at all. The child processes plenary spawns get
 # the same init via minimal_init.
 #
-# A single file goes through PlenaryBustedDirectory too — it shells out to `find`,
-# which takes one. :PlenaryBustedFile accepts no options, so the nvim it spawns
-# gets no -u and would not load minimal_init.
+# Each spec goes through PlenaryBustedDirectory, whose find accepts a file:
+# :PlenaryBustedFile accepts no options, so the nvim it spawns gets no -u and
+# would not load minimal_init.
 #
 # ponytail: one nvim per spec file — PlenaryBustedDirectory recurses into tests/gitsigns/ and
 # tests/mini-pickers/, which the PR Review and picker ports own; go back to one
 # `PlenaryBustedDirectory tests/` (and its parallelism) once those specs sit flat in tests/.
-# --noplugin: plugin/gitsigns.lua runs vim.pack.add at load.
+# --noplugin: minimal_init puts this repo on rtp, and the outer nvim must not source
+# its plugin/ (plugin/gitsigns.lua calls vim.pack.add, cloning into the real data dir).
 specs=("$@")
 (($#)) || specs=(tests/*_spec.lua)
 status=0

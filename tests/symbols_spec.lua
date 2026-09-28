@@ -31,7 +31,7 @@ local function field(items, key)
   return out
 end
 
-describe("mini-pickers.symbols", function()
+describe("changeset.symbols", function()
   describe("flatten", function()
     it("walks a nested tree depth-first, recording depth", function()
       local items = symbols.flatten({

@@ -1,6 +1,6 @@
 local kinds = require("changeset.kinds")
 
-describe("mini-pickers.kinds", function()
+describe("changeset.kinds", function()
   describe("for_filetype", function()
     it("keeps declaration kinds", function()
       assert.is_true(kinds.for_filetype("go").Function)

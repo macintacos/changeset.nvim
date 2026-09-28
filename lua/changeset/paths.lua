@@ -1,3 +1,4 @@
+---Project-root lookup, and the clipboard copy behind the sidebar's `y`.
 local M = {}
 
 ---Project root for `buf` — git root via `vim.fs.root`, falling back to cwd.

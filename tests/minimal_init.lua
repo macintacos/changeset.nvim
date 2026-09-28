@@ -1,8 +1,11 @@
 -- Minimal init for plenary test harness
 
--- Neovim's default rtp includes the user config even under -u.
+-- Neovim's default rtp and packpath include the user config even under -u; a
+-- spec must not resolve a module from it.
 vim.opt.rtp:remove(vim.fn.stdpath("config"))
 vim.opt.rtp:remove(vim.fn.stdpath("config") .. "/after")
+vim.opt.packpath:remove(vim.fn.stdpath("config"))
+vim.opt.packpath:remove(vim.fn.stdpath("config") .. "/after")
 -- Headless test nvims must never touch the shared ShaDa file. Without this,
 -- every spec's child nvim reads and writes ~/.local/state/nvim/*/shada/main.shada
 -- alongside the interactive editor; concurrent or signal-killed children
@@ -31,8 +34,7 @@ end
 -- config (`diff.noprefix`, say) reshapes the output the specs parse.
 vim.env.GIT_CONFIG_GLOBAL = "/dev/null"
 vim.env.GIT_CONFIG_SYSTEM = "/dev/null"
--- Run against the repo tree this init lives in (the repo root is two levels up
--- from tests/minimal_init.lua), so the suite also works from a git worktree.
+-- The repo root is two levels up from this file, wherever nvim was started.
 local root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
 vim.opt.rtp:prepend(root)
 -- `rtp` reaches `lua/` only, so fixture modules under `tests/support/` need their own path.

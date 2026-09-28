@@ -9,7 +9,9 @@ mkdir -p .tests/luacov
 
 # LUACOV is set from -c, after init, so only the spec processes, which inherit the
 # environment, start luacov.
-# sequential, because every spec process merges into one stats file.
+# ponytail: the per-spec loop from .mise/tasks/test — undo both together. Until
+# then sequential = true is inert; it matters once one PlenaryBustedDirectory runs
+# every spec, since they all merge into one stats file.
 status=0
 for spec in tests/*_spec.lua; do
 	nvim --headless --noplugin -u tests/minimal_init.lua \
@@ -19,6 +21,7 @@ done
 
 nvim -l tests/support/coverage.lua
 # The report's Summary table is sized for absolute paths; reprint it repo-relative.
+# index/substr, not sub(): root is a literal path, and sub reads it as a regex.
 awk -v root="$PWD/" '/^Summary$/ { on = 1 } on && NF == 4 { if (index($1, root) == 1) $1 = substr($1, length(root) + 1); printf "%-40s %6s %6s %9s\n", $1, $2, $3, $4 }' \
 	.tests/luacov/report.out
 echo "Full report: .tests/luacov/report.out"

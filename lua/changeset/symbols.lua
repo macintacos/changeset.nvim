@@ -3,12 +3,12 @@
 ---`vim.lsp.util.symbols_to_items` recurses into `children` and appends them to
 ---one flat list, discarding the nesting — so changeset requests
 ---`textDocument/documentSymbol` itself and walks the response through here.
----Every item comes back carrying the tree position it came from: `guides` for
----the idle outline, `crumb` for the trail shown above a search hit.
+---Every item also carries its tree position (`guides`, `crumb`), which changeset
+---itself does not read.
 
 ---@class changeset.Symbol
----@field name string      Symbol name, and the string mini.pick matches against.
----@field text string      Same as `name` (mini.pick reads `text` for its stritems).
+---@field name string      Symbol name.
+---@field text string      Same as `name`.
 ---@field kind string      Resolved `SymbolKind` name, e.g. "Function".
 ---@field path string      File the symbol lives in.
 ---@field lnum integer     1-based line of the symbol's name.
@@ -141,7 +141,7 @@ local function walk(out, nodes, ctx, depth, bars, crumb)
   end
 end
 
----Flatten a `textDocument/documentSymbol` response into picker items.
+---Flatten a `textDocument/documentSymbol` response into `changeset.Symbol`s.
 ---@param response table[] `DocumentSymbol[]` or `SymbolInformation[]`.
 ---@param opts changeset.SymbolOpts?
 ---@return changeset.Symbol[]

@@ -375,7 +375,7 @@ end
 ---Sets the top line instead of running `zt`/`<C-y>`: keys run here reach every
 ---`vim.on_key` listener as if typed in this window, and a preview runs this in a
 ---window the user is not in.
-local function reveal_cursor()
+function M._reveal_cursor()
   local rows = math.floor(vim.api.nvim_win_get_height(0) * REVEAL_RATIO) - 1
   vim.fn.winrestview({ topline = top_line(vim.fn.line("."), rows) })
 end
@@ -400,9 +400,7 @@ function M.preview(path, lnum, band, pick)
   if lnum then
     local last = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
     vim.api.nvim_win_set_cursor(win, { M._clamp(lnum, last), 0 })
-    vim.api.nvim_win_call(win, function()
-      reveal_cursor()
-    end)
+    vim.api.nvim_win_call(win, M._reveal_cursor)
   end
 end
 
@@ -477,7 +475,7 @@ local function promote(win, buf, lnum, how)
   end
   if lnum then
     vim.api.nvim_win_set_cursor(0, { M._clamp(lnum, vim.api.nvim_buf_line_count(buf)), 0 })
-    reveal_cursor()
+    M._reveal_cursor()
   end
 end
 

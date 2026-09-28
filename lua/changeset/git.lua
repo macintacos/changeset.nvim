@@ -1,4 +1,4 @@
----Git queries changeset runs.
+---The git and gh queries that pick the branch changeset diffs against.
 local M = {}
 
 ---Run a git command and return its stdout lines, or an empty table if it failed.

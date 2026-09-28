@@ -1,7 +1,7 @@
----The plugins the specs load, checked out under `.tests/deps` at the revisions
----pinned below, so the suite does not depend on what the editor happens to have
----installed. `nvim -l tests/support/deps.lua` installs them;
----`require("support.deps")` only locates them.
+---The plugins the specs load, and luacov for `mise run coverage`, checked out
+---under `.tests/deps` at the revisions pinned below, so the suite does not depend
+---on what the editor happens to have installed. `nvim -l tests/support/deps.lua`
+---installs them; `require("support.deps")` only locates them.
 local this = debug.getinfo(1, "S").source:sub(2)
 local root = vim.fn.fnamemodify(this, ":p:h:h:h")
 
@@ -72,7 +72,7 @@ function M.install()
     ["mini.icons"] = { src = "https://github.com/nvim-mini/mini.icons", rev = "e56797f90192d81f1fda02e662fc3e8e3d775027" },
     ["mini.pick"] = { src = "https://github.com/nvim-mini/mini.pick", rev = "8c1f75f8ddd8c9f75d07ed2ab5718d2c3cb65a66" },
     ["gitsigns.nvim"] = { src = "https://github.com/lewis6991/gitsigns.nvim", rev = "070a5d7b985546cc57e1fc61e5bc507fecac6045" },
-    luacov = { src = "https://github.com/lunarmodules/luacov", rev = "b1f9eae400da976b93edb7f94cf5d05f538a0655" },
+    luacov = { src = "https://github.com/lunarmodules/luacov", rev = "b1f9eae400da976b93edb7f94cf5d05f538a0655" }, -- v0.17.0
   }
   local errors = M.sync(pins, M.dir)
   if #errors > 0 then
