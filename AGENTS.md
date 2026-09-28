@@ -7,6 +7,7 @@ hunk touched. `README.md` is the user-facing reference and the design record.
 
 ```text
 .
+├── .github/             CI (lint + test on push to main and PRs) and Dependabot
 ├── mise.toml            tools; postinstall registers the hk git hooks
 ├── mise.lock            exact tool versions (`lockfile = true`)
 ├── hk.pkl               formatters, linters and git hooks
@@ -47,16 +48,20 @@ hunk touched. `README.md` is the user-facing reference and the design record.
 │   ├── view.lua         filters it
 │   └── window.lua       window bookkeeping and layout
 ├── tests/               specs, minimal_init.lua, support/ fixtures, busted.yml
-└── .tests/              gitignored: installed deps, luals logs, coverage output
+└── .tests/              gitignored: installed deps, suite data dir, luals logs, coverage output
 ```
 
 ## Tasks
 
 Run `mise trust`, then `mise run setup`, once in each new clone or worktree: mise refuses
-to load an untrusted `mise.toml`.
+to load an untrusted `mise.toml`. Then run `mise run parsers` once: it installs the `rust`,
+`typescript` and `tsx` parsers the specs need into `.tests/data`, and without them
+`attributes_spec` and two `resolve_spec` cases fail.
 
 - `mise run setup` — `mise install`; its postinstall hook installs the hk git hooks.
 - `mise run deps` — checks out the pinned test dependencies under `.tests/deps`.
+- `mise run parsers` — installs the specs' treesitter parsers into `.tests/data`. Depends
+  on `deps`.
 - `mise run format` — `hk fix --all --no-stage`: every formatter, in write mode.
 - `mise run lint` — `hk check --all`: format check, selene, shellcheck, rumdl, taplo,
   pkl, typos, the git checks and `typecheck`. Depends on `deps`.
@@ -83,7 +88,8 @@ Plenary busted specs, flat in `tests/`, named `<module>_spec.lua` or for a behav
 (`sidebar_spec.lua`, `band_spec.lua`). Each spec file runs in its own child Neovim under
 `tests/minimal_init.lua`, which removes the user config from `rtp`, points
 `XDG_STATE_HOME` and `XDG_CACHE_HOME` at temporary directories, scrubs `GIT_*`, and points
-global and system git config at `/dev/null`. It does **not** isolate `XDG_DATA_HOME`.
+global and system git config at `/dev/null`. It points `XDG_DATA_HOME` at `.tests/data`
+and drops the editor's data `site` from `runtimepath`.
 
 A test creates its temporary files and repositories itself and removes them after it.
 Private functions a spec needs are exposed as `M._name` (see Conventions).
@@ -101,6 +107,8 @@ Specs load these as `require("support.<name>")`:
   and a fake gh.
 - `tests/support/cursor.lua` — whether `guicursor` hides the cursor.
 - `tests/support/coverage.lua` — the luacov hooks.
+- `tests/support/parsers.lua` — `data_home`, the suite's data dir that `minimal_init.lua`
+  sets; `nvim -l` on it is the `mise run parsers` installer.
 
 Use `support.git` rather than shelling out to git by hand. `chdir` only when the code
 under test resolves the repository from the process directory.
@@ -119,8 +127,10 @@ test tool like luacov — is added to `.luarc.check.json`'s `workspace.library`.
 ### Treesitter parsers
 
 The suite needs the `rust`, `typescript` and `tsx` parsers; `tests/attributes_spec.lua`
-asserts they load. Because `XDG_DATA_HOME` is not isolated, they are read from your own
-`stdpath("data")/site/parser`, and no task installs them.
+asserts they load. They live in `.tests/data/nvim/site/parser`, and `mise run parsers`
+installs them with the nvim-treesitter pinned in `tests/support/deps.lua` and the
+`tree-sitter` CLI pinned in `mise.toml`. It needs a C compiler. The editor's own parsers
+are never read.
 
 ## Conventions
 
