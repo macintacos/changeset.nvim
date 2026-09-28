@@ -11,11 +11,11 @@ local provider
 ---@return "mini.icons"|"nvim-web-devicons"|nil
 function M.source()
   -- First: a devicons shim (LazyVim's) sets mini.icons up as it loads.
-  local ok = pcall(require, "nvim-web-devicons")
+  local devicons_loads = pcall(require, "nvim-web-devicons")
   if MiniIcons then
     return "mini.icons"
   end
-  return ok and "nvim-web-devicons" or nil
+  return devicons_loads and "nvim-web-devicons" or nil
 end
 
 ---@return changeset.IconProvider

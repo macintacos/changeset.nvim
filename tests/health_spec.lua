@@ -69,8 +69,8 @@ describe("changeset.health", function()
       end
     end
     local ok, err = pcall(fn)
-    for name, s in pairs(saved) do
-      package.loaded[name], package.preload[name] = s[1], s[2]
+    for name, previous in pairs(saved) do
+      package.loaded[name], package.preload[name] = previous[1], previous[2]
     end
     assert.is_true(ok, tostring(err))
   end
@@ -130,7 +130,7 @@ describe("changeset.health", function()
   end)
 
   it("probes each parser the test-symbol marker needs", function()
-    local languages = attributes.languages
+    local original_languages = attributes.languages
     attributes.languages = function()
       return { "changeset_no_such_lang", "lua" }
     end
@@ -138,12 +138,12 @@ describe("changeset.health", function()
       assert.equal("info", checked_level("no treesitter parser for `changeset_no_such_lang`"))
       assert.equal("ok", checked_level("treesitter parser for `lua` found"))
     end)
-    attributes.languages = languages
+    attributes.languages = original_languages
     assert.is_true(ok, tostring(err))
   end)
 
   it("probes optional plugins by loading them", function()
-    local mini_pick = MiniPick
+    local original_mini_pick = MiniPick
     local ok, err = pcall(function()
       with_modules({ ["which-key"] = "installed", gitsigns = "absent", ["mini.pick"] = "absent" }, function()
         assert.equal("ok", checked_level("`which-key` found"))
@@ -157,12 +157,12 @@ describe("changeset.health", function()
         assert.equal("ok", checked_level("`mini.pick` found and set up"))
       end)
     end)
-    MiniPick = mini_pick
+    MiniPick = original_mini_pick
     assert.is_true(ok, tostring(err))
   end)
 
   it("names only the servers that provide documentSymbol, once each", function()
-    local get_clients = vim.lsp.get_clients
+    local original_get_clients = vim.lsp.get_clients
     vim.lsp.get_clients = function(opts)
       if opts and opts.method == "textDocument/documentSymbol" then
         return { { name = "lua_ls" }, { name = "lua_ls" } }
@@ -170,12 +170,12 @@ describe("changeset.health", function()
       return {}
     end
     local ok, calls = pcall(checked)
-    vim.lsp.get_clients = get_clients
+    vim.lsp.get_clients = original_get_clients
     assert.is_true(ok, tostring(calls))
-    local line = vim.iter(calls):find(function(call)
+    local symbols_call = vim.iter(calls):find(function(call)
       return call[2]:find("textDocument/documentSymbol", 1, true) ~= nil
     end)
-    assert.equal("`textDocument/documentSymbol` from lua_ls", line[2])
+    assert.equal("`textDocument/documentSymbol` from lua_ls", symbols_call[2])
   end)
 
   it("calls no process or server API itself", function()
@@ -187,15 +187,15 @@ describe("changeset.health", function()
       { "vim.lsp.enable", vim.lsp, "enable" },
     }
     local calls, originals = {}, {}
-    for i, t in ipairs(targets) do
-      originals[i] = t[2][t[3]]
-      t[2][t[3]] = function()
-        table.insert(calls, t[1])
+    for i, target in ipairs(targets) do
+      originals[i] = target[2][target[3]]
+      target[2][target[3]] = function()
+        table.insert(calls, target[1])
       end
     end
     local ok, err = pcall(checked)
-    for i, t in ipairs(targets) do
-      t[2][t[3]] = originals[i]
+    for i, target in ipairs(targets) do
+      target[2][target[3]] = originals[i]
     end
     assert.is_true(ok, tostring(err))
     assert.same({}, calls)
