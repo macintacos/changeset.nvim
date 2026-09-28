@@ -24,7 +24,7 @@ record.
 ├── docs/design.md       why the sidebar looks and behaves as it does
 ├── plugin/changeset.lua `:Changeset`, `<Plug>(changeset-toggle)`, session restore, mini.pick registry
 ├── lua/changeset/
-│   ├── init.lua         glue: drawing and the window state machine
+│   ├── init.lua         glue: the public API and the window state machine
 │   ├── actions.lua      what each sidebar key does, and binding them
 │   ├── attributes.lua   inline test markers the syntax shows, via treesitter
 │   ├── build.lua        builds the tree and keeps its diff and symbols fresh
@@ -32,6 +32,7 @@ record.
 │   ├── cache.lua        symbols kept between builds and restarts
 │   ├── config.lua       the user's options: defaults, and what `setup()` made of them
 │   ├── diff.lua         runs the branch's git diff and parses it into files and hunks
+│   ├── draw.lua         puts the tree, its header and the row states on the sidebar's buffer
 │   ├── git.lua          git and gh queries that pick the base branch
 │   ├── health.lua       `:checkhealth changeset`: requirements, optional integrations, options in force
 │   ├── help.lua         the `?` key reference

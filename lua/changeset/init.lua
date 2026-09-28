@@ -1,13 +1,13 @@
 ---A read-only sidebar mapping what this branch changed, nested by symbol.
 ---
----See docs/design.md for the design. This file is the glue: it hands the tree `build`
----keeps to `tree` and `render`, and owns drawing and the window state machine; what each
----key does is `actions`. The thinking happens in the pure modules it calls.
+---See docs/design.md for the design. This file is the public API and the window state
+---machine: `build` keeps the tree, `draw` puts it on the sidebar's buffer, and what each key
+---does is `actions`. The thinking happens in the pure modules they call.
 
 local actions = require("changeset.actions")
 local build = require("changeset.build")
 local config = require("changeset.config")
-local icons = require("changeset.icons")
+local draw = require("changeset.draw")
 local prefs = require("changeset.prefs")
 local render = require("changeset.render")
 local state = require("changeset.state")
@@ -21,14 +21,8 @@ local DIFF_WAIT_MS = 2000
 -- Capitalised: `:mksession` saves only globals named so, and only with "globals" in 'sessionoptions'.
 local POSITION_GLOBAL = "ChangesetPosition"
 
--- The totals row over the tree and the blank one under it.
-local HEADER_LINES = 2
-
 local M = {}
 
-local ns = vim.api.nvim_create_namespace("changeset")
--- Separate from `ns` so the tracker can repaint row backgrounds without redrawing the tree.
-local rows_ns = vim.api.nvim_create_namespace("changeset.rows")
 local augroup = vim.api.nvim_create_augroup("changeset", { clear = true })
 
 ---@class changeset.Landing
@@ -78,115 +72,29 @@ local left_float = false
 ---@type changeset.Config.Keymaps
 local bound_keys = {}
 
----@param row changeset.Row
----@return string glyph, string hl
-local function icon_for(row)
-  if row.kind == "section" then
-    return icons.get("directory", row.icon)
-  end
-  if row.kind == "file" then
-    return icons.get("file", row.path)
-  end
-  return icons.get("lsp", row.kind == "symbol" and row.symbol_kind or "Text")
-end
-
----@return changeset.Row?
-local function row_at_cursor()
-  local session = current()
-  if not session then
-    return nil
-  end
-  local win = window.win()
-  if not win then
-    return nil
-  end
-  return session.visible[vim.api.nvim_win_get_cursor(win)[1]]
-end
-
----@param row changeset.Row
----@return changeset.Band
-local function band_for(row)
-  local glyph, hl = icons.get("file", row.path)
-  return {
-    icon = glyph,
-    icon_hl = render.band_icon(hl),
-    path = row.path,
-    -- Only a symbol row names its destination. An orphan hunk's own text is the
-    -- changed line, which is not a place and does not read as one.
-    destination = row.kind == "symbol" and row.name or nil,
-    jump = bound_keys.jump,
-  }
-end
-
 local function preview_current()
   local session = current()
-  local row = row_at_cursor()
+  local row = draw.row_at_cursor()
   if not row then
     return
   end
   assert(session, "changeset: no open session")
   if row.lnum and row.kind ~= "file" then
-    window.preview(session.root .. "/" .. row.path, row.lnum, band_for(row), { row = row, session = session })
-  elseif row.kind == "file" and row.status == "deleted" then
-    window.preview_notice("This file was deleted on this branch", band_for(row))
-  elseif row.kind == "file" then
-    window.preview(session.root .. "/" .. row.path, 1, band_for(row), { row = row, session = session })
-  end
-end
-
----@return string[] ids Of the rows on screen, in display order.
-local function visible_ids()
-  local session = current()
-  assert(session, "changeset: no open session")
-  return vim.tbl_map(function(row)
-    return row.id
-  end, session.visible)
-end
-
----@param buf integer
----@param lnum integer
----@param marks vim.api.keyset.set_extmark[] From `render.state_marks`.
-local function mark_row(buf, lnum, marks)
-  for _, mark in ipairs(marks) do
-    vim.api.nvim_buf_set_extmark(
-      buf,
-      rows_ns,
-      lnum - 1,
-      0,
-      vim.tbl_extend("force", mark, { end_row = lnum, strict = false })
+    window.preview(
+      session.root .. "/" .. row.path,
+      row.lnum,
+      draw.band_for(row, bound_keys.jump),
+      { row = row, session = session }
     )
-  end
-end
-
----Mark the row under the sidebar's cursor as selected while the sidebar has focus,
----the row for where you are, and the row last opened, each of the last two on its
----nearest ancestor on screen. A row several would mark shows the first of those.
-local function paint()
-  local session = current()
-  local buf, win = window.buf(), window.win()
-  if not (session and buf and win) then
-    return
-  end
-  vim.api.nvim_buf_clear_namespace(buf, rows_ns, 0, -1)
-  local ids = visible_ids()
-  ---@param row changeset.Row?
-  ---@return integer?
-  local function on_screen(row)
-    return row and state._nearest(ids, row.id)
-  end
-  local here, picked = session.here, session.picked
-  local states = {
-    { "selected", window.is_focused() and row_at_cursor() and vim.api.nvim_win_get_cursor(win)[1] },
-    { "here", on_screen(here and tree.locate(session.rows, here.path, here.lnum)) },
-    { "picked", on_screen(picked and tree.relocate(session.rows, picked)) },
-  }
-  local width, taken = vim.api.nvim_win_get_width(win), {}
-  for _, entry in ipairs(states) do
-    local kind, lnum = entry[1], entry[2]
-    if lnum and not taken[lnum] then
-      taken[lnum] = true
-      mark_row(buf, lnum, render.state_marks(kind, width))
-    end
+  elseif row.kind == "file" and row.status == "deleted" then
+    window.preview_notice("This file was deleted on this branch", draw.band_for(row, bound_keys.jump))
+  elseif row.kind == "file" then
+    window.preview(
+      session.root .. "/" .. row.path,
+      1,
+      draw.band_for(row, bound_keys.jump),
+      { row = row, session = session }
+    )
   end
 end
 
@@ -224,7 +132,7 @@ local function track()
   local path = name ~= "" and vim.fs.relpath(session.root, vim.fs.normalize(name)) or nil
   session.here = path and { path = path, lnum = vim.api.nvim_win_get_cursor(win)[1] } or nil
   release("here")
-  paint()
+  draw.paint()
 end
 
 ---Keep where you are and the sidebar's cursor row in a global `:mksession` saves, so
@@ -233,7 +141,7 @@ local function remember()
   local session = current()
   -- Not while a restored position waits: a write then would save the half-built tree's.
   if session and not session.restoring then
-    local row = row_at_cursor()
+    local row = draw.row_at_cursor()
     vim.g[POSITION_GLOBAL] = vim.json.encode({ here = session.here, row = row and { id = row.id, path = row.path } })
   end
 end
@@ -246,11 +154,11 @@ local function land(win)
   assert(session, "changeset: no open session")
   local here = session.here
   local row = here and tree.locate(session.rows, here.path, here.lnum)
-  local lnum = row and state._nearest(visible_ids(), row.id)
+  local lnum = row and state._nearest(draw.visible_ids(), row.id)
   if lnum then
     vim.api.nvim_win_set_cursor(win, { lnum, 0 })
   end
-  session.landing = { id = (row_at_cursor() or {}).id }
+  session.landing = { id = (draw.row_at_cursor() or {}).id }
 end
 
 ---Make `row` the one last opened. A folded chain is recorded by its tip, the symbol it jumps to.
@@ -259,158 +167,7 @@ local function pick(row)
   local session = current()
   assert(session, "changeset: no open session")
   session.picked = { id = row.tip or row.id, path = row.path, lnum = row.lnum or 1 }
-  paint()
-end
-
----@param buf integer
----@param lines changeset.Line[] Rendered lines, each carrying its own marks.
-local function apply_marks(buf, lines)
-  for lnum, line in ipairs(lines) do
-    for _, mark in ipairs(line.marks or {}) do
-      vim.api.nvim_buf_set_extmark(buf, ns, lnum - 1, mark.col or 0, {
-        end_col = mark.end_col,
-        hl_group = mark.hl,
-        virt_text = mark.virt_text,
-        virt_text_pos = mark.pos,
-        hl_mode = mark.hl_mode,
-        virt_lines = mark.virt_lines,
-        priority = mark.priority or render.MARK_PRIORITY,
-      })
-    end
-  end
-end
-
----Hang the "what is being hidden" note under the tree as a virtual line.
----@param buf integer
----@param anchor_line integer 0-based line the note hangs under.
----@param width integer Sidebar width; the note gets one cell less, for its leading space.
----@param hidden_kinds table Kinds being hidden, as `view.hiding` reports them.
-local function hidden_note_line(buf, anchor_line, width, hidden_kinds)
-  local note = render.hidden_note(hidden_kinds, width - 1)
-  if note then
-    -- A virtual line rather than a row: the cursor cannot reach it, so it needs no
-    -- place in `visible` and no guard in everything that reads a row off a line.
-    vim.api.nvim_buf_set_extmark(buf, ns, anchor_line, 0, {
-      virt_lines = { { { "" } }, { { " " .. note, render.META_HL } } },
-    })
-  end
-end
-
----What the header says about the branch, as the tree stands.
----@return changeset.Summary
-local function summary()
-  local session = current()
-  assert(session, "changeset: no open session")
-  local added, removed, readable, pending = 0, 0, 0, 0
-  for _, file in ipairs(session.files) do
-    added, removed = added + (file.added or 0), removed + (file.removed or 0)
-    -- A deleted file's symbols are never read.
-    if file.status ~= "deleted" then
-      readable = readable + 1
-      pending = pending + (session.symbols[file.path] == nil and 1 or 0)
-    end
-  end
-  return {
-    ref = session.ref,
-    pr = session.pr,
-    files = #session.files,
-    commits = session.commits,
-    added = added,
-    removed = removed,
-    reading = pending > 0 and { done = readable - pending, total = readable } or nil,
-  }
-end
-
----Scroll the header's totals into view while the tree is at its top. Virtual lines
----above the first line are filler, which Neovim leaves out of view unless asked.
----@param win integer
-local function reveal_header(win)
-  vim.api.nvim_win_call(win, function()
-    local at = vim.fn.winsaveview()
-    if at.topline == 1 and at.topfill < HEADER_LINES then
-      vim.fn.winrestview({ topfill = HEADER_LINES })
-    end
-  end)
-end
-
----Put the ref in the winbar and hang the totals above the tree's first line.
----@param buf integer
----@param win integer
----@param width integer
-local function draw_header(buf, win, width)
-  local session = current()
-  assert(session, "changeset: no open session")
-  local header = summary()
-  vim.wo[win].winbar = render.header(header, width)
-  -- Totals before the first diff would claim that nothing changed.
-  if session.collected then
-    vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {
-      virt_lines = { render.header_totals(header, width), { { "" } } },
-      virt_lines_above = true,
-    })
-  end
-  reveal_header(win)
-end
-
-local function draw()
-  local session = current()
-  local buf, win = window.buf(), window.win()
-  if not (buf and win and vim.api.nvim_buf_is_valid(buf)) then
-    return
-  end
-  assert(session, "changeset: no open session")
-
-  local previous_row = row_at_cursor()
-  local previous_line = vim.api.nvim_win_get_cursor(win)[1]
-  local width = vim.api.nvim_win_get_width(win)
-
-  local shown = tree.compress(view.by_kind(view.filter(session.rows, session.query), session.hidden), function(id)
-    return state.is_chain_open(session.st, id)
-  end)
-
-  -- `render.lines` walks the tree for its guides, so it is the one place that
-  -- decides which rows are on screen; each line carries its row back, which is
-  -- how a cursor line maps to a row without re-deriving that walk here.
-  local lines = render.lines(shown, {
-    icon = icon_for,
-    collapsed = function(id)
-      return state.is_collapsed(session.st, id)
-    end,
-    width = width,
-    query = session.query,
-  })
-
-  session.visible = vim.tbl_map(function(line)
-    return line.row
-  end, lines)
-
-  local text = vim.tbl_map(function(line)
-    return line.text
-  end, lines)
-  if #text == 0 and session.collected then
-    text = {
-      render.empty_message({
-        on_default_branch = session.branch == session.default_branch,
-        branch = session.branch,
-        ref = session.ref,
-      }),
-    }
-  end
-
-  vim.bo[buf].modifiable = true
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, text)
-  vim.bo[buf].modifiable = false
-  -- Rows are trimmed to the width; the sentence standing in for them is not.
-  vim.wo[win].wrap = #lines == 0
-
-  vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-  apply_marks(buf, lines)
-  hidden_note_line(buf, #text - 1, width, view.hiding(view.kind_counts(session.rows), session.hidden))
-
-  vim.api.nvim_win_set_cursor(win, { state._reanchor(session.visible, previous_row, previous_line), 0 })
-
-  draw_header(buf, win, width)
-  paint()
+  draw.paint()
 end
 
 ---Text of a changed line, for captioning an orphan hunk.
@@ -462,13 +219,13 @@ local function apply_restored()
   if wanted and wanted.here and decided(wanted.here.path) then
     if tree.locate(session.rows, wanted.here.path, wanted.here.lnum) then
       session.here = wanted.here
-      paint()
+      draw.paint()
     end
     release("here")
   end
   if wanted and wanted.row and decided(wanted.row.path) then
     local win = window.win()
-    local lnum = win and tree.find(session.rows, wanted.row.id) and state._nearest(visible_ids(), wanted.row.id)
+    local lnum = win and tree.find(session.rows, wanted.row.id) and state._nearest(draw.visible_ids(), wanted.row.id)
     if win and lnum then
       vim.api.nvim_win_set_cursor(win, { lnum, 0 })
       -- Else a pending landing's follow would pull the cursor back off it.
@@ -484,14 +241,14 @@ local function rebuild()
   -- Taken before the rows change. Before the first diff the landing and the row under
   -- the cursor are both nil, which is still "not moved". Only a rebuild follows: a
   -- fold or filter redraw brings no deeper row.
-  local at = (row_at_cursor() or {}).id
+  local at = (draw.row_at_cursor() or {}).id
   local follow = session.landing and window.is_focused() and session.landing.id == at
   -- The same "until the user moves it" rule holds a restored row.
   if session.restoring and window.is_focused() and session.restoring.at ~= at then
     release("row")
   end
   session.rows = tree.build(session.files, session.symbols, line_text)
-  draw()
+  draw.draw()
   if follow then
     land(vim.api.nvim_get_current_win())
   else
@@ -500,7 +257,7 @@ local function rebuild()
   -- After the landing: a restored row overrides it.
   apply_restored()
   if session.restoring then
-    session.restoring.at = (row_at_cursor() or {}).id
+    session.restoring.at = (draw.row_at_cursor() or {}).id
   end
 end
 
@@ -522,7 +279,7 @@ build.attach({
     }
   end,
   rebuild = rebuild,
-  redraw = draw,
+  redraw = draw.draw,
   failed = function()
     -- Nothing would ever settle a restored position, and it silences `remember`.
     assert(current(), "changeset: no open session").restoring = nil
@@ -616,7 +373,11 @@ function M.open()
   local win = window.open(buf)
   vim.wo[win].statusline = "%{%v:lua.require'changeset'.footer()%}"
   -- After `filetype`, so these replace any `]]`/`[[` a plugin maps on the buffer at `FileType`.
-  actions.set_keymaps(buf, bound_keys, { row_at_cursor = row_at_cursor, draw = draw, pick = pick, close = M.close })
+  actions.set_keymaps(
+    buf,
+    bound_keys,
+    { row_at_cursor = draw.row_at_cursor, draw = draw.draw, pick = pick, close = M.close }
+  )
 
   -- Fires: the sidebar's window going without the plugin being asked — `:q`, `:only`,
   -- `:tabclose`, a layout plugin. Scheduled because the window is still in the layout
@@ -642,7 +403,7 @@ function M.open()
     buffer = buf,
     desc = "changeset: move the selected row with the cursor",
     callback = function()
-      paint()
+      draw.paint()
     end,
   })
   -- Fires: the sidebar scrolling, by any means. Back at the top, the header's totals
@@ -654,7 +415,7 @@ function M.open()
     desc = "changeset: keep the header's totals in view at the top of the tree",
     callback = function()
       if vim.v.event[tostring(win)].topline < 0 then
-        reveal_header(win)
+        draw.reveal_header(win)
       end
     end,
   })
@@ -666,7 +427,7 @@ function M.open()
     desc = "changeset: move the tree beside or below the files as the editor's width allows",
     callback = function()
       window.relayout()
-      draw()
+      draw.draw()
     end,
   })
   -- Fires: leaving any window while the sidebar is open. Remembers whether it was a
@@ -716,12 +477,12 @@ function M.open()
     desc = "changeset: stand the selected row in for the cursor while it is in the sidebar",
     callback = function()
       window.sync_cursor()
-      paint()
+      draw.paint()
     end,
   })
   actions.bind_step_keys(bound_keys, preview_current)
 
-  draw()
+  draw.draw()
   -- A kept tree misses what nothing announced, such as a file edited outside Neovim while it kept focus.
   if current() == kept then
     M.refresh()
@@ -770,7 +531,7 @@ function M.restore()
   assert(session, "changeset: no open session")
   session.restoring = recorded(vim.g[POSITION_GLOBAL])
   if session.restoring then
-    session.restoring.at = (row_at_cursor() or {}).id
+    session.restoring.at = (draw.row_at_cursor() or {}).id
     apply_restored()
   end
 end
