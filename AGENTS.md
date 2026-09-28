@@ -7,7 +7,7 @@ hunk touched. `README.md` is the user-facing reference and the design record.
 
 ```text
 .
-├── .github/             CI (lint + test on push to main and PRs) and Dependabot
+├── .github/             CI (lint + test on push to main and PRs), Dependabot and the bug-report issue form
 ├── mise.toml            tools; postinstall registers the hk git hooks
 ├── mise.lock            exact tool versions (`lockfile = true`)
 ├── hk.pkl               formatters, linters and git hooks
@@ -197,4 +197,5 @@ Check a change against
 `mise run preflight` stays green on every PR. A PR that changes the layout, a task, a
 fixture or the public API updates `AGENTS.md` in the same PR.
 
-A user-visible change adds a line under `## [Unreleased]` in `CHANGELOG.md`.
+A user-visible change adds a line to the matching `### Added`, `### Changed`, `### Fixed` or
+`### Removed` group under `## [Unreleased]` in `CHANGELOG.md`.

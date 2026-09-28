@@ -22,7 +22,7 @@ body:
     id: config
     attributes:
       label: Minimal config
-      description: The smallest config that reproduces the bug. Save it as `repro.lua` and start Neovim with `nvim --clean -u repro.lua`.
+      description: The smallest config that reproduces the bug. Save it as `repro.lua` and start Neovim with `NVIM_APPNAME=changeset-repro nvim -u repro.lua`.
       render: lua
       placeholder: |
         vim.pack.add({ "https://github.com/macintacos/changeset.nvim" })
@@ -32,7 +32,7 @@ body:
       label: Steps to reproduce
       description: What you did, what you expected, and what happened instead.
       placeholder: |
-        1. nvim --clean -u repro.lua in a repository, on a branch with commits
+        1. NVIM_APPNAME=changeset-repro nvim -u repro.lua in a repository, on a branch with commits
         2. :Changeset
         3. ...
     validations:
