@@ -1,13 +1,12 @@
 ---A read-only sidebar mapping what this branch changed, nested by symbol.
 ---
 ---See docs/design.md for the design. This file is the glue: it hands the tree `build`
----keeps to `tree` and `render`, and owns the sidebar's actions and the window state
----machine. The thinking happens in the pure modules it calls.
+---keeps to `tree` and `render`, and owns drawing and the window state machine; what each
+---key does is `actions`. The thinking happens in the pure modules it calls.
 
-local Paths = require("changeset.paths")
+local actions = require("changeset.actions")
 local build = require("changeset.build")
 local config = require("changeset.config")
-local help = require("changeset.help")
 local icons = require("changeset.icons")
 local prefs = require("changeset.prefs")
 local render = require("changeset.render")
@@ -18,9 +17,6 @@ local window = require("changeset.window")
 
 -- How long a picker's first ask blocks on the diff before giving up on it.
 local DIFF_WAIT_MS = 2000
-
--- input() reads a line, so it can never hand one back: free to mean "cancelled".
-local CANCELLED = "\r"
 
 -- Capitalised: `:mksession` saves only globals named so, and only with "globals" in 'sessionoptions'.
 local POSITION_GLOBAL = "ChangesetPosition"
@@ -533,270 +529,6 @@ build.attach({
   end,
 })
 
----@param row changeset.Row
----@param open boolean
-local function set_open(row, open)
-  local session = current()
-  assert(session, "changeset: no open session")
-  -- A compressed chain hides intermediate rows; a folded row hides its children.
-  -- `l` on a compressed row means the first, so it wins while the chain is shut.
-  if row.chain and not state.is_chain_open(session.st, row.id) and open then
-    state.set_chain_open(session.st, row.id, true)
-  elseif row.chain and state.is_chain_open(session.st, row.id) and not open then
-    state.set_chain_open(session.st, row.id, false)
-  else
-    state.set_collapsed(session.st, row.id, not open)
-  end
-  draw()
-end
-
----@param how "reuse"|"vsplit"|"split"|"tab"
-local function commit(how)
-  local session = current()
-  local row = row_at_cursor()
-  if not row or row.kind == "section" then
-    return
-  end
-  if row.kind == "file" and row.status == "deleted" then
-    return vim.notify(row.path .. " was deleted on this branch", vim.log.levels.INFO)
-  end
-  assert(session, "changeset: no open session")
-  if window.commit(session.root .. "/" .. row.path, row.lnum or 1, how) then
-    pick(row)
-  end
-end
-
----@param delta integer
-local function step(delta)
-  local session = current()
-  local win = window.win()
-  if not (session and win) then
-    return
-  end
-  local lnum = state._step(session.visible, vim.api.nvim_win_get_cursor(win)[1], delta)
-  vim.api.nvim_win_set_cursor(win, { lnum, 0 })
-  preview_current()
-end
-
----The step keys bound while the sidebar stands, each with the global mapping it replaced.
----@type { lhs: string, prior: vim.api.keyset.get_keymap? }[]
-local step_bindings = {}
-
----Remove the step keys and put back what they replaced. Safe to repeat: `close` also runs with no sidebar open.
-local function unbind_step_keys()
-  -- Newest first: a key bound twice records changeset's own first mapping as the second's prior.
-  for i = #step_bindings, 1, -1 do
-    local binding = step_bindings[i]
-    pcall(vim.keymap.del, "n", binding.lhs)
-    if binding.prior then
-      vim.fn.mapset(binding.prior)
-    end
-  end
-  step_bindings = {}
-end
-
----The global normal-mode mapping for `lhs`, if any.
----@param lhs string
----@return vim.api.keyset.get_keymap?
-local function global_mapping(lhs)
-  -- Global only: maparg() prefers a buffer-local mapping, which mapset() would restore onto the buffer current at close.
-  return vim.iter(vim.api.nvim_get_keymap("n")):find(function(keymap)
-    return vim.keycode(keymap.lhs) == vim.keycode(lhs)
-  end)
-end
-
----@param lhs (string|false)?
----@param delta integer
----@param desc string
-local function bind_step_key(lhs, delta, desc)
-  if not lhs then
-    return
-  end
-  step_bindings[#step_bindings + 1] = { lhs = lhs, prior = global_mapping(lhs) }
-  vim.keymap.set("n", lhs, function()
-    step(delta)
-  end, { desc = desc })
-end
-
----Bind the `next` / `prev` keys globally, remembering the global mapping each replaces.
----Unbinds first: a closed sidebar's scheduled close may not have run yet.
----@param keys changeset.Config.Keymaps
-local function bind_step_keys(keys)
-  unbind_step_keys()
-  bind_step_key(keys.next, 1, "Next change (Changeset)")
-  bind_step_key(keys.prev, -1, "Previous change (Changeset)")
-end
-
----Open the symbol-kind filter menu, redrawing as kinds are toggled.
----@param open_session changeset.Session
-local function open_kind_menu(open_session)
-  require("changeset.menu").open({
-    root = open_session.root,
-    branch = open_session.branch,
-    file = open_session.file,
-    counts = view.kind_counts(open_session.rows),
-    hidden = open_session.hidden,
-    icon = function(symbol_kind)
-      return icons.get("lsp", symbol_kind)
-    end,
-    sidebar = assert(window.win(), "changeset: sidebar is closed"),
-    on_change = function(hidden)
-      open_session.hidden = hidden
-      draw()
-    end,
-  })
-end
-
----Narrow the tree from the command line, restoring the previous query on cancel.
----@param open_session changeset.Session
-local function prompt_filter(open_session)
-  local previous_query = open_session.query
-  local group = vim.api.nvim_create_augroup("changeset.filter", { clear = true })
-  -- input() edits on the command line, so every keystroke is a CmdlineChanged
-  -- — which is what lets the tree narrow as it is typed rather than at <CR>.
-  vim.api.nvim_create_autocmd("CmdlineChanged", {
-    group = group,
-    desc = "changeset: filter the tree on each keystroke of the filter prompt",
-    callback = function()
-      open_session.query = vim.fn.getcmdline()
-      draw()
-      vim.cmd("redraw")
-    end,
-  })
-
-  local ok, typed = pcall(vim.fn.input, {
-    prompt = "Filter changes: ",
-    default = previous_query,
-    cancelreturn = CANCELLED,
-  })
-  vim.api.nvim_del_augroup_by_id(group)
-
-  open_session.query = (ok and typed ~= CANCELLED) and typed or previous_query
-  draw()
-end
-
----Put the cursor on the nearest section header in `delta`'s direction, if there is one.
----@param open_session changeset.Session
----@param delta integer 1 or -1.
-local function to_section(open_session, delta)
-  local win = window.win()
-  if not win then
-    return
-  end
-  local lnum = state._section(open_session.visible, vim.api.nvim_win_get_cursor(win)[1], delta)
-  vim.api.nvim_win_set_cursor(win, { lnum, 0 })
-end
-
----What `h` does from a row: shut it, or put the cursor on its parent.
----@param open_session changeset.Session
-local function collapse_or_parent(open_session)
-  local row, win = row_at_cursor(), window.win()
-  if not (row and win) then
-    return
-  end
-  local action, parent_lnum = state._outward(open_session.visible, vim.api.nvim_win_get_cursor(win)[1])
-  if action == "collapse" then
-    set_open(row, false)
-  elseif action == "parent" then
-    vim.api.nvim_win_set_cursor(win, { parent_lnum, 0 })
-  end
-end
-
----@param open_session changeset.Session
-local function collapse_all_files(open_session)
-  state.collapse_all(
-    open_session.st,
-    vim.tbl_map(function(row)
-      return row.id
-    end, tree.files(open_session.rows))
-  )
-  draw()
-end
-
----Keeps every section's fold, including one whose section is empty for now.
----@param open_session changeset.Session
-local function expand_all_files(open_session)
-  state.expand_all(open_session.st, tree.section_ids())
-  draw()
-end
-
----@param buf integer
----@param keys changeset.Config.Keymaps
-local function set_keymaps(buf, keys)
-  local set, own = help.mapper(buf)
-  -- The window can outlive the session: a `build()` for another repository lets go
-  -- of the tree while a sidebar stands. Handing the session down rather than letting
-  -- handlers reach for it means the check that it exists is the same line that
-  -- passes it on.
-  ---@param lhs string|false
-  ---@param fn fun(open_session: changeset.Session)
-  ---@param desc string
-  local function map(lhs, fn, desc)
-    if not lhs then
-      return
-    end
-    set(lhs, function()
-      local session = current()
-      if session then
-        fn(session)
-      end
-    end, desc)
-  end
-
-  map(keys.jump, function()
-    commit("reuse")
-  end, "Go to this change")
-  -- The commit leaves the cursor in the window it jumped to, and `close` keeps
-  -- focus where it already is, so the sidebar goes without taking the jump back.
-  map(keys.jump_close, function()
-    commit("reuse")
-    M.close()
-  end, "Go to this change and close the tree")
-  map(keys.jump_vsplit, function()
-    commit("vsplit")
-  end, "Go to this change in a vertical split")
-  map(keys.jump_split, function()
-    commit("split")
-  end, "Go to this change in a split")
-  map(keys.jump_tab, function()
-    commit("tab")
-  end, "Go to this change in a new tab")
-  map(keys.close, M.close, "Close the tree")
-  map(keys.expand, function()
-    local row = row_at_cursor()
-    if row then
-      set_open(row, true)
-    end
-  end, "Expand")
-  map(keys.collapse, collapse_or_parent, "Collapse, or step out to the parent")
-  map(keys.collapse_all, collapse_all_files, "Collapse every file")
-  map(keys.expand_all, expand_all_files, "Expand every file")
-  map(keys.next_section, function(open_session)
-    to_section(open_session, 1)
-  end, "Next section")
-  map(keys.prev_section, function(open_session)
-    to_section(open_session, -1)
-  end, "Previous section")
-  map(keys.refresh, M.refresh, "Rebuild the tree")
-  map(keys.yank, function()
-    local row = row_at_cursor()
-    if row and row.kind ~= "section" then
-      Paths.copy(row.lnum and ("%s:%d"):format(row.path, row.lnum) or row.path, "relative path:line")
-    end
-  end, "Yank path:line")
-  map(keys.help, function()
-    help.show(
-      buf,
-      own,
-      vim.tbl_map(function(binding)
-        return binding.lhs
-      end, step_bindings)
-    )
-  end, "Show these keymaps")
-  map(keys.filter_kinds, open_kind_menu, "Filter by symbol kind")
-  map(keys.filter, prompt_filter, "Filter the tree")
-end
-
 -- The pipeline lives in `build`; these stay on `require("changeset")` for the plugin, `pick` and the specs.
 M.build = build.build
 M.refresh = build.refresh
@@ -884,7 +616,7 @@ function M.open()
   local win = window.open(buf)
   vim.wo[win].statusline = "%{%v:lua.require'changeset'.footer()%}"
   -- After `filetype`, so these replace any `]]`/`[[` a plugin maps on the buffer at `FileType`.
-  set_keymaps(buf, bound_keys)
+  actions.set_keymaps(buf, bound_keys, { row_at_cursor = row_at_cursor, draw = draw, pick = pick, close = M.close })
 
   -- Fires: the sidebar's window going without the plugin being asked — `:q`, `:only`,
   -- `:tabclose`, a layout plugin. Scheduled because the window is still in the layout
@@ -987,7 +719,7 @@ function M.open()
       paint()
     end,
   })
-  bind_step_keys(bound_keys)
+  actions.bind_step_keys(bound_keys, preview_current)
 
   draw()
   -- A kept tree misses what nothing announced, such as a file edited outside Neovim while it kept focus.
@@ -999,7 +731,7 @@ end
 ---Dismiss the sidebar and its step keys, putting back what they replaced. The tree stays, and keeps refreshing.
 function M.close()
   require("changeset.menu").close()
-  unbind_step_keys()
+  actions.unbind_step_keys()
   vim.api.nvim_clear_autocmds({ group = augroup })
   window.close()
 end

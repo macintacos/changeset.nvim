@@ -24,7 +24,8 @@ record.
 ├── docs/design.md       why the sidebar looks and behaves as it does
 ├── plugin/changeset.lua `:Changeset`, `<Plug>(changeset-toggle)`, session restore, mini.pick registry
 ├── lua/changeset/
-│   ├── init.lua         glue: sidebar actions, drawing and the window state machine
+│   ├── init.lua         glue: drawing and the window state machine
+│   ├── actions.lua      what each sidebar key does, and binding them
 │   ├── attributes.lua   inline test markers the syntax shows, via treesitter
 │   ├── build.lua        builds the tree and keeps its diff and symbols fresh
 │   ├── buffers.lua      loads the files the sidebar reads
