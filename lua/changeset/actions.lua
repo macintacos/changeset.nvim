@@ -1,6 +1,6 @@
 ---What each sidebar key does, and the keymaps that bind them.
----The keys write `query`, `hidden` and the folds in `st` on the session they are handed; `init.lua` gives those fields
----their first values.
+---The keys write `query`, `hidden` and the folds in `st` on the session they are handed;
+---`changeset.BuildHooks.view` gives those fields their first values.
 
 local Paths = require("changeset.paths")
 local build = require("changeset.build")
@@ -16,13 +16,15 @@ local CANCELLED = "\r"
 
 local M = {}
 
----What the sidebar lends its keys: drawing and the window state machine stay in init.lua.
+---What the sidebar lends its keys.
 ---@class changeset.ActionHooks
 ---@field row_at_cursor fun(): changeset.Row? The row under the sidebar's cursor.
 ---@field draw fun() Redraw the tree from the session's current view state.
 ---@field pick fun(row: changeset.Row) Mark `row` as the one last opened from the sidebar.
 ---@field close fun() Dismiss the sidebar.
 
+---The tree `build` keeps, with the sidebar's own fields on it.
+---Read it again after anything that can replace the tree: `build.build()`, `vim.wait`, a later callback.
 ---@return changeset.Session?
 local function current()
   return build.current() --[[@as changeset.Session?]]
@@ -104,17 +106,14 @@ local function global_mapping(lhs)
 end
 
 ---@param lhs (string|false)?
----@param delta integer
 ---@param desc string
----@param preview fun()
-local function bind_step_key(lhs, delta, desc, preview)
+---@param on_press fun()
+local function bind_step_key(lhs, desc, on_press)
   if not lhs then
     return
   end
   step_bindings[#step_bindings + 1] = { lhs = lhs, prior = global_mapping(lhs) }
-  vim.keymap.set("n", lhs, function()
-    step(delta, preview)
-  end, { desc = desc })
+  vim.keymap.set("n", lhs, on_press, { desc = desc })
 end
 
 ---Bind the `next` / `prev` keys globally, remembering the global mapping each replaces.
@@ -123,8 +122,12 @@ end
 ---@param preview fun() Preview the row under the sidebar's cursor.
 function M.bind_step_keys(keys, preview)
   M.unbind_step_keys()
-  bind_step_key(keys.next, 1, "Next change (Changeset)", preview)
-  bind_step_key(keys.prev, -1, "Previous change (Changeset)", preview)
+  bind_step_key(keys.next, "Next change (Changeset)", function()
+    step(1, preview)
+  end)
+  bind_step_key(keys.prev, "Previous change (Changeset)", function()
+    step(-1, preview)
+  end)
 end
 
 ---Open the symbol-kind filter menu, redrawing as kinds are toggled.
@@ -225,6 +228,7 @@ local function expand_all_files(open_session, hooks)
   hooks.draw()
 end
 
+---Bind `keys` on the sidebar's buffer. `?` lists exactly these and the step keys.
 ---@param buf integer
 ---@param keys changeset.Config.Keymaps
 ---@param hooks changeset.ActionHooks
@@ -235,7 +239,7 @@ function M.set_keymaps(buf, keys, hooks)
   -- handlers reach for it means the check that it exists is the same line that
   -- passes it on.
   ---@param lhs string|false
-  ---@param fn fun(open_session: changeset.Session)
+  ---@param fn fun(open_session: changeset.Session, hooks: changeset.ActionHooks)
   ---@param desc string
   local function map(lhs, fn, desc)
     if not lhs then
@@ -244,7 +248,7 @@ function M.set_keymaps(buf, keys, hooks)
     set(lhs, function()
       local session = current()
       if session then
-        fn(session)
+        fn(session, hooks)
       end
     end, desc)
   end
@@ -274,15 +278,9 @@ function M.set_keymaps(buf, keys, hooks)
       set_open(row, true, hooks)
     end
   end, "Expand")
-  map(keys.collapse, function(s)
-    collapse_or_parent(s, hooks)
-  end, "Collapse, or step out to the parent")
-  map(keys.collapse_all, function(s)
-    collapse_all_files(s, hooks)
-  end, "Collapse every file")
-  map(keys.expand_all, function(s)
-    expand_all_files(s, hooks)
-  end, "Expand every file")
+  map(keys.collapse, collapse_or_parent, "Collapse, or step out to the parent")
+  map(keys.collapse_all, collapse_all_files, "Collapse every file")
+  map(keys.expand_all, expand_all_files, "Expand every file")
   map(keys.next_section, function(open_session)
     to_section(open_session, 1)
   end, "Next section")
@@ -305,12 +303,8 @@ function M.set_keymaps(buf, keys, hooks)
       end, step_bindings)
     )
   end, "Show these keymaps")
-  map(keys.filter_kinds, function(s)
-    open_kind_menu(s, hooks)
-  end, "Filter by symbol kind")
-  map(keys.filter, function(s)
-    prompt_filter(s, hooks)
-  end, "Filter the tree")
+  map(keys.filter_kinds, open_kind_menu, "Filter by symbol kind")
+  map(keys.filter, prompt_filter, "Filter the tree")
 end
 
 return M

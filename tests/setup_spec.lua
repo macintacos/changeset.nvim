@@ -153,6 +153,27 @@ describe("changeset setup", function()
     assert.same(bound, listed)
   end)
 
+  it("closes the tree on q", function()
+    open_sidebar()
+
+    press("q")
+
+    assert.is_nil(window.win())
+  end)
+
+  it("opens the file and closes the tree on <S-CR>", function()
+    local buf = open_sidebar()
+    local lnum = vim.fn.match(lines_of(buf), [[other\.lua]]) + 1
+    -- Entering the sidebar moves its cursor to the file being edited, so enter it before placing the cursor.
+    vim.api.nvim_set_current_win((assert(window.win())))
+    vim.api.nvim_win_set_cursor(0, { lnum, 0 })
+
+    vim.cmd.normal(vim.keycode("<S-CR>"))
+
+    assert.is_nil(window.win())
+    assert.equal("other.lua", changeset._tree().picked.path)
+  end)
+
   it("binds next/prev while open, then puts back the user's mapping", function()
     vim.keymap.set("n", "]h", function() end, { desc = "user ]h" })
     changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
