@@ -169,18 +169,19 @@ check in `validate()`, and a line in README `## Settings`. A module reads it thr
 `config.get()` when it acts, never when it loads, so a later `setup()` reaches it.
 
 `plugin/changeset.lua` binds no keys. It defines `<Plug>(changeset-toggle)` and
-`:Changeset {toggle|refresh|review}`. It refills the sidebar via `restore()` on
-`SessionLoadPost` only when a `changeset://` window is left. On `VimEnter` it sets
-`MiniPick.registry.changeset` when mini.pick exists. It requires no `changeset.*` module at
-load. `require("changeset")` also exposes
-`open`, `close`, `refresh` and `rows()`, which `pick.lua` is built on; its doc block in
-`init.lua` says what it returns and how long its first call blocks. `build` and `footer`
-serve the plugin's own modules and specs; `footer` stays public because the sidebar's
-statusline evaluates `v:lua.require'changeset'.footer()`, a string the type check cannot
-follow. Beyond that: `require("changeset.pick").pick()` and
-`require("changeset.review").toggle()` / `activate()`. `:Changeset` is the only user command.
-`:checkhealth changeset` reports which optional dependencies are missing and the options in
-force.
+`:Changeset {toggle|refresh|review}`, and refills the sidebar via `restore()` on
+`SessionLoadPost` only when a `changeset://` window is left. It sets
+`MiniPick.registry.changeset` when mini.pick exists once startup is over — on `VimEnter`,
+or at once when the plugin loads after it. Both autocmds sit in the `changeset.plugin`
+augroup. It requires no `changeset.*` module at load. `require("changeset")` exposes
+`toggle` and `restore`, which those entry points call, and `open`, `close`, `refresh` and
+`rows()`, which `pick.lua` is built on; its doc block in `init.lua` says what it returns
+and how long its first call blocks. `build` and `footer` serve the plugin's own modules
+and specs; `footer` stays public because the sidebar's statusline evaluates
+`v:lua.require'changeset'.footer()`, a string the type check cannot follow. Beyond that:
+`require("changeset.pick").pick()` and `require("changeset.review").toggle()` /
+`activate()`. `:Changeset` is the only user command. `:checkhealth changeset` reports
+which optional dependencies are missing and the options in force.
 
 For the options and keys themselves, see README `## Settings` and `## Keymaps`.
 

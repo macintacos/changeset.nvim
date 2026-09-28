@@ -42,6 +42,7 @@ describe("plugin/changeset.lua", function()
 
     assert.is_nil(package.loaded.changeset)
     assert.is_nil(package.loaded["changeset.pick"])
+    assert.equal(1, #vim.api.nvim_get_autocmds({ group = "changeset.plugin", event = "SessionLoadPost" }))
     for _, name in ipairs(GROUPS) do
       assert.is_false(group_exists(name), name)
     end
@@ -56,6 +57,28 @@ describe("plugin/changeset.lua", function()
 
     package.loaded["changeset.pick"] = nil
     assert.equal(1, calls.pick)
+  end)
+
+  it("registers the mini.pick source when loaded after startup", function()
+    local root = vim.fn.fnamemodify(vim.api.nvim_get_runtime_file("plugin/changeset.lua", false)[1], ":h:h")
+    local probe = "autocmd VimEnter * ++once lua vim.schedule(function() vim.cmd('runtime plugin/changeset.lua');"
+      .. " io.write(type(MiniPick.registry.changeset)); vim.cmd('qa!') end)"
+    local result = vim
+      .system({
+        vim.v.progpath,
+        "--headless",
+        "-u",
+        "NONE",
+        "--cmd",
+        "set rtp^=" .. root,
+        "--cmd",
+        "lua MiniPick = { registry = {} }",
+        "--cmd",
+        probe,
+      })
+      :wait(10000)
+
+    assert.equal("function", result.stdout)
   end)
 
   it("defines :Changeset and no :PRReview", function()
@@ -77,11 +100,14 @@ describe("plugin/changeset.lua", function()
     vim.cmd("Changeset toggle")
     vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-toggle)"), "x", false)
     vim.cmd("Changeset refresh")
+    vim.cmd("Changeset toggle ")
+    vim.cmd("Changeset refresh | let g:changeset_after = 1")
     local map = vim.fn.maparg("<Plug>(changeset-toggle)", "n", false, true)
 
     package.loaded.changeset = nil
-    assert.equal(3, calls.toggle)
-    assert.equal(1, calls.refresh)
+    assert.equal(4, calls.toggle)
+    assert.equal(2, calls.refresh)
+    assert.equal(1, vim.g.changeset_after)
     assert.truthy(map.desc)
   end)
 

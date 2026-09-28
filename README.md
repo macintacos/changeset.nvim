@@ -2,10 +2,11 @@
 
 A read-only sidebar mapping what this branch changed, nested by symbol.
 
-`:Changeset` opens the *map* of what this branch changed. `:Changeset review` puts the
-*gutter* in PR Review Mode over the same range, with `pr_review.enabled` set. Neither drives
-the other. `require("changeset.pick").pick()` searches the same changes in a picker once
-mini.pick is set up; `:Pick changeset` works too when mini.pick is set up at startup.
+`:Changeset` opens the *map* of what this branch changed. With `pr_review.enabled` set, the
+*gutter* marks the same range in PR Review Mode, and `:Changeset review` switches it off or
+back on for the branch. Neither drives the other. `require("changeset.pick").pick()`
+searches the same changes in a picker once mini.pick is set up, as does `:Pick changeset`
+when mini.pick was set up at startup.
 
 In an editor too narrow to leave the files `layout.min_file_width` columns (80 by default)
 beside it, the sidebar opens as a drawer along the bottom instead, and moves between the
@@ -472,10 +473,12 @@ below and nothing else. `keymaps` renames any sidebar key, or leaves it unbound 
 `false`; `keymaps.next` / `keymaps.prev` bind keys that step through changes from any
 window while the sidebar is open, and are off by default. `layout.min_file_width` (80) is
 the narrowest the files get beside the sidebar before it moves below them.
-`pr_review.enabled` (false) turns on PR Review Mode; only a restart turns it off.
-`:Changeset review` toggles the mode for the branch, and errors while the option is off. Each
-call starts again from the defaults and reaches the sidebar the next time it opens;
-`changeset.Config` in `lua/changeset/config.lua` lists every field.
+`pr_review.enabled` (false) turns on PR Review Mode for every branch but the default;
+turning the option back off takes a restart. Each `setup()` call starts again from the
+defaults and reaches the sidebar the next time it opens; `changeset.Config` in
+`lua/changeset/config.lua` lists every field. While the option is on, `:Changeset review`
+switches the mode off for the current branch, or back on; while it is off, the command
+errors.
 
 Which symbol kinds are hidden is not a setting: it is a choice made in the menu and
 written to `stdpath("state")/changeset/filters.json`, through a temporary file renamed over
@@ -492,7 +495,7 @@ repository's deliberate choice is none of that save's business.
 
 ## Keymaps
 
-The plugin maps nothing outside the sidebar. Bind the toggle yourself:
+By default the plugin maps nothing outside the sidebar. Bind the toggle yourself:
 
 ```lua
 vim.keymap.set("n", "<leader>gp", "<Plug>(changeset-toggle)")
@@ -532,13 +535,13 @@ MiniPick.registry.changeset = function() return require("changeset.pick").pick()
 - **A file cached before its parser was installed keeps just the name rules** until it
   next changes: its entry was read without the syntax layer, and its stamp still matches.
 - **Preview is non-destructive.** `j`/`k` swap a window's buffer and cursor for real, but
-  `q` or toggling it closed puts back every window a preview borrowed, buffer *and* cursor.
-  Only a commit — `<CR>` and its split variants, or entering the previewed window — keeps
-  the file there and writes a jumplist entry, sending `<C-o>` back to where the window
-  stood before the sidebar opened rather than to the last preview — previewing must not
-  write one, or `<C-o>` becomes one entry per keypress. Entering counts only as an
-  arrival: a preview `]h` made in the window the cursor was already in stays a preview
-  however focus leaves and returns, until `<CR>` or `q`.
+  `q` or closing the sidebar with the toggle puts back every window a preview borrowed,
+  buffer *and* cursor. Only a commit — `<CR>` and its split variants, or entering the
+  previewed window — keeps the file there and writes a jumplist entry, sending `<C-o>`
+  back to where the window stood before the sidebar opened rather than to the last preview
+  — previewing must not write one, or `<C-o>` becomes one entry per keypress. Entering
+  counts only as an arrival: a preview `]h` made in the window the cursor was already in
+  stays a preview however focus leaves and returns, until `<CR>` or `q`.
 - **Previews follow the window you were last in** — the focused one, or, while the cursor
   is in the sidebar, the one it came from. `winnr("#")` answers 0 once that window has
   been closed, and 0 is an alias for the current window wherever it would then be passed,
