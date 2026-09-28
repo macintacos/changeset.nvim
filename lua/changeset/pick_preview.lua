@@ -136,11 +136,9 @@ local function attach(preview, main)
   -- item without a move key.
   vim.api.nvim_create_autocmd("User", { group = group, pattern = "MiniPickMatch", callback = render })
 
-  -- Re-fit the float on resize. mini.pick refits the list from its own
-  -- `VimResized` handler; scheduled so the list's new size is what gets read.
+  -- Scheduled: mini.pick refits the list from its own `VimResized` handler.
   vim.api.nvim_create_autocmd("VimResized", { group = group, callback = vim.schedule_wrap(place) })
 
-  -- Tear the preview down with the picker it belongs to.
   vim.api.nvim_create_autocmd("User", { group = group, pattern = "MiniPickStop", once = true, callback = detach })
 
   place()
