@@ -67,6 +67,7 @@ end
 
 ---Sync every dependency to its pin, raising if any failed.
 function M.install()
+  -- Keep in sync with .luarc.check.json's workspace.library, which lists every pin but luacov.
   local pins = {
     ["plenary.nvim"] = {
       src = "https://github.com/nvim-lua/plenary.nvim",

@@ -14,20 +14,19 @@ import "package://github.com/jdx/hk/releases/download/v2.3.0/hk@2.3.0#/Builtins.
 local formatters = new Mapping<String, Step> {
   ["Lua(Format)       [[builtins.stylua]]"] = Builtins.stylua
 
-  // rumdl owns Markdown — one binary, two builtins. This one is `rumdl fmt`;
-  // the linters mapping below runs `rumdl check`. Config: .rumdl.toml.
-  // `check_diff = null` on rumdl and taplo_format: hk applies a builtin's check_diff
-  // patch instead of running `fix`, and their diffs don't apply cleanly. rumdl also
-  // needs `check_after_diff = false`, which hk rejects without a `check_diff`.
-  ["Markdown(Format)  [[builtins.rumdl]]"] = (Builtins.rumdl) {
+  // rumdl owns Markdown — one binary, two builtins: `rumdl fmt` here, `rumdl check`
+  // under linters. Config: .rumdl.toml.
+  // `check_diff = null` on rumdl_format and taplo_format: hk applies a builtin's
+  // check_diff patch instead of running `fix`, and their diffs don't apply cleanly.
+  // That leaves no read-mode command, so each supplies `check`.
+  ["Markdown(Format)  [[builtins.rumdl_format]]"] = (Builtins.rumdl_format) {
     check = "rumdl fmt --check {{ files }}"
     check_diff = null
-    check_after_diff = false
-    fix = "rumdl fmt {{ files }}"
   }
 
   ["YAML(Format)      [[builtins.yamlfmt]]"] = Builtins.yamlfmt
   ["TOML(Format)      [[builtins.taplo_format]]"] = (Builtins.taplo_format) {
+    check = "taplo format --check {{ files }}"
     check_diff = null
   }
   ["Pkl(Format)       [[builtins.pkl_format]]"] = Builtins.pkl_format
@@ -42,8 +41,7 @@ local formatters = new Mapping<String, Step> {
 
 // Linters — check rules without rewriting.
 local linters = new Mapping<String, Step> {
-  // Two selene steps mirror the old task: root selene.toml (excludes tests/*)
-  // for source, tests/selene.toml (busted std) for specs.
+  // Two selene steps: root selene.toml (excludes tests/*) for source, tests/selene.toml (busted std) for specs.
   // The builtin selects Lua via `types`, so only the narrowing is ours. LintTests
   // overrides `check_diff`, not `check`: that is the command the builtin defines,
   // and overriding `check` would leave specs linted with the root config.
@@ -55,13 +53,10 @@ local linters = new Mapping<String, Step> {
     check_diff = "selene --config tests/selene.toml {{ files }}"
   }
 
-  // As with shfmt, the builtin's shebang-based `types` selector already reaches
-  // the extensionless .mise/tasks/* scripts.
   ["Shell(Lint)       [[builtins.shellcheck]]"] = Builtins.shellcheck
 
-  // Same rumdl binary, read-only: `rumdl check` reports violations (exit 1).
+  // Read-only rumdl. Nulling check_diff means undoing the builtin's check_after_diff, which hk rejects without one.
   ["Markdown(Lint)    [[builtins.rumdl]]"] = (Builtins.rumdl) {
-    check = "rumdl check {{ files }}"
     check_diff = null
     check_after_diff = false
   }
@@ -72,8 +67,10 @@ local linters = new Mapping<String, Step> {
   // amends/import package (cached after first run).
   ["Pkl(Lint)         [[builtins.pkl]]"] = Builtins.pkl
 
-  // Check-only: `typos --write-changes` would also rewrite identifiers it misreads.
+  // Check-only: typos' --write-changes and its --diff patch would both rewrite identifiers it misreads.
   ["Text(Spelling)    [[builtins.typos]]"] = (Builtins.typos) {
+    check = "typos --force-exclude {{ files }}"
+    check_diff = null
     fix = null
   }
 
@@ -101,13 +98,11 @@ hooks {
     }
   }
 
-  // `mise run format` — formatters only, in write mode.
   ["fix"] {
     fix = true
     steps = formatters
   }
 
-  // `mise run lint` — formatters in check mode, linters and the type check; read-only.
   ["check"] {
     steps = new Mapping<String, Step> {
       ...formatters
@@ -116,11 +111,11 @@ hooks {
     }
   }
 
-  // Runs the type check and the plenary test suite on `git push`.
   ["pre-push"] {
     steps = new Mapping<String, Step> {
       ...typecheck
       ["Lua(Test)         [[plenary]]"] = new Step {
+        depends = "Lua(Types)        [[lua-language-server]]"
         check = "mise run test"
       }
     }

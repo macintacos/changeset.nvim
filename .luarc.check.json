@@ -1,10 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
   "runtime.version": "LuaJIT",
-  "runtime.path": [
-    "lua/?.lua",
-    "lua/?/init.lua"
-  ],
+  "runtime.path": ["lua/?.lua", "lua/?/init.lua"],
   "workspace.library": [
     "$VIMRUNTIME",
     "${3rd}/luv/library",
@@ -15,14 +12,7 @@
     ".tests/deps/plenary.nvim"
   ],
   "workspace.checkThirdParty": false,
-  "workspace.ignoreDir": [
-    ".tests",
-    ".tmp"
-  ],
-  "diagnostics.disable": [
-    "duplicate-set-field"
-  ],
-  "diagnostics.unusedLocalExclude": [
-    "_*"
-  ]
+  "workspace.ignoreDir": [".tests", ".tmp"],
+  "diagnostics.disable": ["duplicate-set-field"],
+  "diagnostics.unusedLocalExclude": ["_*"]
 }

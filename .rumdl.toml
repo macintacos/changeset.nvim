@@ -1,10 +1,9 @@
 # rumdl config — rumdl lints AND formats Markdown (one tool): `rumdl check` lints,
-# `rumdl fmt` formats; hk drives both via Builtins.rumdl. Per-project file.
+# `rumdl fmt` formats; hk drives them via Builtins.rumdl_format and Builtins.rumdl.
 # Reference: https://rumdl.dev
 [global]
-# Ported from the repo's previous markdownlint "style/relaxed" config: line length
-# (MD013) is OFF so docs aren't reflowed, alongside MD033 (inline HTML), MD034
-# (bare URLs), and MD041 (first line need not be an h1 — CLAUDE.md leads with prose).
+# MD013 (line length) off so prose isn't reflowed; inline HTML (MD033), bare URLs (MD034)
+# and a non-h1 first line (MD041) are allowed.
 disable = ["MD013", "MD033", "MD034", "MD041"]
 
 # Respect .gitignore when scanning directories.

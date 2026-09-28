@@ -1,4 +1,5 @@
 std = "lua51+vim+busted"
 
 [lints]
+# busted's assert.same/equal/is_nil are fields on Lua's assert, which lua51 types as a function.
 incorrect_standard_library_use = "allow"

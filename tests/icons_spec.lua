@@ -37,17 +37,13 @@ describe("changeset.icons", function()
   end)
 
   it("draws a provider's glyph in Normal when it gives no highlight", function()
-    -- mini.nvim exposes a set-up module only as a global.
-    -- selene: allow(global_usage)
-    _G.MiniIcons = {
+    MiniIcons = {
       get = function()
         return "x"
       end,
     }
     assert.are.same({ "x", "Normal" }, { fresh().get("file", PATH) })
-    -- Unset the stub so the next case sees mini.icons only once it is set up.
-    -- selene: allow(global_usage)
-    _G.MiniIcons = nil
+    MiniIcons = nil
   end)
 
   it("prefers mini.icons over nvim-web-devicons once it is set up", function()
@@ -61,9 +57,7 @@ describe("changeset.icons", function()
   end)
 
   it("sees a mini.icons that the devicons probe sets up", function()
-    -- Unset mini.icons so only the devicons probe can set it up.
-    -- selene: allow(global_usage)
-    _G.MiniIcons = nil
+    MiniIcons = nil
     package.loaded["nvim-web-devicons"] = nil
     package.preload["nvim-web-devicons"] = function()
       require("mini.icons").setup()

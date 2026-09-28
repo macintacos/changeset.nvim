@@ -11,10 +11,8 @@ local provider
 local function detect()
   -- First: a devicons shim (LazyVim's) sets mini.icons up as it loads.
   local ok, devicons = pcall(require, "nvim-web-devicons")
-  -- mini.nvim exposes a set-up module only as a global.
-  -- selene: allow(global_usage)
-  if _G.MiniIcons then
-    return _G.MiniIcons.get
+  if MiniIcons then
+    return MiniIcons.get
   end
   if not ok then
     return function() end
