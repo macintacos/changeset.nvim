@@ -21,8 +21,9 @@ hunk touched. `README.md` is the user-facing reference and the design record.
 ├── .mise/tasks/         one script per `mise run` task
 ├── plugin/changeset.lua `:Changeset`, `<Plug>(changeset-toggle)`, session restore, mini.pick registry
 ├── lua/changeset/
-│   ├── init.lua         glue: gathers diff + symbols, owns the tree lifecycle and window state machine
+│   ├── init.lua         glue: sidebar actions, drawing and the window state machine
 │   ├── attributes.lua   inline test markers the syntax shows, via treesitter
+│   ├── build.lua        builds the tree and keeps its diff and symbols fresh
 │   ├── buffers.lua      loads the files the sidebar reads
 │   ├── cache.lua        symbols kept between builds and restarts
 │   ├── config.lua       the user's options: defaults, and what `setup()` made of them
