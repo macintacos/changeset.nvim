@@ -1,7 +1,8 @@
 ---The plugins the specs load, and luacov for `mise run coverage`, checked out
 ---under `.tests/deps` at the revisions pinned below, so the suite does not depend
 ---on what the editor happens to have installed. `nvim -l tests/support/deps.lua`
----installs them; `require("support.deps")` only locates them.
+---installs them; `require("support.deps")` only locates them. nvim-treesitter is
+---the checkout `mise run parsers` installs the specs' parsers with.
 local this = debug.getinfo(1, "S").source:sub(2)
 local root = vim.fn.fnamemodify(this, ":p:h:h:h")
 
@@ -72,6 +73,10 @@ function M.install()
     ["plenary.nvim"] = {
       src = "https://github.com/nvim-lua/plenary.nvim",
       rev = "74b06c6c75e4eeb3108ec01852001636d85a932b",
+    },
+    ["nvim-treesitter"] = {
+      src = "https://github.com/nvim-treesitter/nvim-treesitter",
+      rev = "728e031f6b11d03d1f0708b7dc4fb0f1d9c8a137",
     },
     ["mini.icons"] = {
       src = "https://github.com/nvim-mini/mini.icons",

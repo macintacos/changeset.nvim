@@ -34,6 +34,14 @@ local root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
 vim.opt.rtp:prepend(root)
 -- `rtp` reaches `lua/` only, so fixture modules under `tests/support/` need their own path.
 package.path = root .. "/tests/?.lua;" .. package.path
+-- Startup put the editor's data dir on rtp, and with it the editor's treesitter
+-- parsers; a spec must find only the ones `mise run parsers` installed.
+vim.opt.rtp:remove(vim.fn.stdpath("data") .. "/site")
+vim.opt.rtp:remove(vim.fn.stdpath("data") .. "/site/after")
+vim.opt.packpath:remove(vim.fn.stdpath("data") .. "/site")
+vim.opt.packpath:remove(vim.fn.stdpath("data") .. "/site/after")
+vim.env.XDG_DATA_HOME = require("support.parsers").data_home
+vim.opt.rtp:prepend(vim.fn.stdpath("data") .. "/site")
 vim.opt.rtp:prepend(require("support.deps").path("plenary.nvim"))
 if vim.env.LUACOV then
   require("support.coverage").start()

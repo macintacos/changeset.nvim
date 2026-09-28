@@ -42,10 +42,7 @@ describe("attributes", function()
 
   it("has the rust, typescript and tsx parsers", function()
     for _, lang in ipairs({ "rust", "typescript", "tsx" }) do
-      assert.is_true(
-        vim.treesitter.language.add(lang),
-        lang .. " parser missing: start Neovim once so plugin/treesitter.lua installs it"
-      )
+      assert.is_true(vim.treesitter.language.add(lang), lang .. " parser missing: run `mise run parsers` once")
     end
   end)
 

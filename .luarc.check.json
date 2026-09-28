@@ -8,6 +8,7 @@
     ".tests/deps/gitsigns.nvim",
     ".tests/deps/mini.icons",
     ".tests/deps/mini.pick",
+    ".tests/deps/nvim-treesitter",
     ".tests/deps/nvim-web-devicons",
     ".tests/deps/plenary.nvim"
   ],

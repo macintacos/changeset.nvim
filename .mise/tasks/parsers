@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Install the treesitter parsers the specs need into .tests/data; run once on a fresh clone"
+#MISE depends=["deps"]
+
+set -euo pipefail
+
+nvim -l tests/support/parsers.lua

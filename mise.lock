@@ -413,6 +413,53 @@ url_api = "https://api.github.com/repos/tamasfe/taplo/releases/assets/257323116"
 url = "https://github.com/tamasfe/taplo/releases/download/0.10.0/taplo-windows-x86_64.zip"
 url_api = "https://api.github.com/repos/tamasfe/taplo/releases/assets/257323062"
 
+[[tools.tree-sitter]]
+version = "0.26.13"
+backend = "aqua:tree-sitter/tree-sitter"
+specifiers = ["0.26"]
+
+[tools.tree-sitter."platforms.linux-arm64"]
+checksum = "sha256:088c5ebf4b4b558c8abfd167c9c4f9669c2f9070da3edd9c0157dc051d77ac5d"
+url = "https://github.com/tree-sitter/tree-sitter/releases/download/v0.26.13/tree-sitter-linux-arm64.gz"
+url_api = "https://api.github.com/repos/tree-sitter/tree-sitter/releases/assets/526034724"
+provenance = "github-attestations"
+
+[tools.tree-sitter."platforms.linux-arm64-musl"]
+checksum = "sha256:088c5ebf4b4b558c8abfd167c9c4f9669c2f9070da3edd9c0157dc051d77ac5d"
+url = "https://github.com/tree-sitter/tree-sitter/releases/download/v0.26.13/tree-sitter-linux-arm64.gz"
+url_api = "https://api.github.com/repos/tree-sitter/tree-sitter/releases/assets/526034724"
+provenance = "github-attestations"
+
+[tools.tree-sitter."platforms.linux-x64"]
+checksum = "sha256:c9c8bef027658d60249ca4fc0663578ceb2e2029346bb8702e091e20d7716475"
+url = "https://github.com/tree-sitter/tree-sitter/releases/download/v0.26.13/tree-sitter-linux-x64.gz"
+url_api = "https://api.github.com/repos/tree-sitter/tree-sitter/releases/assets/526034722"
+provenance = "github-attestations"
+
+[tools.tree-sitter."platforms.linux-x64-musl"]
+checksum = "sha256:c9c8bef027658d60249ca4fc0663578ceb2e2029346bb8702e091e20d7716475"
+url = "https://github.com/tree-sitter/tree-sitter/releases/download/v0.26.13/tree-sitter-linux-x64.gz"
+url_api = "https://api.github.com/repos/tree-sitter/tree-sitter/releases/assets/526034722"
+provenance = "github-attestations"
+
+[tools.tree-sitter."platforms.macos-arm64"]
+checksum = "sha256:0a13c53d178d4cca22d2da220d5841c76cba0c39c220b789b64d752ae5d31864"
+url = "https://github.com/tree-sitter/tree-sitter/releases/download/v0.26.13/tree-sitter-macos-arm64.gz"
+url_api = "https://api.github.com/repos/tree-sitter/tree-sitter/releases/assets/526034751"
+provenance = "github-attestations"
+
+[tools.tree-sitter."platforms.macos-x64"]
+checksum = "sha256:41fa2bdfb77fa76d0f821d47bdc9c52285adb61a4c41ed21a902aee65d8de2b5"
+url = "https://github.com/tree-sitter/tree-sitter/releases/download/v0.26.13/tree-sitter-macos-x64.gz"
+url_api = "https://api.github.com/repos/tree-sitter/tree-sitter/releases/assets/526034752"
+provenance = "github-attestations"
+
+[tools.tree-sitter."platforms.windows-x64"]
+checksum = "sha256:99ddf495f73763419f60727e8eb79d8361aad12589e214ab82e44a80730d2e8a"
+url = "https://github.com/tree-sitter/tree-sitter/releases/download/v0.26.13/tree-sitter-windows-x64.gz"
+url_api = "https://api.github.com/repos/tree-sitter/tree-sitter/releases/assets/526034754"
+provenance = "github-attestations"
+
 [[tools.typos]]
 version = "1.50.3"
 backend = "aqua:crate-ci/typos"
