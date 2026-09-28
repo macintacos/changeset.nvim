@@ -1,0 +1,28 @@
+# rumdl config — rumdl lints AND formats Markdown (one tool): `rumdl check` lints,
+# `rumdl fmt` formats; hk drives both via Builtins.rumdl. Per-project file.
+# Reference: https://rumdl.dev
+[global]
+# Ported from the repo's previous markdownlint "style/relaxed" config: line length
+# (MD013) is OFF so docs aren't reflowed, alongside MD033 (inline HTML), MD034
+# (bare URLs), and MD041 (first line need not be an h1 — CLAUDE.md leads with prose).
+disable = ["MD013", "MD033", "MD034", "MD041"]
+
+# Respect .gitignore when scanning directories.
+respect-gitignore = true
+
+# Patterns rumdl skips.
+exclude = [
+  ".git",
+  ".github",
+  "node_modules",
+  "vendor",
+  "dist",
+  "build",
+  "CHANGELOG.md",
+  "LICENSE.md",
+]
+
+[MD024]
+# Only flag duplicate headings that are siblings (share a parent), not across the
+# whole document.
+siblings-only = true

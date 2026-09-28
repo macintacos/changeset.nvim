@@ -1,2 +1,32 @@
+[settings]
+lockfile = true
+
+# HK_MISE routes hk's git-hook subprocesses through `mise x`, so each hook step
+# uses the pinned versions below even when committing without mise activated.
+[env]
+HK_MISE = 1
+
 [tools]
 neovim = "0.12"
+
+# Lua toolchain — formatter + linter + type check.
+"aqua:JohnnyMorganz/StyLua" = "latest"
+"aqua:Kampfkarren/selene"   = "latest"
+lua-language-server         = "latest" # type check (config in .luarc.check.json)
+
+# Exact pin: keep in lockstep with hk.pkl's amends/import version.
+hk = "2.3.0"
+# Runs the Pkl(Format) / Pkl(Lint) steps that lint hk.pkl itself.
+pkl = "latest"
+
+# Cross-language baseline (Markdown / YAML / TOML / Shell).
+rumdl                 = "latest" # Markdown format + lint (config in .rumdl.toml)
+"aqua:google/yamlfmt" = "latest" # YAML format
+taplo                 = "latest" # TOML format + lint (config in taplo.toml)
+shfmt                 = "latest" # Shell format (.mise/tasks scripts)
+shellcheck            = "latest" # Shell lint
+typos                 = "latest" # Spell check (config in typos.toml)
+
+# (Re)register git hooks whenever tools are installed or updated.
+[hooks]
+postinstall = "hk install --mise"

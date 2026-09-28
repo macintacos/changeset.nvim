@@ -1,0 +1,128 @@
+amends "package://github.com/jdx/hk/releases/download/v2.3.0/hk@2.3.0#/Config.pkl"
+
+import "package://github.com/jdx/hk/releases/download/v2.3.0/hk@2.3.0#/Builtins.pkl"
+
+// Keep the amends/import version in lockstep with the `hk` version in mise.toml.
+//   mise run format -> the `fix` hook   -> `formatters` (write mode)
+//   mise run lint   -> the `check` hook -> `formatters` + `linters` + `typecheck` (read-only)
+// `pre-commit` runs formatters + linters; `pre-push` runs the type check and test suite.
+//
+// Step keys use a uniform `Language(Action)  [[builtins.tool]]` scheme,
+// column-aligned on the bracket tag, so hk's per-run output reads consistently.
+
+// Formatters — rewrite files into canonical form.
+local formatters = new Mapping<String, Step> {
+  ["Lua(Format)       [[builtins.stylua]]"] = Builtins.stylua
+
+  // rumdl owns Markdown — one binary, two builtins. This one is `rumdl fmt`;
+  // the linters mapping below runs `rumdl check`. Config: .rumdl.toml.
+  // `check_diff = null` on rumdl and taplo_format: hk applies a builtin's check_diff
+  // patch instead of running `fix`, and their diffs don't apply cleanly. rumdl also
+  // needs `check_after_diff = false`, which hk rejects without a `check_diff`.
+  ["Markdown(Format)  [[builtins.rumdl]]"] = (Builtins.rumdl) {
+    check = "rumdl fmt --check {{ files }}"
+    check_diff = null
+    check_after_diff = false
+    fix = "rumdl fmt {{ files }}"
+  }
+
+  ["YAML(Format)      [[builtins.yamlfmt]]"] = Builtins.yamlfmt
+  ["TOML(Format)      [[builtins.taplo_format]]"] = (Builtins.taplo_format) {
+    check_diff = null
+  }
+  ["Pkl(Format)       [[builtins.pkl_format]]"] = Builtins.pkl_format
+
+  // The builtin's `types` selector detects shell by shebang, so the
+  // extensionless .mise/tasks/* scripts are covered without a custom glob.
+  ["Shell(Format)     [[builtins.shfmt]]"] = Builtins.shfmt
+
+  ["Text(Newline)     [[builtins.newlines]]"] = Builtins.newlines
+  ["Text(Whitespace)  [[builtins.trailing_whitespace]]"] = Builtins.trailing_whitespace
+}
+
+// Linters — check rules without rewriting.
+local linters = new Mapping<String, Step> {
+  // Two selene steps mirror the old task: root selene.toml (excludes tests/*)
+  // for source, tests/selene.toml (busted std) for specs.
+  // The builtin selects Lua via `types`, so only the narrowing is ours. LintTests
+  // overrides `check_diff`, not `check`: that is the command the builtin defines,
+  // and overriding `check` would leave specs linted with the root config.
+  ["Lua(Lint)         [[builtins.selene]]"] = (Builtins.selene) {
+    exclude = List("tests/**/*.lua")
+  }
+  ["Lua(LintTests)    [[builtins.selene]]"] = (Builtins.selene) {
+    glob = List("tests/**/*.lua")
+    check_diff = "selene --config tests/selene.toml {{ files }}"
+  }
+
+  // As with shfmt, the builtin's shebang-based `types` selector already reaches
+  // the extensionless .mise/tasks/* scripts.
+  ["Shell(Lint)       [[builtins.shellcheck]]"] = Builtins.shellcheck
+
+  // Same rumdl binary, read-only: `rumdl check` reports violations (exit 1).
+  ["Markdown(Lint)    [[builtins.rumdl]]"] = (Builtins.rumdl) {
+    check = "rumdl check {{ files }}"
+    check_diff = null
+    check_after_diff = false
+  }
+
+  ["TOML(Lint)        [[builtins.taplo]]"] = Builtins.taplo
+
+  // pkl lints by evaluating the file (`pkl eval`), resolving the remote
+  // amends/import package (cached after first run).
+  ["Pkl(Lint)         [[builtins.pkl]]"] = Builtins.pkl
+
+  // Check-only: `typos --write-changes` would also rewrite identifiers it misreads.
+  ["Text(Spelling)    [[builtins.typos]]"] = (Builtins.typos) {
+    fix = null
+  }
+
+  ["Git(Conflict)     [[builtins.check_merge_conflict]]"] = Builtins.check_merge_conflict
+  ["Git(PrivateKey)   [[builtins.detect_private_key]]"] = Builtins.detect_private_key
+  ["Git(LargeFile)    [[builtins.check_added_large_files]]"] = Builtins.check_added_large_files
+}
+
+// lua-language-server checks the whole workspace in one run, whichever files
+// changed. Too slow for every commit, so it runs from `check` and `pre-push` only.
+local typecheck = new Mapping<String, Step> {
+  ["Lua(Types)        [[lua-language-server]]"] = new Step {
+    glob = List("**/*.lua", ".luarc.check.json")
+    check = "mise run typecheck"
+  }
+}
+
+hooks {
+  ["pre-commit"] {
+    fix = true
+    stash = "git"
+    steps = new Mapping<String, Step> {
+      ...formatters
+      ...linters
+    }
+  }
+
+  // `mise run format` — formatters only, in write mode.
+  ["fix"] {
+    fix = true
+    steps = formatters
+  }
+
+  // `mise run lint` — formatters in check mode, linters and the type check; read-only.
+  ["check"] {
+    steps = new Mapping<String, Step> {
+      ...formatters
+      ...linters
+      ...typecheck
+    }
+  }
+
+  // Runs the type check and the plenary test suite on `git push`.
+  ["pre-push"] {
+    steps = new Mapping<String, Step> {
+      ...typecheck
+      ["Lua(Test)         [[plenary]]"] = new Step {
+        check = "mise run test"
+      }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+std = "lua51+vim+busted"
+
+[lints]
+incorrect_standard_library_use = "allow"
