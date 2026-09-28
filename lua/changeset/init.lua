@@ -969,6 +969,10 @@ function M.footer()
 end
 
 ---Public API: the file rows under the sidebar's sections, less the kinds it hides, for the current buffer's repository.
+---
+---The first call builds and keeps the tree, loading the changed files and their language servers, and
+---blocks up to `DIFF_WAIT_MS` (2 s) while the diff is read. `rows` are the file rows, uncompressed, with
+---their symbols under `children`.
 ---@return { rows: changeset.Row[], root: string, ref: string }? tree
 ---@return string? err Why there is no tree yet.
 function M.rows()

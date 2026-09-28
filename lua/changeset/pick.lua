@@ -2,16 +2,17 @@
 ---
 ---A row that only places a change — a file with rows beneath it, an ancestor
 ---symbol, the "Other changes" group — is not an item but part of the trail
----printed above the items it holds, the way the live grep hoists a hit's path. A
----deleted file is left out: there is nothing to open.
+---printed as a virtual line above the items it holds. A deleted file is left
+---out: there is nothing to open.
 
+local icons = require("changeset.icons")
 local pick_preview = require("changeset.pick_preview")
 local stats = require("changeset.render")
 local symbols = require("changeset.symbols")
 
 local M = {}
 
-M.ns = vim.api.nvim_create_namespace("changeset.pick")
+local ns = vim.api.nvim_create_namespace("changeset.pick")
 
 local SEP = " › "
 
@@ -50,19 +51,6 @@ local function items(rows, root)
   return out
 end
 
----@param category string MiniIcons category.
----@param name string
----@return string glyph
----@return string hl
-local function icon(category, name)
-  -- The call is wrapped, not `MiniIcons.get`: an argument is evaluated before `pcall`
-  -- runs, so indexing a missing mini.icons would raise past the fallback below.
-  local ok, glyph, hl = pcall(function()
-    return MiniIcons.get(category, name)
-  end)
-  return ok and glyph or " ", ok and hl or "Normal"
-end
-
 ---Reserve (or release) a display row above the window's first line.
 ---
 ---Neovim clips a `virt_lines_above` mark on the topline: the line is part of
@@ -94,15 +82,15 @@ end
 ---@param list changeset.PickItem[]
 ---@param query string[]
 local function show(buf_id, list, query)
-  local icons, hls, display = {}, {}, {}
+  local glyphs, hls, display = {}, {}, {}
   for i, item in ipairs(list) do
     local row = item.row
     if row.kind == "file" then
-      icons[i], hls[i] = icon("file", row.path)
+      glyphs[i], hls[i] = icons.get("file", row.path)
     else
-      icons[i], hls[i] = icon("lsp", row.symbol_kind or "Text")
+      glyphs[i], hls[i] = icons.get("lsp", row.symbol_kind or "Text")
     end
-    display[i] = icons[i] .. " " .. row.name
+    display[i] = glyphs[i] .. " " .. row.name
   end
 
   MiniPick.default_show(buf_id, display, query)
@@ -110,15 +98,15 @@ local function show(buf_id, list, query)
   local state = MiniPick.get_picker_state()
   local width = state and vim.api.nvim_win_get_width(state.windows.main) or 80
 
-  vim.api.nvim_buf_clear_namespace(buf_id, M.ns, 0, -1)
+  vim.api.nvim_buf_clear_namespace(buf_id, ns, 0, -1)
   local prev_trail, first_has_trail = nil, false
   for i, item in ipairs(list) do
-    vim.api.nvim_buf_set_extmark(buf_id, M.ns, i - 1, 0, {
-      end_col = #icons[i],
+    vim.api.nvim_buf_set_extmark(buf_id, ns, i - 1, 0, {
+      end_col = #glyphs[i],
       hl_group = hls[i],
       priority = 199,
     })
-    vim.api.nvim_buf_set_extmark(buf_id, M.ns, i - 1, 0, {
+    vim.api.nvim_buf_set_extmark(buf_id, ns, i - 1, 0, {
       virt_text = stats.stat_chunks(item.row),
       virt_text_pos = "right_align",
       priority = 199,
@@ -126,8 +114,8 @@ local function show(buf_id, list, query)
 
     if item.trail ~= "" then
       if item.trail ~= prev_trail then
-        local glyph, hl = icon("file", item.row.path)
-        vim.api.nvim_buf_set_extmark(buf_id, M.ns, i - 1, 0, {
+        local glyph, hl = icons.get("file", item.row.path)
+        vim.api.nvim_buf_set_extmark(buf_id, ns, i - 1, 0, {
           -- Split on "/" so a long trail sheds directories before the file or its symbols.
           virt_lines = { { { glyph .. " ", hl }, { symbols.fit(item.trail, width - 2, "/"), stats.META_HL } } },
           virt_lines_above = true,
@@ -135,7 +123,7 @@ local function show(buf_id, list, query)
         })
         first_has_trail = first_has_trail or i == 1
       end
-      vim.api.nvim_buf_set_extmark(buf_id, M.ns, i - 1, 0, {
+      vim.api.nvim_buf_set_extmark(buf_id, ns, i - 1, 0, {
         virt_text = { { "  " } },
         virt_text_pos = "inline",
         priority = 199,
@@ -154,15 +142,20 @@ M._items = items
 M._show = show
 
 ---Open the picker on the changeset of the current buffer's repository.
+---Needs mini.pick set up; warns and returns otherwise. Blocks until the picker closes.
+---@return changeset.PickItem? chosen
 function M.pick()
-  if not rawget(_G, "MiniPick") then
-    vim.notify("Changeset: the picker needs mini.pick", vim.log.levels.WARN)
-    return
+  -- `require` first so a lazy-loading manager can load and set mini.pick up; then
+  -- `_G.MiniPick`, which only `setup()` creates and `MiniPick.start` needs.
+  if not (pcall(require, "mini.pick") and rawget(_G, "MiniPick")) then
+    return vim.notify("Changeset: the picker needs mini.pick set up", vim.log.levels.WARN)
   end
   local tree, err = require("changeset").rows()
   if not tree then
     return vim.notify("Changeset: " .. err, vim.log.levels.WARN)
   end
+  -- Here, not at require time: the sidebar defines its groups only when it opens,
+  -- and nothing may touch MiniPick before the guard.
   stats.define_highlights()
   pick_preview.setup()
   return MiniPick.start({

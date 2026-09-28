@@ -4,11 +4,12 @@
 ---This hangs a second float right of the list instead and keeps it showing the
 ---current item. The picker's own `source.preview` fills it: `default_preview`
 ---positions the cursor in whichever window shows the buffer it is handed, so a
----location item (grep hit, symbol, reference) lands on its line here too.
+---location item lands on its line here too.
 ---
----Pickers opt in by passing `window = require("changeset.pick_preview").window()`
----to `MiniPick.start`, which also narrows the list to leave room. Below `MIN_COLUMNS` the list takes
----the whole width and no float opens; the in-place toggle still works.
+---`require("changeset.pick").pick()` calls `setup()` and passes `window = window()`
+---to `MiniPick.start`, which also narrows the list to leave room. Below
+---`MIN_COLUMNS` the list takes the whole width and no float opens; the in-place
+---toggle still works.
 
 local window = require("changeset.window")
 
@@ -131,9 +132,8 @@ local function attach(preview, main)
     vim.schedule(render)
   end, ns)
 
-  -- Refresh the preview when matching lands: items arriving from an async
-  -- source (rg, an LSP reply) and query changes both reset the current item
-  -- without a move key.
+  -- Refresh the preview when matching lands: a query change resets the current
+  -- item without a move key.
   vim.api.nvim_create_autocmd("User", { group = group, pattern = "MiniPickMatch", callback = render })
 
   -- Re-fit the float on resize. mini.pick refits the list from its own

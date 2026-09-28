@@ -3,8 +3,9 @@
 A read-only sidebar mapping what this branch changed, nested by symbol.
 
 `<leader>gp` opens the *map* of what this branch changed. `<leader>gP` puts the *gutter*
-in PR Review Mode over the same range. Neither drives the other. `<leader>gj` searches the
-same changes in a picker (`require("changeset.pick").pick()`, when mini.pick is loaded).
+in PR Review Mode over the same range. Neither drives the other.
+`require("changeset.pick").pick()` searches the same changes in a picker once mini.pick is
+set up.
 
 In an editor too narrow to leave the files 80 columns beside it, the sidebar opens as a
 drawer along the bottom instead, and moves between the two as the editor is resized.
@@ -414,17 +415,17 @@ binary change.
 
 ## What it remembers
 
-The tree is built the first time something asks for it — `<leader>gp`, `<leader>gj`, or a
-restored session refilling the sidebar — for the current buffer's repository: the fork
-point is measured at once, the diff and symbols in the background. Reading symbols loads
-each changed file the cache can't answer, Generated ones aside, so those buffers and their
-language servers arrive with that first ask, and a session that never asks starts none.
-The picker waits a moment for the diff, which it has no way to fill in behind. The sidebar
-opens at once: a tree still waiting on its first diff opens blank rather than claiming
-nothing changed. Closing the sidebar lets go of the window only, and opening it again
-draws the tree it kept and refreshes its diff in the background. The tree is rebuilt for a
-different repository, fork point or branch, and a build that finds no fork point keeps the
-tree it had.
+The tree is built the first time something asks for it — `<leader>gp`, the picker
+(`require("changeset.pick").pick()`), or a restored session refilling the sidebar — for
+the current buffer's repository: the fork point is measured at once, the diff and symbols
+in the background. Reading symbols loads each changed file the cache can't answer,
+Generated ones aside, so those buffers and their language servers arrive with that first
+ask, and a session that never asks starts none. The picker waits a moment for the diff,
+which it has no way to fill in behind. The sidebar opens at once: a tree still waiting on
+its first diff opens blank rather than claiming nothing changed. Closing the sidebar lets
+go of the window only, and opening it again draws the tree it kept and refreshes its diff
+in the background. The tree is rebuilt for a different repository, fork point or branch,
+and a build that finds no fork point keeps the tree it had.
 
 Once built, the tree re-reads the diff whenever the files it diffs can have moved, whether
 or not the sidebar is showing: after a write, when a buffer is reloaded because its file

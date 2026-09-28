@@ -4,6 +4,7 @@ require("mini.pick").setup()
 require("mini.icons").setup()
 
 local changeset = require("changeset.pick")
+local ns = vim.api.nvim_create_namespace("changeset.pick")
 local Fixture = require("support.git")
 require("support.gh")
 
@@ -38,7 +39,7 @@ local function float_with_trail(lines)
   })
   vim.wo[win].wrap = false
   vim.wo[win].scrolloff = 0
-  vim.api.nvim_buf_set_extmark(buf, changeset.ns, 0, 0, {
+  vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {
     virt_lines = { { { "trail", "Comment" } } },
     virt_lines_above = true,
   })
@@ -134,7 +135,7 @@ describe("changeset.pick", function()
       changeset._show(buf, items, {})
 
       local headed = {}
-      for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, changeset.ns, 0, -1, { details = true })) do
+      for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
         if mark[4].virt_lines then
           headed[#headed + 1] = mark[2]
         end
@@ -143,6 +144,7 @@ describe("changeset.pick", function()
       vim.api.nvim_buf_delete(buf, { force = true })
     end)
   end)
+
   describe("_reserve_trail_row", function()
     it("reserves the display row Neovim would otherwise clip the trail into, before returning", function()
       local win, buf = float_with_trail({ "one", "two", "three" })
@@ -204,10 +206,13 @@ describe("changeset.pick", function()
       vim.fn.delete(tmp, "rf")
     end)
 
-    it("opens the changeset picker against the base branch when mini.pick is loaded", function()
-      local name
+    it("opens the changeset picker against the base branch when mini.pick is set up", function()
+      local name, returned
       -- `pick()` blocks until the picker closes, so the step polls for it.
       local function step()
+        if returned then
+          return
+        end
         if not MiniPick.is_picker_active() then
           return vim.defer_fn(step, 20)
         end
@@ -217,6 +222,7 @@ describe("changeset.pick", function()
       vim.defer_fn(step, 20)
 
       changeset.pick()
+      returned = true
 
       assert.are.equal("Changeset (vs trunk)", name)
     end)

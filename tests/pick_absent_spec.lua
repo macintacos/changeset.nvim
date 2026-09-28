@@ -30,4 +30,30 @@ describe("changeset.pick without mini.pick", function()
     assert.equal(vim.log.levels.WARN, notes[1].level)
     assert.truthy(notes[1].msg:find("mini.pick", 1, true))
   end)
+
+  describe("installed but not set up", function()
+    local rtp
+
+    before_each(function()
+      rtp = vim.o.runtimepath
+      vim.opt.runtimepath:prepend(require("support.deps").path("mini.pick"))
+    end)
+
+    after_each(function()
+      vim.o.runtimepath = rtp
+      package.loaded["mini.pick"] = nil
+    end)
+
+    it("warns once that the picker needs mini.pick set up", function()
+      assert.is_true((pcall(require, "mini.pick")))
+      assert.is_nil(rawget(_G, "MiniPick"))
+
+      require("changeset.pick").pick()
+
+      assert.equal(1, #notes)
+      assert.equal(vim.log.levels.WARN, notes[1].level)
+      assert.truthy(notes[1].msg:find("mini.pick", 1, true))
+      assert.truthy(notes[1].msg:find("set up", 1, true))
+    end)
+  end)
 end)
