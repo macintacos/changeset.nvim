@@ -1,6 +1,6 @@
-local changeset = require("plugins.changeset")
-local render = require("plugins.changeset.render")
-local window = require("plugins.changeset.window")
+local changeset = require("changeset")
+local render = require("changeset.render")
+local window = require("changeset.window")
 local Fixture = require("support.git")
 
 local ns = assert(vim.api.nvim_get_namespaces()["changeset.rows"], "changeset.rows namespace missing")

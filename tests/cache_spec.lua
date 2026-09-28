@@ -1,4 +1,4 @@
-local cache = require("plugins.changeset.cache")
+local cache = require("changeset.cache")
 
 ---@param path string
 ---@param added integer?

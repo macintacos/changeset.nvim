@@ -1,5 +1,5 @@
-local changeset = require("plugins.changeset")
-local window = require("plugins.changeset.window")
+local changeset = require("changeset")
+local window = require("changeset.window")
 local Fixture = require("support.git")
 require("support.gh")
 
@@ -178,7 +178,7 @@ describe("changeset tree", function()
     end
 
     describe("while its symbols are being read", function()
-      local resolve = require("plugins.changeset.resolve")
+      local resolve = require("changeset.resolve")
       local real_start = resolve.start
       ---@type { paths: string[], answer: fun(path: string, items: table[]?) }[]
       local asks

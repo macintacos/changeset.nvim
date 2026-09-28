@@ -1,4 +1,4 @@
-local view = require("plugins.changeset.view")
+local view = require("changeset.view")
 
 ---@param id string
 ---@param name string

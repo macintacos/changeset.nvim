@@ -1,4 +1,4 @@
-local changeset = require("plugins.changeset")
+local changeset = require("changeset")
 
 describe("changeset", function()
   describe("_next_action", function()

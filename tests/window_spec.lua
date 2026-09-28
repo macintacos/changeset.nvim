@@ -1,4 +1,4 @@
-local window = require("plugins.changeset.window")
+local window = require("changeset.window")
 
 ---What the band says is the sidebar's business; these tests only need one to pass on.
 ---@type changeset.Band

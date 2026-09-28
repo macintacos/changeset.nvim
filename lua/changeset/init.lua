@@ -6,16 +6,16 @@
 
 local Git = require("helpers.git")
 local Paths = require("helpers.paths")
-local cache = require("plugins.changeset.cache")
-local help = require("plugins.changeset.help")
-local prefs = require("plugins.changeset.prefs")
-local render = require("plugins.changeset.render")
-local resolve = require("plugins.changeset.resolve")
-local sections = require("plugins.changeset.sections")
-local state = require("plugins.changeset.state")
-local tree = require("plugins.changeset.tree")
-local view = require("plugins.changeset.view")
-local window = require("plugins.changeset.window")
+local cache = require("changeset.cache")
+local help = require("changeset.help")
+local prefs = require("changeset.prefs")
+local render = require("changeset.render")
+local resolve = require("changeset.resolve")
+local sections = require("changeset.sections")
+local state = require("changeset.state")
+local tree = require("changeset.tree")
+local view = require("changeset.view")
+local window = require("changeset.window")
 
 -- `:wall` writes every buffer, and regaining focus reloads every file changed
 -- meanwhile. One rebuild per burst is enough, and a rebuild mid-keypress is what
@@ -609,7 +609,7 @@ end
 ---Open the symbol-kind filter menu, redrawing as kinds are toggled.
 ---@param open_session changeset.Session
 local function open_kind_menu(open_session)
-  require("plugins.changeset.menu").open({
+  require("changeset.menu").open({
     root = open_session.root,
     branch = open_session.branch,
     file = open_session.file,
@@ -820,7 +820,7 @@ function M.refresh()
   local request = {}
   session.request = request
 
-  local diff = require("plugins.changeset.diff")
+  local diff = require("changeset.diff")
   diff.collect(session.base, session.root, function(files, err, commits)
     if not session or session.request ~= request then
       return
@@ -1034,7 +1034,7 @@ function M.open()
 
   render.define_highlights()
   local win = window.open(buf)
-  vim.wo[win].statusline = "%{%v:lua.require'plugins.changeset'.footer()%}"
+  vim.wo[win].statusline = "%{%v:lua.require'changeset'.footer()%}"
   -- After `filetype`, so these replace any `]]`/`[[` a plugin maps on the buffer at `FileType`.
   set_keymaps(buf)
 
@@ -1155,7 +1155,7 @@ end
 
 ---Dismiss the sidebar and the global `]h`/`[h` keys. The tree stays, and keeps refreshing.
 function M.close()
-  require("plugins.changeset.menu").close()
+  require("changeset.menu").close()
   for _, lhs in ipairs(STEP_KEYS) do
     pcall(vim.keymap.del, "n", lhs)
   end

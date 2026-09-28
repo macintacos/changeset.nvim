@@ -1,4 +1,4 @@
-local diff = require("plugins.changeset.diff")
+local diff = require("changeset.diff")
 local Fixture = require("support.git")
 
 -- Real `git diff --numstat -M <base>` output. Renames appear as `old => new`, or with the

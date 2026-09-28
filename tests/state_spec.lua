@@ -1,4 +1,4 @@
-local state = require("plugins.changeset.state")
+local state = require("changeset.state")
 
 describe("changeset.state", function()
   describe("folds", function()

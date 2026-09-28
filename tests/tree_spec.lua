@@ -1,4 +1,4 @@
-local tree = require("plugins.changeset.tree")
+local tree = require("changeset.tree")
 
 local PATH = "src/session.ts"
 

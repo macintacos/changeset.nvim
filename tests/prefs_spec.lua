@@ -1,4 +1,4 @@
-local prefs = require("plugins.changeset.prefs")
+local prefs = require("changeset.prefs")
 
 local ROOT = "/src/app"
 local BRANCH = "feat/login"

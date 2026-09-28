@@ -1,5 +1,5 @@
-local changeset = require("plugins.changeset")
-local window = require("plugins.changeset.window")
+local changeset = require("changeset")
+local window = require("changeset.window")
 local Fixture = require("support.git")
 local Cursor = require("support.cursor")
 
@@ -204,7 +204,7 @@ describe("changeset sidebar focus", function()
   end)
 
   describe("while symbols are still being read", function()
-    local resolve = require("plugins.changeset.resolve")
+    local resolve = require("changeset.resolve")
     local real_start = resolve.start
     ---@type fun(path: string, items: table[]?)
     local answer

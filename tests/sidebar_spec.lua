@@ -1,9 +1,9 @@
 vim.opt.rtp:prepend(require("support.deps").path("mini.icons"))
 require("mini.icons").setup()
 
-local changeset = require("plugins.changeset")
-local render = require("plugins.changeset.render")
-local window = require("plugins.changeset.window")
+local changeset = require("changeset")
+local render = require("changeset.render")
+local window = require("changeset.window")
 local Fixture = require("support.git")
 
 local ns = vim.api.nvim_get_namespaces()["changeset"]
@@ -222,7 +222,7 @@ describe("changeset sidebar", function()
   -- No language server runs under the specs, so neither fixture file gets an answer.
   it("asks again about a file no server answered for only once it changes", function()
     open_sidebar()
-    local resolve = require("plugins.changeset.resolve")
+    local resolve = require("changeset.resolve")
     local start = resolve.start
     local asked
     resolve.start = function(root, files, on_file)
@@ -420,7 +420,7 @@ describe("changeset sidebar", function()
   end)
 
   describe("with inline tests", function()
-    local resolve = require("plugins.changeset.resolve")
+    local resolve = require("changeset.resolve")
     local real_start = resolve.start
     ---@type fun(path: string, items: table[]?)
     local answer
@@ -643,7 +643,7 @@ describe("changeset sidebar", function()
     end)
 
     it("files a cached symbol the syntax marked under Tests without asking about the file again", function()
-      local cache = require("plugins.changeset.cache")
+      local cache = require("changeset.cache")
       local root = assert(vim.uv.fs_realpath(tmp))
       local cache_file = cache.path(root)
       cache.save(cache_file, {
@@ -735,7 +735,7 @@ describe("changeset sidebar", function()
     end)
 
     it("never asks for a generated file's symbols, nor waits on them", function()
-      local resolve = require("plugins.changeset.resolve")
+      local resolve = require("changeset.resolve")
       local start = resolve.start
       local asked = {}
       resolve.start = function(_, files)

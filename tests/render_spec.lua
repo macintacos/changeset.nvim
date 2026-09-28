@@ -1,4 +1,4 @@
-local render = require("plugins.changeset.render")
+local render = require("changeset.render")
 
 ---@param overrides? table
 ---@return changeset.Row

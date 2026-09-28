@@ -1,4 +1,4 @@
-local help = require("plugins.changeset.help")
+local help = require("changeset.help")
 
 describe("changeset.help", function()
   describe("_own", function()

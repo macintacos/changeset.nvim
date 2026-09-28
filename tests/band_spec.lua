@@ -1,5 +1,5 @@
-local changeset = require("plugins.changeset")
-local window = require("plugins.changeset.window")
+local changeset = require("changeset")
+local window = require("changeset.window")
 local Fixture = require("support.git")
 
 ---A repo on `trunk` with two files, then a `feature` branch that changes both.

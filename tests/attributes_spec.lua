@@ -1,5 +1,5 @@
-local attributes = require("plugins.changeset.attributes")
-local sections = require("plugins.changeset.sections")
+local attributes = require("changeset.attributes")
+local sections = require("changeset.sections")
 
 ---@param name string
 ---@param lnum integer

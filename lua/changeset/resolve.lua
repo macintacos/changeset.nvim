@@ -4,8 +4,8 @@
 ---flattened trees back. Everything it learns goes to `changeset.tree`, which does
 ---the thinking without touching the editor.
 
-local attributes = require("plugins.changeset.attributes")
-local buffers = require("plugins.changeset.buffers")
+local attributes = require("changeset.attributes")
+local buffers = require("changeset.buffers")
 local kinds = require("plugins.mini-pickers.kinds")
 local symbols = require("plugins.mini-pickers.symbols")
 

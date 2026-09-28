@@ -1,4 +1,4 @@
-local buffers = require("plugins.changeset.buffers")
+local buffers = require("changeset.buffers")
 
 describe("changeset.buffers", function()
   local tmp

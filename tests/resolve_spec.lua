@@ -1,4 +1,4 @@
-local resolve = require("plugins.changeset.resolve")
+local resolve = require("changeset.resolve")
 
 ---A step that parks each call so the spec decides when it answers.
 ---@return fun(path: string, done: fun(items: MiniPickers.Symbol[]?)) run

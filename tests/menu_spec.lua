@@ -1,4 +1,4 @@
-local menu = require("plugins.changeset.menu")
+local menu = require("changeset.menu")
 
 local ROOT = "/fixture/repo"
 local BRANCH = "feature"

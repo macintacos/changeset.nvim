@@ -1,4 +1,4 @@
-local window = require("plugins.changeset.window")
+local window = require("changeset.window")
 local Fixture = require("support.git")
 
 ---@type changeset.Band

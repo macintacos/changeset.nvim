@@ -1,8 +1,8 @@
 ---Window bookkeeping for the sidebar: which window previews land in, and how
 ---that window is put back when the sidebar is dismissed without committing.
 
-local buffers = require("plugins.changeset.buffers")
-local render = require("plugins.changeset.render")
+local buffers = require("changeset.buffers")
+local render = require("changeset.render")
 
 local M = {}
 

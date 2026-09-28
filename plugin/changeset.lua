@@ -7,13 +7,13 @@
 -- A plain keymap with a `desc` is all which-key needs to label it; `add()` is for
 -- groups and description-only entries, and the <leader>g group already exists.
 vim.keymap.set("n", "<leader>gp", function()
-  require("plugins.changeset").toggle()
+  require("changeset").toggle()
 end, { desc = "Changeset (changed files & symbols)" })
 
 -- Fires: after a session is restored, which brings the sidebar's window back
 -- without its contents. Refills it rather than leaving an empty window behind.
 vim.api.nvim_create_autocmd("SessionLoadPost", {
   callback = function()
-    require("plugins.changeset").restore()
+    require("changeset").restore()
   end,
 })

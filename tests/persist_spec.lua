@@ -1,6 +1,6 @@
-local changeset = require("plugins.changeset")
-local render = require("plugins.changeset.render")
-local window = require("plugins.changeset.window")
+local changeset = require("changeset")
+local render = require("changeset.render")
+local window = require("changeset.window")
 local Fixture = require("support.git")
 local Cursor = require("support.cursor")
 
@@ -270,7 +270,7 @@ describe("changeset position in a session", function()
   end
 
   describe("while symbols are still being read", function()
-    local resolve = require("plugins.changeset.resolve")
+    local resolve = require("changeset.resolve")
     local real_start = resolve.start
     ---@type fun(path: string, items: table[]?)
     local answer

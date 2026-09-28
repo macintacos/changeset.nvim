@@ -5,9 +5,9 @@
 ---gets made. Toggling is immediate; the three save keys only decide where it is
 ---remembered, and closing without one puts back the set that is on disk.
 
-local help = require("plugins.changeset.help")
-local prefs = require("plugins.changeset.prefs")
-local render = require("plugins.changeset.render")
+local help = require("changeset.help")
+local prefs = require("changeset.prefs")
+local render = require("changeset.render")
 
 local M = {}
 

@@ -1,4 +1,4 @@
-local sections = require("plugins.changeset.sections")
+local sections = require("changeset.sections")
 
 ---@type table<changeset.SectionKey, string[]>
 local cases = {
