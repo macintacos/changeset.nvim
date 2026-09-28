@@ -3,7 +3,7 @@ vim.opt.rtp:prepend(require("support.deps").path("mini.icons"))
 require("mini.pick").setup()
 require("mini.icons").setup()
 
-local changeset = require("changeset.pick")
+local pick = require("changeset.pick")
 local ns = vim.api.nvim_create_namespace("changeset.pick")
 local Fixture = require("support.git")
 require("support.gh")
@@ -75,7 +75,7 @@ describe("changeset.pick", function()
         }),
       }
 
-      local items = changeset._items(rows, "/repo")
+      local items = pick._items(rows, "/repo")
 
       assert.same({ "lua/a.lua › M › refresh" }, texts(items))
       assert.equal("lua/a.lua › M", items[1].trail)
@@ -88,7 +88,7 @@ describe("changeset.pick", function()
       local outer = row({ kind = "symbol", path = "a.lua", name = "outer", lnum = 4, children = { inner } })
       local rows = { row({ kind = "file", path = "a.lua", name = "a.lua", lnum = 4, children = { outer } }) }
 
-      assert.same({ "a.lua › outer", "a.lua › outer › inner" }, texts(changeset._items(rows, "/repo")))
+      assert.same({ "a.lua › outer", "a.lua › outer › inner" }, texts(pick._items(rows, "/repo")))
     end)
 
     it("lists orphan hunks under their group, not the group itself", function()
@@ -101,14 +101,14 @@ describe("changeset.pick", function()
       })
       local rows = { row({ kind = "file", path = "Makefile", name = "Makefile", lnum = 2, children = { orphans } }) }
 
-      local items = changeset._items(rows, "/repo")
+      local items = pick._items(rows, "/repo")
 
       assert.same({ "Makefile › Other changes › L2 all: build" }, texts(items))
       assert.equal(2, items[1].lnum)
     end)
 
     it("lists a file with nothing beneath it on its own, with no trail", function()
-      local items = changeset._items({ row({ kind = "file", path = "a.lua", name = "a.lua", lnum = 1 }) }, "/repo")
+      local items = pick._items({ row({ kind = "file", path = "a.lua", name = "a.lua", lnum = 1 }) }, "/repo")
 
       assert.same({ "a.lua" }, texts(items))
       assert.equal("", items[1].trail)
@@ -117,7 +117,7 @@ describe("changeset.pick", function()
     it("leaves out a deleted file, which has nothing to open", function()
       local rows = { row({ kind = "file", path = "gone.lua", name = "gone.lua", status = "deleted" }) }
 
-      assert.same({}, changeset._items(rows, "/repo"))
+      assert.same({}, pick._items(rows, "/repo"))
     end)
   end)
 
@@ -132,7 +132,7 @@ describe("changeset.pick", function()
       }
       local buf = vim.api.nvim_create_buf(false, true)
 
-      changeset._show(buf, items, {})
+      pick._show(buf, items, {})
 
       local headed = {}
       for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
@@ -155,7 +155,7 @@ describe("changeset.pick", function()
       -- Checked straight away: mini.pick draws the frame as soon as `source.show`
       -- returns, so a reservation that lands any later paints the list a row
       -- off first.
-      changeset._reserve_trail_row(win, true)
+      pick._reserve_trail_row(win, true)
 
       assert.equal(1, topfill(win))
       vim.api.nvim_win_close(win, true)
@@ -164,8 +164,8 @@ describe("changeset.pick", function()
 
     it("releases the row when the first line carries no trail", function()
       local win, buf = float_with_trail({ "one", "two", "three" })
-      changeset._reserve_trail_row(win, true)
-      changeset._reserve_trail_row(win, false)
+      pick._reserve_trail_row(win, true)
+      pick._reserve_trail_row(win, false)
 
       assert.equal(0, topfill(win))
       vim.api.nvim_win_close(win, true)
@@ -178,7 +178,7 @@ describe("changeset.pick", function()
       vim.api.nvim_buf_delete(buf, { force = true })
 
       assert.no_errors(function()
-        changeset._reserve_trail_row(win, true)
+        pick._reserve_trail_row(win, true)
       end)
     end)
   end)
@@ -221,7 +221,7 @@ describe("changeset.pick", function()
       end
       vim.defer_fn(step, 20)
 
-      changeset.pick()
+      pick.pick()
       returned = true
 
       assert.are.equal("Changeset (vs trunk)", name)

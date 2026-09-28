@@ -7,7 +7,7 @@
 
 local icons = require("changeset.icons")
 local pick_preview = require("changeset.pick_preview")
-local stats = require("changeset.render")
+local render = require("changeset.render")
 local symbols = require("changeset.symbols")
 
 local M = {}
@@ -107,7 +107,7 @@ local function show(buf_id, list, query)
       priority = 199,
     })
     vim.api.nvim_buf_set_extmark(buf_id, ns, i - 1, 0, {
-      virt_text = stats.stat_chunks(item.row),
+      virt_text = render.stat_chunks(item.row),
       virt_text_pos = "right_align",
       priority = 199,
     })
@@ -117,7 +117,7 @@ local function show(buf_id, list, query)
         local glyph, hl = icons.get("file", item.row.path)
         vim.api.nvim_buf_set_extmark(buf_id, ns, i - 1, 0, {
           -- Split on "/" so a long trail sheds directories before the file or its symbols.
-          virt_lines = { { { glyph .. " ", hl }, { symbols.fit(item.trail, width - 2, "/"), stats.META_HL } } },
+          virt_lines = { { { glyph .. " ", hl }, { symbols.fit(item.trail, width - 2, "/"), render.META_HL } } },
           virt_lines_above = true,
           priority = 199,
         })
@@ -156,7 +156,7 @@ function M.pick()
   end
   -- Here, not at require time: the sidebar defines its groups only when it opens,
   -- and nothing may touch MiniPick before the guard.
-  stats.define_highlights()
+  render.define_highlights()
   pick_preview.setup()
   return MiniPick.start({
     source = { items = items(tree.rows, tree.root), name = "Changeset (vs " .. tree.ref .. ")", show = show },
