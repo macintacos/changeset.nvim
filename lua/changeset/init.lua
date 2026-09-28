@@ -1159,7 +1159,7 @@ function M.open()
       left_float = vim.api.nvim_win_get_config(0).relative ~= ""
     end,
   })
-  -- Fires: the cursor entering the sidebar by any route — `<leader>gp`, a click,
+  -- Fires: the cursor entering the sidebar by any route — `:Changeset`, a click,
   -- `<C-w>` — but not a return from a float such as the kind menu, which the user
   -- never left the sidebar for. Lands on the row you are on, dropping a restored row
   -- still waiting; the `CursorMoved` that follows previews it.
@@ -1236,7 +1236,7 @@ end
 ---
 ---A session records the layout but not a scratch buffer's contents, so the
 ---sidebar comes back empty. Filling that window is also what keeps the next
----`<leader>gp` from opening a second one beside it.
+---`toggle()` from opening a second one beside it.
 function M.restore()
   local placeholder = window.placeholder()
   if not placeholder then
@@ -1255,7 +1255,7 @@ function M.restore()
   end
 end
 
----What `<leader>gp` does next, given where the sidebar and the cursor are.
+---What `toggle()` does next, given where the sidebar and the cursor are.
 ---@param st { visible: boolean, focused: boolean }
 ---@return "open"|"focus"|"close"
 function M._next_action(st)

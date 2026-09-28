@@ -2,10 +2,10 @@
 
 A read-only sidebar mapping what this branch changed, nested by symbol.
 
-`<leader>gp` opens the *map* of what this branch changed. `<leader>gP` puts the *gutter*
-in PR Review Mode over the same range. Neither drives the other.
-`require("changeset.pick").pick()` searches the same changes in a picker once mini.pick is
-set up.
+`:Changeset` opens the *map* of what this branch changed. `:Changeset review` puts the
+*gutter* in PR Review Mode over the same range, with `pr_review.enabled` set. Neither drives
+the other. `require("changeset.pick").pick()` searches the same changes in a picker once
+mini.pick is set up; `:Pick changeset` works too when mini.pick is set up at startup.
 
 In an editor too narrow to leave the files `layout.min_file_width` columns (80 by default)
 beside it, the sidebar opens as a drawer along the bottom instead, and moves between the
@@ -234,7 +234,7 @@ sections answers from the copy with the deeper match, and falls back to the path
 section's copy. When the row is off screen — folded, filtered, or inside a compressed
 chain — its nearest visible ancestor wears the highlight instead.
 
-Focusing the sidebar, by `<leader>gp`, a click or `<C-w>`, puts its cursor on that same
+Focusing the sidebar, by `:Changeset`, a click or `<C-w>`, puts its cursor on that same
 row, and previews it the way moving onto it would. Focused before your file's symbols
 are in, it lands on the file row and follows you into your symbol when they arrive,
 unless you have moved the cursor or left the sidebar by then. From a file outside the
@@ -418,7 +418,7 @@ binary change.
 
 ## What it remembers
 
-The tree is built the first time something asks for it — `<leader>gp`, the picker
+The tree is built the first time something asks for it — `:Changeset`, the picker
 (`require("changeset.pick").pick()`), or a restored session refilling the sidebar — for
 the current buffer's repository: the fork point is measured at once, the diff and symbols
 in the background. Reading symbols loads each changed file the cache can't answer,
@@ -472,7 +472,8 @@ below and nothing else. `keymaps` renames any sidebar key, or leaves it unbound 
 `false`; `keymaps.next` / `keymaps.prev` bind keys that step through changes from any
 window while the sidebar is open, and are off by default. `layout.min_file_width` (80) is
 the narrowest the files get beside the sidebar before it moves below them.
-`pr_review.enabled` (false) turns on PR Review Mode; only a restart turns it off. Each
+`pr_review.enabled` (false) turns on PR Review Mode; only a restart turns it off.
+`:Changeset review` toggles the mode for the branch, and errors while the option is off. Each
 call starts again from the defaults and reaches the sidebar the next time it opens;
 `changeset.Config` in `lua/changeset/config.lua` lists every field.
 
@@ -491,9 +492,23 @@ repository's deliberate choice is none of that save's business.
 
 ## Keymaps
 
+The plugin maps nothing outside the sidebar. Bind the toggle yourself:
+
+```lua
+vim.keymap.set("n", "<leader>gp", "<Plug>(changeset-toggle)")
+```
+
+`:Changeset` toggles the sidebar too, `:Changeset refresh` rebuilds it and
+`:Changeset review` toggles PR Review Mode. A mini.pick set up after startup misses
+`:Pick changeset`; register it yourself:
+
+```lua
+MiniPick.registry.changeset = function() return require("changeset.pick").pick() end
+```
+
 | Key | Where | Does |
 | --- | --- | --- |
-| `<leader>gp` | anywhere | closed → open+focus on the row you are on; open+unfocused → focus on the row you are on; open+focused → close, restore focus |
+| `<Plug>(changeset-toggle)` | anywhere | closed → open+focus on the row you are on; open+unfocused → focus on the row you are on; open+focused → close, restore focus |
 | `j` / `k` | sidebar | move, previewing into the window you were last in, without leaving the sidebar |
 | `<CR>` | sidebar | commit: focus that window at the row's position, keep the jump; nothing on a section header |
 | `<S-CR>` | sidebar | commit, then close the sidebar behind you |
@@ -517,7 +532,7 @@ repository's deliberate choice is none of that save's business.
 - **A file cached before its parser was installed keeps just the name rules** until it
   next changes: its entry was read without the syntax layer, and its stamp still matches.
 - **Preview is non-destructive.** `j`/`k` swap a window's buffer and cursor for real, but
-  `q` or `<leader>gp` puts back every window a preview borrowed, buffer *and* cursor.
+  `q` or toggling it closed puts back every window a preview borrowed, buffer *and* cursor.
   Only a commit — `<CR>` and its split variants, or entering the previewed window — keeps
   the file there and writes a jumplist entry, sending `<C-o>` back to where the window
   stood before the sidebar opened rather than to the last preview — previewing must not

@@ -19,7 +19,7 @@ hunk touched. `README.md` is the user-facing reference and the design record.
 ├── taplo.toml           TOML format config
 ├── typos.toml           spell-check config
 ├── .mise/tasks/         one script per `mise run` task
-├── plugin/changeset.lua the `<leader>gp` mapping and the session-restore autocmd
+├── plugin/changeset.lua `:Changeset`, `<Plug>(changeset-toggle)`, session restore, mini.pick registry
 ├── lua/changeset/
 │   ├── init.lua         glue: gathers diff + symbols, owns the tree lifecycle and window state machine
 │   ├── attributes.lua   inline test markers the syntax shows, via treesitter
@@ -168,14 +168,17 @@ step keys unless the user sets them. A new option gets its `---@field` (on
 check in `validate()`, and a line in README `## Settings`. A module reads it through
 `config.get()` when it acts, never when it loads, so a later `setup()` reaches it.
 
-`plugin/changeset.lua` maps `<leader>gp` to `require("changeset").toggle()` and refills
-the sidebar on `SessionLoadPost` via `restore()`. `require("changeset")` also exposes
+`plugin/changeset.lua` binds no keys. It defines `<Plug>(changeset-toggle)` and
+`:Changeset {toggle|refresh|review}`. It refills the sidebar via `restore()` on
+`SessionLoadPost` only when a `changeset://` window is left. On `VimEnter` it sets
+`MiniPick.registry.changeset` when mini.pick exists. It requires no `changeset.*` module at
+load. `require("changeset")` also exposes
 `open`, `close`, `refresh` and `rows()`, which `pick.lua` is built on; its doc block in
 `init.lua` says what it returns and how long its first call blocks. `build` and `footer`
 serve the plugin's own modules and specs; `footer` stays public because the sidebar's
 statusline evaluates `v:lua.require'changeset'.footer()`, a string the type check cannot
 follow. Beyond that: `require("changeset.pick").pick()` and
-`require("changeset.review").toggle()` / `activate()`. There are no user commands.
+`require("changeset.review").toggle()` / `activate()`. `:Changeset` is the only user command.
 `:checkhealth changeset` reports which optional dependencies are missing and the options in
 force.
 
