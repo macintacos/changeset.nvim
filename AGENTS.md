@@ -1,0 +1,171 @@
+# changeset.nvim
+
+A Neovim sidebar mapping what the current branch changed: its files, and the symbols each
+hunk touched. `README.md` is the user-facing reference and the design record.
+
+## Layout
+
+```text
+.
+├── mise.toml            tools, pinned; postinstall registers the hk git hooks
+├── hk.pkl               formatters, linters and git hooks
+├── .luarc.check.json    lua-language-server config for `mise run typecheck`
+├── selene.toml          selene config for lua/ (tests/selene.toml for specs)
+├── vim.yml              selene's std: the Neovim runtime globals
+├── stylua.toml          StyLua config
+├── .rumdl.toml          Markdown lint config
+├── taplo.toml           TOML format config
+├── typos.toml           spell-check config
+├── .mise/tasks/         one script per `mise run` task
+├── plugin/changeset.lua the `<leader>gp` mapping and the session-restore autocmd
+├── lua/changeset/
+│   ├── init.lua         glue: gathers diff + symbols, owns the tree lifecycle and window state machine
+│   ├── attributes.lua   inline test markers the syntax shows, via treesitter
+│   ├── buffers.lua      loads the files the sidebar reads
+│   ├── cache.lua        symbols kept between builds and restarts
+│   ├── config.lua       the user's options: defaults, and what `setup()` made of them
+│   ├── diff.lua         git diff parsing
+│   ├── git.lua          git and gh queries that pick the base branch
+│   ├── help.lua         the `?` key reference
+│   ├── icons.lua        mini.icons → nvim-web-devicons → blank
+│   ├── jsonfile.lua     small JSON records under `stdpath`
+│   ├── kinds.lua        which LSP symbol kinds are listed, per filetype
+│   ├── menu.lua         the symbol-kind popup
+│   ├── paths.lua        project root and clipboard copy
+│   ├── pick.lua         the rows as a mini.pick picker
+│   ├── pick_preview.lua its side-by-side preview
+│   ├── prefs.lua        hidden kinds, persisted
+│   ├── render.lua       rows → buffer lines + extmarks
+│   ├── resolve.lua      asks LSP servers for symbols
+│   ├── review.lua       PR Review Mode
+│   ├── sections.lua     Implementation/Tests/Docs/Config/Generated classification
+│   ├── state.lua        cursor and folds across rebuilds
+│   ├── symbols.lua      flattens documentSymbol trees
+│   ├── tree.lua         builds the row tree
+│   ├── view.lua         filters it
+│   └── window.lua       window bookkeeping and layout
+├── tests/               specs, minimal_init.lua, support/ fixtures
+└── .tests/              gitignored: installed deps, luals logs, coverage output
+```
+
+## Tasks
+
+Run `mise run setup` once after cloning.
+
+- `mise run setup` — `mise install`; its postinstall hook installs the hk git hooks.
+- `mise run deps` — checks out the pinned test dependencies under `.tests/deps`.
+- `mise run format` — `hk fix --all`: every formatter, in write mode.
+- `mise run lint` — `hk check --all`: format check, selene, shellcheck, rumdl, taplo,
+  pkl, typos and the git checks, then `typecheck`. Depends on `deps`.
+- `mise run typecheck` — lua-language-server at Warning level with `.luarc.check.json`.
+  Depends on `deps`.
+- `mise run test [path ...]` — the plenary suite; default `tests/`, or the spec files
+  given. Depends on `deps`.
+- `mise run coverage` — the suite under luacov; prints line coverage of `lua/`, full
+  report in `.tests/luacov/report.out`. Depends on `deps`.
+- `mise run preflight` — `lint` + `test`.
+
+The pre-commit hook runs the formatters and linters on staged files; pre-push runs the
+type check and the suite. Never bypass them with `--no-verify`.
+
+Run one spec with `mise run test tests/<name>_spec.lua`, not `:PlenaryBustedFile`: that
+command takes no options, so its child Neovim skips `tests/minimal_init.lua` and can load
+the wrong checkout of the plugin — from a worktree, silently the main one.
+
+## Testing
+
+### Specs
+
+Plenary busted specs, flat in `tests/`, named `<module>_spec.lua` or for a behaviour
+(`sidebar_spec.lua`, `band_spec.lua`). Each spec file runs in its own child Neovim under
+`tests/minimal_init.lua`, which removes the user config from `rtp`, points
+`XDG_STATE_HOME` and `XDG_CACHE_HOME` at temporary directories, scrubs `GIT_*`, and points
+global and system git config at `/dev/null`. It does **not** isolate `XDG_DATA_HOME`.
+
+A test creates its temporary files and repositories itself and removes them after it.
+Private functions a spec needs are exposed as `M._name` (see Conventions).
+
+### Fixtures
+
+Specs load these as `require("support.<name>")`:
+
+- `tests/support/deps.lua` — the pins and their installer; `path(name)` locates a
+  checkout.
+- `tests/support/git.lua` — `git`, `init_repo` and `commit` helpers that take a `cwd`.
+- `tests/support/gh.lua` — puts a fake `gh` on `PATH`, driven by `FAKE_GH_PR` and
+  `FAKE_GH_DELAY`.
+- `tests/support/pr_review.lua` — the PR Review Mode fixture: gitsigns, `changeset.review`
+  and a fake gh.
+- `tests/support/cursor.lua` — whether `guicursor` hides the cursor.
+- `tests/support/coverage.lua` — the luacov hooks.
+
+Use `support.git` rather than shelling out to git by hand. `chdir` only when the code
+under test resolves the repository from the process directory.
+
+### Test dependencies
+
+The `pins` table in `tests/support/deps.lua` maps each plugin to a source and a full
+commit SHA. `mise run deps` fetches each into `.tests/deps/<name>`; `test`, `lint`,
+`typecheck` and `coverage` depend on it. To bump one, edit its SHA, run `mise run deps`,
+then run the suite.
+
+A new plugin goes into `pins` first, is prepended in the spec with
+`vim.opt.rtp:prepend(require("support.deps").path("<name>"))`, and — unless it is only a
+test tool like luacov — is added to `.luarc.check.json`'s `workspace.library`.
+
+### Treesitter parsers
+
+The suite needs the `rust`, `typescript` and `tsx` parsers; `tests/attributes_spec.lua`
+asserts they load. Because `XDG_DATA_HOME` is not isolated, they are read from your own
+`stdpath("data")/site/parser`, and no task installs them.
+
+## Conventions
+
+- TDD: a failing spec before any behaviour change.
+- Private functions a spec needs are exposed as `M._name` on their module (e.g.
+  `M._parse_hunks` in `diff.lua`). They are not public API.
+- LuaCATS: a module file opens with a one-line `---` summary; every public function has a
+  one-line `---` summary plus `---@param` / `---@return`; types are
+  `---@class changeset.<Name>` with `---@field`; module-level tables get `---@type`.
+  `mise run typecheck` enforces it.
+- Comments say why, never what the code does or how it changed.
+- Every `nvim_create_autocmd` says what fires it and why. Keymaps are set with a `desc`.
+- StyLua formats (2 spaces, 120 columns). A runtime global goes in `vim.yml`. A
+  `-- selene: allow(...)` suppression sits under a one-line comment giving the reason.
+
+## Public API
+
+`require("changeset").setup(opts)` is optional; zero-config works. Its options are the
+`changeset.Config` class in `lua/changeset/config.lua` (`keymaps`, `layout.min_file_width`,
+`pr_review.enabled`), deep-merged over the defaults and validated; each call starts again
+from the defaults. The resolved result is `changeset.Options`, in the same file.
+`keymaps.next` / `keymaps.prev` default to `false`, so the sidebar binds no step keys
+unless the user sets them. A new option is added to `changeset.Config` with its
+`---@field` and described in README `## Settings`.
+
+`plugin/changeset.lua` maps `<leader>gp` to `require("changeset").toggle()` and refills
+the sidebar on `SessionLoadPost` via `restore()`. `require("changeset")` also exposes
+`open`, `close`, `refresh` and `rows()` — the file rows under the sidebar's sections, less
+the hidden kinds, which `pick.lua` is built on; its first call blocks up to `DIFF_WAIT_MS`
+(2 s) while the diff is read. `build` and `footer` are there for the plugin's own modules
+and specs. README documents none of `rows`, `build` or `footer`. Beyond that:
+`require("changeset.pick").pick()` and `require("changeset.review").toggle()` /
+`activate()`. There are no user commands.
+
+For the options and keys themselves, see README `## Settings` and `## Keymaps`.
+
+## Vendored modules
+
+`git.lua`, `jsonfile.lua`, `paths.lua`, `symbols.lua` and `kinds.lua` began as copies of
+shared modules. They are owned by this repository and not synced with any other copy, so
+they change as this plugin needs.
+
+## Behaviour that is easy to break
+
+Check a change against
+[README.md#behaviour-that-is-easy-to-get-wrong](README.md#behaviour-that-is-easy-to-get-wrong).
+
+## Before a PR
+
+`mise run preflight` stays green on every PR. A PR that changes the layout, a task, a
+fixture or the public API updates `AGENTS.md` in the same PR.
