@@ -1,4 +1,4 @@
----Row icons: mini.icons when it is set up, else nvim-web-devicons for files, else a blank glyph.
+---Icons: mini.icons when it is set up, else nvim-web-devicons for files, else a blank glyph.
 
 local M = {}
 
@@ -9,10 +9,11 @@ local provider
 
 ---@return changeset.IconProvider
 local function detect()
+  -- First: a devicons shim (LazyVim's) sets mini.icons up as it loads.
+  local ok, devicons = pcall(require, "nvim-web-devicons")
   if _G.MiniIcons then
     return _G.MiniIcons.get
   end
-  local ok, devicons = pcall(require, "nvim-web-devicons")
   if not ok then
     return function() end
   end
@@ -25,7 +26,8 @@ local function detect()
 end
 
 ---Glyph and highlight group for `name` in a mini.icons `category`. The provider is
----picked on the first call and kept for the session.
+---kept for the session: `require` does not cache a failure, so a per-icon probe would
+---search 'runtimepath' for a missing devicons on every row.
 ---@param category "directory"|"file"|"lsp"
 ---@param name string
 ---@return string glyph, string hl

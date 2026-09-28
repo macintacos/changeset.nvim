@@ -26,10 +26,12 @@ describe("changeset.icons", function()
   end)
 
   it("takes file icons from nvim-web-devicons without mini.icons", function()
+    vim.opt.rtp:prepend(deps.path("nvim-web-devicons"))
     local icons = fresh()
     local glyph, hl = icons.get("file", PATH)
     assert.are.equal("DevIconLua", hl)
     assert.are.equal((require("nvim-web-devicons").get_icon("init.lua")), glyph)
+    assert.are.equal("DevIconMakefile", select(2, icons.get("file", "src/Makefile")))
     assert.are.same(BLANK, { icons.get("directory", "src") })
     assert.are.same(BLANK, { icons.get("lsp", "Function") })
   end)
@@ -42,5 +44,18 @@ describe("changeset.icons", function()
       local glyph, hl = MiniIcons.get(case[1], case[2])
       assert.are.same({ glyph, hl }, { icons.get(case[1], case[2]) })
     end
+  end)
+
+  it("sees a mini.icons that the devicons probe sets up", function()
+    _G.MiniIcons = nil
+    package.loaded["nvim-web-devicons"] = nil
+    package.preload["nvim-web-devicons"] = function()
+      require("mini.icons").setup()
+      MiniIcons.mock_nvim_web_devicons()
+      return package.loaded["nvim-web-devicons"]
+    end
+    local got = { fresh().get("directory", "src") }
+    local glyph, hl = MiniIcons.get("directory", "src")
+    assert.are.same({ glyph, hl }, got)
   end)
 end)

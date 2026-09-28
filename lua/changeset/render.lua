@@ -22,7 +22,7 @@ local symbols = require("changeset.symbols")
 ---@field kind? string
 
 ---@class changeset.RenderOpts
----@field icon fun(row: changeset.Row): string, string Glyph and its highlight group; the caller resolves it with `changeset.icons`.
+---@field icon fun(row: changeset.Row): string, string Glyph and its highlight group.
 ---@field collapsed fun(id: string): boolean         Whether the row with this id hides its children.
 ---@field width integer                              Window width in cells; long names and directories are trimmed so stats stay visible.
 ---@field query? string                               Filter text; every occurrence of it in a line is marked.

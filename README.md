@@ -141,8 +141,10 @@ symbol rules: their tests live in files the path rules already catch.
 ### Icons come from an icon plugin, never hand-picked
 
 `changeset.icons` asks mini.icons when it is set up, else nvim-web-devicons, else draws a
-blank. devicons covers files only, so under it section headers and symbol rows draw a
-blank in `Normal`. The provider is picked once, on the first icon drawn. With mini.icons:
+blank. devicons covers files only, so under it every other icon — section headers,
+symbols, orphan hunks, the kind menu — is a blank in `Normal`. The provider is picked
+once, on the first icon drawn; an icon plugin set up after that is not seen until Neovim
+restarts. With mini.icons:
 
 - Symbol rows: `MiniIcons.get("lsp", kind)` — the exact call `outline.lua` makes, so a
   method is the same glyph in the same hue in both the picker and the sidebar.
