@@ -453,8 +453,14 @@ identified by a repo-relative path, which two checkouts can easily both have.
 
 ## Settings
 
-There are none, and the sidebar leaves the gutter alone — that is
-`<leader>gP`'s to switch on, including its memory of you having switched it off.
+`require("changeset").setup(opts)` is optional; without it the sidebar binds the keys
+below and nothing else. `keymaps` renames any sidebar key, or leaves it unbound with
+`false`; `keymaps.next` / `keymaps.prev` bind keys that step through changes from any
+window while the sidebar is open, and are off by default. `layout.min_file_width` (80) is
+the narrowest the files get beside the sidebar before it moves below them.
+`pr_review.enabled` (false) turns on PR Review Mode, until a restart. Each call starts
+again from the defaults and reaches the sidebar the next time it opens; `changeset.Config`
+in `lua/changeset/config.lua` lists every field.
 
 Which symbol kinds are hidden is not a setting either: it is a choice made in the menu and
 written to `stdpath("state")/changeset/filters.json`, through a temporary file renamed over
@@ -489,8 +495,8 @@ repository's deliberate choice is none of that save's business.
 | `R` | sidebar | rebuild now |
 | `y` | sidebar | yank the row's `path:line` via `changeset.paths.copy`; nothing on a section header |
 | `/` `-` `<C-t>` | sidebar | commit into a vsplit / split / new tab instead |
-| `?` | sidebar | list these keys, `]h` / `[h` included: which-key's popup where it is installed, a float where it is not |
-| `]h` / `[h` | anywhere, while open | advance the sidebar's selection, previewing as it goes and stepping over section headers — review without focusing the sidebar |
+| `?` | sidebar | list the keys the sidebar bound, the step keys included when set: which-key's popup where it is installed, a float where it is not |
+| `]h` / `[h` | anywhere, while open | off unless set as `keymaps.next` / `keymaps.prev`; advance the sidebar's selection, previewing as it goes and stepping over section headers — review without focusing the sidebar |
 
 ## Behaviour that is easy to get wrong
 
