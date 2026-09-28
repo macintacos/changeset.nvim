@@ -105,9 +105,9 @@ describe("changeset setup", function()
   it("binds the default sidebar keys and no step keys without setup()", function()
     local buf = open_sidebar()
 
-    local defaults =
+    local default_keys =
       { "<CR>", "<S-CR>", "q", "h", "l", "H", "L", "]]", "[[", "F", "f", "R", "y", "/", "-", "<C-t>", "?" }
-    for _, lhs in ipairs(defaults) do
+    for _, lhs in ipairs(default_keys) do
       assert.not_nil(buffer_map(buf, lhs), lhs)
     end
     assert.is_nil(global_map("]h"))
