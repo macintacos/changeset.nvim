@@ -27,6 +27,7 @@ hunk touched. `README.md` is the user-facing reference and the design record.
 │   ├── config.lua       the user's options: defaults, and what `setup()` made of them
 │   ├── diff.lua         runs the branch's git diff and parses it into files and hunks
 │   ├── git.lua          git and gh queries that pick the base branch
+│   ├── health.lua       `:checkhealth changeset`: requirements, optional integrations, options in force
 │   ├── help.lua         the `?` key reference
 │   ├── icons.lua        mini.icons → nvim-web-devicons → blank
 │   ├── jsonfile.lua     small JSON records under `stdpath`
@@ -159,6 +160,8 @@ serve the plugin's own modules and specs; `footer` stays public because the side
 statusline evaluates `v:lua.require'changeset'.footer()`, a string the type check cannot
 follow. Beyond that: `require("changeset.pick").pick()` and
 `require("changeset.review").toggle()` / `activate()`. There are no user commands.
+`:checkhealth changeset` reports which optional dependencies are missing and the options in
+force.
 
 For the options and keys themselves, see README `## Settings` and `## Keymaps`.
 
