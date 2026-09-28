@@ -688,6 +688,36 @@ function M.is_preview_winbar(winbar)
   return winbar:find(("%%#%s# Preview "):format(M.PREVIEW_LABEL_HL), 1, true) ~= nil
 end
 
+---What `set_default` last gave each group, as `nvim_get_hl` read it back.
+---@type table<string, vim.api.keyset.get_hl_info>
+local ours = {}
+
+---`name`'s definition without its `default` flag, which setting `Normal` strips from
+---every group.
+---@param name string
+---@return vim.api.keyset.get_hl_info
+local function definition(name)
+  local hl = vim.api.nvim_get_hl(0, { name = name })
+  hl.default = nil
+  return hl
+end
+
+---Give `name` the default `attrs` unless a colorscheme or the user has defined it. A
+---group still holding what this module last gave it is cleared first: `default = true`
+---alone would keep the old theme's colours.
+---@param name string
+---@param attrs vim.api.keyset.highlight
+local function set_default(name, attrs)
+  local current = definition(name)
+  if vim.deep_equal(current, ours[name]) then
+    vim.api.nvim_set_hl(0, name, {})
+  elseif next(current) then
+    return
+  end
+  vim.api.nvim_set_hl(0, name, vim.tbl_extend("force", attrs, { default = true }))
+  ours[name] = definition(name)
+end
+
 ---Point `PREVIEW_ICON_HL` at `hl`'s colour over the band's background.
 ---
 ---An icon plugin's group carries a foreground only, so a glyph drawn straight in one
@@ -701,7 +731,7 @@ local band_hl
 ---@return string group
 function M.band_icon(hl)
   band_hl = hl
-  vim.api.nvim_set_hl(0, M.PREVIEW_ICON_HL, {
+  set_default(M.PREVIEW_ICON_HL, {
     fg = vim.api.nvim_get_hl(0, { name = hl, link = false }).fg,
     bg = vim.api.nvim_get_hl(0, { name = M.PREVIEW_HL, link = false }).bg,
   })
@@ -732,11 +762,12 @@ local function mix(from, to, amount)
   return out
 end
 
----Create the groups the sidebar draws with. `META_HL` is mixed from `Comment`
+---Create the groups the sidebar draws with, as defaults that a colorscheme's or the
+---user's own definition of the same group overrides. `META_HL` is mixed from `Comment`
 ---rather than linked to it, which would drop the italics.
 function M.define_highlights()
   local comment = vim.api.nvim_get_hl(0, { name = "Comment", link = false })
-  vim.api.nvim_set_hl(0, M.META_HL, { fg = comment.fg, italic = true })
+  set_default(M.META_HL, { fg = comment.fg, italic = true })
 
   -- CursorLine's background is the faintest tint every colorscheme gives a window
   -- to say "this is the thing you are on", so the band reads in any theme without
@@ -746,47 +777,47 @@ function M.define_highlights()
   local visual = vim.api.nvim_get_hl(0, { name = "Visual", link = false })
   local band = cursorline.bg or visual.bg
   local warn = vim.api.nvim_get_hl(0, { name = "DiagnosticWarn", link = false })
-  vim.api.nvim_set_hl(0, M.PREVIEW_HL, { bg = band })
+  set_default(M.PREVIEW_HL, { bg = band })
   -- `reverse` rather than a background read off `Normal`: it pairs the accent
   -- with whatever the window is actually drawn on, so the badge survives a
   -- theme that leaves `Normal` transparent.
-  vim.api.nvim_set_hl(0, M.PREVIEW_LABEL_HL, { fg = warn.fg or comment.fg, reverse = true, bold = true })
-  vim.api.nvim_set_hl(0, M.PREVIEW_HINT_HL, { fg = comment.fg, bg = band, italic = true })
+  set_default(M.PREVIEW_LABEL_HL, { fg = warn.fg or comment.fg, reverse = true, bold = true })
+  set_default(M.PREVIEW_HINT_HL, { fg = comment.fg, bg = band, italic = true })
   -- TabLine's background is what a colorscheme paints its own chrome with, so the
   -- header reads as the panel's frame rather than as a preview band.
   local chrome = vim.api.nvim_get_hl(0, { name = "TabLine", link = false }).bg or band
-  vim.api.nvim_set_hl(0, M.HEADER_HL, { bg = chrome })
+  set_default(M.HEADER_HL, { bg = chrome })
   -- Directory's colour rather than the preview badge's warning yellow: these say
   -- what the panel is, and yellow is already spoken for by "on loan".
   local directory = vim.api.nvim_get_hl(0, { name = "Directory", link = false }).fg or comment.fg
-  vim.api.nvim_set_hl(0, M.HEADER_ICON_HL, { fg = directory, bg = chrome })
-  vim.api.nvim_set_hl(0, M.HEADER_DIM_HL, { fg = comment.fg, bg = chrome })
+  set_default(M.HEADER_ICON_HL, { fg = directory, bg = chrome })
+  set_default(M.HEADER_DIM_HL, { fg = comment.fg, bg = chrome })
   local normal = vim.api.nvim_get_hl(0, { name = "Normal", link = false })
-  vim.api.nvim_set_hl(0, M.HEADER_REF_HL, { fg = normal.fg, bg = chrome, bold = true })
-  vim.api.nvim_set_hl(0, M.BADGE_HL, { fg = directory, reverse = true, bold = true })
+  set_default(M.HEADER_REF_HL, { fg = normal.fg, bg = chrome, bold = true })
+  set_default(M.BADGE_HL, { fg = directory, reverse = true, bold = true })
   local statusline = vim.api.nvim_get_hl(0, { name = "StatusLine", link = false })
-  vim.api.nvim_set_hl(0, M.FOOTER_HL, { fg = comment.fg, bg = statusline.bg })
-  vim.api.nvim_set_hl(0, M.FOOTER_KEY_HL, { fg = statusline.fg, bg = statusline.bg, bold = true })
+  set_default(M.FOOTER_HL, { fg = comment.fg, bg = statusline.bg })
+  set_default(M.FOOTER_KEY_HL, { fg = statusline.fg, bg = statusline.bg, bold = true })
   -- What the editor already paints over the text you searched for.
-  vim.api.nvim_set_hl(0, M.MATCH_HL, { link = "Search" })
+  set_default(M.MATCH_HL, { link = "Search" })
   -- Struck through as well as dimmed: dim on its own is what ancestor rows mean,
   -- and it reads as faint rather than as switched off in a light colourscheme.
-  vim.api.nvim_set_hl(0, M.HIDDEN_HL, { fg = comment.fg, strikethrough = true })
+  set_default(M.HIDDEN_HL, { fg = comment.fg, strikethrough = true })
   -- Every state tints toward the theme's keyword colour, a hue nothing else on a row
   -- carries, so a tinted row reads as a state rather than as another diff colour.
   -- Mixed rather than linked: an opaque background keeps each token's own colour
   -- legible on top. Over the chrome's background when Normal is transparent.
   local accent = vim.api.nvim_get_hl(0, { name = "Statement", link = false }).fg or normal.fg or 0x808080
   local base = normal.bg or chrome or 0
-  vim.api.nvim_set_hl(0, M.SELECTED_HL, { bg = mix(base, accent, SELECTED_TINT) })
-  vim.api.nvim_set_hl(0, M.HERE_HL, { bg = mix(base, accent, HERE_TINT) })
-  vim.api.nvim_set_hl(0, M.PICKED_HL, { bg = mix(base, accent, PICKED_TINT) })
-  vim.api.nvim_set_hl(0, M.SELECTED_ICON_HL, { fg = accent })
-  vim.api.nvim_set_hl(0, M.HERE_ICON_HL, { fg = accent })
-  vim.api.nvim_set_hl(0, M.PICKED_ICON_HL, { fg = accent })
+  set_default(M.SELECTED_HL, { bg = mix(base, accent, SELECTED_TINT) })
+  set_default(M.HERE_HL, { bg = mix(base, accent, HERE_TINT) })
+  set_default(M.PICKED_HL, { bg = mix(base, accent, PICKED_TINT) })
+  set_default(M.SELECTED_ICON_HL, { fg = accent })
+  set_default(M.HERE_ICON_HL, { fg = accent })
+  set_default(M.PICKED_ICON_HL, { fg = accent })
   -- Fully blended is the TUI's cue to hide the cursor outright. `nocombine` is only
   -- there to keep the group: one holding nothing but `blend` is stored as cleared.
-  vim.api.nvim_set_hl(0, M.NO_CURSOR_HL, { blend = 100, nocombine = true })
+  set_default(M.NO_CURSOR_HL, { blend = 100, nocombine = true })
   -- Last, over the band it is drawn on: a glyph left on the old theme's colour is
   -- the one thing here that can come out invisible rather than merely off-key.
   if band_hl then
