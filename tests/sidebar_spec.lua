@@ -2,6 +2,7 @@ vim.opt.rtp:prepend(require("support.deps").path("mini.icons"))
 require("mini.icons").setup()
 
 local changeset = require("changeset")
+changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
 local render = require("changeset.render")
 local window = require("changeset.window")
 local Fixture = require("support.git")

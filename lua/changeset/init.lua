@@ -33,11 +33,6 @@ local CANCELLED = "\r"
 -- One write per burst of answers rather than one per file.
 local SAVE_DEBOUNCE_MS = 1000
 
--- Not <C-n>/<C-p>: plugin/multicursor.lua owns those, and shadowing them would mean
--- deleting a user mapping on close. `h` is free across mini.bracketed's targets.
--- Next first — the bindings and `?` both index this order.
-local STEP_KEYS = { "]h", "[h" }
-
 -- Capitalised: `:mksession` saves only globals named so, and only with "globals" in 'sessionoptions'.
 local POSITION_GLOBAL = "ChangesetPosition"
 
@@ -593,6 +588,42 @@ local function step(delta)
   preview_current()
 end
 
+---The step keys bound while the sidebar stands, each with the global mapping it replaced.
+---@type { lhs: string, prior: table? }[]
+local stepped = {}
+
+---Remove the step keys and put back what they replaced. Safe to repeat: `close` also runs with no sidebar open.
+local function unbind_step_keys()
+  for _, key in ipairs(stepped) do
+    pcall(vim.keymap.del, "n", key.lhs)
+    if key.prior then
+      vim.fn.mapset(key.prior)
+    end
+  end
+  stepped = {}
+end
+
+---Bind the configured `next` / `prev` keys globally, remembering the global mapping each replaces.
+local function bind_step_keys()
+  unbind_step_keys()
+  local keys = config.get().keymaps
+  for _, key in ipairs({
+    { keys.next, 1, "Next change (Changeset)" },
+    { keys.prev, -1, "Previous change (Changeset)" },
+  }) do
+    local lhs, delta, desc = unpack(key)
+    if lhs then
+      local prior = vim.iter(vim.api.nvim_get_keymap("n")):find(function(keymap)
+        return vim.keycode(keymap.lhs) == vim.keycode(lhs)
+      end)
+      stepped[#stepped + 1] = { lhs = lhs, prior = prior }
+      vim.keymap.set("n", lhs, function()
+        step(delta)
+      end, { desc = desc })
+    end
+  end
+end
+
 ---Open the symbol-kind filter menu, redrawing as kinds are toggled.
 ---@param open_session changeset.Session
 local function open_kind_menu(open_session)
@@ -688,15 +719,19 @@ end
 
 ---@param buf integer
 local function set_keymaps(buf)
+  local keys = config.get().keymaps
   local set, own = help.mapper(buf)
   -- The window can outlive the session: a `build()` for another repository lets go
   -- of the tree while a sidebar stands. Handing the session down rather than letting
   -- handlers reach for it means the check that it exists is the same line that
   -- passes it on.
-  ---@param lhs string
+  ---@param lhs string|false
   ---@param fn fun(open_session: changeset.Session)
   ---@param desc string
   local function map(lhs, fn, desc)
+    if not lhs then
+      return
+    end
     set(lhs, function()
       if session then
         fn(session)
@@ -704,52 +739,58 @@ local function set_keymaps(buf)
     end, desc)
   end
 
-  map("<CR>", function()
+  map(keys.jump, function()
     commit("reuse")
   end, "Go to this change")
   -- The commit leaves the cursor in the window it jumped to, and `close` keeps
   -- focus where it already is, so the sidebar goes without taking the jump back.
-  map("<S-CR>", function()
+  map(keys.jump_close, function()
     commit("reuse")
     M.close()
   end, "Go to this change and close the tree")
-  map("/", function()
+  map(keys.jump_vsplit, function()
     commit("vsplit")
   end, "Go to this change in a vertical split")
-  map("-", function()
+  map(keys.jump_split, function()
     commit("split")
   end, "Go to this change in a split")
-  map("<C-t>", function()
+  map(keys.jump_tab, function()
     commit("tab")
   end, "Go to this change in a new tab")
-  map("q", M.close, "Close the tree")
-  map("l", function()
+  map(keys.close, M.close, "Close the tree")
+  map(keys.expand, function()
     local row = row_at_cursor()
     if row then
       set_open(row, true)
     end
   end, "Expand")
-  map("h", collapse_or_parent, "Collapse, or step out to the parent")
-  map("H", collapse_all_files, "Collapse every file")
-  map("L", expand_all_files, "Expand every file")
-  map("]]", function(open_session)
+  map(keys.collapse, collapse_or_parent, "Collapse, or step out to the parent")
+  map(keys.collapse_all, collapse_all_files, "Collapse every file")
+  map(keys.expand_all, expand_all_files, "Expand every file")
+  map(keys.next_section, function(open_session)
     to_section(open_session, 1)
   end, "Next section")
-  map("[[", function(open_session)
+  map(keys.prev_section, function(open_session)
     to_section(open_session, -1)
   end, "Previous section")
-  map("R", M.refresh, "Rebuild the tree")
-  map("y", function()
+  map(keys.refresh, M.refresh, "Rebuild the tree")
+  map(keys.yank, function()
     local row = row_at_cursor()
     if row and row.kind ~= "section" then
       Paths.copy(row.lnum and ("%s:%d"):format(row.path, row.lnum) or row.path, "relative path:line")
     end
   end, "Yank path:line")
-  map("?", function()
-    help.show(buf, own, STEP_KEYS)
+  map(keys.help, function()
+    help.show(
+      buf,
+      own,
+      vim.tbl_map(function(key)
+        return key.lhs
+      end, stepped)
+    )
   end, "Show these keymaps")
-  map("F", open_kind_menu, "Filter by symbol kind")
-  map("f", prompt_filter, "Filter the tree")
+  map(keys.filter_kinds, open_kind_menu, "Filter by symbol kind")
+  map(keys.filter, prompt_filter, "Filter the tree")
 end
 
 ---The Generated files, each filed as answered with no symbols, and the rest, which a server is asked about.
@@ -1139,12 +1180,7 @@ function M.open()
       paint()
     end,
   })
-  vim.keymap.set("n", STEP_KEYS[1], function()
-    step(1)
-  end, { desc = "Next change (Changeset)" })
-  vim.keymap.set("n", STEP_KEYS[2], function()
-    step(-1)
-  end, { desc = "Previous change (Changeset)" })
+  bind_step_keys()
 
   draw()
   -- A kept tree misses what nothing announced, such as a file edited outside Neovim while it kept focus.
@@ -1153,12 +1189,10 @@ function M.open()
   end
 end
 
----Dismiss the sidebar and the global `]h`/`[h` keys. The tree stays, and keeps refreshing.
+---Dismiss the sidebar and its step keys, putting back what they replaced. The tree stays, and keeps refreshing.
 function M.close()
   require("changeset.menu").close()
-  for _, lhs in ipairs(STEP_KEYS) do
-    pcall(vim.keymap.del, "n", lhs)
-  end
+  unbind_step_keys()
   vim.api.nvim_clear_autocmds({ group = augroup })
   window.close()
 end

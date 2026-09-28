@@ -1,4 +1,5 @@
 local changeset = require("changeset")
+changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
 local window = require("changeset.window")
 local Fixture = require("support.git")
 
