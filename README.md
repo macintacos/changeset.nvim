@@ -15,18 +15,18 @@ two as the editor is resized.
 ## What it shows
 
 Files changed between `merge-base(origin/<default>, HEAD)` — the local default branch
-when there is no `origin/` copy of it — and the working tree: the
-same range PR Review Mode's gutter marks. On a branch whose open PR targets another branch,
-that branch stands in for the default once `gh` names it, and the tree rebuilds onto it.
-Untracked files count. A deleted file is listed, but its row previews a notice
-in place of the file and never opens it.
+when there is no `origin/` copy of it — and the working tree: the same range PR Review
+Mode's gutter marks. On a branch whose open PR targets another branch, that branch stands
+in for the default once `gh` names it, and the tree rebuilds onto it. Untracked files
+count. A deleted file is listed, but its row previews a notice in place of the file and
+never opens it.
 
 Under each file sit the symbols a hunk actually touched, plus the ancestors needed to
 place them. Unchanged siblings are hidden: the tree is a map of the diff, not an outline.
 
 Files sit under Implementation / Tests / Docs / Config / Generated headers, in that order,
-with Generated folded at first, and are grouped by directory within their section, a directory's own files ahead of its
-subdirectories'.
+with Generated folded at first, and are grouped by directory within their section, a
+directory's own files ahead of its subdirectories'.
 
 ```text
 󰴉  Implementation      2 files      +12 -3
@@ -52,9 +52,10 @@ Optional, each adding one thing:
 - A language server answering `textDocument/documentSymbol`: the symbol
   rows under each file. Without one, a file lists only its changes.
 - The `rust`, `typescript` and `tsx` treesitter parsers: inline test
-  symbols are marked by their syntax rather than their name.
-- mini.icons or nvim-web-devicons: icons. nvim-web-devicons covers files
-  only.
+  symbols are also recognised by their syntax (`#[test]`, `#[cfg(test)]`,
+  `import.meta.vitest`), not only by their name.
+- mini.icons, set up, or nvim-web-devicons: icons. nvim-web-devicons
+  covers files only.
 - which-key: `?` opens its popup instead of a float.
 - mini.pick: the picker.
 - gitsigns: required by PR Review Mode; also colours the status rail
@@ -71,8 +72,10 @@ vim.pack.add({ "https://github.com/macintacos/changeset.nvim" })
 With lazy.nvim:
 
 ```lua
-{ "macintacos/changeset.nvim", opts = {} }
+{ "macintacos/changeset.nvim" }
 ```
+
+Options go in the spec as `opts = { … }`, which makes lazy.nvim call `setup()` with them.
 
 `setup()` is optional; without it the sidebar works with the defaults below.
 
@@ -99,7 +102,9 @@ require("changeset").setup({ keymaps = { next = "]h", prev = "[h" } })
 ## Options
 
 Pass any of these to `require("changeset").setup()` as nested tables
-(`{ keymaps = { jump = "o" } }`). Any key may be `false` to leave it unbound.
+(`{ keymaps = { jump = "o" } }`). Any `keymaps` entry may be `false` to leave it unbound.
+
+<!-- The separator rows' dash counts set the vimdoc's column widths; keep their ratios. -->
 
 | Option | Default | Description |
 | --------- | --- | --------------- |
@@ -135,12 +140,17 @@ off takes a restart.
 
 ## Sidebar keys
 
+Moving through the tree previews each change in the window you were last in, under a
+band; `<CR>` (or a split or tab key) opens it there for real. Keys shown are the
+defaults; each sidebar key is renamed by the `keymaps` option in its row of
+[Options](#options).
+
 | Key | Where | Does |
 | --- | --- | ------------ |
 | `j` / `k` | sidebar | move, previewing into the window you were last in, without leaving the sidebar |
-| `<CR>` | sidebar | commit: focus that window at the row's position, keep the jump; nothing on a section header |
-| `<S-CR>` | sidebar | commit, then close the sidebar behind you |
-| `q` | sidebar | close, restore focus and put back whatever the previews borrowed |
+| `<CR>` | sidebar | open it there: focus that window at the row's position, keeping the jump; nothing on a section header |
+| `<S-CR>` | sidebar | open it, then close the sidebar behind you |
+| `q` | sidebar | close, restore focus and restore the windows it previewed into |
 | `h` / `l` | sidebar | collapse / expand; on a header, fold / unfold its section; `h` with nothing left to shut steps out to the parent, so repeated `h` walks up to the filename and then its section header; `l` on a compressed chain expands it to full nesting |
 | `H` / `L` | sidebar | collapse / expand every file, the whole-tree form of `h` / `l`; never folds or unfolds a section |
 | `]]` / `[[` | sidebar | move to the next / previous section header, a folded one included; stays put when there is none that way |
@@ -151,7 +161,7 @@ off takes a restart.
 | `f` | sidebar | filter as you type, keeping ancestors so matches stay placed and lighting every match until the filter goes; `<Esc>` restores the last filter |
 | `R` | sidebar | rebuild now |
 | `y` | sidebar | yank the row's `path:line` to the clipboard; nothing on a section header |
-| `/` `-` `<C-t>` | sidebar | commit into a vsplit / split / new tab instead |
+| `/` `-` `<C-t>` | sidebar | open it in a vsplit / split / new tab instead |
 | `?` | sidebar | list the keys the sidebar bound, the step keys included when set: which-key's popup where it is installed, a float where it is not |
 | `]h` / `[h` | anywhere, while open | off unless set as `keymaps.next` / `keymaps.prev`; advance the sidebar's selection, previewing as it goes and stepping over section headers — review without focusing the sidebar |
 
@@ -243,9 +253,10 @@ asks nothing of the network.
   `stdpath("cache")/changeset/`. Safe to delete; the next build is slow
   once.
 - Hidden symbol kinds: `stdpath("state")/changeset/filters.json`.
-- `:mksession` restores the sidebar, and its position too when
-  `'sessionoptions'` contains `globals`.
+- `:mksession` restores the sidebar when `'sessionoptions'` contains
+  `blank` (the default), and its position too when it contains `globals`.
 - Folds are kept in memory per repository until Neovim exits.
 
-Contributors: the design and its rationale are in
-[docs/design.md](https://github.com/macintacos/changeset.nvim/blob/main/docs/design.md).
+<!-- panvimdoc-ignore-start -->
+Contributors: the design and its rationale are in [docs/design.md](docs/design.md).
+<!-- panvimdoc-ignore-end -->

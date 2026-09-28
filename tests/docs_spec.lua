@@ -1,3 +1,4 @@
+-- The vimdoc, not README.md: it is what :help shows, and CI fails when it lags the README.
 local root = vim.fn.fnamemodify(vim.api.nvim_get_runtime_file("plugin/changeset.lua", false)[1], ":h:h")
 -- panvimdoc re-wraps at 78 columns, inside inline code too.
 local flat = table.concat(vim.fn.readfile(root .. "/doc/changeset.nvim.txt"), "\n"):gsub("%s+", " ")
@@ -67,7 +68,14 @@ describe("doc/changeset.nvim.txt", function()
     end
   end)
 
-  it("tags the options section", function()
-    assert.truthy(flat:find("*changeset.nvim-options*", 1, true))
+  it("has unique tags, one of them for the options section", function()
+    local dir = vim.fn.tempname()
+    vim.fn.mkdir(dir, "p")
+    vim.fn.writefile(vim.fn.readfile(root .. "/doc/changeset.nvim.txt"), dir .. "/changeset.nvim.txt")
+    local ok, err = pcall(vim.cmd.helptags, dir)
+    local tags = ok and "\n" .. table.concat(vim.fn.readfile(dir .. "/tags"), "\n") or ""
+    vim.fn.delete(dir, "rf")
+    assert.is_true(ok, err)
+    assert.truthy(tags:find("\nchangeset%.nvim%-options\t"))
   end)
 end)

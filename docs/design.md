@@ -1,11 +1,13 @@
 # Design
 
-This records why the sidebar looks and behaves as it does, for contributors; `README.md` is the user reference.
+This records why the sidebar looks and behaves as it does, for contributors; `README.md`
+is the user reference.
 
 ## Visual system
 
-Cohesion here means speaking the vocabulary of the Neovim config the plugin was extracted from, not inventing one. Every
-glyph, colour and layout device below is already in use somewhere in that config.
+Cohesion here means speaking the vocabulary of the Neovim config the plugin was extracted
+from, not inventing one. Every glyph, colour and layout device below is already in use
+somewhere in that config.
 
 ### The status rail is the one bold element
 
@@ -110,8 +112,9 @@ symbols, orphan hunks, the kind menu — is a blank in `Normal`. The provider is
 once, on the first icon drawn; an icon plugin set up after that is not seen until Neovim
 restarts. With mini.icons:
 
-- Symbol rows: `MiniIcons.get("lsp", kind)` — the exact call that config's outline picker makes, so a
-  method is the same glyph in the same hue in both the outline picker and the sidebar.
+- Symbol rows: `MiniIcons.get("lsp", kind)` — the exact call that config's outline picker
+  makes, so a method is the same glyph in the same hue in both the outline picker and the
+  sidebar.
 - File rows: `MiniIcons.get("file", path)`.
 - Section headers: `MiniIcons.get("directory", …)` with `src`, `tests`, `docs`,
   `.config` and `build`, so each header wears the icon its kind of directory already has.
@@ -121,18 +124,19 @@ A future icon-set change propagates everywhere at once. That is the point.
 
 ### Kind labels are dropped; the icon carries kind
 
-The config's outline picker right-aligns a kind label (`Method`, `Class`). A sidebar is too narrow
-to spend its right edge twice, and the kind icon already encodes kind in colour and form.
-The right edge goes to the stat instead. This is the one place the sidebar deliberately
-diverges from the outline picker, and it is a width decision, not a style one.
+The config's outline picker right-aligns a kind label (`Method`, `Class`). A sidebar is
+too narrow to spend its right edge twice, and the kind icon already encodes kind in colour
+and form. The right edge goes to the stat instead. This is the one place the sidebar
+deliberately diverges from the outline picker, and it is a width decision, not a style
+one.
 
 ### Tree guides and chain separators are the outline picker's
 
 `├─ └─ │` are the guides the outline picker draws, and a compressed chain joins with
 ` › `, the separator its breadcrumbs use. Both are built here rather than carried over:
-the outline picker's guides describe its own flat list, and this tree nests differently. The
-separator is the one that has to stay identical, because `symbols.fit` trims a chain by
-splitting it on its own copy. No new punctuation is introduced.
+the outline picker's guides describe its own flat list, and this tree nests differently.
+The separator is the one that has to stay identical, because `symbols.fit` trims a chain
+by splitting it on its own copy. No new punctuation is introduced.
 
 ### Three levels of emphasis, all theme-derived
 
@@ -142,9 +146,9 @@ splitting it on its own copy. No new punctuation is introduced.
 | Context | ancestor-only rows — shown because a descendant changed | `Comment` |
 | Meta | `⋯ reading symbols`, the orphan group's label | `Comment` + italic |
 
-Italic means "this is not content" — the idiom the outline picker's breadcrumbs already establish.
-No row is bold: the outline picker uses no bold, and adding it would break the pairing.
-The two badges are, because a badge is chrome rather than content.
+Italic means "this is not content" — the idiom the outline picker's breadcrumbs already
+establish. No row is bold: the outline picker uses no bold, and adding it would break the
+pairing. The two badges are, because a badge is chrome rather than content.
 
 Ancestor-only rows carry no stat. They did not change; only their descendants did.
 
@@ -400,10 +404,11 @@ change while typing, none of which moves a diff git reads from disk, and the sym
 own buffer loads would fire it too, restarting the walk they came from.
 
 Asking a language server about every changed file is what makes a cold build slow: 28
-files took about nine seconds in the config the plugin was extracted from, and the tree fills a row at a time while it
-waits. Symbols are cached per file instead, stamped with the file's size and mtime, so
-the next build asks a server only about what has changed since — the same tree comes back
-complete in under 300ms, which is the `git diff` and nothing else.
+files took about nine seconds in the config the plugin was extracted from, and the tree
+fills a row at a time while it waits. Symbols are cached per file instead, stamped with
+the file's size and mtime, so the next build asks a server only about what has changed
+since — the same tree comes back complete in under 300ms, which is the `git diff` and
+nothing else.
 
 The cache is one JSON file per repo under `stdpath("cache")/changeset/`, holding only the
 fields the tree reads from a symbol. Every refresh narrows it to the files the current diff
@@ -458,14 +463,14 @@ repository's deliberate choice is none of that save's business.
   `BufRead` chain that would otherwise detect one. gitsigns is attached explicitly for the
   same reason: `BufRead` is what it attaches on.
 - **`?` documents the sidebar, not its buffer.** A buffer collects mappings from whoever
-  wants one — a blanket `FileType` autocmd elsewhere in a user's config is all it takes — and
-  those keys are not this sidebar's interface. The keys it sets are recorded as it sets
-  them, and which-key is handed a throwaway buffer carrying only those, since it describes
-  whatever a buffer maps and takes no say in which. The callbacks travel across with the
-  keys, so pressing one from inside the popup still works. The step keys (`keymaps.next` /
-  `keymaps.prev`, unbound by default) are global rather than buffer-local, so when set they
-  are looked up by name and added to that buffer, or they would be the two keys the
-  reference never mentions.
+  wants one — a blanket `FileType` autocmd elsewhere in a user's config is all it takes —
+  and those keys are not this sidebar's interface. The keys it sets are recorded as it
+  sets them, and which-key is handed a throwaway buffer carrying only those, since it
+  describes whatever a buffer maps and takes no say in which. The callbacks travel across
+  with the keys, so pressing one from inside the popup still works. The step keys
+  (`keymaps.next` / `keymaps.prev`, unbound by default) are global rather than
+  buffer-local, so when set they are looked up by name and added to that buffer, or they
+  would be the two keys the reference never mentions.
 - **The selection is the focused sidebar's cursor.** It moves with the cursor, in step
   rather than a tick behind, and goes when focus leaves the sidebar, for a float opened
   from it too, leaving "you are here". Previews never count as being somewhere: the

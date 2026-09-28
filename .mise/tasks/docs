@@ -5,7 +5,11 @@
 set -euo pipefail
 
 mkdir -p doc
-# --no-date and a literal --vim-version keep the output identical across days and Neovim builds, so CI can diff it.
+# --no-date and a literal --vim-version keep the output identical across days and
+# Neovim builds, so CI can diff it. --dedup-subheadings false tags each H2
+# changeset.nvim-<heading> (:h changeset.nvim-options), not
+# changeset.nvim-changeset-<heading>, so README H2s must be unique: a repeat makes
+# :helptags fail, which tests/docs_spec.lua catches.
 bash .tests/deps/panvimdoc/panvimdoc.sh \
 	--project-name changeset.nvim \
 	--input-file README.md \

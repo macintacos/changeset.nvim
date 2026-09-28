@@ -1,7 +1,6 @@
----The plugins the specs load, luacov for `mise run coverage`, nvim-treesitter for
----`mise run parsers` and panvimdoc for `mise run docs`, checked out under
----`.tests/deps` at the revisions pinned below, so the suite does not depend on what
----the editor happens to have installed.
+---Pinned checkouts under `.tests/deps` — the plugins the specs load and the tools
+---`coverage`, `parsers` and `docs` run — so neither the suite nor the generated docs
+---depend on what the machine happens to have installed.
 ---`nvim -l tests/support/deps.lua` installs them; `require("support.deps")` only
 ---locates them.
 local this = debug.getinfo(1, "S").source:sub(2)
@@ -93,7 +92,7 @@ function M.install()
       rev = "070a5d7b985546cc57e1fc61e5bc507fecac6045",
     },
     luacov = { src = "https://github.com/lunarmodules/luacov", rev = "b1f9eae400da976b93edb7f94cf5d05f538a0655" }, -- v0.17.0
-    panvimdoc = { src = "https://github.com/kdheepak/panvimdoc", rev = "4c8eaecb80058694171627629c6ff59bcf41472d" },
+    panvimdoc = { src = "https://github.com/kdheepak/panvimdoc", rev = "4c8eaecb80058694171627629c6ff59bcf41472d" }, -- v6.0.0
   }
   local errors = M.sync(pins, M.dir)
   if #errors > 0 then

@@ -1,7 +1,8 @@
 # changeset.nvim
 
 A Neovim sidebar mapping what the current branch changed: its files, and the symbols each
-hunk touched. `README.md` is the user-facing reference; `docs/design.md` is the design record.
+hunk touched. `README.md` is the user-facing reference; `docs/design.md` is the design
+record.
 
 ## Layout
 
@@ -126,7 +127,8 @@ full commit SHA. `mise run deps` fetches each into `.tests/deps/<name>`; `test`,
 `lint`, `typecheck`, `coverage`, `parsers` and `docs` depend on it. To bump one, edit its
 SHA, run `mise run deps`, then run the suite; after bumping `nvim-treesitter`, run
 `mise run parsers` first, which rebuilds every parser whose recorded revision differs
-from the new pin's.
+from the new pin's. After bumping `panvimdoc`, or `pandoc` in `mise.toml`, run
+`mise run docs` and commit the regenerated `doc/`.
 
 A new plugin goes into `pins` first, is prepended on `rtp` where it is used with
 `vim.opt.rtp:prepend(require("support.deps").path("<name>"))`, and is added to
@@ -172,8 +174,13 @@ each call starts again from the defaults. The resolved result is `changeset.Opti
 the same file. `keymaps.next` / `keymaps.prev` default to `false`, so the sidebar binds no
 step keys unless the user sets them. A new option gets its `---@field` (on
 `changeset.Options` too when it is a new top-level table), a default in `DEFAULTS`, a
-check in `validate()`, and a row in README `## Options`, then `mise run docs`. A module reads it through
-`config.get()` when it acts, never when it loads, so a later `setup()` reaches it.
+check in `validate()`, and a row in README `## Options`, then `mise run docs`. A module
+reads it through `config.get()` when it acts, never when it loads, so a later `setup()`
+reaches it.
+
+`tests/docs_spec.lua` fails until every option, `:Changeset` subcommand, `<Plug>` map and
+highlight group — the `Changeset*` names on `render.lua` — appears in the vimdoc: add it
+to the README, then `mise run docs`.
 
 `plugin/changeset.lua` binds no keys. It defines `<Plug>(changeset-toggle)` and
 `:Changeset {toggle|refresh|review}`, and refills the sidebar via `restore()` on
@@ -207,5 +214,6 @@ Check a change against
 
 `mise run preflight` stays green on every PR. A PR that changes the layout, a task, a
 fixture or the public API updates `AGENTS.md` in the same PR. Every `README.md` edit is
-followed by `mise run docs`, and the regenerated `doc/` is committed in the same PR; CI
-fails otherwise.
+followed by `mise run format && mise run docs` — format first: the pre-commit hook's
+Markdown fixes change what pandoc renders — and the regenerated `doc/` is committed in
+the same PR. `preflight` does not check it; CI does.
