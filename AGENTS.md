@@ -196,3 +196,5 @@ Check a change against
 
 `mise run preflight` stays green on every PR. A PR that changes the layout, a task, a
 fixture or the public API updates `AGENTS.md` in the same PR.
+
+A user-visible change adds a line under `## [Unreleased]` in `CHANGELOG.md`.
