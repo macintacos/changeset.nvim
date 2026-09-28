@@ -1,6 +1,6 @@
 ---A read-only sidebar mapping what this branch changed, nested by symbol.
 ---
----See README.md for the design. This file is the glue: it hands the tree `build`
+---See docs/design.md for the design. This file is the glue: it hands the tree `build`
 ---keeps to `tree` and `render`, and owns the sidebar's actions and the window state
 ---machine. The thinking happens in the pure modules it calls.
 

@@ -1,7 +1,7 @@
 # changeset.nvim
 
 A Neovim sidebar mapping what the current branch changed: its files, and the symbols each
-hunk touched. `README.md` is the user-facing reference and the design record.
+hunk touched. `README.md` is the user-facing reference; `docs/design.md` is the design record.
 
 ## Layout
 
@@ -20,6 +20,7 @@ hunk touched. `README.md` is the user-facing reference and the design record.
 ├── typos.toml           spell-check config
 ├── .mise/tasks/         one script per `mise run` task
 ├── doc/                 generated vimdoc — `mise run docs`, never edited by hand
+├── docs/design.md       why the sidebar looks and behaves as it does
 ├── plugin/changeset.lua `:Changeset`, `<Plug>(changeset-toggle)`, session restore, mini.pick registry
 ├── lua/changeset/
 │   ├── init.lua         glue: sidebar actions, drawing and the window state machine
@@ -200,7 +201,7 @@ repository and not synced with any other copy, so they change as this plugin nee
 ## Behaviour that is easy to break
 
 Check a change against
-[README.md#behaviour-that-is-easy-to-get-wrong](README.md#behaviour-that-is-easy-to-get-wrong).
+[docs/design.md#behaviour-that-is-easy-to-get-wrong](docs/design.md#behaviour-that-is-easy-to-get-wrong).
 
 ## Before a PR
 
