@@ -40,12 +40,14 @@ local symbols = require("changeset.symbols")
 ---@field file integer?  Which of the files shown the cursor is in; absent when it is in none.
 ---@field files integer  Files shown.
 ---@field query string   Filter in force; empty for none.
+---@field keys changeset.Config.Keymaps The keys the sidebar bound.
 
 ---@class changeset.Band The strip over a window the sidebar is previewing into.
 ---@field icon string       Glyph for the previewed file's type.
 ---@field icon_hl string    Group to draw it in, from `band_icon`.
 ---@field path string       Repo-relative path of the previewed file.
----@field destination string? What `<CR>` lands on; absent for a row that names nothing.
+---@field destination string? What the jump key lands on; absent for a row that names nothing.
+---@field jump (string|false)? The jump key the sidebar bound; absent or `false` for none.
 
 ---@class changeset.Empty
 ---@field on_default_branch boolean
@@ -177,7 +179,7 @@ local GUTTER = 2
 local SELECTED_TINT, HERE_TINT, PICKED_TINT = 0.2, 0.12, 0.06
 
 -- Stands in at the tail of the preview band when the row names no destination.
-local HINT = "<CR> to open"
+local HINT = "%s to open"
 
 ---`%` introduces an item in a statusline, so anything interpolated into one is doubled.
 ---@param text string
@@ -195,8 +197,8 @@ local FILES_ICON = ""
 local COMMIT_ICON = ""
 local FILTER_ICON = "󰈲"
 
--- The keys the footer offers, `?` last since it lists the rest.
-local HINTS = { { "<CR>", "open" }, { "f", "filter" }, { "F", "kinds" }, { "?", "all keys" } }
+-- The actions the footer offers, `help` last since it lists the rest.
+local HINTS = { { "jump", "open" }, { "filter", "filter" }, { "filter_kinds", "kinds" }, { "help", "all keys" } }
 
 -- The two kinds whose plural is not just an `s`. The rest split on the camel hump
 -- ("EnumMember" reads as two words) and take one.
@@ -654,9 +656,15 @@ function M.footer(info)
   if info.query ~= "" then
     parts[#parts + 1] = ("%%#%s#  %s %%#%s#%s"):format(M.FOOTER_HL, FILTER_ICON, M.FOOTER_KEY_HL, escaped(info.query))
   end
-  local hints = vim.tbl_map(function(hint)
-    return ("%%#%s#%s %%#%s#%s"):format(M.FOOTER_KEY_HL, hint[1], M.FOOTER_HL, hint[2])
-  end, HINTS)
+  local hints = vim
+    .iter(HINTS)
+    :filter(function(hint)
+      return info.keys[hint[1]]
+    end)
+    :map(function(hint)
+      return ("%%#%s#%s %%#%s#%s"):format(M.FOOTER_KEY_HL, escaped(info.keys[hint[1]]), M.FOOTER_HL, hint[2])
+    end)
+    :totable()
   -- `%<` before the hints: a bar too narrow for everything gives up the keys first.
   parts[#parts + 1] = ("%%#%s#%%=%%<"):format(M.FOOTER_HL) .. table.concat(hints, "  ") .. " "
   return table.concat(parts)
@@ -665,7 +673,7 @@ end
 ---The winbar over a window the sidebar is borrowing: a band across the top
 ---saying the file under it is on loan, and which one it is.
 ---
----Reversed badge, then the file's own icon and path, then where `<CR>` would
+---Reversed badge, then the file's own icon and path, then where the jump key would
 ---land — what a borrowed window has to answer, in the order it is asked.
 ---
 ---`%<` sits before the path because the path is the one part the sidebar is
@@ -681,7 +689,7 @@ function M.preview_winbar(band)
     ("%%#%s# %s "):format(band.icon_hl, band.icon),
     ("%%#%s#%%<%s"):format(M.PREVIEW_HL, escaped(band.path)),
     "%=",
-    ("%%#%s#%s "):format(M.PREVIEW_HINT_HL, escaped(band.destination or HINT)),
+    ("%%#%s#%s "):format(M.PREVIEW_HINT_HL, escaped(band.destination or (band.jump and HINT:format(band.jump) or ""))),
   })
 end
 

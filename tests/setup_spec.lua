@@ -102,13 +102,13 @@ describe("changeset setup", function()
     vim.fn.delete(tmp, "rf")
   end)
 
-  it("binds today's sidebar keys and no step keys without setup()", function()
+  it("binds the default sidebar keys and no step keys without setup()", function()
     local buf = open_sidebar()
 
     local defaults =
       { "<CR>", "<S-CR>", "q", "h", "l", "H", "L", "]]", "[[", "F", "f", "R", "y", "/", "-", "<C-t>", "?" }
     for _, lhs in ipairs(defaults) do
-      assert.is_not_nil(buffer_map(buf, lhs), lhs)
+      assert.not_nil(buffer_map(buf, lhs), lhs)
     end
     assert.is_nil(global_map("]h"))
     assert.is_nil(global_map("[h"))
@@ -151,16 +151,46 @@ describe("changeset setup", function()
     assert.is_nil(global_map("[h"))
   end)
 
+  it("puts back the user's mapping when next and prev share a key", function()
+    vim.keymap.set("n", "]h", function() end, { desc = "user ]h" })
+    changeset.setup({ keymaps = { next = "]h", prev = "]h" } })
+    open_sidebar()
+
+    changeset.close()
+    assert.equal("user ]h", global_map("]h").desc)
+  end)
+
+  it("puts back the user's mapping when the sidebar is closed with :q", function()
+    vim.keymap.set("n", "]h", function() end, { desc = "user ]h" })
+    changeset.setup({ keymaps = { next = "]h" } })
+    open_sidebar()
+
+    vim.api.nvim_win_close(assert(window.win()), true)
+    assert.is_true(vim.wait(1000, function()
+      return global_map("]h").desc == "user ]h"
+    end, 10))
+  end)
+
+  it("names the bound jump key in the footer", function()
+    changeset.setup({ keymaps = { jump = "o" } })
+    open_sidebar()
+
+    local win = assert(window.win())
+    local footer = vim.api.nvim_eval_statusline(vim.wo[win].statusline, { winid = win, maxwidth = 200 }).str
+    assert.truthy(footer:find("o open", 1, true))
+    assert.falsy(footer:find("<CR>", 1, true))
+  end)
+
   it("applies a second setup() at the next open, not to the open sidebar", function()
     local buf = open_sidebar()
     changeset.setup({ keymaps = { jump = "o" } })
 
-    assert.is_not_nil(buffer_map(buf, "<CR>"))
+    assert.not_nil(buffer_map(buf, "<CR>"))
     assert.is_nil(buffer_map(buf, "o"))
 
     changeset.close()
     buf = open_sidebar()
     assert.is_nil(buffer_map(buf, "<CR>"))
-    assert.is_not_nil(buffer_map(buf, "o"))
+    assert.not_nil(buffer_map(buf, "o"))
   end)
 end)

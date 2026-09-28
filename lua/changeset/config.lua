@@ -3,7 +3,7 @@
 local M = {}
 
 ---@class changeset.Config
----@field keymaps? changeset.Config.Keymaps Sidebar keys, each a key or `false` to leave the action unbound.
+---@field keymaps? changeset.Config.Keymaps The sidebar's keys, and the step keys it binds globally while open; each a key or `false` to leave it unbound.
 ---@field layout? changeset.Config.Layout
 ---@field pr_review? changeset.Config.PrReview
 
@@ -34,7 +34,13 @@ local M = {}
 ---@class changeset.Config.PrReview
 ---@field enabled? boolean Turn PR Review Mode on for every branch but the default. Only a restart turns it off again. Default false.
 
----@type changeset.Config
+---The options in force: every top-level field set.
+---@class changeset.Options : changeset.Config
+---@field keymaps changeset.Config.Keymaps
+---@field layout changeset.Config.Layout
+---@field pr_review changeset.Config.PrReview
+
+---@type changeset.Options
 local DEFAULTS = {
   keymaps = {
     jump = "<CR>",
@@ -63,15 +69,15 @@ local DEFAULTS = {
 
 local current = vim.deepcopy(DEFAULTS)
 
----@param options changeset.Config
+---@param options changeset.Options
 local function validate(options)
   vim.validate("keymaps", options.keymaps, "table")
   vim.validate("layout", options.layout, "table")
   vim.validate("pr_review", options.pr_review, "table")
   for action, lhs in pairs(options.keymaps) do
     vim.validate("keymaps." .. action, lhs, function(v)
-      return v == false or type(v) == "string"
-    end, "string or false")
+      return v == false or (type(v) == "string" and v ~= "")
+    end, "non-empty string or false")
   end
   vim.validate("layout.min_file_width", options.layout.min_file_width, "number")
   vim.validate("pr_review.enabled", options.pr_review.enabled, "boolean")
@@ -86,8 +92,8 @@ function M.setup(opts)
   current = merged
 end
 
----The options in force, every field set.
----@return changeset.Config
+---The options in force: what the last setup() asked for, not whether PR Review Mode is on. Read-only.
+---@return changeset.Options
 function M.get()
   return current
 end

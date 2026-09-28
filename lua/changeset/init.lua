@@ -110,6 +110,10 @@ local targets = {}
 ---@type boolean
 local left_float = false
 
+---The keys the open sidebar bound, which its footer and preview band name.
+---@type changeset.Config.Keymaps
+local bound = {}
+
 ---Stop a deferred callback for good. `vim.defer_fn` closes its handle from inside the
 ---callback, so a timer replaced before it fires leaves one open.
 ---@param timer uv.uv_timer_t?
@@ -172,6 +176,7 @@ local function band_for(row)
     -- Only a symbol row names its destination. An orphan hunk's own text is the
     -- changed line, which is not a place and does not read as one.
     destination = row.kind == "symbol" and row.name or nil,
+    jump = bound.jump,
   }
 end
 
@@ -589,12 +594,14 @@ local function step(delta)
 end
 
 ---The step keys bound while the sidebar stands, each with the global mapping it replaced.
----@type { lhs: string, prior: table? }[]
+---@type { lhs: string, prior: vim.api.keyset.get_keymap? }[]
 local stepped = {}
 
 ---Remove the step keys and put back what they replaced. Safe to repeat: `close` also runs with no sidebar open.
 local function unbind_step_keys()
-  for _, key in ipairs(stepped) do
+  -- Newest first: a key bound twice records changeset's own first mapping as the second's prior.
+  for i = #stepped, 1, -1 do
+    local key = stepped[i]
     pcall(vim.keymap.del, "n", key.lhs)
     if key.prior then
       vim.fn.mapset(key.prior)
@@ -603,25 +610,36 @@ local function unbind_step_keys()
   stepped = {}
 end
 
----Bind the configured `next` / `prev` keys globally, remembering the global mapping each replaces.
-local function bind_step_keys()
-  unbind_step_keys()
-  local keys = config.get().keymaps
-  for _, key in ipairs({
-    { keys.next, 1, "Next change (Changeset)" },
-    { keys.prev, -1, "Previous change (Changeset)" },
-  }) do
-    local lhs, delta, desc = unpack(key)
-    if lhs then
-      local prior = vim.iter(vim.api.nvim_get_keymap("n")):find(function(keymap)
-        return vim.keycode(keymap.lhs) == vim.keycode(lhs)
-      end)
-      stepped[#stepped + 1] = { lhs = lhs, prior = prior }
-      vim.keymap.set("n", lhs, function()
-        step(delta)
-      end, { desc = desc })
-    end
+---The global normal-mode mapping for `lhs`, if any.
+---@param lhs string
+---@return vim.api.keyset.get_keymap?
+local function global_mapping(lhs)
+  -- Global only: maparg() prefers a buffer-local mapping, which mapset() would restore onto the buffer current at close.
+  return vim.iter(vim.api.nvim_get_keymap("n")):find(function(keymap)
+    return vim.keycode(keymap.lhs) == vim.keycode(lhs)
+  end)
+end
+
+---@param lhs (string|false)?
+---@param delta integer
+---@param desc string
+local function bind_step_key(lhs, delta, desc)
+  if not lhs then
+    return
   end
+  stepped[#stepped + 1] = { lhs = lhs, prior = global_mapping(lhs) }
+  vim.keymap.set("n", lhs, function()
+    step(delta)
+  end, { desc = desc })
+end
+
+---Bind the `next` / `prev` keys globally, remembering the global mapping each replaces.
+---Unbinds first: a closed sidebar's scheduled close may not have run yet.
+---@param keys changeset.Config.Keymaps
+local function bind_step_keys(keys)
+  unbind_step_keys()
+  bind_step_key(keys.next, 1, "Next change (Changeset)")
+  bind_step_key(keys.prev, -1, "Previous change (Changeset)")
 end
 
 ---Open the symbol-kind filter menu, redrawing as kinds are toggled.
@@ -718,8 +736,8 @@ local function expand_all_files(open_session)
 end
 
 ---@param buf integer
-local function set_keymaps(buf)
-  local keys = config.get().keymaps
+---@param keys changeset.Config.Keymaps
+local function set_keymaps(buf, keys)
   local set, own = help.mapper(buf)
   -- The window can outlive the session: a `build()` for another repository lets go
   -- of the tree while a sidebar stands. Handing the session down rather than letting
@@ -1007,7 +1025,7 @@ function M.footer()
     return ""
   end
   local file, files = view.position(session.visible, vim.api.nvim_win_get_cursor(win)[1])
-  return render.footer({ file = file, files = files, query = session.query })
+  return render.footer({ file = file, files = files, query = session.query, keys = bound })
 end
 
 ---Public API: the file rows under the sidebar's sections, less the kinds it hides, for the current buffer's repository.
@@ -1037,7 +1055,8 @@ function M._tree()
   return session
 end
 
----Configure changeset. Optional; each call starts again from the defaults and reaches the sidebar the next time it opens. See `changeset.Config`.
+---Configure changeset. Optional; reaches the sidebar the next time it opens; PR Review Mode, once on, stays on.
+---See `changeset.Config`.
 ---@param opts changeset.Config?
 function M.setup(opts)
   config.setup(opts)
@@ -1057,6 +1076,7 @@ function M.open()
   if not M.build() then
     return vim.notify("Changeset: no merge base with the default branch", vim.log.levels.WARN)
   end
+  bound = config.get().keymaps
 
   -- The cursor is still where the user was, and nothing tracked it before a tree existed.
   track()
@@ -1077,7 +1097,7 @@ function M.open()
   local win = window.open(buf)
   vim.wo[win].statusline = "%{%v:lua.require'changeset'.footer()%}"
   -- After `filetype`, so these replace any `]]`/`[[` a plugin maps on the buffer at `FileType`.
-  set_keymaps(buf)
+  set_keymaps(buf, bound)
 
   -- Fires: the sidebar's window going without the plugin being asked — `:q`, `:only`,
   -- `:tabclose`, a layout plugin. Scheduled because the window is still in the layout
@@ -1180,7 +1200,7 @@ function M.open()
       paint()
     end,
   })
-  bind_step_keys()
+  bind_step_keys(bound)
 
   draw()
   -- A kept tree misses what nothing announced, such as a file edited outside Neovim while it kept focus.

@@ -769,7 +769,8 @@ describe("changeset.render", function()
     ---@param info table
     ---@return string
     local function shown(info)
-      local full = vim.tbl_extend("force", { files = 12, query = "" }, info)
+      local keys = { jump = "<CR>", filter = "f", filter_kinds = "F", help = "?" }
+      local full = vim.tbl_extend("force", { files = 12, query = "", keys = keys }, info)
       return vim.api.nvim_eval_statusline(render.footer(full), { maxwidth = 120 }).str
     end
 
@@ -796,14 +797,30 @@ describe("changeset.render", function()
     it("points at ? for every key, at the right edge", function()
       assert.truthy(vim.endswith(shown({}), "? all keys "))
     end)
+
+    it("names a remapped key, escaping %", function()
+      local footer = shown({ keys = { jump = "o%", filter = "f", filter_kinds = "F", help = "?" } })
+
+      assert.truthy(footer:find("o% open", 1, true))
+      assert.falsy(footer:find("<CR>", 1, true))
+    end)
+
+    it("leaves out a key set to false", function()
+      local footer = shown({ keys = { jump = "<CR>", filter = false, filter_kinds = "F", help = "?" } })
+
+      assert.falsy(footer:find("filter", 1, true))
+      assert.truthy(footer:find("F kinds", 1, true))
+    end)
   end)
 
   describe("preview_winbar", function()
     ---@param destination string?
     ---@param path string?
+    ---@param jump (string|false)?
     ---@return changeset.Band
-    local function band(destination, path)
+    local function band(destination, path, jump)
       return {
+        jump = jump == nil and "<CR>" or jump,
         icon = "󰢱",
         -- What `band_icon` hands back, which is the only group a real band carries.
         icon_hl = render.PREVIEW_ICON_HL,
@@ -837,6 +854,24 @@ describe("changeset.render", function()
         vim.api.nvim_eval_statusline(render.preview_winbar(band()), { use_winbar = true, maxwidth = 70 }).str
 
       assert.is_true(vim.endswith(shown, "<CR> to open "))
+    end)
+
+    it("offers a remapped jump key, escaping %", function()
+      local shown = vim.api.nvim_eval_statusline(
+        render.preview_winbar(band(nil, nil, "o%")),
+        { use_winbar = true, maxwidth = 70 }
+      ).str
+
+      assert.is_true(vim.endswith(shown, "o% to open "))
+    end)
+
+    it("offers no way out when jump is unbound", function()
+      local shown = vim.api.nvim_eval_statusline(
+        render.preview_winbar(band(nil, nil, false)),
+        { use_winbar = true, maxwidth = 70 }
+      ).str
+
+      assert.is_nil(shown:find("to open", 1, true))
     end)
 
     it("gives up the path first when the window is too narrow for all three", function()

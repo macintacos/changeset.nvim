@@ -5,7 +5,7 @@ describe("changeset.config", function()
     config.setup()
   end)
 
-  it("has today's options before any setup()", function()
+  it("has the default options before any setup()", function()
     assert.equal("<CR>", config.get().keymaps.jump)
     assert.equal("?", config.get().keymaps.help)
     assert.is_false(config.get().keymaps.next)
@@ -31,13 +31,15 @@ describe("changeset.config", function()
     config.setup({ layout = { min_file_width = 100 } })
     for _, case in ipairs({
       { { keymaps = { jump = true } }, "keymaps.jump" },
+      { { keymaps = { jump = "" } }, "keymaps.jump" },
       { { layout = { min_file_width = "80" } }, "layout.min_file_width" },
       { { pr_review = { enabled = "yes" } }, "pr_review.enabled" },
       { { keymaps = false }, "keymaps" },
     }) do
       local ok, err = pcall(config.setup, case[1])
       assert.is_false(ok)
-      assert.truthy(string.find(err, case[2], 1, true), err)
+      assert.is_string(err)
+      assert.truthy(string.find(tostring(err), case[2], 1, true), err)
     end
     assert.equal(100, config.get().layout.min_file_width)
   end)

@@ -7,8 +7,9 @@ in PR Review Mode over the same range. Neither drives the other.
 `require("changeset.pick").pick()` searches the same changes in a picker once mini.pick is
 set up.
 
-In an editor too narrow to leave the files 80 columns beside it, the sidebar opens as a
-drawer along the bottom instead, and moves between the two as the editor is resized.
+In an editor too narrow to leave the files `layout.min_file_width` columns (80 by default)
+beside it, the sidebar opens as a drawer along the bottom instead, and moves between the
+two as the editor is resized.
 
 ## What it shows
 
@@ -358,7 +359,8 @@ the header glyph's `Directory` colour, reversed, standing where the mode badge w
 position counts the files on screen — a folded section's files are not — and names no
 file while the cursor is on a section header. A file shown in two sections counts once, at
 its first row. The filter in force is named, since once its prompt closes the lit matches
-are the only other trace of it. Only four keys are offered — `?` lists the rest.
+are the only other trace of it. Only four actions are offered, each under the key
+`keymaps` gives it and left out when set to `false` — `?` lists the rest.
 
 The sidebar turns off `scrollEOF.nvim`, which would otherwise scroll the tree past its end
 on opening and push its first row off the top.
@@ -377,9 +379,10 @@ asked: what is this, what am I looking at, where does `<CR>` put me — the icon
 answer the middle one together, under the same glyph the tree files it by. The right edge
 carries the destination rather than the file, because the file is on the left and the row
 under the cursor is not: a chain is shown the way the tree shows it, joined by ` › `. A
-row that names no destination — a file, an orphan hunk — reads `<CR> to open` instead.
-`%<` sits before the path, so a window too narrow for all three gives up the part the
-sidebar is already showing. The badge is `reverse`d
+row that names no destination — a file, an orphan hunk — reads `<CR> to open` instead —
+or whatever `keymaps.jump` is, and nothing when it is `false`. `%<` sits before the path,
+so a window too narrow for all three gives up the part the sidebar is already showing. The
+badge is `reverse`d
 rather than given a looked-up background, so it pairs the theme's warning colour with
 whatever the window is actually drawn on and survives a theme that leaves `Normal`
 transparent. The band behind it is `CursorLine`'s background — the faintest tint every
@@ -458,11 +461,11 @@ below and nothing else. `keymaps` renames any sidebar key, or leaves it unbound 
 `false`; `keymaps.next` / `keymaps.prev` bind keys that step through changes from any
 window while the sidebar is open, and are off by default. `layout.min_file_width` (80) is
 the narrowest the files get beside the sidebar before it moves below them.
-`pr_review.enabled` (false) turns on PR Review Mode, until a restart. Each call starts
-again from the defaults and reaches the sidebar the next time it opens; `changeset.Config`
-in `lua/changeset/config.lua` lists every field.
+`pr_review.enabled` (false) turns on PR Review Mode; only a restart turns it off. Each
+call starts again from the defaults and reaches the sidebar the next time it opens;
+`changeset.Config` in `lua/changeset/config.lua` lists every field.
 
-Which symbol kinds are hidden is not a setting either: it is a choice made in the menu and
+Which symbol kinds are hidden is not a setting: it is a choice made in the menu and
 written to `stdpath("state")/changeset/filters.json`, through a temporary file renamed over
 the old one, so an interrupted write leaves the last good copy standing. Three scopes,
 narrowest first —
@@ -529,9 +532,10 @@ repository's deliberate choice is none of that save's business.
   those keys are not this sidebar's interface. The keys it sets are recorded as it sets
   them, and which-key is handed a throwaway buffer carrying only those, since it describes
   whatever a buffer maps and takes no say in which. The callbacks travel across with the
-  keys, so pressing one from inside the popup still works. `]h` / `[h` are global rather
-  than buffer-local, so they are looked up by name and added to that buffer, or they would
-  be the two keys the reference never mentions.
+  keys, so pressing one from inside the popup still works. The step keys (`keymaps.next` /
+  `keymaps.prev`, unbound by default) are global rather than buffer-local, so when set they
+  are looked up by name and added to that buffer, or they would be the two keys the
+  reference never mentions.
 - **The selection is the focused sidebar's cursor.** It moves with the cursor, in step
   rather than a tick behind, and goes when focus leaves the sidebar, for a float opened
   from it too, leaving "you are here". Previews never count as being somewhere: the

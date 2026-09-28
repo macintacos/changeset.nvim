@@ -40,9 +40,10 @@ local NO_CURSOR = "n-v:" .. render.NO_CURSOR_HL
 local sidebar = { borrowed = {} }
 
 ---@param columns integer The editor's width.
+---@param min_file_width number The narrowest the files may get beside the sidebar.
 ---@return changeset.Layout
-local function layout_for(columns)
-  return columns - SIDEBAR_WIDTH < config.get().layout.min_file_width and "drawer" or "sidebar"
+local function layout_for(columns, min_file_width)
+  return columns - SIDEBAR_WIDTH < min_file_width and "drawer" or "sidebar"
 end
 
 ---Where `layout` splits the tree off, as `nvim_open_win` and `nvim_win_set_config` take it.
@@ -285,7 +286,7 @@ end
 ---Move the tree beside the files when the editor is wide enough for both, and below
 ---them when it is not. The window is moved, not reopened, so it keeps its id.
 function M.relayout()
-  local layout = layout_for(vim.o.columns)
+  local layout = layout_for(vim.o.columns, config.get().layout.min_file_width)
   if not M.is_visible() or layout == sidebar.layout then
     return
   end
@@ -315,7 +316,7 @@ function M.open(buf)
     -- Laid out as the session was saved, which `relayout` below settles for this editor.
     sidebar.layout = nil
   else
-    sidebar.layout = layout_for(vim.o.columns)
+    sidebar.layout = layout_for(vim.o.columns, config.get().layout.min_file_width)
     sidebar.win = vim.api.nvim_open_win(buf, false, split_for(sidebar.layout, vim.o.lines))
     pin(sidebar.win, sidebar.layout)
   end
