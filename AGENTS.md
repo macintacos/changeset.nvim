@@ -172,7 +172,7 @@ each call starts again from the defaults. The resolved result is `changeset.Opti
 the same file. `keymaps.next` / `keymaps.prev` default to `false`, so the sidebar binds no
 step keys unless the user sets them. A new option gets its `---@field` (on
 `changeset.Options` too when it is a new top-level table), a default in `DEFAULTS`, a
-check in `validate()`, and a line in README `## Settings`. A module reads it through
+check in `validate()`, and a row in README `## Options`, then `mise run docs`. A module reads it through
 `config.get()` when it acts, never when it loads, so a later `setup()` reaches it.
 
 `plugin/changeset.lua` binds no keys. It defines `<Plug>(changeset-toggle)` and
@@ -190,7 +190,7 @@ and specs; `footer` stays public because the sidebar's statusline evaluates
 `activate()`. `:Changeset` is the only user command. `:checkhealth changeset` reports
 which optional dependencies are missing and the options in force.
 
-For the options and keys themselves, see README `## Settings` and `## Keymaps`.
+For the options and keys themselves, see README `## Options` and `## Sidebar keys`.
 
 ## Vendored modules
 
