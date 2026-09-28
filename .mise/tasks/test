@@ -11,8 +11,8 @@ set -euo pipefail
 # ponytail: one nvim per spec file — PlenaryBustedDirectory recurses into tests/mini-pickers/,
 # which the picker port owns; go back to one `PlenaryBustedDirectory tests/` (and its
 # parallelism) once those specs sit flat in tests/.
-# --noplugin: minimal_init puts this repo on rtp, and the outer nvim, which only runs
-# plenary, has no use for its plugin/.
+# --noplugin: the flag plenary gives its children, which minimal_init is written for;
+# it sources plenary's plugin/ itself.
 specs=("$@")
 (($#)) || specs=(tests/*_spec.lua)
 status=0

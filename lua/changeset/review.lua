@@ -2,10 +2,10 @@
 ---default branch, or from its open PR's target branch when that is another
 ---branch, so the gutter marks everything the branch changed rather than just
 ---uncommitted work. The PR target comes from gh once the default-branch base is
----applied, so a stacked branch starts on that base and then moves. It turns
----itself on off the default branch; `toggle()` turns it off, and each branch
----remembers that choice for the session. Requiring it registers nothing;
----`activate()` registers the autocmd that drives it.
+---applied, so a stacked branch starts on that base and then moves. Requiring it
+---registers nothing; once `activate()` has run, it turns itself on for every
+---branch but the default, `toggle()` turns it off, and each branch remembers
+---that choice for the session.
 local M = {}
 
 ---@type table<string, true> Branches the mode was switched off on.
@@ -199,8 +199,8 @@ local function sync(branch)
   end
 end
 
----Switch the mode off for the current buffer's branch, remembered for the session,
----or back on.
+---Switch the mode off for the current buffer's branch for the rest of the session, or back on.
+---Needs `activate()`: without it the mode never follows a branch change.
 function M.toggle()
   local branch = vim.b.gitsigns_head or ""
   if is_on() then
@@ -213,8 +213,8 @@ function M.toggle()
   end
 end
 
----Register the `User GitSignsUpdate` autocmd that turns the mode on off the default
----branch and keeps buffers on its base. Safe to call more than once.
+---Register the `User GitSignsUpdate` autocmd that turns the mode on for every branch but the
+---default and keeps buffers on its base. Safe to call more than once.
 function M.activate()
   -- gitsigns republishes a buffer's branch on every sign refresh, including after
   -- a checkout made outside Neovim, so this doubles as a branch-change hook, and
@@ -224,7 +224,7 @@ function M.activate()
   vim.api.nvim_create_autocmd("User", {
     group = vim.api.nvim_create_augroup("changeset.review", { clear = true }),
     pattern = "GitSignsUpdate",
-    desc = "changeset: PR Review Mode",
+    desc = "changeset: keep buffers on PR Review Mode's base as the branch changes",
     callback = function(args)
       local branch = args.data and vim.b[args.data.buffer].gitsigns_head
       if branch and branch ~= "" then

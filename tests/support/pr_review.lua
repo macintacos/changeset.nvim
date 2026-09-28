@@ -5,11 +5,12 @@ local support = require("support.git")
 
 vim.opt.rtp:prepend(require("support.deps").path("gitsigns.nvim"))
 
--- The module keeps its state at module scope. `want`, `toplevel`, `ours` and
--- `moving` are tied to a fixture repo each teardown deletes, so they own nothing in
--- the next case; `dismissed` and the branch memo `applied` persist, so each case
--- opens its first buffer on a branch other than the one the case before it ended
--- on. A gh lookup still in flight is dropped by the next case's first apply.
+-- `changeset.review` is required once, so its state outlives each case. `want`,
+-- `toplevel`, `ours` and `moving` are tied to a fixture repo each teardown deletes,
+-- so they own nothing in the next case; `dismissed` and the branch memo `applied`
+-- persist, so each case opens its first buffer on a branch other than the one the
+-- case before it ended on. A gh lookup still in flight is dropped by the next case's
+-- first apply.
 require("gitsigns").setup()
 require("changeset.review").activate()
 

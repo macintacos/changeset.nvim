@@ -1,5 +1,6 @@
 local support = require("support.git")
 local review = require("support.pr_review")
+local toggle = require("changeset.review").toggle
 
 local await, edit, revision, settle = review.await, review.edit, review.revision, review.settle
 
@@ -65,10 +66,10 @@ describe("PR Review Mode", function()
     vim.fn.chdir(dir)
     local bufs = edit({ "a.txt" })
     assert.is_true(await(bufs, review.merge_base(dir, "parent"), 5000))
-    require("changeset.review").toggle()
+    toggle()
     assert.is_true(await(bufs, nil, 5000))
 
-    require("changeset.review").toggle()
+    toggle()
 
     local on = on_notices(5000)
     assert.equal(1, #on)
@@ -80,7 +81,7 @@ describe("PR Review Mode", function()
     vim.fn.chdir(dir)
     local bufs = edit({ "a.txt" })
     assert.is_true(await(bufs, review.merge_base(dir), 5000))
-    require("changeset.review").toggle()
+    toggle()
     assert.is_true(await(bufs, nil, 5000))
     assert.is_true(settle())
     require("gitsigns").change_base = function(_, _, cb)
@@ -89,7 +90,7 @@ describe("PR Review Mode", function()
       end)
     end
 
-    require("changeset.review").toggle()
+    toggle()
 
     assert.is_true(vim.wait(5000, function()
       return vim.iter(notices):any(function(n)
@@ -130,7 +131,7 @@ describe("PR Review Mode", function()
 
     local bufs = edit({ "a.txt" })
     assert.is_true(await(bufs, review.merge_base(dir), 5000))
-    require("changeset.review").toggle()
+    toggle()
     assert.is_true(await(bufs, nil, 5000))
 
     assert.is_false(vim.wait(1500, function()
@@ -150,9 +151,9 @@ describe("PR Review Mode", function()
     end)
     assert.is_true(await({ bufs[1] }, tip, 5000))
 
-    require("changeset.review").toggle()
+    toggle()
     assert.is_true(await({ bufs[2] }, nil, 5000))
-    require("changeset.review").toggle()
+    toggle()
     assert.is_true(await({ bufs[2] }, base, 5000))
 
     assert.is_true(settle())

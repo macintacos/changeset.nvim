@@ -4,9 +4,10 @@ describe("changeset.review", function()
   end
 
   it("registers nothing until activated, then its autocmd once", function()
-    local autocmds, commands = updates(), vim.tbl_count(vim.api.nvim_get_commands({}))
+    local all, autocmds = #vim.api.nvim_get_autocmds({}), updates()
+    local commands = vim.tbl_count(vim.api.nvim_get_commands({}))
     local review = require("changeset.review")
-    assert.equal(autocmds, updates())
+    assert.equal(all, #vim.api.nvim_get_autocmds({}))
     assert.equal(commands, vim.tbl_count(vim.api.nvim_get_commands({})))
     review.activate()
     review.activate()
