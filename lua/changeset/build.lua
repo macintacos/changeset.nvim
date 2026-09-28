@@ -262,7 +262,7 @@ function M.build()
     memo = { root = root, entries = cache.load(cache.path(root)) }
   end
 
-  local view = hooks.view(root, branch)
+  local sidebar_fields = hooks.view(root, branch)
   local default_branch = Git.default_base(root)
   session = vim.tbl_extend("error", {
     root = root,
@@ -274,7 +274,7 @@ function M.build()
     files = {},
     collected = false,
     symbols = {},
-  }, view)
+  }, sidebar_fields)
   M.refresh()
   return true
 end

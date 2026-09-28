@@ -8,17 +8,17 @@ require("support.gh") -- a fake gh on PATH: never the real one, never the networ
 ---@return string[][]
 local function recording(fn)
   local argvs = {}
-  local system, systemlist = vim.system, vim.fn.systemlist
+  local real_system, real_systemlist = vim.system, vim.fn.systemlist
   vim.system = function(argv, ...)
     argvs[#argvs + 1] = argv
-    return system(argv, ...)
+    return real_system(argv, ...)
   end
   vim.fn.systemlist = function(argv, ...)
     argvs[#argvs + 1] = argv
-    return systemlist(argv, ...)
+    return real_systemlist(argv, ...)
   end
   local ok, err = pcall(fn)
-  vim.system, vim.fn.systemlist = system, systemlist
+  vim.system, vim.fn.systemlist = real_system, real_systemlist
   assert(ok, err)
   return argvs
 end
