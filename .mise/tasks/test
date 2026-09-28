@@ -8,13 +8,10 @@ set -euo pipefail
 # PlenaryBustedDirectory, not :PlenaryBustedFile, even for one file: the latter
 # takes no options, so its child would skip minimal_init.
 #
-# ponytail: one nvim per spec file — PlenaryBustedDirectory recurses into tests/mini-pickers/,
-# which the picker port owns; go back to one `PlenaryBustedDirectory tests/` (and its
-# parallelism) once those specs sit flat in tests/.
 # --noplugin: the flag plenary gives its children, which minimal_init is written for;
 # it sources plenary's plugin/ itself.
 specs=("$@")
-(($#)) || specs=(tests/*_spec.lua)
+(($#)) || specs=(tests/)
 status=0
 for spec in "${specs[@]}"; do
 	nvim --headless --noplugin -u tests/minimal_init.lua \

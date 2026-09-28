@@ -9,15 +9,11 @@ mkdir -p .tests/luacov
 
 # LUACOV is set from -c, after init, so only the spec processes, which inherit the
 # environment, start luacov.
-# ponytail: the per-spec loop from .mise/tasks/test — undo both together. Until
-# then sequential = true is inert; it matters once one PlenaryBustedDirectory runs
-# every spec, since they all merge into one stats file.
+# sequential: every spec merges into one luacov stats file.
 status=0
-for spec in tests/*_spec.lua; do
-	nvim --headless --noplugin -u tests/minimal_init.lua \
-		-c "lua vim.env.LUACOV = '1'" \
-		-c "PlenaryBustedDirectory $spec {minimal_init = 'tests/minimal_init.lua', sequential = true}" || status=1
-done
+nvim --headless --noplugin -u tests/minimal_init.lua \
+	-c "lua vim.env.LUACOV = '1'" \
+	-c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua', sequential = true}" || status=1
 
 nvim -l tests/support/coverage.lua
 # The report's Summary table is sized for absolute paths; reprint it repo-relative.
