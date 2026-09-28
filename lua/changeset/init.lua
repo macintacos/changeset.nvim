@@ -31,7 +31,7 @@ local augroup = vim.api.nvim_create_augroup("changeset", { clear = true })
 ---@class changeset.Session: changeset.Tree
 ---@field file string Preferences file for this changeset session.
 ---@field rows changeset.Row[]
----@field visible changeset.Row[]
+---@field visible changeset.Row[] The row on each line of the sidebar's buffer, as `draw` last put them.
 ---@field st changeset.State
 ---@field query string
 ---@field hidden table<string, true> Symbol kinds the tree is not showing.

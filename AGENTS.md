@@ -32,7 +32,7 @@ record.
 │   ├── cache.lua        symbols kept between builds and restarts
 │   ├── config.lua       the user's options: defaults, and what `setup()` made of them
 │   ├── diff.lua         runs the branch's git diff and parses it into files and hunks
-│   ├── draw.lua         puts the tree, its header and the row states on the sidebar's buffer
+│   ├── draw.lua         puts `render`'s lines, the header and the row states on the sidebar's buffer
 │   ├── git.lua          git and gh queries that pick the base branch
 │   ├── health.lua       `:checkhealth changeset`: requirements, optional integrations, options in force
 │   ├── help.lua         the `?` key reference

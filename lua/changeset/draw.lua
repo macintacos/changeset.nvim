@@ -1,6 +1,5 @@
 ---Puts the session's tree on the sidebar's buffer, through the pure `render`: lines, marks, header and row states.
----`draw` writes the session's `visible`, the row on each line, which reading a row off the
----sidebar's cursor goes through.
+---`draw` also records the row on each line in the session's `visible`; `band_for` builds a row's preview band.
 
 local build = require("changeset.build")
 local icons = require("changeset.icons")
@@ -40,7 +39,7 @@ end
 
 ---The row under the sidebar's cursor.
 ---@return changeset.Row?
-local function row_at_cursor()
+function M.row_at_cursor()
   local session = current()
   if not session then
     return nil
@@ -56,7 +55,7 @@ end
 ---@param row changeset.Row
 ---@param jump (string|false)? The jump key the sidebar bound.
 ---@return changeset.Band
-local function band_for(row, jump)
+function M.band_for(row, jump)
   local glyph, hl = icons.get("file", row.path)
   return {
     icon = glyph,
@@ -69,9 +68,9 @@ local function band_for(row, jump)
   }
 end
 
----The ids of the rows on screen.
+---The ids of the rows on screen; errors when there is no session.
 ---@return string[] ids Of the rows on screen, in display order.
-local function visible_ids()
+function M.visible_ids()
   local session = current()
   assert(session, "changeset: no open session")
   return vim.tbl_map(function(row)
@@ -97,14 +96,14 @@ end
 ---Mark the row under the sidebar's cursor as selected while the sidebar has focus,
 ---the row for where you are, and the row last opened, each of the last two on its
 ---nearest ancestor on screen. A row several would mark shows the first of those.
-local function paint()
+function M.paint()
   local session = current()
   local buf, win = window.buf(), window.win()
   if not (session and buf and win) then
     return
   end
   vim.api.nvim_buf_clear_namespace(buf, rows_ns, 0, -1)
-  local ids = visible_ids()
+  local ids = M.visible_ids()
   ---@param row changeset.Row?
   ---@return integer?
   local function on_screen(row)
@@ -112,7 +111,7 @@ local function paint()
   end
   local here, picked = session.here, session.picked
   local states = {
-    { "selected", window.is_focused() and row_at_cursor() and vim.api.nvim_win_get_cursor(win)[1] },
+    { "selected", window.is_focused() and M.row_at_cursor() and vim.api.nvim_win_get_cursor(win)[1] },
     { "here", on_screen(here and tree.locate(session.rows, here.path, here.lnum)) },
     { "picked", on_screen(picked and tree.relocate(session.rows, picked)) },
   }
@@ -188,7 +187,7 @@ end
 ---Scroll the header's totals into view while the tree is at its top. Virtual lines
 ---above the first line are filler, which Neovim leaves out of view unless asked.
 ---@param win integer
-local function reveal_header(win)
+function M.reveal_header(win)
   vim.api.nvim_win_call(win, function()
     local at = vim.fn.winsaveview()
     if at.topline == 1 and at.topfill < HEADER_LINES then
@@ -213,11 +212,11 @@ local function draw_header(buf, win, width)
       virt_lines_above = true,
     })
   end
-  reveal_header(win)
+  M.reveal_header(win)
 end
 
 ---Draw the tree from the session's current view state, then its header and row states.
-local function draw()
+function M.draw()
   local session = current()
   local buf, win = window.buf(), window.win()
   if not (buf and win and vim.api.nvim_buf_is_valid(buf)) then
@@ -225,7 +224,7 @@ local function draw()
   end
   assert(session, "changeset: no open session")
 
-  local previous_row = row_at_cursor()
+  local previous_row = M.row_at_cursor()
   local previous_line = vim.api.nvim_win_get_cursor(win)[1]
   local width = vim.api.nvim_win_get_width(win)
 
@@ -275,14 +274,7 @@ local function draw()
   vim.api.nvim_win_set_cursor(win, { state._reanchor(session.visible, previous_row, previous_line), 0 })
 
   draw_header(buf, win, width)
-  paint()
+  M.paint()
 end
-
-M.draw = draw
-M.paint = paint
-M.reveal_header = reveal_header
-M.row_at_cursor = row_at_cursor
-M.visible_ids = visible_ids
-M.band_for = band_for
 
 return M
