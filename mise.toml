@@ -29,6 +29,7 @@ taplo                 = "latest" # TOML format + lint (config in taplo.toml)
 shfmt                 = "latest" # Shell format (.mise/tasks scripts)
 shellcheck            = "latest" # Shell lint
 typos                 = "latest" # Spell check (config in typos.toml)
+pandoc                = "3.11"   # vimdoc generation for `mise run docs`
 
 # (Re)register git hooks whenever tools are installed or updated.
 [hooks]

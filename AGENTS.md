@@ -7,7 +7,7 @@ hunk touched. `README.md` is the user-facing reference and the design record.
 
 ```text
 .
-├── .github/             CI (lint + test on push to main and PRs) and Dependabot
+├── .github/             CI (lint, docs check and test on push to main and PRs) and Dependabot
 ├── mise.toml            tools; postinstall registers the hk git hooks
 ├── mise.lock            exact tool versions (`lockfile = true`)
 ├── hk.pkl               formatters, linters and git hooks
@@ -19,6 +19,7 @@ hunk touched. `README.md` is the user-facing reference and the design record.
 ├── taplo.toml           TOML format config
 ├── typos.toml           spell-check config
 ├── .mise/tasks/         one script per `mise run` task
+├── doc/                 generated vimdoc — `mise run docs`, never edited by hand
 ├── plugin/changeset.lua `:Changeset`, `<Plug>(changeset-toggle)`, session restore, mini.pick registry
 ├── lua/changeset/
 │   ├── init.lua         glue: sidebar actions, drawing and the window state machine
@@ -60,7 +61,9 @@ installs into `.tests/data` (see Treesitter parsers), the specs that parse Rust 
 TypeScript fail.
 
 - `mise run setup` — `mise install`; its postinstall hook installs the hk git hooks.
-- `mise run deps` — checks out the pinned test dependencies under `.tests/deps`.
+- `mise run deps` — checks out the pinned test and docs dependencies under `.tests/deps`.
+- `mise run docs` — regenerates `doc/changeset.nvim.txt` from `README.md` with the pinned
+  panvimdoc and pandoc. Depends on `deps`.
 - `mise run parsers` — installs the specs' treesitter parsers into `.tests/data`. Depends
   on `deps`.
 - `mise run format` — `hk fix --all --no-stage`: every formatter, in write mode.
@@ -117,17 +120,19 @@ under test resolves the repository from the process directory.
 
 ### Test dependencies
 
-The `pins` table in `tests/support/deps.lua` maps each plugin to a source and a full
-commit SHA. `mise run deps` fetches each into `.tests/deps/<name>`; `test`, `lint`,
-`typecheck`, `coverage` and `parsers` depend on it. To bump one, edit its SHA, run
-`mise run deps`, then run the suite; after bumping `nvim-treesitter`, run
+The `pins` table in `tests/support/deps.lua` maps each plugin and tool to a source and a
+full commit SHA. `mise run deps` fetches each into `.tests/deps/<name>`; `test`,
+`lint`, `typecheck`, `coverage`, `parsers` and `docs` depend on it. To bump one, edit its
+SHA, run `mise run deps`, then run the suite; after bumping `nvim-treesitter`, run
 `mise run parsers` first, which rebuilds every parser whose recorded revision differs
 from the new pin's.
 
 A new plugin goes into `pins` first, is prepended on `rtp` where it is used with
 `vim.opt.rtp:prepend(require("support.deps").path("<name>"))`, and is added to
-`.luarc.check.json`'s `workspace.library` — every pin but luacov, which is no Neovim
-plugin: its modules live under `src/` and load through `package.path`.
+`.luarc.check.json`'s `workspace.library` — every pin but luacov and panvimdoc. luacov is
+no Neovim plugin: its modules live under `src/` and load through `package.path`.
+panvimdoc is a shell script and pandoc Lua filters that `mise run docs` runs, not a
+Neovim plugin.
 
 ### Treesitter parsers
 
@@ -200,4 +205,6 @@ Check a change against
 ## Before a PR
 
 `mise run preflight` stays green on every PR. A PR that changes the layout, a task, a
-fixture or the public API updates `AGENTS.md` in the same PR.
+fixture or the public API updates `AGENTS.md` in the same PR. Every `README.md` edit is
+followed by `mise run docs`, and the regenerated `doc/` is committed in the same PR; CI
+fails otherwise.

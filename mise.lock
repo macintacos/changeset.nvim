@@ -213,6 +213,53 @@ url = "https://github.com/neovim/neovim/releases/download/v0.12.5/nvim-macos-x86
 [tools.neovim."platforms.windows-x64"]
 url = "https://github.com/neovim/neovim/releases/download/v0.12.5/nvim-win64.zip"
 
+[[tools.pandoc]]
+version = "3.11"
+backend = "github:jgm/pandoc"
+specifiers = ["3.11"]
+
+[tools.pandoc."platforms.linux-arm64"]
+checksum = "sha256:56ed5566ec41d22ec9ee0704e6ac0b98ba102e92384efd5306173a22d314c79a"
+url = "https://github.com/jgm/pandoc/releases/download/3.11/pandoc-3.11-linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/jgm/pandoc/releases/assets/534533345"
+provenance = "github-attestations"
+
+[tools.pandoc."platforms.linux-arm64-musl"]
+checksum = "sha256:56ed5566ec41d22ec9ee0704e6ac0b98ba102e92384efd5306173a22d314c79a"
+url = "https://github.com/jgm/pandoc/releases/download/3.11/pandoc-3.11-linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/jgm/pandoc/releases/assets/534533345"
+provenance = "github-attestations"
+
+[tools.pandoc."platforms.linux-x64"]
+checksum = "sha256:37edb3bbcf722f921a009941bf5874e2e0c09263226c9b4a2d980788cb062ab6"
+url = "https://github.com/jgm/pandoc/releases/download/3.11/pandoc-3.11-linux-amd64.tar.gz"
+url_api = "https://api.github.com/repos/jgm/pandoc/releases/assets/534533278"
+provenance = "github-attestations"
+
+[tools.pandoc."platforms.linux-x64-musl"]
+checksum = "sha256:37edb3bbcf722f921a009941bf5874e2e0c09263226c9b4a2d980788cb062ab6"
+url = "https://github.com/jgm/pandoc/releases/download/3.11/pandoc-3.11-linux-amd64.tar.gz"
+url_api = "https://api.github.com/repos/jgm/pandoc/releases/assets/534533278"
+provenance = "github-attestations"
+
+[tools.pandoc."platforms.macos-arm64"]
+checksum = "sha256:15806bedf9517bfead72e88fe6a6696635c3691efbb6e152173440e9c5bb50b4"
+url = "https://github.com/jgm/pandoc/releases/download/3.11/pandoc-3.11-arm64-macOS.zip"
+url_api = "https://api.github.com/repos/jgm/pandoc/releases/assets/534533197"
+provenance = "github-attestations"
+
+[tools.pandoc."platforms.macos-x64"]
+checksum = "sha256:3b1c1b57f160112c821d02f23d946ede8b7f57a6ccf4632a25a512d334a9291f"
+url = "https://github.com/jgm/pandoc/releases/download/3.11/pandoc-3.11-x86_64-macOS.zip"
+url_api = "https://api.github.com/repos/jgm/pandoc/releases/assets/534533757"
+provenance = "github-attestations"
+
+[tools.pandoc."platforms.windows-x64"]
+checksum = "sha256:2ab72baf2399450e148ddf7a2a8689806c42e1bba71862b57e220fd9b8456d3d"
+url = "https://github.com/jgm/pandoc/releases/download/3.11/pandoc-3.11-windows-x86_64.zip"
+url_api = "https://api.github.com/repos/jgm/pandoc/releases/assets/534533568"
+provenance = "github-attestations"
+
 [[tools.pkl]]
 version = "0.32.1"
 backend = "aqua:apple/pkl"

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#MISE description="Generate doc/changeset.nvim.txt from README.md with panvimdoc"
+#MISE depends=["deps"]
+
+set -euo pipefail
+
+mkdir -p doc
+# --no-date and a literal --vim-version keep the output identical across days and Neovim builds, so CI can diff it.
+bash .tests/deps/panvimdoc/panvimdoc.sh \
+	--project-name changeset.nvim \
+	--input-file README.md \
+	--vim-version "Neovim 0.12" \
+	--no-date true \
+	--dedup-subheadings false

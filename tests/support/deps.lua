@@ -1,6 +1,7 @@
----The plugins the specs load, luacov for `mise run coverage` and nvim-treesitter for
----`mise run parsers`, checked out under `.tests/deps` at the revisions pinned below,
----so the suite does not depend on what the editor happens to have installed.
+---The plugins the specs load, luacov for `mise run coverage`, nvim-treesitter for
+---`mise run parsers` and panvimdoc for `mise run docs`, checked out under
+---`.tests/deps` at the revisions pinned below, so the suite does not depend on what
+---the editor happens to have installed.
 ---`nvim -l tests/support/deps.lua` installs them; `require("support.deps")` only
 ---locates them.
 local this = debug.getinfo(1, "S").source:sub(2)
@@ -68,7 +69,7 @@ end
 
 ---Sync every dependency to its pin, raising if any failed.
 function M.install()
-  -- Keep in sync with .luarc.check.json's workspace.library, which lists every pin but luacov.
+  -- Keep in sync with .luarc.check.json's workspace.library, which lists every pin but luacov and panvimdoc.
   local pins = {
     ["plenary.nvim"] = {
       src = "https://github.com/nvim-lua/plenary.nvim",
@@ -92,6 +93,7 @@ function M.install()
       rev = "070a5d7b985546cc57e1fc61e5bc507fecac6045",
     },
     luacov = { src = "https://github.com/lunarmodules/luacov", rev = "b1f9eae400da976b93edb7f94cf5d05f538a0655" }, -- v0.17.0
+    panvimdoc = { src = "https://github.com/kdheepak/panvimdoc", rev = "4c8eaecb80058694171627629c6ff59bcf41472d" },
   }
   local errors = M.sync(pins, M.dir)
   if #errors > 0 then
