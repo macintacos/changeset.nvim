@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Install the treesitter parsers the specs need into .tests/data; run once on a fresh clone"
+#MISE description="Install the treesitter parsers the specs need into .tests/data"
 #MISE depends=["deps"]
 
 set -euo pipefail

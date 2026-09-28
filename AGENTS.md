@@ -54,9 +54,9 @@ hunk touched. `README.md` is the user-facing reference and the design record.
 ## Tasks
 
 Run `mise trust`, then `mise run setup`, once in each new clone or worktree: mise refuses
-to load an untrusted `mise.toml`. Then run `mise run parsers` once: it installs the `rust`,
-`typescript` and `tsx` parsers the specs need into `.tests/data`, and without them
-`attributes_spec` and two `resolve_spec` cases fail.
+to load an untrusted `mise.toml`. Then run `mise run parsers` once: without the parsers it
+installs into `.tests/data` (see Treesitter parsers), the specs that parse Rust or
+TypeScript fail.
 
 - `mise run setup` — `mise install`; its postinstall hook installs the hk git hooks.
 - `mise run deps` — checks out the pinned test dependencies under `.tests/deps`.
@@ -108,7 +108,8 @@ Specs load these as `require("support.<name>")`:
 - `tests/support/cursor.lua` — whether `guicursor` hides the cursor.
 - `tests/support/coverage.lua` — the luacov hooks.
 - `tests/support/parsers.lua` — `data_home`, the suite's data dir that `minimal_init.lua`
-  sets; `nvim -l` on it is the `mise run parsers` installer.
+  sets, and `site` under it, which it prepends to `rtp`; `nvim -l` on it is the
+  `mise run parsers` installer.
 
 Use `support.git` rather than shelling out to git by hand. `chdir` only when the code
 under test resolves the repository from the process directory.
@@ -117,20 +118,25 @@ under test resolves the repository from the process directory.
 
 The `pins` table in `tests/support/deps.lua` maps each plugin to a source and a full
 commit SHA. `mise run deps` fetches each into `.tests/deps/<name>`; `test`, `lint`,
-`typecheck` and `coverage` depend on it. To bump one, edit its SHA, run `mise run deps`,
-then run the suite.
+`typecheck`, `coverage` and `parsers` depend on it. To bump one, edit its SHA, run
+`mise run deps`, then run the suite; after bumping `nvim-treesitter`, run
+`mise run parsers` first, which rebuilds every parser whose recorded revision differs
+from the new pin's.
 
-A new plugin goes into `pins` first, is prepended in the spec with
-`vim.opt.rtp:prepend(require("support.deps").path("<name>"))`, and — unless it is only a
-test tool like luacov — is added to `.luarc.check.json`'s `workspace.library`.
+A new plugin goes into `pins` first, is prepended on `rtp` where it is used with
+`vim.opt.rtp:prepend(require("support.deps").path("<name>"))`, and is added to
+`.luarc.check.json`'s `workspace.library` — every pin but luacov, which is no Neovim
+plugin: its modules live under `src/` and load through `package.path`.
 
 ### Treesitter parsers
 
 The suite needs the `rust`, `typescript` and `tsx` parsers; `tests/attributes_spec.lua`
 asserts they load. They live in `.tests/data/nvim/site/parser`, and `mise run parsers`
 installs them with the nvim-treesitter pinned in `tests/support/deps.lua` and the
-`tree-sitter` CLI pinned in `mise.toml`. It needs a C compiler. The editor's own parsers
-are never read.
+`tree-sitter` CLI pinned in `mise.toml`. The install needs a C compiler. Parsers under
+your own `stdpath("data")` are never read. After a pin bump, re-run
+`mise run parsers` (see Test dependencies). `test` does not depend on `parsers`: a
+missing parser fails the suite rather than compiling during pre-push.
 
 ## Conventions
 

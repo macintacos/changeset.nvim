@@ -8,7 +8,8 @@ HK_MISE = 1
 
 [tools]
 neovim = "0.12"
-# Builds the parsers `mise run parsers` installs; nvim-treesitter needs >= 0.26.1.
+# Compiles the parsers `mise run parsers` installs. The pinned nvim-treesitter needs
+# 0.26.1+; a new minor may break it.
 tree-sitter = "0.26"
 
 # Lua toolchain — formatter + linter + type check.

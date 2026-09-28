@@ -8,22 +8,25 @@ local M = {}
 
 ---@type string
 M.data_home = root .. "/.tests/data"
+---Where `install()` puts the parsers, and the `site` the suite puts on `rtp`.
+---@type string
+M.site = M.data_home .. "/nvim/site"
 
 local langs = { "rust", "typescript", "tsx" }
+local INSTALL_TIMEOUT_MS = 5 * 60 * 1000
 
----Install whichever parser is missing, raising if any still is afterwards.
+---Install or rebuild whichever parser is missing or stale, raising if any still is afterwards.
 function M.install()
-  vim.env.XDG_DATA_HOME = M.data_home
-  -- nvim-treesitter downloads into, and first deletes, <cache>/tree-sitter-<lang>.
+  -- nvim-treesitter wipes and re-downloads <cache>/tree-sitter-<lang>; keep that
+  -- scratch work out of the editor's cache.
   vim.env.XDG_CACHE_HOME = vim.fn.tempname()
-  vim.fn.mkdir(vim.env.XDG_CACHE_HOME, "p")
-  local site = vim.fn.stdpath("data") .. "/site"
   vim.opt.rtp:prepend(require("support.deps").path("nvim-treesitter"))
   local ts = require("nvim-treesitter")
-  ts.setup({ install_dir = site })
-  ts.install(langs):wait(300000)
+  ts.setup({ install_dir = M.site })
+  ts.install(langs):wait(INSTALL_TIMEOUT_MS)
+  ts.update(langs):wait(INSTALL_TIMEOUT_MS)
   local missing = vim.tbl_filter(function(lang)
-    return not vim.uv.fs_stat(site .. "/parser/" .. lang .. ".so")
+    return not vim.uv.fs_stat(M.site .. "/parser/" .. lang .. ".so")
   end, langs)
   if #missing > 0 then
     error("parsers not installed: " .. table.concat(missing, ", "), 0)

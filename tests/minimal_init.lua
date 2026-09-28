@@ -40,8 +40,9 @@ vim.opt.rtp:remove(vim.fn.stdpath("data") .. "/site")
 vim.opt.rtp:remove(vim.fn.stdpath("data") .. "/site/after")
 vim.opt.packpath:remove(vim.fn.stdpath("data") .. "/site")
 vim.opt.packpath:remove(vim.fn.stdpath("data") .. "/site/after")
-vim.env.XDG_DATA_HOME = require("support.parsers").data_home
-vim.opt.rtp:prepend(vim.fn.stdpath("data") .. "/site")
+local parsers = require("support.parsers")
+vim.env.XDG_DATA_HOME = parsers.data_home
+vim.opt.rtp:prepend(parsers.site)
 vim.opt.rtp:prepend(require("support.deps").path("plenary.nvim"))
 if vim.env.LUACOV then
   require("support.coverage").start()
