@@ -1,28 +1,26 @@
 describe("changeset.health", function()
   local health = require("changeset.health")
   local config = require("changeset.config")
-  local icons = require("changeset.icons")
-  local MODULES = { "which-key", "mini.pick", "gitsigns" }
+  local attributes = require("changeset.attributes")
 
-  local saved, missing, source, clients, no_parser
+  local HEALTHY = {
+    version = "0.12.5",
+    nvim_012 = true,
+    git = true,
+    gh = true,
+    icons = "mini.icons",
+    which_key = true,
+    mini_pick = "set up",
+    gitsigns = true,
+    symbol_servers = { "lua_ls" },
+    parsers = { { lang = "rust", found = true } },
+    options = config.get(),
+  }
 
-  local function installed(name)
-    package.loaded[name] = nil
-    package.preload[name] = function()
-      return {}
-    end
-  end
-
-  local function absent(name)
-    package.loaded[name] = nil
-    package.preload[name] = function()
-      error("not installed")
-    end
-  end
-
+  ---Level of the first finding, in report order, whose message contains `text`.
   ---@return string?
-  local function level(text)
-    for _, section in ipairs(health._report()) do
+  local function level(overrides, text)
+    for _, section in ipairs(health._report(vim.tbl_extend("force", HEALTHY, overrides))) do
       for _, finding in ipairs(section.findings) do
         if finding.msg:find(text, 1, true) then
           return finding.level
@@ -31,159 +29,9 @@ describe("changeset.health", function()
     end
   end
 
-  before_each(function()
-    saved = {
-      has = vim.fn.has,
-      executable = vim.fn.executable,
-      get_clients = vim.lsp.get_clients,
-      add = vim.treesitter.language.add,
-      source = icons.source,
-      MiniPick = MiniPick,
-      loaded = {},
-      preload = {},
-    }
-    for _, name in ipairs(MODULES) do
-      saved.loaded[name] = package.loaded[name]
-      saved.preload[name] = package.preload[name]
-      absent(name)
-    end
-    missing, source, clients, no_parser = {}, "mini.icons", {}, {}
-    vim.fn.has = function(feature)
-      if feature == "nvim-0.12" then
-        return missing[feature] and 0 or 1
-      end
-      return saved.has(feature)
-    end
-    vim.fn.executable = function(name)
-      if name == "git" or name == "gh" then
-        return missing[name] and 0 or 1
-      end
-      return saved.executable(name)
-    end
-    vim.lsp.get_clients = function()
-      return clients
-    end
-    vim.treesitter.language.add = function(lang)
-      if no_parser[lang] then
-        error("no parser")
-      end
-      return true
-    end
-    icons.source = function()
-      return source
-    end
-    MiniPick = nil
-  end)
-
-  after_each(function()
-    vim.fn.has = saved.has
-    vim.fn.executable = saved.executable
-    vim.lsp.get_clients = saved.get_clients
-    vim.treesitter.language.add = saved.add
-    icons.source = saved.source
-    MiniPick = saved.MiniPick
-    for _, name in ipairs(MODULES) do
-      package.loaded[name] = saved.loaded[name]
-      package.preload[name] = saved.preload[name]
-    end
-    config.setup()
-  end)
-
-  it("reports the running Neovim when it is 0.12 or newer", function()
-    assert.equal("ok", level("Neovim "))
-  end)
-
-  it("errors when Neovim is older than 0.12", function()
-    missing["nvim-0.12"] = true
-    assert.equal("error", level("Neovim 0.12 or newer is required"))
-  end)
-
-  it("reports git, and errors without it", function()
-    assert.equal("ok", level("`git` found"))
-    missing.git = true
-    assert.equal("error", level("`git` not found"))
-  end)
-
-  it("reports gh, and warns without it", function()
-    assert.equal("ok", level("`gh` found"))
-    missing.gh = true
-    assert.equal("warn", level("`gh` not found"))
-  end)
-
-  it("reports the icon provider, and warns without one", function()
-    assert.equal("ok", level("icons from `mini.icons`"))
-    source = "nvim-web-devicons"
-    assert.equal("ok", level("icons from `nvim-web-devicons`"))
-    source = nil
-    assert.equal("warn", level("no icon provider"))
-  end)
-
-  it("reports which-key as ok when installed, info when not", function()
-    assert.equal("info", level("`which-key` not found"))
-    installed("which-key")
-    assert.equal("ok", level("`which-key` found"))
-  end)
-
-  it("reports mini.pick as ok only when installed and set up", function()
-    assert.equal("info", level("`mini.pick` not found"))
-    installed("mini.pick")
-    assert.equal("info", level("`mini.pick` is installed but not set up"))
-    MiniPick = {}
-    assert.equal("ok", level("`mini.pick` found"))
-  end)
-
-  it("errors on a missing gitsigns only while PR Review Mode is enabled", function()
-    assert.equal("info", level("`gitsigns` not found"))
-    config.setup({ pr_review = { enabled = true } })
-    assert.equal("error", level("`gitsigns` not found"))
-    installed("gitsigns")
-    assert.equal("ok", level("`gitsigns` found"))
-  end)
-
-  it("names the language servers that provide symbols", function()
-    assert.equal("info", level("textDocument/documentSymbol"))
-    clients = { { name = "lua_ls" } }
-    assert.equal("info", level("lua_ls"))
-  end)
-
-  it("reports each test-symbol parser, and notes a missing one", function()
-    no_parser.rust = true
-    assert.equal("info", level("no treesitter parser for `rust`"))
-    assert.equal("ok", level("treesitter parser for `tsx`"))
-  end)
-
-  it("shows the options in force", function()
-    assert.equal("info", level("min_file_width"))
-  end)
-
-  it("spawns no process and starts no server", function()
-    local calls = {}
-    local names = { "system", "fn.system", "fn.jobstart", "lsp.start", "lsp.enable" }
-    local targets =
-      { { vim, "system" }, { vim.fn, "system" }, { vim.fn, "jobstart" }, { vim.lsp, "start" }, { vim.lsp, "enable" } }
-    local originals = {}
-    for i, t in ipairs(targets) do
-      originals[i] = t[1][t[2]]
-      t[1][t[2]] = function()
-        table.insert(calls, names[i])
-      end
-    end
-    local ok, err = pcall(health._report)
-    for i, t in ipairs(targets) do
-      t[1][t[2]] = originals[i]
-    end
-    assert.is_true(ok, tostring(err))
-    assert.same({}, calls)
-  end)
-
-  it("does not load the plugin's entry module", function()
-    health._report()
-    assert.is_nil(package.loaded["changeset"])
-  end)
-
-  it("check() emits each section and finding through vim.health", function()
-    local calls = {}
-    local originals = {}
+  ---Runs `check()` with `vim.health` recorded; returns the `{ fn, msg }` calls.
+  local function checked()
+    local calls, originals = {}, {}
     for _, fn in ipairs({ "start", "ok", "warn", "error", "info" }) do
       originals[fn] = vim.health[fn]
       vim.health[fn] = function(msg)
@@ -194,14 +42,179 @@ describe("changeset.health", function()
     for fn, original in pairs(originals) do
       vim.health[fn] = original
     end
-    assert.is_true(ok, err)
-    local expected = {}
-    for _, section in ipairs(health._report()) do
-      table.insert(expected, { "start", section.name })
-      for _, finding in ipairs(section.findings) do
-        table.insert(expected, { finding.level, finding.msg })
+    assert.is_true(ok, tostring(err))
+    return calls
+  end
+
+  ---Level of the first `check()` call whose message contains `text`.
+  local function checked_level(text)
+    for _, call in ipairs(checked()) do
+      if call[1] ~= "start" and call[2]:find(text, 1, true) then
+        return call[1]
       end
     end
-    assert.same(expected, calls)
+  end
+
+  ---Runs `fn` with each of `names` forced to `state` ("installed"/"absent"), then restores them.
+  local function with_modules(modules, fn)
+    local saved = {}
+    for name, state in pairs(modules) do
+      saved[name] = { package.loaded[name], package.preload[name] }
+      package.loaded[name] = nil
+      package.preload[name] = function()
+        if state == "absent" then
+          error("not installed")
+        end
+        return {}
+      end
+    end
+    local ok, err = pcall(fn)
+    for name, s in pairs(saved) do
+      package.loaded[name], package.preload[name] = s[1], s[2]
+    end
+    assert.is_true(ok, tostring(err))
+  end
+
+  it("reports the running Neovim when it is 0.12 or newer", function()
+    assert.equal("ok", level({}, "Neovim 0.12.5"))
+    assert.equal("error", level({ nvim_012 = false }, "Neovim 0.12 or newer is required"))
+  end)
+
+  it("reports git, and errors without it", function()
+    assert.equal("ok", level({}, "`git` found"))
+    assert.equal("error", level({ git = false }, "`git` not found"))
+  end)
+
+  it("reports gh, and warns without it", function()
+    assert.equal("ok", level({}, "`gh` found"))
+    assert.equal("warn", level({ gh = false }, "`gh` not found"))
+  end)
+
+  it("reports the icon provider, and warns without one", function()
+    assert.equal("ok", level({}, "icons from `mini.icons`"))
+    assert.equal("ok", level({ icons = "nvim-web-devicons" }, "icons from `nvim-web-devicons`"))
+    assert.equal("warn", level({ icons = false }, "no icon provider"))
+  end)
+
+  it("reports which-key as ok when installed, info when not", function()
+    assert.equal("ok", level({}, "`which-key` found"))
+    assert.equal("info", level({ which_key = false }, "`which-key` not found"))
+  end)
+
+  it("reports mini.pick as ok only when installed and set up", function()
+    assert.equal("info", level({ mini_pick = false }, "`mini.pick` not found"))
+    assert.equal("info", level({ mini_pick = "installed" }, "`mini.pick` is installed but not set up"))
+    assert.equal("ok", level({}, "`mini.pick` found"))
+  end)
+
+  it("errors on a missing gitsigns only while PR Review Mode is enabled", function()
+    assert.equal("ok", level({}, "`gitsigns` found"))
+    assert.equal("info", level({ gitsigns = false }, "`gitsigns` not found"))
+    local review = vim.tbl_deep_extend("force", config.get(), { pr_review = { enabled = true } })
+    assert.equal("error", level({ gitsigns = false, options = review }, "`gitsigns` not found"))
+  end)
+
+  it("names the language servers that provide symbols", function()
+    assert.equal("info", level({ symbol_servers = {} }, "no attached language server"))
+    assert.equal("info", level({}, "`textDocument/documentSymbol` from lua_ls"))
+  end)
+
+  it("reports each test-symbol parser, and notes a missing one", function()
+    local parsers = { { lang = "rust", found = false }, { lang = "tsx", found = true } }
+    assert.equal("info", level({ parsers = parsers }, "no treesitter parser for `rust`"))
+    assert.equal("ok", level({ parsers = parsers }, "treesitter parser for `tsx`"))
+  end)
+
+  it("shows the options in force", function()
+    assert.equal("info", level({}, "min_file_width"))
+  end)
+
+  it("probes each parser the test-symbol marker needs", function()
+    local languages = attributes.languages
+    attributes.languages = function()
+      return { "changeset_no_such_lang", "lua" }
+    end
+    local ok, err = pcall(function()
+      assert.equal("info", checked_level("no treesitter parser for `changeset_no_such_lang`"))
+      assert.equal("ok", checked_level("treesitter parser for `lua` found"))
+    end)
+    attributes.languages = languages
+    assert.is_true(ok, tostring(err))
+  end)
+
+  it("probes optional plugins by loading them", function()
+    local mini_pick = MiniPick
+    local ok, err = pcall(function()
+      with_modules({ ["which-key"] = "installed", gitsigns = "absent", ["mini.pick"] = "absent" }, function()
+        assert.equal("ok", checked_level("`which-key` found"))
+        assert.equal("info", checked_level("`gitsigns` not found"))
+        assert.equal("info", checked_level("`mini.pick` not found"))
+      end)
+      with_modules({ ["mini.pick"] = "installed" }, function()
+        MiniPick = nil
+        assert.equal("info", checked_level("`mini.pick` is installed but not set up"))
+        MiniPick = {}
+        assert.equal("ok", checked_level("`mini.pick` found and set up"))
+      end)
+    end)
+    MiniPick = mini_pick
+    assert.is_true(ok, tostring(err))
+  end)
+
+  it("names only the servers that provide documentSymbol, once each", function()
+    local get_clients = vim.lsp.get_clients
+    vim.lsp.get_clients = function(opts)
+      if opts and opts.method == "textDocument/documentSymbol" then
+        return { { name = "lua_ls" }, { name = "lua_ls" } }
+      end
+      return {}
+    end
+    local ok, calls = pcall(checked)
+    vim.lsp.get_clients = get_clients
+    assert.is_true(ok, tostring(calls))
+    local line = vim.iter(calls):find(function(call)
+      return call[2]:find("textDocument/documentSymbol", 1, true) ~= nil
+    end)
+    assert.equal("`textDocument/documentSymbol` from lua_ls", line[2])
+  end)
+
+  it("calls no process or server API itself", function()
+    local targets = {
+      { "vim.system", vim, "system" },
+      { "vim.fn.system", vim.fn, "system" },
+      { "vim.fn.jobstart", vim.fn, "jobstart" },
+      { "vim.lsp.start", vim.lsp, "start" },
+      { "vim.lsp.enable", vim.lsp, "enable" },
+    }
+    local calls, originals = {}, {}
+    for i, t in ipairs(targets) do
+      originals[i] = t[2][t[3]]
+      t[2][t[3]] = function()
+        table.insert(calls, t[1])
+      end
+    end
+    local ok, err = pcall(checked)
+    for i, t in ipairs(targets) do
+      t[2][t[3]] = originals[i]
+    end
+    assert.is_true(ok, tostring(err))
+    assert.same({}, calls)
+  end)
+
+  it("does not load the plugin's entry module", function()
+    checked()
+    assert.is_nil(package.loaded["changeset"])
+  end)
+
+  it("check() starts each section in order and emits only health levels", function()
+    local starts = {}
+    for _, call in ipairs(checked()) do
+      if call[1] == "start" then
+        table.insert(starts, call[2])
+      else
+        assert.is_true(vim.list_contains({ "ok", "warn", "error", "info" }, call[1]), call[1])
+      end
+    end
+    assert.same({ "Requirements", "Optional integrations", "Configuration" }, starts)
   end)
 end)

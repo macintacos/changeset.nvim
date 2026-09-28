@@ -461,8 +461,9 @@ optional integration the sidebar quietly does without: `gh` for the PR's target 
 mini.icons or nvim-web-devicons, which-key, mini.pick, gitsigns (required once
 `pr_review.enabled` is set), a language server answering `textDocument/documentSymbol`,
 and the `rust`, `typescript` and `tsx` treesitter parsers that mark test symbols. It
-then prints the options in force. It only looks: nothing is installed, started or asked of
-the network.
+then prints the options in force. It checks the way the sidebar loads, so a plugin your
+manager has held back may load, but it installs nothing, starts no language server and
+asks nothing of the network.
 
 ## Settings
 

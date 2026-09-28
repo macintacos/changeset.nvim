@@ -84,12 +84,10 @@ function M.mark(items, path, source)
   end
 end
 
+---The treesitter languages `mark` parses, sorted: the parsers test-symbol marking needs.
 ---@return string[]
 function M.languages()
-  local langs = vim.tbl_keys(vim.iter(vim.tbl_values(LANGS)):fold({}, function(set, lang)
-    set[lang] = true
-    return set
-  end))
+  local langs = vim.tbl_keys(QUERIES)
   table.sort(langs)
   return langs
 end
