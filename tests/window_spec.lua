@@ -159,6 +159,7 @@ describe("changeset.window", function()
       window.close()
       vim.cmd("only")
       vim.o.columns = columns
+      require("changeset.config").setup()
     end)
 
     ---Widths of every window the sidebar does not occupy.
@@ -213,6 +214,22 @@ describe("changeset.window", function()
       local win = window.open(vim.api.nvim_create_buf(false, true))
 
       assert.equal("bottom", edge(win))
+    end)
+
+    it("opens along the bottom below a raised layout.min_file_width", function()
+      vim.o.columns = 200
+      require("changeset.config").setup({ layout = { min_file_width = 160 } })
+      vim.cmd("vsplit")
+
+      assert.equal("bottom", edge(window.open(vim.api.nvim_create_buf(false, true))))
+    end)
+
+    it("stands beside the files above a lowered layout.min_file_width", function()
+      vim.o.columns = 120
+      require("changeset.config").setup({ layout = { min_file_width = 60 } })
+      vim.cmd("vsplit")
+
+      assert.equal("right", edge(window.open(vim.api.nvim_create_buf(false, true))))
     end)
 
     it("moves along the bottom when the editor narrows, keeping its window", function()

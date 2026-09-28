@@ -2,13 +2,12 @@
 ---that window is put back when the sidebar is dismissed without committing.
 
 local buffers = require("changeset.buffers")
+local config = require("changeset.config")
 local render = require("changeset.render")
 
 local M = {}
 
 local SIDEBAR_WIDTH = 44
--- Narrower than this beside the sidebar, the files get the width and the tree moves below them.
-local MIN_FILE_WIDTH = 80
 local MIN_DRAWER_HEIGHT = 10
 
 -- A session records the layout but not a scratch buffer's contents, so a
@@ -43,7 +42,7 @@ local sidebar = { borrowed = {} }
 ---@param columns integer The editor's width.
 ---@return changeset.Layout
 local function layout_for(columns)
-  return columns - SIDEBAR_WIDTH < MIN_FILE_WIDTH and "drawer" or "sidebar"
+  return columns - SIDEBAR_WIDTH < config.get().layout.min_file_width and "drawer" or "sidebar"
 end
 
 ---Where `layout` splits the tree off, as `nvim_open_win` and `nvim_win_set_config` take it.
