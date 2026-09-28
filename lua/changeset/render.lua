@@ -22,7 +22,7 @@ local symbols = require("changeset.symbols")
 ---@field kind? string
 
 ---@class changeset.RenderOpts
----@field icon fun(row: changeset.Row): string, string Glyph and its highlight group; the caller wraps `MiniIcons.get`.
+---@field icon fun(row: changeset.Row): string, string Glyph and its highlight group; the caller resolves it with `changeset.icons`.
 ---@field collapsed fun(id: string): boolean         Whether the row with this id hides its children.
 ---@field width integer                              Window width in cells; long names and directories are trimmed so stats stay visible.
 ---@field query? string                               Filter text; every occurrence of it in a line is marked.
@@ -690,7 +690,7 @@ end
 
 ---Point `PREVIEW_ICON_HL` at `hl`'s colour over the band's background.
 ---
----A MiniIcons group carries a foreground only, so a glyph drawn straight in one
+---An icon plugin's group carries a foreground only, so a glyph drawn straight in one
 ---punches the window's own background through the band. One group recoloured per
 ---preview rather than one per filetype: only ever one band is on screen.
 ---@type string? The group the band's glyph last came with, so a new colorscheme can

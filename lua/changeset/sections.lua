@@ -7,7 +7,7 @@ local M = {}
 ---@class changeset.Section
 ---@field key changeset.SectionKey
 ---@field label string
----@field icon string Directory name `MiniIcons.get("directory", …)` draws the header's icon for.
+---@field icon string Directory name `icons.get("directory", …)` draws the header's icon for.
 
 ---@type changeset.Section[] Display order.
 M.ORDER = {

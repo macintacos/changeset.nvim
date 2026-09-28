@@ -65,12 +65,11 @@ trimmed from the front before the name ever is.
 󱞊  Tests               3 files      +40 -2
 ```
 
-A header is the section's `MiniIcons.get("directory", …)` icon, its label as plain
-content, the file count in the meta colour, and a right-aligned `+N -N` for the whole
-section — the same stat chunks a file row draws. The count and stat are the section's
-own, taken before any filter, so they stay put while a filter thins the files beneath. A
-header carries no rail and is never lit as a filter match; it stays on screen only while
-one of its rows matches.
+A header is the section's directory icon, its label as plain content, the file count in
+the meta colour, and a right-aligned `+N -N` for the whole section — the same stat chunks
+a file row draws. The count and stat are the section's own, taken before any filter, so
+they stay put while a filter thins the files beneath. A header carries no rail and is
+never lit as a filter match; it stays on screen only while one of its rows matches.
 
 An empty section is left out. A lone section is still headed, so what a file was
 classified as is always on screen. Files are not indented under their header: the rail
@@ -139,7 +138,11 @@ Implementation copy takes the rest, so the two sum to the file's. A copy with no
 list is left out, and the one left carries the file's whole stat. Go, Lua and bash get no
 symbol rules: their tests live in files the path rules already catch.
 
-### Icons come from mini.icons, never hand-picked
+### Icons come from an icon plugin, never hand-picked
+
+`changeset.icons` asks mini.icons when it is set up, else nvim-web-devicons, else draws a
+blank. devicons covers files only, so under it section headers and symbol rows draw a
+blank in `Normal`. The provider is picked once, on the first icon drawn. With mini.icons:
 
 - Symbol rows: `MiniIcons.get("lsp", kind)` — the exact call `outline.lua` makes, so a
   method is the same glyph in the same hue in both the picker and the sidebar.
@@ -380,7 +383,7 @@ transparent. The band behind it is `CursorLine`'s background — the faintest ti
 colorscheme gives a window to say "this is the thing you are on", quiet enough to sit over
 a file rather than in front of it — and it runs the full width, which is why a band rather
 than a border: a split cannot have one, and the sidebar already speaks winbar. The icon
-gets a group of its own recoloured onto that background, because a `MiniIcons` group
+gets a group of its own recoloured onto that background, because an icon plugin's group
 carries a foreground only and the glyph would otherwise punch the window's own background
 through the band.
 

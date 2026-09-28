@@ -8,6 +8,7 @@ local Git = require("changeset.git")
 local Paths = require("changeset.paths")
 local cache = require("changeset.cache")
 local help = require("changeset.help")
+local icons = require("changeset.icons")
 local prefs = require("changeset.prefs")
 local render = require("changeset.render")
 local resolve = require("changeset.resolve")
@@ -132,31 +133,16 @@ local function save_soon()
   end, SAVE_DEBOUNCE_MS)
 end
 
----@param category string MiniIcons category.
----@param name string
----@return string glyph, string hl
-local function icon(category, name)
-  -- The call is wrapped, not `MiniIcons.get`: an argument is evaluated before `pcall`
-  -- runs, so indexing a missing mini.icons would raise past the fallback below.
-  local ok, glyph, hl = pcall(function()
-    return MiniIcons.get(category, name)
-  end)
-  if ok then
-    return glyph, hl
-  end
-  return " ", "Normal"
-end
-
 ---@param row changeset.Row
 ---@return string glyph, string hl
 local function icon_for(row)
   if row.kind == "section" then
-    return icon("directory", row.icon)
+    return icons.get("directory", row.icon)
   end
   if row.kind == "file" then
-    return icon("file", row.path)
+    return icons.get("file", row.path)
   end
-  return icon("lsp", row.kind == "symbol" and row.symbol_kind or "Text")
+  return icons.get("lsp", row.kind == "symbol" and row.symbol_kind or "Text")
 end
 
 ---@return changeset.Row?
@@ -182,7 +168,7 @@ end
 ---@param row changeset.Row
 ---@return changeset.Band
 local function band_for(row)
-  local glyph, hl = icon("file", row.path)
+  local glyph, hl = icons.get("file", row.path)
   return {
     icon = glyph,
     icon_hl = render.band_icon(hl),
@@ -616,7 +602,7 @@ local function open_kind_menu(open_session)
     counts = view.kind_counts(open_session.rows),
     hidden = open_session.hidden,
     icon = function(symbol_kind)
-      return icon("lsp", symbol_kind)
+      return icons.get("lsp", symbol_kind)
     end,
     sidebar = assert(window.win(), "changeset: sidebar is closed"),
     on_change = function(hidden)

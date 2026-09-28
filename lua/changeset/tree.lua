@@ -26,7 +26,7 @@ local SEP = " › "
 ---@field status string?      File rows only.
 ---@field resolved boolean?   File rows only: whether a server has answered for this file yet.
 ---@field files integer?      Section rows only: how many files the section holds, before any filter.
----@field icon string?        Section rows only: the mini.icons directory name for its section header.
+---@field icon string?        Section rows only: the directory name its section header's icon is looked up by.
 ---@field children changeset.Row[]
 
 ---A line of a file, repo-relative.
