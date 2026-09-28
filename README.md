@@ -454,6 +454,16 @@ repository for as long as Neovim is running, so reopening looks like you left it
 starts expanded, except Generated, which starts folded. Per repository because a row is
 identified by a repo-relative path, which two checkouts can easily both have.
 
+## Health
+
+`:checkhealth changeset` reports the requirements — Neovim 0.12+ and `git` — and each
+optional integration the sidebar quietly does without: `gh` for the PR's target branch,
+mini.icons or nvim-web-devicons, which-key, mini.pick, gitsigns (required once
+`pr_review.enabled` is set), a language server answering `textDocument/documentSymbol`,
+and the `rust`, `typescript` and `tsx` treesitter parsers that mark test symbols. It
+then prints the options in force. It only looks: nothing is installed, started or asked of
+the network.
+
 ## Settings
 
 `require("changeset").setup(opts)` is optional; without it the sidebar binds the keys
