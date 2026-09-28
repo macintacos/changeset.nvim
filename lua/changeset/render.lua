@@ -694,7 +694,7 @@ end
 
 ---What `set_default` last gave each group, as `definition` read it back.
 ---@type table<string, vim.api.keyset.get_hl_info>
-local ours = {}
+local last_given = {}
 
 ---`name`'s definition without its `default` flag, which setting `Normal` strips from
 ---every group.
@@ -713,11 +713,11 @@ end
 ---@param attrs vim.api.keyset.highlight
 local function set_default(name, attrs)
   local current = definition(name)
-  if not vim.tbl_isempty(current) and not vim.deep_equal(current, ours[name]) then
+  if not vim.tbl_isempty(current) and not vim.deep_equal(current, last_given[name]) then
     return
   end
   vim.api.nvim_set_hl(0, name, vim.tbl_extend("force", attrs, { default = true, force = true }))
-  ours[name] = definition(name)
+  last_given[name] = definition(name)
 end
 
 ---Point `PREVIEW_ICON_HL` at `hl`'s colour over the band's background.

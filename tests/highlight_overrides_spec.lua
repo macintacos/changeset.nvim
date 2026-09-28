@@ -4,15 +4,15 @@ vim.api.nvim_set_hl(0, "ChangesetHeaderRef", { fg = 0x0a0b0c })
 local render = require("changeset.render")
 require("changeset") -- registers the ColorScheme autocmd
 
-local colors = vim.fn.tempname()
-vim.fn.mkdir(colors .. "/colors", "p")
-vim.opt.rtp:append(colors)
+local runtime_dir = vim.fn.tempname()
+vim.fn.mkdir(runtime_dir .. "/colors", "p")
+vim.opt.rtp:append(runtime_dir)
 
 ---Write `colors/<name>.lua` from `lines` and switch to it.
 ---@param name string
 ---@param lines string[]
 local function colorscheme(name, lines)
-  vim.fn.writefile(lines, ("%s/colors/%s.lua"):format(colors, name))
+  vim.fn.writefile(lines, ("%s/colors/%s.lua"):format(runtime_dir, name))
   vim.cmd.colorscheme(name)
 end
 
