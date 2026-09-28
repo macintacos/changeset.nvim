@@ -1,15 +1,12 @@
--- github.com/lewis6991/gitsigns.nvim
--- Git change indicators in the sign column
-vim.pack.add({ "https://github.com/lewis6991/gitsigns.nvim" })
-require("gitsigns").setup()
-
--- PR Review Mode points gitsigns' base at this branch's fork point from the
--- default branch, or from its open PR's target branch when that is another
--- branch, so the gutter marks everything the branch changed rather than just
--- uncommitted work. The PR target comes from gh once the default-branch base is
--- applied, so a stacked branch starts on that base and then moves. It turns
--- itself on off the default branch; `:PRReview` turns it off, and each branch
--- remembers that choice for the session.
+---PR Review Mode points gitsigns' base at this branch's fork point from the
+---default branch, or from its open PR's target branch when that is another
+---branch, so the gutter marks everything the branch changed rather than just
+---uncommitted work. The PR target comes from gh once the default-branch base is
+---applied, so a stacked branch starts on that base and then moves. It turns
+---itself on off the default branch; `toggle()` turns it off, and each branch
+---remembers that choice for the session. Requiring it registers nothing;
+---`activate()` registers the autocmd that drives it.
+local M = {}
 
 ---@type table<string, true> Branches the mode was switched off on.
 local dismissed = {}
@@ -91,7 +88,7 @@ end
 local function apply(base, done)
   generation = generation + 1
   want = base
-  toplevel = require("helpers.git").lines({ "git", "rev-parse", "--show-toplevel" })[1]
+  toplevel = require("changeset.git").lines({ "git", "rev-parse", "--show-toplevel" })[1]
   if base then
     ours[base] = true
   end
@@ -122,7 +119,7 @@ end
 ---@param done fun(err: string?) Called once every move has landed, with the first error.
 ---@return string? branch The branch diffed against; nil when there is no fork point.
 local function point_at(target, done)
-  local base, branch = require("helpers.git").merge_base(nil, target)
+  local base, branch = require("changeset.git").merge_base(nil, target)
   if base then
     apply(base, done)
     return branch
@@ -158,7 +155,7 @@ local function enable(report)
     return vim.notify("PR Review Mode: no merge base with the default branch", vim.log.levels.WARN)
   end
   local token = generation
-  require("helpers.git").pr_target(nil, function(target)
+  require("changeset.git").pr_target(nil, function(target)
     if token ~= generation then
       return
     end
@@ -193,7 +190,7 @@ local function sync(branch)
     return
   end
   applied = branch
-  if dismissed[branch] or branch == require("helpers.git").default_base() then
+  if dismissed[branch] or branch == require("changeset.git").default_base() then
     if is_on() then
       apply(nil)
     end
@@ -202,7 +199,9 @@ local function sync(branch)
   end
 end
 
-vim.api.nvim_create_user_command("PRReview", function()
+---Switch the mode off for the current buffer's branch, remembered for the session,
+---or back on.
+function M.toggle()
   local branch = vim.b.gitsigns_head or ""
   if is_on() then
     apply(nil)
@@ -212,20 +211,28 @@ vim.api.nvim_create_user_command("PRReview", function()
     dismissed[branch] = nil
     enable(true)
   end
-end, { desc = "Toggle PR Review Mode for this branch" })
+end
 
--- gitsigns republishes a buffer's branch on every sign refresh, including after
--- a checkout made outside Neovim, so this doubles as a branch-change hook, and
--- each event also moves buffers that missed the base. Its cwd-wide sibling
--- event carries no buffer and is skipped: that watcher never starts in a
--- worktree, where `.git` is a file rather than a directory.
-vim.api.nvim_create_autocmd("User", {
-  pattern = "GitSignsUpdate",
-  callback = function(args)
-    local branch = args.data and vim.b[args.data.buffer].gitsigns_head
-    if branch and branch ~= "" then
-      sync(branch)
-    end
-    reconcile()
-  end,
-})
+---Register the `User GitSignsUpdate` autocmd that turns the mode on off the default
+---branch and keeps buffers on its base. Safe to call more than once.
+function M.activate()
+  -- gitsigns republishes a buffer's branch on every sign refresh, including after
+  -- a checkout made outside Neovim, so this doubles as a branch-change hook, and
+  -- each event also moves buffers that missed the base. Its cwd-wide sibling
+  -- event carries no buffer and is skipped: that watcher never starts in a
+  -- worktree, where `.git` is a file rather than a directory.
+  vim.api.nvim_create_autocmd("User", {
+    group = vim.api.nvim_create_augroup("changeset.review", { clear = true }),
+    pattern = "GitSignsUpdate",
+    desc = "changeset: PR Review Mode",
+    callback = function(args)
+      local branch = args.data and vim.b[args.data.buffer].gitsigns_head
+      if branch and branch ~= "" then
+        sync(branch)
+      end
+      reconcile()
+    end,
+  })
+end
+
+return M

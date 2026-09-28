@@ -1,0 +1,16 @@
+describe("changeset.review", function()
+  local function updates()
+    return #vim.api.nvim_get_autocmds({ event = "User", pattern = "GitSignsUpdate" })
+  end
+
+  it("registers nothing until activated, then its autocmd once", function()
+    local autocmds, commands = updates(), vim.tbl_count(vim.api.nvim_get_commands({}))
+    local review = require("changeset.review")
+    assert.equal(autocmds, updates())
+    assert.equal(commands, vim.tbl_count(vim.api.nvim_get_commands({})))
+    review.activate()
+    review.activate()
+    assert.equal(autocmds + 1, updates())
+    assert.equal(commands, vim.tbl_count(vim.api.nvim_get_commands({})))
+  end)
+end)
