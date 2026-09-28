@@ -7,6 +7,7 @@
 local Git = require("changeset.git")
 local Paths = require("changeset.paths")
 local cache = require("changeset.cache")
+local config = require("changeset.config")
 local help = require("changeset.help")
 local icons = require("changeset.icons")
 local prefs = require("changeset.prefs")
@@ -993,6 +994,15 @@ end
 ---@return changeset.Session?
 function M._tree()
   return session
+end
+
+---Configure changeset. Optional; each call starts again from the defaults and reaches the sidebar the next time it opens. See `changeset.Config`.
+---@param opts changeset.Config?
+function M.setup(opts)
+  config.setup(opts)
+  if config.get().pr_review.enabled then
+    require("changeset.review").activate()
+  end
 end
 
 ---Open the sidebar on the current buffer's repository, drawing its tree.
