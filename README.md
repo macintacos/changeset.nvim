@@ -258,5 +258,7 @@ asks nothing of the network.
 - Folds are kept in memory per repository until Neovim exits.
 
 <!-- panvimdoc-ignore-start -->
+
 Contributors: the design and its rationale are in [docs/design.md](docs/design.md).
+
 <!-- panvimdoc-ignore-end -->
