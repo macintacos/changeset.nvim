@@ -16,6 +16,8 @@ local SAVE_DEBOUNCE_MS = 1000
 
 local M = {}
 
+---The tree as the pipeline keeps it. Only this module writes these fields; the sidebar keeps its own on the
+---same table (`changeset.Session`).
 ---@class changeset.Tree
 ---@field root string
 ---@field base string
@@ -31,11 +33,11 @@ local M = {}
 ---@field timer uv.uv_timer_t?
 ---@field request table? The refresh whose answers this session is still listening for.
 
----What the sidebar does when the tree changes under it.
+---What the sidebar supplies to a new tree, and does as the tree changes.
 ---@class changeset.BuildHooks
----@field view fun(root: string, branch: string): table The sidebar's own fields for a tree built fresh.
+---@field view fun(root: string, branch: string): table The sidebar's own fields for a new tree. Asked for here, not added after `build()` returns: a PR target landing builds with no sidebar code on the stack.
 ---@field rebuild fun() The tree's files or symbols changed.
----@field redraw fun() A PR target landed without moving the fork point, so only the header has news.
+---@field redraw fun() Only what the header shows changed; the rows stand.
 ---@field failed fun() The diff could not be read.
 
 ---@type changeset.Tree?
@@ -144,7 +146,6 @@ function M.refresh()
       return
     end
     if not files then
-      -- Nothing would ever settle it, and it silences `remember`.
       hooks.failed()
       return vim.notify("Changeset: " .. (err or "git failed"), vim.log.levels.ERROR)
     end
@@ -278,16 +279,17 @@ function M.build()
   return true
 end
 
----The tree as last built, or nil once let go of.
+---The tree the last `build()` made; nil before the first.
 ---@return changeset.Tree?
 function M.current()
   return session
 end
 
----Register what the sidebar does when the tree changes under it.
----@param h changeset.BuildHooks
-function M.attach(h)
-  hooks = h
+---Register what the sidebar supplies and does as the tree changes. Before the first
+---`build()`: nothing here runs without them.
+---@param sidebar changeset.BuildHooks
+function M.attach(sidebar)
+  hooks = sidebar
 end
 
 -- Fires: a language server attaching to any buffer. A file no server answered for

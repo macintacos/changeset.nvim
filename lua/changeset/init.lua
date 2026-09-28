@@ -57,6 +57,7 @@ local augroup = vim.api.nvim_create_augroup("changeset", { clear = true })
 ---@field at string? Id of the row under the sidebar's cursor when last checked; another means the user moved it.
 
 ---The tree `build` keeps, with the sidebar's own fields on it.
+---Read it again after anything that can replace the tree: `M.build()`, `vim.wait`, a later callback.
 ---@return changeset.Session?
 local function current()
   return build.current() --[[@as changeset.Session?]]
@@ -527,6 +528,7 @@ build.attach({
   rebuild = rebuild,
   redraw = draw,
   failed = function()
+    -- Nothing would ever settle a restored position, and it silences `remember`.
     assert(current(), "changeset: no open session").restoring = nil
   end,
 })
@@ -795,9 +797,9 @@ local function set_keymaps(buf, keys)
   map(keys.filter, prompt_filter, "Filter the tree")
 end
 
-M.refresh = build.refresh
-
+-- The pipeline lives in `build`; these stay on `require("changeset")` for the plugin, `pick` and the specs.
 M.build = build.build
+M.refresh = build.refresh
 
 ---The sidebar's footer, which its statusline evaluates on every redraw.
 ---@return string

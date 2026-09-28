@@ -60,7 +60,14 @@ local BUILD = {
   "git check-attr -z --stdin linguist-generated",
 }
 
-local REFRESH = vim.list_slice(BUILD, #BUILD - 5)
+local REFRESH = {
+  "git -c core.quotepath=off diff --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ -M --name-status <base>",
+  "git -c core.quotepath=off diff --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ -M --numstat <base>",
+  "git -c core.quotepath=off diff --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ -M --unified=0 <base>",
+  "git -c core.quotepath=off ls-files --others --exclude-standard",
+  "git -c core.quotepath=off rev-list --count <base>..HEAD",
+  "git check-attr -z --stdin linguist-generated",
+}
 
 describe("changeset.build", function()
   local tmp, previous_dir
@@ -92,6 +99,7 @@ describe("changeset.build", function()
   end)
 
   it("starts the same git and gh commands for a build and a refresh", function()
+    -- Each wait stays inside `recording`: `check-attr` starts from a scheduled callback, after `build()` returns.
     local build_argvs = recording(function()
       assert.is_true(changeset.build())
       assert.is_true(vim.wait(10000, function()
