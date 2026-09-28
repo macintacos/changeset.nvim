@@ -3,6 +3,5 @@
 
 set -euo pipefail
 
-# `mise install` installs every tool in mise.toml; the postinstall hook then
-# runs `hk install --mise` to (re)register the git hooks.
+# mise.toml's postinstall hook registers the git hooks.
 mise install
