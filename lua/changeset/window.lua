@@ -346,6 +346,40 @@ function M.open(buf)
   return sidebar.win
 end
 
+-- Where a jump target should sit vertically in the window: 30% down from the
+-- top, so the landing line has context above it and room to read below.
+local REVEAL_RATIO = 0.3
+
+---The top line that leaves at most `rows` screen lines above `lnum` in the current
+---window, a closed fold counting as one.
+---@param lnum integer
+---@param rows integer
+---@return integer
+local function top_line(lnum, rows)
+  local top = lnum
+  while top > 1 do
+    local above = vim.fn.foldclosed(top - 1)
+    above = above == -1 and top - 1 or above
+    if vim.api.nvim_win_text_height(0, { start_row = above - 1, end_row = lnum - 2 }).all > rows then
+      break
+    end
+    top = above
+  end
+  return top
+end
+
+---Scroll the current window so the cursor line sits ~30% down from the top.
+---Scrolls the view only — the cursor stays on the same buffer line, and
+---'scrolloff' still wins over the 30%.
+---
+---Sets the top line instead of running `zt`/`<C-y>`: keys run here reach every
+---`vim.on_key` listener as if typed in this window, and a preview runs this in a
+---window the user is not in.
+local function reveal_cursor()
+  local rows = math.floor(vim.api.nvim_win_get_height(0) * REVEAL_RATIO) - 1
+  vim.fn.winrestview({ topline = top_line(vim.fn.line("."), rows) })
+end
+
 ---Show `path` at `lnum` in the pinned window without leaving the sidebar.
 ---@param path string
 ---@param lnum integer? A deletion hunk at the top of a file reports 0, so this is clamped.
@@ -367,7 +401,7 @@ function M.preview(path, lnum, band, pick)
     local last = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
     vim.api.nvim_win_set_cursor(win, { M._clamp(lnum, last), 0 })
     vim.api.nvim_win_call(win, function()
-      require("helpers.windows").reveal_cursor()
+      reveal_cursor()
     end)
   end
 end
@@ -443,7 +477,7 @@ local function promote(win, buf, lnum, how)
   end
   if lnum then
     vim.api.nvim_win_set_cursor(0, { M._clamp(lnum, vim.api.nvim_buf_line_count(buf)), 0 })
-    require("helpers.windows").reveal_cursor()
+    reveal_cursor()
   end
 end
 

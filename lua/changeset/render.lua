@@ -3,7 +3,7 @@
 ---Everything here is data in, data out: the caller supplies icons, collapse state
 ---and width, and applies the returned marks to a buffer itself.
 
-local symbols = require("plugins.mini-pickers.symbols")
+local symbols = require("changeset.symbols")
 
 ---@class changeset.Mark
 ---@field priority? integer    Draw order against the row's other marks; `MARK_PRIORITY` stands when absent.

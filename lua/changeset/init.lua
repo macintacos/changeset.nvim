@@ -4,8 +4,8 @@
 ---the symbols, hands them to `tree` and `render`, and owns the tree's lifecycle
 ---and the window state machine. The thinking happens in the pure modules it calls.
 
-local Git = require("helpers.git")
-local Paths = require("helpers.paths")
+local Git = require("changeset.git")
+local Paths = require("changeset.paths")
 local cache = require("changeset.cache")
 local help = require("changeset.help")
 local prefs = require("changeset.prefs")
@@ -784,7 +784,7 @@ end
 ---File what a server said about `path` in the symbol cache, while the cache is still `root`'s.
 ---@param root string
 ---@param path string Repo-relative.
----@param items MiniPickers.Symbol[]? nil when no server answered.
+---@param items changeset.Symbol[]? nil when no server answered.
 ---@param stamp string? The file as it stood when its symbols were asked for.
 local function file_answer(root, path, items, stamp)
   if not (memo and memo.root == root and stamp) then

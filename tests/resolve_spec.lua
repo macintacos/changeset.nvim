@@ -1,7 +1,7 @@
 local resolve = require("changeset.resolve")
 
 ---A step that parks each call so the spec decides when it answers.
----@return fun(path: string, done: fun(items: MiniPickers.Symbol[]?)) run
+---@return fun(path: string, done: fun(items: changeset.Symbol[]?)) run
 ---@return table[] pending
 local function deferred()
   local pending = {}

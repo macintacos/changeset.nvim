@@ -5,7 +5,7 @@
 ---so a branch that hides nothing still overrides a repository that hides
 ---something — which is the only way "show me everything, just here" can be said.
 
-local jsonfile = require("helpers.jsonfile")
+local jsonfile = require("changeset.jsonfile")
 
 local M = {}
 

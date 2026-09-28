@@ -609,7 +609,7 @@ describe("changeset sidebar", function()
       it("yanks the file's path and its line, as the other copy's rows do", function()
         open_unanswered()
         answer_all()
-        local Paths = require("helpers.paths")
+        local Paths = require("changeset.paths")
         local copy = Paths.copy
         local yanked = {}
         Paths.copy = function(text)
@@ -825,7 +825,7 @@ describe("changeset sidebar", function()
 
     it("opens nothing, copies nothing and says nothing on <CR> or y", function()
       on_header()
-      local Paths = require("helpers.paths")
+      local Paths = require("changeset.paths")
       local commit, copy, notify = window.commit, Paths.copy, vim.notify
       local calls = {}
       window.commit = function()

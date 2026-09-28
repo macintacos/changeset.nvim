@@ -41,7 +41,7 @@ local SEP = " › "
 ---@alias changeset.LineText fun(path: string, lnum: integer): string?
 
 ---@class changeset.Node
----@field sym MiniPickers.Symbol
+---@field sym changeset.Symbol
 ---@field children changeset.Node[]
 ---@field changed boolean
 ---@field added integer
@@ -49,7 +49,7 @@ local SEP = " › "
 ---@field test boolean In a subtree the file's test rule marked.
 
 ---Rebuild the symbol tree from `symbols.flatten`'s document-ordered list and its `depth` sequence.
----@param symbols MiniPickers.Symbol[]
+---@param symbols changeset.Symbol[]
 ---@param is_test changeset.SymbolRule?
 ---@return changeset.Node[]
 local function nest(symbols, is_test)
@@ -77,7 +77,7 @@ local function span(hunk)
 end
 
 ---Whether `sym`'s range meets `first..last`.
----@param sym MiniPickers.Symbol
+---@param sym changeset.Symbol
 ---@param first integer
 ---@param last integer
 ---@return boolean
@@ -107,7 +107,7 @@ end
 
 ---How many of a hunk's added lines fall inside `sym`'s body.
 ---@param hunk changeset.Hunk
----@param sym MiniPickers.Symbol
+---@param sym changeset.Symbol
 ---@return integer
 local function added_inside(hunk, sym)
   if hunk.count == 0 then
@@ -149,7 +149,7 @@ end
 
 ---Credit `file`'s hunks to its symbols.
 ---@param file changeset.File
----@param symbols MiniPickers.Symbol[]
+---@param symbols changeset.Symbol[]
 ---@param is_test changeset.SymbolRule?
 ---@return changeset.Node[] roots
 ---@return changeset.Hunk[] orphans Hunks that touch no symbol.
@@ -375,7 +375,7 @@ end
 ---Two copies split the file's stat; a lone copy carries all of it.
 ---@param section_rows table<changeset.SectionKey, changeset.Row>
 ---@param file changeset.File
----@param symbols MiniPickers.Symbol[]? nil while the file is still resolving.
+---@param symbols changeset.Symbol[]? nil while the file is still resolving.
 ---@param line_text changeset.LineText?
 local function add_file(section_rows, file, symbols, line_text)
   local key = sections.classify(file.path, file.generated)
@@ -417,7 +417,7 @@ end
 ---has no symbols, so all its hunks are orphans. A deleted or Generated file never gets children: a Generated
 ---file's hunks are not worth a row each.
 ---@param files changeset.File[] Hunks ascending by line, as `git diff` emits them.
----@param symbols_by_path table<string, MiniPickers.Symbol[]> Flat `symbols.flatten` output by file path.
+---@param symbols_by_path table<string, changeset.Symbol[]> Flat `symbols.flatten` output by file path.
 ---@param line_text changeset.LineText? Captions orphan hunks; without it they are named by line range alone.
 ---@return changeset.Row[]
 function M.build(files, symbols_by_path, line_text)

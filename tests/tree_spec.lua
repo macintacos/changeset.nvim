@@ -2,7 +2,7 @@ local tree = require("changeset.tree")
 
 local PATH = "src/session.ts"
 
----A flat `MiniPickers.Symbol` as `symbols.flatten` returns it, its body spanning `first..last`.
+---A flat `changeset.Symbol` as `symbols.flatten` returns it, its body spanning `first..last`.
 ---@param name string
 ---@param kind string
 ---@param depth integer

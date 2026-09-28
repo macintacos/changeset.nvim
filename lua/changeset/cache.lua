@@ -5,7 +5,7 @@
 ---with the file it was read from, so the next build asks a server only about
 ---what has actually changed since.
 
-local jsonfile = require("helpers.jsonfile")
+local jsonfile = require("changeset.jsonfile")
 
 local M = {}
 

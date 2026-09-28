@@ -481,7 +481,7 @@ repository's deliberate choice is none of that save's business.
 | `q` / `<Esc>` | kind menu | close, putting the tree back to the set on disk |
 | `f` | sidebar | filter as you type, keeping ancestors so matches stay placed and lighting every match until the filter goes; `<Esc>` restores the last filter |
 | `R` | sidebar | rebuild now |
-| `y` | sidebar | yank the row's `path:line` via `helpers.paths.copy`; nothing on a section header |
+| `y` | sidebar | yank the row's `path:line` via `changeset.paths.copy`; nothing on a section header |
 | `/` `-` `<C-t>` | sidebar | commit into a vsplit / split / new tab instead |
 | `?` | sidebar | list these keys, `]h` / `[h` included: which-key's popup where it is installed, a float where it is not |
 | `]h` / `[h` | anywhere, while open | advance the sidebar's selection, previewing as it goes and stepping over section headers — review without focusing the sidebar |

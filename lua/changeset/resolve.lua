@@ -6,8 +6,8 @@
 
 local attributes = require("changeset.attributes")
 local buffers = require("changeset.buffers")
-local kinds = require("plugins.mini-pickers.kinds")
-local symbols = require("plugins.mini-pickers.symbols")
+local kinds = require("changeset.kinds")
+local symbols = require("changeset.symbols")
 
 -- Resolving every changed file at once would open forty buffers and fire forty
 -- requests in the same tick. Walking the list a few at a time costs nothing and
@@ -84,7 +84,7 @@ end
 ---Flattened symbols for one loaded buffer, with the inline tests its syntax marks flagged.
 ---@param bufnr integer
 ---@param path string
----@param on_done fun(items: MiniPickers.Symbol[]?)
+---@param on_done fun(items: changeset.Symbol[]?)
 local function request(bufnr, path, on_done)
   -- The attach wait ends in a timer or an autocommand, by which time a `:bwipeout`
   -- or another plugin's buffer sweep may have taken this one. Answering nothing
@@ -119,7 +119,7 @@ end
 ---Load `path` without listing it, then resolve its symbols.
 ---@param root string Repo root the paths are relative to.
 ---@param path string
----@param on_done fun(items: MiniPickers.Symbol[]?)
+---@param on_done fun(items: changeset.Symbol[]?)
 local function resolve_one(root, path, on_done)
   local bufnr = buffers.load(root .. "/" .. path)
   if not bufnr then
@@ -137,8 +137,8 @@ end
 ---each answer as it lands. A `run` that raises before answering is reported as no symbols,
 ---so a failing step closes its lane instead of stranding it.
 ---@param queue string[]
----@param run fun(path: string, done: fun(items: MiniPickers.Symbol[]?))
----@param on_file fun(path: string, items: MiniPickers.Symbol[]?)
+---@param run fun(path: string, done: fun(items: changeset.Symbol[]?))
+---@param on_file fun(path: string, items: changeset.Symbol[]?)
 ---@return fun() cancel Starts no further file; one already in flight is still reported.
 function M._walk(queue, run, on_file)
   local next_index, cancelled = 1, false
@@ -178,7 +178,7 @@ end
 ---marks it an inline test.
 ---@param root string
 ---@param files changeset.File[]
----@param on_file fun(path: string, items: MiniPickers.Symbol[]?)
+---@param on_file fun(path: string, items: changeset.Symbol[]?)
 ---@return fun() cancel
 function M.start(root, files, on_file)
   return M._walk(M._resolvable(files), function(path, done)
