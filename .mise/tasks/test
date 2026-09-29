@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+#MISE description="Run the plenary test suite, or the spec files given"
+#MISE depends=["deps"]
+
+set -euo pipefail
+
+# -u gives the outer nvim plenary; minimal_init gives it to the children.
+# PlenaryBustedDirectory, not :PlenaryBustedFile, even for one file: the latter
+# takes no options, so its child would skip minimal_init.
+#
+# --noplugin: the flag plenary gives its children, which minimal_init is written for;
+# it sources plenary's plugin/ itself.
+specs=("$@")
+(($#)) || specs=(tests/)
+status=0
+for spec in "${specs[@]}"; do
+	nvim --headless --noplugin -u tests/minimal_init.lua \
+		-c "PlenaryBustedDirectory $spec {minimal_init = 'tests/minimal_init.lua'}" || status=1
+done
+exit "$status"

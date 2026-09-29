@@ -1,0 +1,3 @@
+[default.extend-words]
+enew = "enew" # :enew
+noet = "noet" # vim modeline: noexpandtab

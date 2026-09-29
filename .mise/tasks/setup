@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Install pinned tools and register git hooks"
+
+set -euo pipefail
+
+# mise.toml's postinstall hook registers the git hooks.
+mise install

@@ -1,0 +1,352 @@
+---Builds the tree for the current buffer's repository, and keeps its diff and symbols fresh.
+
+local Git = require("changeset.git")
+local Paths = require("changeset.paths")
+local cache = require("changeset.cache")
+local resolve = require("changeset.resolve")
+local sections = require("changeset.sections")
+
+-- `:wall` writes every buffer, and regaining focus reloads every file changed
+-- meanwhile. One rebuild per burst is enough, and a rebuild mid-keypress is what
+-- the identity re-anchoring exists to survive.
+local REFRESH_DEBOUNCE_MS = 250
+
+-- One write per burst of answers rather than one per file.
+local SAVE_DEBOUNCE_MS = 1000
+
+local M = {}
+
+---The tree as the pipeline keeps it. Only this module writes these fields; the sidebar keeps its own on the
+---same table (`changeset.Session`).
+---@class changeset.Tree
+---@field root string
+---@field base string
+---@field ref string Ref the fork point was measured against, e.g. "origin/trunk".
+---@field branch string
+---@field default_branch string
+---@field pr integer? The branch's open PR, while the tree is measured against its target.
+---@field files changeset.File[]
+---@field commits integer? Commits on the branch since `base`, once the diff has been read.
+---@field collected boolean Whether the diff has been read yet.
+---@field symbols table<string, changeset.CachedSymbol[]> Absent key means "still resolving".
+---@field cancel fun()?
+---@field timer uv.uv_timer_t?
+---@field request table? The refresh whose answers this session is still listening for.
+
+---What the sidebar supplies to a new tree, and does as the tree changes.
+---@class changeset.BuildHooks
+---@field view fun(root: string, branch: string): table The sidebar's own fields for a new tree. Asked for here, not added after `build()` returns: a PR target landing builds with no sidebar code on the stack.
+---@field rebuild fun() The tree's files or symbols changed.
+---@field redraw fun() Only what the header shows changed; the rows stand.
+---@field failed fun() The diff could not be read.
+
+---@type changeset.Tree?
+local session
+
+---Symbols read for the repo at `root`, carried between builds and to disk.
+---@type { root: string, entries: table<string, changeset.CacheEntry> }?
+local memo
+
+---@type uv.uv_timer_t?
+local save_timer
+
+---Each open PR's target and number, by repository and branch; false while gh is asked.
+---No answer is not kept, so a PR opened later is found on the next build.
+---@type table<string, { target: string, number: integer }|false>
+local targets = {}
+
+---@type changeset.BuildHooks
+local hooks
+
+---Stop a deferred callback for good. `vim.defer_fn` closes its handle from inside the
+---callback, so a timer replaced before it fires leaves one open.
+---@param timer uv.uv_timer_t?
+local function stop(timer)
+  if timer and not timer:is_closing() then
+    timer:stop()
+    timer:close()
+  end
+end
+
+local function save_soon()
+  stop(save_timer)
+  save_timer = vim.defer_fn(function()
+    if memo then
+      cache.save(cache.path(memo.root), memo.entries)
+    end
+  end, SAVE_DEBOUNCE_MS)
+end
+
+---Whether the file at `path` holds edits the file on disk does not.
+---@param path string Absolute.
+---@return boolean
+local function unwritten(path)
+  local buf = vim.fn.bufnr(path)
+  return buf ~= -1 and vim.bo[buf].modified
+end
+
+---The Generated files, each filed as answered with no symbols, and the rest, which a server is asked about.
+---@param files changeset.File[]
+---@return table<string, changeset.CachedSymbol[]> generated_symbols Each Generated path mapped to `{}`.
+---@return changeset.File[] readable The other files, in order.
+local function split_generated(files)
+  local generated_symbols, readable = {}, {}
+  for _, file in ipairs(files) do
+    if sections.classify(file.path, file.generated) == "generated" then
+      generated_symbols[file.path] = {}
+    else
+      readable[#readable + 1] = file
+    end
+  end
+  return generated_symbols, readable
+end
+
+---File what a server said about `path` in the symbol cache, while the cache is still `root`'s.
+---@param root string
+---@param path string Repo-relative.
+---@param items changeset.Symbol[]? nil when no server answered.
+---@param stamp string? The file as it stood when its symbols were asked for.
+local function file_answer(root, path, items, stamp)
+  if not (memo and memo.root == root and stamp) then
+    return
+  end
+  -- Only an answer that arrived is filed. A server that never attached would
+  -- otherwise leave "this file has no symbols" on disk, fresh until the file
+  -- next moves; and a stamp taken off the file cannot describe what a server
+  -- read out of a buffer holding unwritten edits.
+  if items and not unwritten(root .. "/" .. path) then
+    memo.entries[path] = { stamp = stamp, symbols = cache.project(items) }
+    save_soon()
+  elseif not items then
+    -- Not asked again on every refresh — each ask waits out the attach timeout
+    -- under a "reading symbols" row — only once the file moves or a server
+    -- arrives for it.
+    memo.entries[path] = { stamp = stamp, symbols = {}, silent = true }
+  end
+end
+
+---Gather the diff, then let symbols fill in behind it.
+function M.refresh()
+  if not session then
+    return
+  end
+  if session.cancel then
+    session.cancel()
+    session.cancel = nil
+  end
+
+  -- Identity rather than a counter: an answer from a refresh that this one replaced
+  -- has to be dropped, and a session built later starts from a table of its own.
+  local request = {}
+  session.request = request
+
+  local diff = require("changeset.diff")
+  diff.collect(session.base, session.root, function(files, err, commits)
+    if not session or session.request ~= request then
+      return
+    end
+    if not files then
+      hooks.failed()
+      return vim.notify("Changeset: " .. (err or "git failed"), vim.log.levels.ERROR)
+    end
+    session.files = files
+    session.commits = commits
+    session.collected = true
+    -- Generated files are never asked about; filed as answered with nothing, they
+    -- show no placeholder and count as read.
+    local generated_symbols, readable = split_generated(files)
+
+    -- Stamped before the request rather than after: a file edited while its
+    -- symbols are being read then fails this check next time, instead of
+    -- leaving behind an answer for content that has already moved on.
+    assert(memo, "changeset: symbol cache not loaded")
+    local stamps = {}
+    local known, unknown = cache.fresh(memo.entries, readable, function(path)
+      assert(session, "changeset: no open session")
+      stamps[path] = cache.stamp(session.root .. "/" .. path)
+      return stamps[path]
+    end)
+    session.symbols = vim.tbl_extend("force", known, generated_symbols)
+
+    -- Down to what this diff needs: the file caches the branch being read, not
+    -- every file whose symbols have ever been asked for.
+    local entries = memo.entries
+    memo.entries = {}
+    for path in pairs(known) do
+      memo.entries[path] = entries[path]
+    end
+    hooks.rebuild()
+
+    local root = session.root
+    session.cancel = resolve.start(root, unknown, function(path, items)
+      -- Filed even once a newer refresh has replaced this one: the stamp predates
+      -- the request, so the answer still describes the file it was read from.
+      file_answer(root, path, items, stamps[path])
+      if session and session.request == request then
+        -- A server that answers nothing is "resolved with no symbols", which is what
+        -- turns every hunk in an unsupported file into an orphan row. Leaving the key
+        -- absent would instead read as "still resolving", forever.
+        session.symbols[path] = items or {}
+        hooks.rebuild()
+      end
+    end)
+  end)
+end
+
+---Let go of the tree, stopping whatever it was still gathering.
+local function drop()
+  if session then
+    if session.cancel then
+      session.cancel()
+    end
+    stop(session.timer)
+  end
+  session = nil
+end
+
+---The branch `branch`'s open PR, once gh has said. Asks it otherwise, and builds
+---again when the answer lands on the repository and branch still in view.
+---@param root string
+---@param branch string
+---@return { target: string, number: integer }?
+local function pr_target(root, branch)
+  local key = root .. "\n" .. branch
+  if targets[key] == nil then
+    targets[key] = false
+    Git.pr_target(root, function(target, number)
+      targets[key] = target and { target = target, number = number } or nil
+      if target and session and session.root == root and session.branch == branch and Paths.root(0) == root then
+        local kept = session
+        M.build()
+        -- A PR onto the branch already compared against leaves the tree standing,
+        -- and only the header has news.
+        if session == kept then
+          hooks.redraw()
+        end
+      end
+    end)
+  end
+  return targets[key] or nil
+end
+
+---Build the tree for the current buffer's repository, unless it is already built there.
+---
+---The buffer's repository, not Neovim's directory: with the two different, a base
+---measured in the wrong one leaves every later `git diff` on a bad object.
+---@return boolean ready false when the repository has no merge base with its default
+---branch, which includes a buffer outside any repository.
+function M.build()
+  local root = Paths.root(0)
+  local base, _, ref = Git.merge_base(root)
+  if not base then
+    return false
+  end
+  local branch = Git.lines({ "git", "rev-parse", "--abbrev-ref", "HEAD" }, root)[1] or "HEAD"
+  -- A stacked branch reads its fork point from its PR's target; one that target
+  -- has none with (never fetched, say) stays on the default branch's.
+  local pr, number = pr_target(root, branch), nil
+  if pr then
+    local stacked, _, stacked_ref = Git.merge_base(root, pr.target)
+    if stacked then
+      -- Named only while the tree is measured against the ref the PR merges into.
+      base, ref, number = stacked, stacked_ref, pr.number
+    end
+  end
+  if session and session.root == root and session.base == base and session.branch == branch then
+    session.pr = number
+    return true
+  end
+  drop()
+
+  if not memo or memo.root ~= root then
+    memo = { root = root, entries = cache.load(cache.path(root)) }
+  end
+
+  local sidebar_fields = hooks.view(root, branch)
+  local default_branch = Git.default_base(root)
+  session = vim.tbl_extend("error", {
+    root = root,
+    base = base,
+    ref = ref or default_branch,
+    branch = branch,
+    default_branch = default_branch,
+    pr = number,
+    files = {},
+    collected = false,
+    symbols = {},
+  }, sidebar_fields)
+  M.refresh()
+  return true
+end
+
+---The tree the last `build()` made; nil before the first.
+---@return changeset.Tree?
+function M.current()
+  return session
+end
+
+---Register what the sidebar supplies and does as the tree changes. Before the first
+---`build()`: nothing here runs without them.
+---@param sidebar changeset.BuildHooks
+function M.attach(sidebar)
+  hooks = sidebar
+end
+
+-- Fires: a language server attaching to any buffer. A file no server answered for
+-- is not asked about again until it changes, so one that attaches late — started
+-- slowly, or installed since — would otherwise never be heard from.
+vim.api.nvim_create_autocmd("LspAttach", {
+  group = vim.api.nvim_create_augroup("changeset.servers", { clear = true }),
+  desc = "changeset: ask again about a file once a server that lists symbols reaches it",
+  callback = function(args)
+    local client = vim.lsp.get_client_by_id(args.data.client_id)
+    if not (session and memo and client and client:supports_method("textDocument/documentSymbol")) then
+      return
+    end
+    local path = vim.fs.relpath(session.root, vim.fs.normalize(vim.api.nvim_buf_get_name(args.buf)))
+    local entry = path and memo.entries[path]
+    if path and entry and entry.silent then
+      memo.entries[path] = nil
+      M.refresh()
+    end
+  end,
+})
+
+local function refresh_soon()
+  if not session then
+    return
+  end
+  stop(session.timer)
+  session.timer = vim.defer_fn(function()
+    if session then
+      M.refresh()
+    end
+  end, REFRESH_DEBOUNCE_MS)
+end
+
+local watch = vim.api.nvim_create_augroup("changeset.watch", { clear = true })
+
+-- Fires: a write, a buffer reloaded after its file changed outside Neovim, and Neovim
+-- regaining focus — the moments the files git diffs from disk can have moved.
+-- Nothing else does: the diff reads the disk, so unwritten edits never move it.
+vim.api.nvim_create_autocmd({ "BufWritePost", "FileChangedShellPost", "FocusGained" }, {
+  group = watch,
+  desc = "changeset: rebuild the tree after the working tree changes",
+  callback = refresh_soon,
+})
+
+-- Fires: gitsigns seeing HEAD move, a checkout or rebase made anywhere, which it
+-- publishes without a buffer. The per-buffer ones fire on every attach and every
+-- hunk change while typing, and the symbol walk's own loads would restart it.
+vim.api.nvim_create_autocmd("User", {
+  pattern = "GitSignsUpdate",
+  group = watch,
+  desc = "changeset: rebuild the tree after the branch changes",
+  callback = function(args)
+    if not (args.data and args.data.buffer) then
+      refresh_soon()
+    end
+  end,
+})
+
+return M

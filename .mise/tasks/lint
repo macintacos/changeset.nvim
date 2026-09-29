@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Check formatting, lint rules and types (read-only)"
+#MISE depends=["deps"]
+
+set -euo pipefail
+
+hk check --all

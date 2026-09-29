@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Run lint + test before pushing / opening a PR"
+#MISE depends=["lint", "test"]
+
+set -euo pipefail
+
+echo "preflight: lint + test passed"

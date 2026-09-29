@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#MISE description="Generate doc/changeset.nvim.txt from README.md with panvimdoc"
+#MISE depends=["deps"]
+
+set -euo pipefail
+
+mkdir -p doc
+# --no-date and a literal --vim-version keep the output stable, so CI can diff it.
+# --dedup-subheadings false tags each H2 changeset.nvim-<heading>, so README H2s
+# must be unique: a repeat makes :helptags fail.
+bash .tests/deps/panvimdoc/panvimdoc.sh \
+	--project-name changeset.nvim \
+	--input-file README.md \
+	--vim-version "Neovim 0.12" \
+	--no-date true \
+	--dedup-subheadings false
