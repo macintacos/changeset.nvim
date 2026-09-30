@@ -55,11 +55,11 @@ local function open_sidebar()
   vim.cmd.edit("mod.lua")
   changeset.open()
   local buf
-  vim.wait(10000, function()
+  local drawn = vim.wait(10000, function()
     buf = window.buf()
     return buf ~= nil and #lines_of(buf) > 1
   end, 25)
-  assert(buf, "the sidebar never opened a buffer")
+  assert(buf and drawn, "the sidebar never drew a tree")
 
   -- Symbols land after the diff does, replacing each file's placeholder row with
   -- however many rows it really has. A count taken before that settles drifts on
@@ -832,13 +832,18 @@ describe("changeset sidebar", function()
     end)
 
     it("keeps its section folded through a close and a reopen", function()
-      local buf = on_header()
+      on_header()
       press("h")
-
       changeset.close()
-      buf = open_sidebar()
+      local before = assert(changeset._tree()).files
 
-      assert.equal(1, #lines_of(buf))
+      changeset.open()
+
+      -- Not open_sidebar(): it waits for a second line, and the folded section is one.
+      assert.is_true(vim.wait(10000, function()
+        return changeset._tree().files ~= before
+      end, 25))
+      assert.equal(1, #lines_of(assert(window.buf())))
     end)
 
     it("is where h goes from a shut file", function()
