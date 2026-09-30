@@ -1,5 +1,7 @@
 local changeset = require("changeset")
 changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
+local draw = require("changeset.draw")
+local render = require("changeset.render")
 local window = require("changeset.window")
 local Fixture = require("support.git")
 
@@ -265,5 +267,28 @@ describe("changeset preview band", function()
         assert_unbanded_here()
       end
     end)
+  end)
+end)
+
+describe("changeset preview band's band_for", function()
+  ---What the band made for `row` reads on screen.
+  ---@param row table
+  ---@return string
+  local function band_text(row)
+    local winbar = render.preview_winbar(draw.band_for(row, "<CR>"))
+    return vim.api.nvim_eval_statusline(winbar, { use_winbar = true, maxwidth = 70 }).str
+  end
+
+  it("offers <CR> to open on an orphan hunk, whose text is no place to land", function()
+    local text = band_text({ kind = "orphan", name = "L4 return 2", path = "mod.lua", lnum = 4 })
+
+    assert.truthy(text:find("<CR>", 1, true))
+    assert.is_nil(text:find("return 2", 1, true))
+  end)
+
+  it("names the symbol <CR> lands on", function()
+    local text = band_text({ kind = "symbol", name = "M.one", path = "mod.lua", lnum = 3 })
+
+    assert.truthy(vim.endswith(text, "M.one "))
   end)
 end)
