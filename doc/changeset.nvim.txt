@@ -37,12 +37,16 @@ Each optional integration adds one feature:
 - `gh`: a branch whose open PR targets another branch is compared against that branch.
 - A language server that lists a file’s symbols (`textDocument/documentSymbol`): the
     symbol rows under each file. Without one, a file lists only its changes.
-- The `rust`, `typescript` and `tsx` treesitter parsers, plus a language server: splitting
-    a Rust or TypeScript file’s inline tests from the rest of the file. When a branch changes
-    both, the file shows twice, under the sidebar’s Implementation and Tests sections.
-    Treesitter finds the tests by syntax, such as `#[test]` or `import.meta.vitest`. Without
-    a file’s parser, only tests found by name, such as a `tests` module, are split out.
-    nvim-treesitter installs the parsers with `:TSInstall rust typescript tsx`.
+- Treesitter parsers: finding the tests inside a source file by their syntax, so the
+    sidebar lists them under Tests and the file’s code under Implementation. Without the
+    file’s parser, only tests found by name, such as a `tests` module or a `describe` block,
+    are split out. With or without a parser, this needs a language server, as the symbol
+    rows do. The supported languages, whose parsers nvim-treesitter installs with
+    `:TSInstall rust typescript tsx`:
+    - Rust, with the `rust` parser: items under `#[test]`, `#[cfg(test)]` or any
+        `#[…::test]` attribute, such as `#[tokio::test]`.
+    - TypeScript, with the `typescript` parser, or `tsx` for `.tsx` files: an
+        `if (import.meta.vitest) { … }` block.
 - mini.icons (once set up) or nvim-web-devicons: icons. nvim-web-devicons covers files
     only.
 - which-key: `?` opens its popup instead of a float.
