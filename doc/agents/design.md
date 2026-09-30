@@ -97,12 +97,46 @@ parser keeps just the name rules. They match exactly: `cfg(test)` alone, not
 ```
 
 A file whose changes reach both shows under Implementation and Tests, each copy listing
-only its own symbols; `Other changes` stays on the Implementation copy. Each copy counts
-toward its own section's header. The Tests copy's `+N` is the added lines inside test
-symbols and its `-N` the removed lines of hunks whose first symbol is a test; the
-Implementation copy takes the rest, so the two sum to the file's. A copy with nothing to
-list is left out, and the one left carries the file's whole stat. Go, Lua and bash get no
-symbol rules: their tests live in files the path rules already catch.
+only its own symbols and hunks; each copy counts toward its own section's header, its stat
+as § Stats splits it. A copy with nothing to list is left out, and the one left carries
+the file's whole stat. Go, Lua and bash get no symbol rules: their tests live in files the
+path rules already catch.
+
+A change that touches only comments shows under a Docs copy of its file, whatever section
+its path gives it. The unit is a changed symbol, or a hunk outside every symbol, which
+lands under the Docs copy's `Other changes`. A unit goes to Docs when its changed lines
+hold at least one comment line and no code line; any code line keeps it where it lands
+today. Treesitter decides each line's kind, on the new side for added lines and on the
+base for removed ones:
+
+- A **comment** line is covered from its first to its last non-blank character by one
+  comment node, or by a Python docstring. `x = 1  # note` is code.
+- A **directive** is a comment that tells a tool what to do, such as `#!`, `//go:`,
+  `// eslint-…`, `// @ts-…`, `---@diagnostic`, `-- selene:`, `-- stylua:`, `# type:`,
+  `# noqa`, `# pylint:` or `# fmt:`. It counts as code, so changing one is not a docs
+  change. Every other LuaCATS annotation, such as `---@param`, is a comment.
+- A **blank** line counts as neither, so a unit whose only change is blank lines stays
+  put.
+
+A doc comment belongs to the declaration below it: a symbol's range reaches up over the
+comment and directive lines directly above it, stopping at the previous sibling and at its
+parent's own first line, never the parent's doc comment. So editing a function's doc
+comment moves that function to Docs, and a class's first method still takes its own. A
+removed line counts as code when git cannot read the base, and a file whose parser is not
+installed, or fails to parse, keeps today's placement. The language comes from the file's
+name and contents, so an extensionless shebang script is read too. Generated files and
+files the path rules already put in Docs are left alone: neither their base nor their
+comments are read.
+
+```text
+󰴉  Implementation      1 file    +6 -1
+▎ 󰌠 session.py               +6 -1
+  └─󰊕 refresh                  +6 -1
+
+󱂷  Docs                1 file    +3 -1
+▎ 󰌠 session.py               +3 -1
+  └─󰊕 load                     +3 -1
+```
 
 ### Icons come from an icon plugin, never hand-picked
 
@@ -195,10 +229,12 @@ the `changeset` filetype or its entry wins. mini.cursorword is off in the sideba
 hidden cursor rests on each row's rail and it would underline that.
 
 A line belongs to the deepest symbol row whose body holds it, else to the file's
-`Other changes` row when one of its hunks does, else to the file row. A file shown in two
-sections answers from the copy with the deeper match, and falls back to the path
-section's copy. When the row is off screen — folded, filtered, or inside a compressed
-chain — its nearest visible ancestor wears the highlight instead.
+`Other changes` row when one of its hunks does, else to the file row. A file shown in
+several sections answers from the copy with the deeper match. On a tie in depth, a changed
+row beats an unchanged ancestor, so a comment-only class holding a changed method answers
+from its Docs row rather than its bare copy. Any other tie, and a line no copy matches, go
+to the path section's copy. When the row is off screen — folded, filtered, or inside a
+compressed chain — its nearest visible ancestor wears the highlight instead.
 
 Focusing the sidebar, by `:Changeset`, a click or `<C-w>`, puts its cursor on that same
 row, and previews it the way moving onto it would. Focused before your file's symbols
@@ -274,9 +310,11 @@ a bar — a bar would be decoration competing with the rail, and the rail alread
 A symbol's `+N` counts only the changed lines falling inside its own range, so a hunk
 running across two symbols gives each one its own share and the lines in the gap between
 them to neither. A file's `+N` is git's count for the whole file and can therefore exceed
-the sum of its symbols'. A file split across Implementation and Tests shows its own share
-on each copy, and the shares sum to git's count. Removed lines have no position in the
-new file to split on, so a hunk's `-N` goes wholly to the first symbol it reaches.
+the sum of its symbols'. A file split across its path section, Tests and Docs shows its own
+share on each copy, and the shares sum to git's count. Docs takes the lines of its
+comment-only units, Tests its test lines less any Docs units inside them, and the path
+copy the rest. Removed lines have no position in the new file to split on, so a hunk's
+`-N` goes wholly to the first symbol it reaches.
 
 ### Header
 
@@ -320,12 +358,12 @@ rather than claiming that nothing changed.
 
 The sidebar's own `statusline`. With `laststatus=3` a window's own statusline is drawn
 only while that window has focus, so it takes the global bar's place exactly when the
-sidebar's keys are worth naming, and hands it back the moment you leave. The badge is
-the header glyph's `Directory` colour, reversed, standing where the mode badge would. The
-position counts the files on screen — a folded section's files are not — and names no
-file while the cursor is on a section header. A file shown in two sections counts once, at
-its first row. The filter in force is named, since once its prompt closes the lit matches
-are the only other trace of it. Only four actions are offered, each under the key
+sidebar's keys are worth naming, and hands it back the moment you leave. The badge is the
+header glyph's `Directory` colour, reversed, standing where the mode badge would. The
+position counts the files on screen — a folded section's files are not — and names no file
+while the cursor is on a section header. A file shown in more than one section counts
+once, at its first row. The filter in force is named, since once its prompt closes the lit
+matches are the only other trace of it. Only four actions are offered, each under the key
 `keymaps` gives it and left out when set to `false` — `?` lists the rest.
 
 The sidebar turns off `scrollEOF.nvim`, which would otherwise scroll the tree past its end
@@ -406,15 +444,16 @@ own buffer loads would fire it too, restarting the walk they came from.
 Asking a language server about every changed file is what makes a cold build slow: 28
 files took about nine seconds in the config the plugin was extracted from, and the tree
 fills a row at a time while it waits. Symbols are cached per file instead, stamped with
-the file's size and mtime, so the next build asks a server only about what has changed
-since — the same tree comes back complete in under 300ms, which is the `git diff` and
-nothing else.
+the file's size and mtime and the base it was diffed against, so the next build asks a
+server only about what has changed since — the same tree comes back complete in under
+300ms, which is the `git diff` and nothing else.
 
 The cache is one JSON file per repo under `stdpath("cache")/changeset/`, holding only the
 fields the tree reads from a symbol. Every refresh narrows it to the files the current diff
 touches, so it stays the size of a branch rather than growing with every branch ever
 reviewed, and losing it costs one slow build. An entry also records which symbols the
-syntax marked as tests, so a cached file is never parsed again. The file name carries a
+syntax marked as tests, and each side's comment, directive and blank lines, so a cached file
+is never parsed again and its base is never read again. The file name carries a
 format number, bumped whenever an entry gains a field, because an older entry's stamp would
 otherwise still match. Folds — a section's as well as a file's — are remembered per
 repository for as long as Neovim is running, so reopening looks like you left it; a restart
@@ -440,6 +479,8 @@ repository's deliberate choice is none of that save's business.
 
 - **A file cached before its parser was installed keeps just the name rules** until it
   next changes: its entry was read without the syntax layer, and its stamp still matches.
+  Its comment lines are missing too, so its comment-only changes stay out of Docs. A moved
+  base re-reads every file, base side included.
 - **Preview is non-destructive.** `j`/`k` swap a window's buffer and cursor for real, but
   `q` or closing the sidebar with the toggle puts back every window a preview borrowed,
   buffer *and* cursor. Only a commit — `<CR>` and its split variants, or entering the
@@ -490,8 +531,8 @@ repository's deliberate choice is none of that save's business.
   restore the cursor to the same row *identity* and preserve collapse state, including an
   `l`-expanded chain. One key scheme serves all three. Every redraw re-anchors the same
   way; when the cursor's file row is gone from screen — its changes all turned out to be
-  tests, or a filter kept only one copy — the cursor moves to the first file row with that
-  path.
+  tests or comments, or a filter kept only one copy — the cursor moves to the first file
+  row with that path.
 - **Opening the sidebar is an ordinary split.** It takes its width with `winfixwidth`
   (a drawer its height, with `winfixheight`) already set and then lets `'equalalways'`
   settle the rest, so the windows that were already open share out what is left instead
@@ -507,7 +548,7 @@ repository's deliberate choice is none of that save's business.
 - **A cached file is never loaded or parsed.** Reading symbols is what puts a changed file
   in a buffer, so a file answered from the cache has none, and anything the tree needs
   from its text comes off disk instead. The test flag its attributes gave each symbol
-  comes back with the symbol.
+  comes back with the symbol, and the file's comment lines come back with its symbols.
 - **Stamp a file before asking about it, not after.** A file edited while its symbols are
   being read has to fail the freshness check next time; stamping afterwards would file
   the answer under the content that replaced it. The same stamp is why an answer is filed
@@ -516,12 +557,16 @@ repository's deliberate choice is none of that save's business.
 - **Only an answer is cached.** A server that never attached, and a file whose buffer held
   unwritten edits when it was read, are both left out: a stamp taken off the file on disk
   cannot describe either, and either one filed as fresh would outlive the edit that made
-  it wrong — across restarts, until the file next moves.
+  it wrong — across restarts, until the file next moves. A file no server answers for,
+  with unwritten edits in its buffer, has its comment lines left out the same way until it
+  is written.
 - **No answer is remembered, but only in memory.** A file no server answers for — `go.sum`,
   a `Makefile` — is not asked about again on every refresh, each of which would wait out
   the attach timeout under a `reading symbols` row, and every write refreshes the tree.
   The file is asked about again once it moves, or once a server that lists symbols
-  attaches to it, which is how a slow or newly installed server still gets heard.
+  attaches to it, which is how a slow or newly installed server still gets heard. Its
+  comment lines live in memory too, so after a restart its first build reads its base and
+  parses it again.
 - **One line is one row, one level below its parent.** `h` and the cursor anchor both read
   the next line's depth to decide what is showing, so the `⋯ reading symbols` placeholder
   is a row of its own rather than the file's row drawn a second time. A file sits one

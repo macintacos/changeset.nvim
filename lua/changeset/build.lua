@@ -29,6 +29,7 @@ local M = {}
 ---@field commits integer? Commits on the branch since `base`, once the diff has been read.
 ---@field collected boolean Whether the diff has been read yet.
 ---@field symbols table<string, changeset.CachedSymbol[]> Absent key means "still resolving".
+---@field comments table<string, changeset.Comments> Absent key means none read or parsed for the file.
 ---@field cancel fun()?
 ---@field timer uv.uv_timer_t?
 ---@field request table? The refresh whose answers this session is still listening for.
@@ -101,12 +102,17 @@ local function split_generated(files)
   return generated_symbols, readable
 end
 
----File what a server said about `path` in the symbol cache, while the cache is still `root`'s.
+---What resolving one file answered.
+---@class changeset.build.Answer
+---@field items changeset.Symbol[]? nil when no server answered.
+---@field comments changeset.Comments?
+
+---File what was read about `path` in the symbol cache, while the cache is still `root`'s.
 ---@param root string
 ---@param path string Repo-relative.
----@param items changeset.Symbol[]? nil when no server answered.
+---@param answer changeset.build.Answer
 ---@param stamp string? The file as it stood when its symbols were asked for.
-local function file_answer(root, path, items, stamp)
+local function file_answer(root, path, answer, stamp)
   if not (memo and memo.root == root and stamp) then
     return
   end
@@ -114,14 +120,15 @@ local function file_answer(root, path, items, stamp)
   -- otherwise leave "this file has no symbols" on disk, fresh until the file
   -- next moves; and a stamp taken off the file cannot describe what a server
   -- read out of a buffer holding unwritten edits.
-  if items and not unwritten(root .. "/" .. path) then
-    memo.entries[path] = { stamp = stamp, symbols = cache.project(items) }
+  local items, dirty = answer.items, unwritten(root .. "/" .. path)
+  if items and not dirty then
+    memo.entries[path] = { stamp = stamp, symbols = cache.project(items), comments = answer.comments }
     save_soon()
   elseif not items then
     -- Not asked again on every refresh — each ask waits out the attach timeout
     -- under a "reading symbols" row — only once the file moves or a server
     -- arrives for it.
-    memo.entries[path] = { stamp = stamp, symbols = {}, silent = true }
+    memo.entries[path] = { stamp = stamp, symbols = {}, comments = not dirty and answer.comments or nil, silent = true }
   end
 end
 
@@ -163,7 +170,7 @@ function M.refresh()
     local stamps = {}
     local known, unknown = cache.fresh(memo.entries, readable, function(path)
       assert(session, "changeset: no open session")
-      stamps[path] = cache.stamp(session.root .. "/" .. path)
+      stamps[path] = cache.stamp(session.root .. "/" .. path, session.base)
       return stamps[path]
     end)
     session.symbols = vim.tbl_extend("force", known, generated_symbols)
@@ -172,21 +179,24 @@ function M.refresh()
     -- every file whose symbols have ever been asked for.
     local entries = memo.entries
     memo.entries = {}
+    session.comments = {}
     for path in pairs(known) do
       memo.entries[path] = entries[path]
+      session.comments[path] = entries[path].comments
     end
     hooks.rebuild()
 
     local root = session.root
-    session.cancel = resolve.start(root, unknown, function(path, items)
+    session.cancel = resolve.start({ root = root, base = session.base }, unknown, function(path, items, comment_lines)
       -- Filed even once a newer refresh has replaced this one: the stamp predates
       -- the request, so the answer still describes the file it was read from.
-      file_answer(root, path, items, stamps[path])
+      file_answer(root, path, { items = items, comments = comment_lines }, stamps[path])
       if session and session.request == request then
         -- A server that answers nothing is "resolved with no symbols", which is what
         -- turns every hunk in an unsupported file into an orphan row. Leaving the key
         -- absent would instead read as "still resolving", forever.
         session.symbols[path] = items or {}
+        session.comments[path] = comment_lines
         hooks.rebuild()
       end
     end)
@@ -274,6 +284,7 @@ function M.build()
     files = {},
     collected = false,
     symbols = {},
+    comments = {},
   }, sidebar_fields)
   M.refresh()
   return true

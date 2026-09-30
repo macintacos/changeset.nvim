@@ -17,7 +17,7 @@ mini.pick, through the [Picker](#picker). Each works without the others.
 
 changeset needs Neovim 0.12 or newer and `git`.
 
-Each optional integration adds one feature:
+Each optional integration adds a feature:
 
 - `gh`: a branch whose open PR targets another branch is compared against that branch.
 - A language server that lists a file's symbols (`textDocument/documentSymbol`): the
@@ -32,6 +32,10 @@ Each optional integration adds one feature:
     `#[…::test]` attribute, such as `#[tokio::test]`.
   - TypeScript, with the `typescript` parser, or `tsx` for `.tsx` files: an
     `if (import.meta.vitest) { … }` block.
+
+  Parsers also move comment-only changes under Docs: a symbol whose changed lines are all
+  comments, or a hunk outside every symbol that changes only comments. This works for any
+  language whose parser is installed, and needs no language server.
 - mini.icons (once set up) or nvim-web-devicons: icons. nvim-web-devicons covers files
   only.
 - which-key: `?` opens its popup instead of a float.

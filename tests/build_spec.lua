@@ -101,14 +101,15 @@ describe("changeset.build", function()
   describe("asking about symbols", function()
     local asked
 
-    ---Answer every file with `items` at once, counting each time `path` is asked about.
+    ---Answer every file with `items` and `comment_lines` at once, counting each time `path` is asked about.
     ---@param items table[]?
-    local function answer(items)
+    ---@param comment_lines changeset.Comments?
+    local function answer(items, comment_lines)
       asked = 0
       resolve.start = function(_, files, on_file)
         for _, file in ipairs(files) do
           asked = asked + (file.path == "mod.lua" and 1 or 0)
-          on_file(file.path, items)
+          on_file(file.path, items, comment_lines)
         end
         return function() end
       end
@@ -131,6 +132,28 @@ describe("changeset.build", function()
       refresh_and_collect()
 
       assert.equal(2, asked)
+    end)
+
+    it("keeps a file's comment lines across a refresh without asking about it again", function()
+      local comment_lines = { new = { comment = { { 1, 1 } }, directive = {}, blank = {} } }
+      answer({}, comment_lines)
+      build_and_collect()
+
+      refresh_and_collect()
+
+      assert.equal(1, asked)
+      assert.same(comment_lines, changeset._tree().comments["mod.lua"])
+    end)
+
+    it("does not cache the comment lines read from a silent file's buffer holding unwritten edits", function()
+      answer(nil, { new = { comment = { { 1, 1 } }, directive = {}, blank = {} } })
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, { "-- note", "return 3" })
+      build_and_collect()
+
+      refresh_and_collect()
+
+      assert.equal(1, asked)
+      assert.is_nil(changeset._tree().comments["mod.lua"])
     end)
 
     it("asks again about a silent file once a symbol-listing server attaches to it", function()

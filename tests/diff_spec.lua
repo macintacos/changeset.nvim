@@ -191,30 +191,36 @@ describe("changeset.diff._parse_hunks", function()
 
   it("reads every hunk of a file that has several", function()
     assert.same({
-      { lnum = 3, count = 1, added = 1, removed = 1 },
-      { lnum = 10, count = 1, added = 1, removed = 1 },
-      { lnum = 24, count = 0, added = 0, removed = 1 },
+      { lnum = 3, count = 1, added = 1, removed = 1, old_lnum = 3 },
+      { lnum = 10, count = 1, added = 1, removed = 1, old_lnum = 10 },
+      { lnum = 24, count = 0, added = 0, removed = 1, old_lnum = 25 },
     }, hunks["src/session.lua"])
   end)
 
   it("records a pure deletion at the line it followed, with a zero count", function()
-    assert.same({ lnum = 7, count = 0, added = 0, removed = 2 }, hunks["notes.txt"][1])
+    assert.same({ lnum = 7, count = 0, added = 0, removed = 2, old_lnum = 8 }, hunks["notes.txt"][1])
   end)
 
   it("records a pure addition as the new lines it spans", function()
-    assert.same({ lnum = 16, count = 3, added = 3, removed = 0 }, hunks["notes.txt"][2])
+    assert.same({ lnum = 16, count = 3, added = 3, removed = 0, old_lnum = 17 }, hunks["notes.txt"][2])
   end)
 
   it("spans the whole file for a newly added one", function()
-    assert.same({ { lnum = 1, count = 4, added = 4, removed = 0 } }, hunks["fresh.lua"])
+    assert.same({ { lnum = 1, count = 4, added = 4, removed = 0, old_lnum = 0 } }, hunks["fresh.lua"])
   end)
 
   it("records a deleted file as one pure deletion", function()
-    assert.same({ { lnum = 0, count = 0, added = 0, removed = 6 } }, hunks["legacy.lua"])
+    assert.same({ { lnum = 0, count = 0, added = 0, removed = 6, old_lnum = 1 } }, hunks["legacy.lua"])
+  end)
+
+  it("keeps the first line the hunk covers on the old side", function()
+    local parsed = diff._parse_hunks({ "diff --git a/a.lua b/a.lua", "@@ -12,3 +12,2 @@" })
+
+    assert.equal(12, parsed["a.lua"][1].old_lnum)
   end)
 
   it("attributes a renamed file's hunks to its new path", function()
-    assert.same({ { lnum = 5, count = 1, added = 1, removed = 1 } }, hunks["new_name.lua"])
+    assert.same({ { lnum = 5, count = 1, added = 1, removed = 1, old_lnum = 5 } }, hunks["new_name.lua"])
     assert.is_nil(hunks["old_name.lua"])
   end)
 
@@ -229,7 +235,7 @@ describe("changeset.diff._parse_hunks", function()
 
   it("keeps the spaces in a path", function()
     local spaced = diff._parse_hunks(HUNKS_SPACED_PATH)
-    assert.same({ { lnum = 2, count = 1, added = 1, removed = 1 } }, spaced["my notes.txt"])
+    assert.same({ { lnum = 2, count = 1, added = 1, removed = 1, old_lnum = 2 } }, spaced["my notes.txt"])
   end)
 
   it("unquotes a path git quoted because it holds a quote character", function()
@@ -238,7 +244,7 @@ describe("changeset.diff._parse_hunks", function()
       "@@ -1 +1 @@",
     })
 
-    assert.same({ { lnum = 1, count = 1, added = 1, removed = 1 } }, quoted['quo"te.txt'])
+    assert.same({ { lnum = 1, count = 1, added = 1, removed = 1, old_lnum = 1 } }, quoted['quo"te.txt'])
   end)
 
   it("drops a hunk header that arrives before any file header", function()
@@ -280,7 +286,7 @@ describe("changeset.diff._assemble", function()
         status = "untracked",
         added = 3,
         removed = 0,
-        hunks = { { lnum = 1, count = 3, added = 3, removed = 0 } },
+        hunks = { { lnum = 1, count = 3, added = 3, removed = 0, old_lnum = 0 } },
       },
     }, files)
   end)
@@ -460,8 +466,8 @@ describe("changeset.diff.collect", function()
         added = 2,
         removed = 2,
         hunks = {
-          { lnum = 4, count = 1, added = 1, removed = 1 },
-          { lnum = 8, count = 1, added = 1, removed = 1 },
+          { lnum = 4, count = 1, added = 1, removed = 1, old_lnum = 4 },
+          { lnum = 8, count = 1, added = 1, removed = 1, old_lnum = 8 },
         },
       },
     }, collect(base, tmp))
@@ -488,7 +494,7 @@ describe("changeset.diff.collect", function()
     Fixture.git({ "config", "diff.mnemonicPrefix", "true" }, tmp)
     Fixture.git({ "config", "color.diff", "always" }, tmp)
 
-    assert.same({ { lnum = 4, count = 1, added = 1, removed = 1 } }, collect(base, tmp)[1].hunks)
+    assert.same({ { lnum = 4, count = 1, added = 1, removed = 1, old_lnum = 4 } }, collect(base, tmp)[1].hunks)
   end)
 
   it("reads hunks when the user config installs an external diff driver", function()
@@ -497,7 +503,7 @@ describe("changeset.diff.collect", function()
     -- parser sees no hunk headers at all.
     Fixture.git({ "config", "diff.external", "true" }, tmp)
 
-    assert.same({ { lnum = 4, count = 1, added = 1, removed = 1 } }, collect(base, tmp)[1].hunks)
+    assert.same({ { lnum = 4, count = 1, added = 1, removed = 1, old_lnum = 4 } }, collect(base, tmp)[1].hunks)
   end)
 
   it("keeps a non-ASCII path as a real filename", function()
@@ -572,7 +578,7 @@ describe("changeset.diff.collect", function()
         status = "untracked",
         added = 3,
         removed = 0,
-        hunks = { { lnum = 1, count = 3, added = 3, removed = 0 } },
+        hunks = { { lnum = 1, count = 3, added = 3, removed = 0, old_lnum = 0 } },
       },
     }, collect(base, tmp))
   end)
@@ -648,5 +654,45 @@ describe("changeset.diff.collect", function()
 
   it("reports a missing repository as an error", function()
     assert.matches("ENOENT", select(2, await_collect("HEAD", tmp .. "/gone")))
+  end)
+end)
+
+describe("changeset.diff.blob", function()
+  local tmp
+
+  before_each(function()
+    tmp = vim.fn.tempname()
+    vim.fn.mkdir(tmp, "p")
+    Fixture.init_repo("trunk", tmp)
+    vim.fn.writefile({ "one", "two" }, vim.fs.joinpath(tmp, "notes.txt"))
+    Fixture.commit("seed", tmp)
+  end)
+
+  after_each(function()
+    vim.fn.delete(tmp, "rf")
+  end)
+
+  ---@param object string
+  ---@return string?
+  local function blob(object)
+    local text, done
+    diff.blob(object, tmp, function(result)
+      text, done = result, true
+    end)
+    assert(
+      vim.wait(10000, function()
+        return done
+      end, 10),
+      "blob never called back"
+    )
+    return text
+  end
+
+  it("reads a committed file's text", function()
+    assert.equal("one\ntwo\n", blob("HEAD:notes.txt"))
+  end)
+
+  it("has no text for a path the commit does not hold", function()
+    assert.is_nil(blob("HEAD:missing.txt"))
   end)
 end)
