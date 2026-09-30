@@ -1,4 +1,4 @@
----Runs the branch's git diff and parses it into files and hunks.
+---Runs the branch's git diff and parses it into files and hunks, and reads a file's text at the base.
 
 local M = {}
 
@@ -7,6 +7,7 @@ local M = {}
 ---@field count integer  New lines the hunk covers; 0 for a pure deletion.
 ---@field added integer
 ---@field removed integer
+---@field old_lnum integer First old line; with no removed lines, the one the addition followed, 0 at the top.
 
 ---@class changeset.File A changed file and the hunks inside it.
 ---@field path string      Repo-relative, the new path for a rename.
@@ -105,12 +106,12 @@ end
 ---@param line string
 ---@return changeset.Hunk?
 local function parse_hunk_header(line)
-  local old_count, new_start, new_count = line:match("^@@ %-%d+,?(%d*) %+(%d+),?(%d*) @@")
+  local old_start, old_count, new_start, new_count = line:match("^@@ %-(%d+),?(%d*) %+(%d+),?(%d*) @@")
   if not new_start then
     return nil
   end
   local removed, added = line_count(old_count), line_count(new_count)
-  return { lnum = tonumber(new_start), count = added, added = added, removed = removed }
+  return { lnum = tonumber(new_start), count = added, added = added, removed = removed, old_lnum = tonumber(old_start) }
 end
 
 ---Hunks per path from `git diff --unified=0 -M`.
@@ -158,7 +159,7 @@ end
 ---@param lines integer
 ---@return changeset.File
 local function untracked_file(path, lines)
-  local whole_file = { lnum = 1, count = lines, added = lines, removed = 0 }
+  local whole_file = { lnum = 1, count = lines, added = lines, removed = 0, old_lnum = 0 }
   return {
     path = path,
     status = "untracked",
@@ -386,6 +387,18 @@ function M.collect(base, cwd, callback)
         file.generated = marked[file.path]
       end
       callback(files, nil, tonumber(stdout_lines(results.commits)[1]))
+    end)
+  end)
+end
+
+---The text of `object`, such as `<base>:<path>`, calling back on the main loop with nil when git cannot read it.
+---@param object string
+---@param cwd string
+---@param callback fun(text: string?)
+function M.blob(object, cwd, callback)
+  system({ "git", "cat-file", "blob", object }, { cwd = cwd, text = true }, function(result)
+    vim.schedule(function()
+      callback(result.code == 0 and result.stdout or nil)
     end)
   end)
 end

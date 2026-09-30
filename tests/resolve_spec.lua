@@ -1,7 +1,9 @@
+local comments = require("changeset.comments")
+local Fixture = require("support.git")
 local resolve = require("changeset.resolve")
 
 ---A step that parks each call so the spec decides when it answers.
----@return fun(path: string, done: fun(items: changeset.Symbol[]?)) run
+---@return fun(path: string, done: fun(items: changeset.Symbol[]?, comments: changeset.Comments?)) run
 ---@return table[] pending
 local function deferred()
   local pending = {}
@@ -120,6 +122,19 @@ describe("changeset.resolve", function()
       assert.equal(items, answers["api.ts"])
     end)
 
+    it("reports the comments its step answered with", function()
+      local run, pending = deferred()
+      local answers = {}
+
+      resolve._walk({ "api.ts" }, run, function(path, _, found)
+        answers[path] = found
+      end)
+      local found = { new = { comment = {}, directive = {}, blank = {} } }
+      pending[1].done(nil, found)
+
+      assert.equal(found, answers["api.ts"])
+    end)
+
     it("reports a file once when its step answers and then raises", function()
       local seen = {}
 
@@ -156,8 +171,8 @@ describe("changeset.resolve", function()
     ---@return string[]
     local function reported_at_once()
       local seen = {}
-      local file = { path = "mod.lua", status = "modified", added = 1, removed = 0, hunks = {} }
-      local cancel = resolve.start(root, { file }, function(path)
+      local file = { path = "mod.lua", status = "added", added = 1, removed = 0, hunks = {} }
+      local cancel = resolve.start({ root = root, base = "HEAD" }, { file }, function(path)
         seen[#seen + 1] = path
       end)
       cancel()
@@ -187,9 +202,9 @@ describe("changeset.resolve", function()
       vim.lsp.enable("stub_lua")
       enabled = "stub_lua"
       local report
-      local file = { path = "mod.lua", status = "modified", added = 1, removed = 0, hunks = {} }
+      local file = { path = "mod.lua", status = "added", added = 1, removed = 0, hunks = {} }
 
-      resolve.start(root, { file }, function(_, items)
+      resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items)
         report = { items = items }
       end)
 
@@ -250,8 +265,8 @@ describe("changeset.resolve", function()
     local function resolved(path)
       local answer, done
       resolve.start(
-        root,
-        { { path = path, status = "modified", added = 1, removed = 0, hunks = {} } },
+        { root = root, base = "HEAD" },
+        { { path = path, status = "added", added = 1, removed = 0, hunks = {} } },
         function(_, items)
           answer, done = items, true
         end
@@ -268,6 +283,27 @@ describe("changeset.resolve", function()
       end
       return by_name
     end
+
+    it("reads a file's comment lines at its base and now when no server covers it", function()
+      Fixture.init_repo("trunk", root)
+      vim.fn.writefile({ "x = 1", "# old note" }, root .. "/conf.toml")
+      Fixture.commit("base", root)
+      vim.fn.writefile({ "# new note", "x = 1" }, root .. "/conf.toml")
+      local report
+      local file = { path = "conf.toml", status = "modified", added = 1, removed = 1, hunks = {} }
+
+      resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items, found)
+        report = { items = items, comments = found }
+      end)
+
+      assert.is_true(vim.wait(5000, function()
+        return report ~= nil
+      end, 25))
+      assert.is_nil(report.items)
+      local found = assert(report.comments)
+      assert.same({ "comment", "code" }, { comments.kind(found.new, 1), comments.kind(found.new, 2) })
+      assert.same({ "code", "comment" }, { comments.kind(assert(found.old), 1), comments.kind(found.old, 2) })
+    end)
 
     it("marks a test its attribute names in a file no one opened", function()
       serve("stub_rust", "rust", { fn_symbol("refreshes_token", 1, 0), fn_symbol("load", 2, 2) })

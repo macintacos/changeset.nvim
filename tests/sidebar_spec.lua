@@ -636,7 +636,7 @@ describe("changeset sidebar", function()
       local cache_file = cache.path(root)
       cache.save(cache_file, {
         ["src/session.rs"] = {
-          stamp = assert(cache.stamp(root .. "/src/session.rs")),
+          stamp = assert(cache.stamp(root .. "/src/session.rs", Fixture.git({ "merge-base", "trunk", "HEAD" }, root))),
           symbols = {
             { name = "load", kind = "Function", depth = 0, lnum = 1, range_lnum = 1, range_end_lnum = 3, test = true },
             { name = "tests", kind = "Module", depth = 0, lnum = 5, range_lnum = 5, range_end_lnum = 9 },
