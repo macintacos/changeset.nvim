@@ -181,6 +181,23 @@ describe("changeset.resolve", function()
       end)
     end
 
+    it("reports a file as unanswered once an enabled server fails to attach in time", function()
+      vim.lsp.config("stub_lua", { cmd = function() end, filetypes = { "lua" }, root_dir = function() end })
+      vim.lsp.enable("stub_lua")
+      enabled = "stub_lua"
+      local report
+      local file = { path = "mod.lua", status = "modified", added = 1, removed = 0, hunks = {} }
+
+      resolve.start(root, { file }, function(_, items)
+        report = { items = items }
+      end)
+
+      assert.is_true(vim.wait(5000, function()
+        return report ~= nil
+      end, 25))
+      assert.is_nil(report.items)
+    end)
+
     ---Enable an in-process server for `filetype` that answers `symbols` for every file.
     ---@param name string
     ---@param filetype string
