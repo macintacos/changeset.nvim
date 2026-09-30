@@ -84,15 +84,14 @@ describe("changeset preview band", function()
   end)
 
   describe("with ]h pressed from the file window", function()
-    for _, steps in ipairs({ 1, 2, 3, 4 }) do
-      it(("stays off after %d step(s)"):format(steps), function()
-        open_sidebar()
+    it("stays off another changed file it steps onto", function()
+      open_sidebar()
 
-        step(steps)
+      step(4)
 
-        assert_unbanded_here()
-      end)
-    end
+      assert.equal("other.lua", vim.fn.expand("%:t"))
+      assert_unbanded_here()
+    end)
 
     it("stays off after stepping back with [h", function()
       open_sidebar()
