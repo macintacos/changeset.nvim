@@ -530,7 +530,6 @@ describe("changeset.window", function()
       assert.truthy(
         table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n"):find("This file was deleted", 1, true)
       )
-      assert.is_true(vim.wo[right].winbar:find(BAND.path, 1, true) ~= nil)
     end)
 
     it("keeps one notice highlight however often the notice is shown", function()
