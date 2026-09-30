@@ -123,6 +123,20 @@ describe("changeset.cache", function()
       vim.fn.delete(path)
     end)
 
+    it("changes when the file is rewritten at the same size", function()
+      local path = vim.fn.tempname()
+      vim.fn.writefile({ "one" }, path)
+      assert(vim.uv.fs_utime(path, 1000, 1000))
+      local before = cache.stamp(path)
+
+      vim.fn.writefile({ "two" }, path)
+      assert(vim.uv.fs_utime(path, 2000, 2000))
+
+      assert.is_string(before)
+      assert.not_equal(before, cache.stamp(path))
+      vim.fn.delete(path)
+    end)
+
     it("has no stamp for a file that is not there", function()
       assert.is_nil(cache.stamp(vim.fn.tempname()))
     end)
