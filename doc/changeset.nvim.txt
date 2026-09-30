@@ -9,47 +9,19 @@ Table of Contents                           *changeset.nvim-table-of-contents*
   - Requirements                                 |changeset.nvim-requirements|
   - Installation                                 |changeset.nvim-installation|
   - Usage                                               |changeset.nvim-usage|
-  - Options                                           |changeset.nvim-options|
   - Sidebar keys                                 |changeset.nvim-sidebar-keys|
-  - Highlight groups                         |changeset.nvim-highlight-groups|
   - PR Review Mode                             |changeset.nvim-pr-review-mode|
   - Picker                                             |changeset.nvim-picker|
+  - Options                                           |changeset.nvim-options|
+  - Highlight groups                         |changeset.nvim-highlight-groups|
   - Health                                             |changeset.nvim-health|
   - Where state is stored               |changeset.nvim-where-state-is-stored|
 
 ==============================================================================
 1. changeset                                        *changeset.nvim-changeset*
 
-A read-only sidebar mapping what this branch changed, nested by symbol.
-
-`:Changeset` opens the _map_ of what this branch changed. With
-`pr_review.enabled` set, the _gutter_ marks the same range in PR Review Mode,
-and `:Changeset review` switches it off or back on for the branch. Neither
-drives the other. `require("changeset.pick").pick()` searches the same changes
-in a picker once mini.pick is set up, as does `:Pick changeset` when mini.pick
-was set up at startup.
-
-In an editor too narrow to leave the files `layout.min_file_width` columns (80
-by default) beside it, the sidebar opens as a drawer along the bottom instead,
-and moves between the two as the editor is resized.
-
-
-WHAT IT SHOWS                                   *changeset.nvim-what-it-shows*
-
-Files changed between `merge-base(origin/<default>, HEAD)` — the local
-default branch when there is no `origin/` copy of it — and the working tree:
-the same range PR Review Mode’s gutter marks. On a branch whose open PR
-targets another branch, that branch stands in for the default once `gh` names
-it, and the tree rebuilds onto it. Untracked files count. A deleted file is
-listed, but its row previews a notice in place of the file and never opens it.
-
-Under each file sit the symbols a hunk actually touched, plus the ancestors
-needed to place them. Unchanged siblings are hidden: the tree is a map of the
-diff, not an outline.
-
-Files sit under Implementation / Tests / Docs / Config / Generated headers, in
-that order, with Generated folded at first, and are grouped by directory within
-their section, a directory’s own files ahead of its subdirectories’.
+changeset.nvim opens a read-only sidebar listing the files your branch changed
+and, under each file, the symbols those changes touched.
 
 >text
     󰴉  Implementation      2 files      +12 -3
@@ -64,26 +36,55 @@ their section, a directory’s own files ahead of its subdirectories’.
       └─󰘦 Other changes                   +2 -0
 <
 
+Use it to read a branch before you push it, or one you checked out to review.
+The same changes also show in gitsigns’ gutter, through
+|changeset.nvim-pr-review-mode|, and in mini.pick, through the
+|changeset.nvim-picker|. Each works without the others.
+
+
+WHAT IT SHOWS                                   *changeset.nvim-what-it-shows*
+
+The sidebar compares the working tree with the commit where your branch forked
+from the default branch, so it lists everything the branch changed, committed
+or not. When both `origin`’s copy of the default branch and your local one
+exist, it uses whichever gives the later fork point.
+
+When `gh` finds an open PR that targets a branch other than the default, the
+sidebar compares against that branch instead. A stacked branch therefore shows
+only its own changes, not those of the branch below it.
+
+Untracked files are listed. So are deleted files, but moving onto one previews
+a notice that the file was deleted, and the sidebar never opens it.
+
+Under each file, the sidebar lists only the symbols a change touched, plus the
+symbols that enclose them. It leaves out unchanged siblings, so the tree maps
+the diff rather than outlining the file. Changes outside any listed symbol go
+under "Other changes", one row per hunk.
+
+Files sort into Implementation, Tests, Docs, Config and Generated sections, in
+that order. Within a section, files are grouped by directory, with a
+directory’s own files ahead of its subdirectories’. Generated starts
+folded.
+
 
 REQUIREMENTS                                     *changeset.nvim-requirements*
 
-- Neovim 0.12+ and `git`.
+changeset needs Neovim 0.12 or newer and `git`.
 
-Optional, each adding one thing:
+Each optional integration adds one feature:
 
-- `gh`: a branch whose open PR targets another branch is compared against
-    that branch.
-- A language server answering `textDocument/documentSymbol`: the symbol
-    rows under each file. Without one, a file lists only its changes.
-- The `rust`, `typescript` and `tsx` treesitter parsers: inline test
-    symbols are also recognised by their syntax (`#[test]`, `#[cfg(test)]`,
-    `import.meta.vitest`), not only by their name.
-- mini.icons, set up, or nvim-web-devicons: icons. nvim-web-devicons
-    covers files only.
+- `gh`: a branch whose open PR targets another branch is compared against that branch.
+- A language server that lists a file’s symbols (`textDocument/documentSymbol`): the
+    symbol rows under each file. Without one, a file lists only its changes.
+- The `rust`, `typescript` and `tsx` treesitter parsers: inline tests (`#[test]`,
+    `#[cfg(test)]`, `import.meta.vitest`) are recognised by their syntax, not only by their
+    name.
+- mini.icons (once set up) or nvim-web-devicons: icons. nvim-web-devicons covers files
+    only.
 - which-key: `?` opens its popup instead of a float.
-- mini.pick: the picker.
-- gitsigns: required by PR Review Mode; also colours the status rail
-    beside each file.
+- mini.pick: the |changeset.nvim-picker|.
+- gitsigns: |changeset.nvim-pr-review-mode|, and the colours of the status rail (the
+    `▎` bar beside each file).
 
 
 INSTALLATION                                     *changeset.nvim-installation*
@@ -100,24 +101,33 @@ With lazy.nvim:
     { "macintacos/changeset.nvim" }
 <
 
-Options go in the spec as `opts = { … }`, which makes lazy.nvim call
-`setup()` with them.
+`setup()` is optional: without it, the sidebar uses the defaults in
+|changeset.nvim-options|.
 
-`setup()` is optional; without it the sidebar works with the defaults below.
+With lazy.nvim, put options in the spec as `opts = { … }`, and lazy.nvim
+calls `setup()` with them.
 
 
 USAGE                                                   *changeset.nvim-usage*
 
-- `:Changeset` or `:Changeset toggle` opens the sidebar, focuses it, or
-    closes it.
-- `:Changeset refresh` rebuilds it.
-- `:Changeset review` toggles PR Review Mode for the current branch; it
-    errors unless `pr_review.enabled` is set.
-- `<Plug>(changeset-toggle)` does what `:Changeset toggle` does: closed →
-    open and focus the row you are on; open and unfocused → focus the row
-    you are on; focused → close and restore focus.
+`:Changeset` opens the sidebar and focuses it, and running it again from the
+sidebar closes it. It takes one optional subcommand:
 
-The plugin maps nothing outside the sidebar. A suggested setup:
+- `:Changeset toggle`, the default: from any other window, opens or focuses the sidebar
+    on the row for where your cursor is. From the sidebar, closes it and returns you to your
+    window.
+- `:Changeset refresh` rebuilds the tree.
+- `:Changeset review` turns |changeset.nvim-pr-review-mode| off, or back on, for the
+    current branch. It raises an error unless `pr_review.enabled` is set.
+
+`<Plug>(changeset-toggle)` does what `:Changeset toggle` does.
+
+The sidebar opens on the right of the editor. When the editor is too narrow to
+leave the files `layout.min_file_width` columns (80 by default) beside it, the
+sidebar opens as a drawer along the bottom instead. It moves between the two as
+you resize the editor.
+
+The plugin maps no keys outside the sidebar, so map your own. For example:
 
 >lua
     vim.keymap.set("n", "<leader>gp", "<Plug>(changeset-toggle)", { desc = "Toggle the changeset sidebar" })
@@ -127,15 +137,128 @@ The plugin maps nothing outside the sidebar. A suggested setup:
 <
 
 
+SIDEBAR KEYS                                     *changeset.nvim-sidebar-keys*
+
+Moving through the tree previews each change in the window you were last in,
+with a band across the top of that window. `<CR>`, or a split or tab key, opens
+the change there.
+
+The table lists the default keys, plus `]h` / `[h`, which the
+|changeset.nvim-usage| example binds. Rename a sidebar key with its `keymaps`
+option in |changeset.nvim-options|.
+
+  -----------------------------------------------------------------------
+  Key         Where       Does
+  ----------- ----------- -----------------------------------------------
+  j / k       sidebar     move, previewing into the window you were last
+                          in without leaving the sidebar
+
+  <CR>        sidebar     open the change there, focusing that window at
+                          the row’s line; nothing on a section header
+
+  <S-CR>      sidebar     open the change, then close the sidebar
+
+  q           sidebar     close, return you to your window and put back
+                          what each previewed window showed
+
+  h           sidebar     collapse; on a section header, fold its
+                          section; with nothing left to collapse, step
+                          out to the parent, so repeated h walks up to
+                          the file and then its section header
+
+  l           sidebar     expand; on a section header, unfold its
+                          section; on nested symbols shown as one row,
+                          such as SessionStore › refresh › deadline, show
+                          one row per symbol
+
+  H / L       sidebar     collapse / expand every file, the whole-tree
+                          form of h / l; never folds or unfolds a section
+
+  ]] / [[     sidebar     move to the next / previous section header,
+                          folded ones included; stays put when there is
+                          none that way
+
+  F           sidebar     open the symbol-kind menu
+
+  x           kind menu   hide or show the kind under the cursor,
+                          redrawing the tree at once
+
+  <CR> / r /  kind menu   remember this set everywhere / for this
+  b                       repository / for this branch, then close
+
+  q / <Esc>   kind menu   close, putting the tree back to the saved set
+
+  f           sidebar     filter as you type, keeping ancestors so
+                          matches stay in place and highlighting every
+                          match until you clear the filter; <Esc> cancels
+                          and keeps the previous filter
+
+  R           sidebar     rebuild now
+
+  y           sidebar     copy the row’s path:line to the clipboard;
+                          nothing on a section header
+
+  / - <C-t>   sidebar     open the change in a vsplit / split / new tab
+                          instead
+
+  ?           sidebar     list the keys the sidebar bound, keymaps.next /
+                          keymaps.prev included when set: which-key’s
+                          popup where it is installed, a float where it
+                          is not
+
+  ]h / [h     anywhere,   off unless set as keymaps.next / keymaps.prev;
+              while open  move the sidebar’s selection to the next /
+                          previous row, previewing it and skipping
+                          section headers, so you can review without
+                          focusing the sidebar
+  -----------------------------------------------------------------------
+Opening a change adds a jumplist entry, so `<C-o>` returns to where that window
+was before the sidebar opened. Previewing adds none.
+
+The symbol-kind menu remembers the kinds you hide for this branch, this
+repository or everywhere. The narrowest scope with a saved set wins.
+
+
+PR REVIEW MODE                                 *changeset.nvim-pr-review-mode*
+
+PR Review Mode makes gitsigns’ gutter mark everything the branch changed, not
+only uncommitted work, by comparing against the same fork point as the sidebar.
+
+Turn it on in `setup()`. It requires gitsigns, and uses `gh`, when present, to
+find an open PR’s target branch.
+
+>lua
+    require("changeset").setup({ pr_review = { enabled = true } })
+<
+
+It turns itself on for every branch except the default. `:Changeset review`
+turns it off, or back on, for the current branch until Neovim exits.
+
+It works without the sidebar, and the sidebar works without it.
+
+
+PICKER                                                 *changeset.nvim-picker*
+
+With mini.pick set up, `require("changeset.pick").pick()` searches the same
+changes as the sidebar.
+
+`:Pick changeset` works too when mini.pick is set up by the end of startup. If
+you set up mini.pick later, register the picker yourself:
+
+>lua
+    MiniPick.registry.changeset = function() return require("changeset.pick").pick() end
+<
+
+
 OPTIONS                                               *changeset.nvim-options*
 
-Pass any of these to `require("changeset").setup()` as nested tables:
+Pass options to `require("changeset").setup()` as nested tables:
 
 >lua
     require("changeset").setup({ keymaps = { jump = "o" } })
 <
 
-Any `keymaps` entry may be `false` to leave it unbound.
+Any `keymaps` entry can be `false` to leave that key unbound.
 
   -------------------------------------------------------------------------
   Option                  Default   Description
@@ -166,7 +289,7 @@ Any `keymaps` entry may be `false` to leave it unbound.
 
   keymaps.refresh         R         Rebuild the tree
 
-  keymaps.yank            y         Yank path:line
+  keymaps.yank            y         Copy path:line
 
   keymaps.help            ?         List the sidebar’s keys
 
@@ -174,9 +297,9 @@ Any `keymaps` entry may be `false` to leave it unbound.
 
   keymaps.filter          f         Filter the tree
 
-  keymaps.next            false     Next change, from any window
+  keymaps.next            false     Next row, from any window
 
-  keymaps.prev            false     Previous change, from any window
+  keymaps.prev            false     Previous row, from any window
 
   layout.min_file_width   80        Narrowest the files get beside the
                                     sidebar before it moves below them
@@ -184,90 +307,21 @@ Any `keymaps` entry may be `false` to leave it unbound.
   pr_review.enabled       false     PR Review Mode on every branch but the
                                     default
   -------------------------------------------------------------------------
-`keymaps.next` and `keymaps.prev` are off by default. When set, they are bound
-globally only while the sidebar is open, and what they replaced is restored
-when it closes.
+The step keys, `keymaps.next` and `keymaps.prev`, are off by default. Once set,
+they work from any window, but only while the sidebar is open. Whatever they
+replaced comes back when it closes.
 
-Each `setup()` call starts again from the defaults, not from the previous call,
-and reaches the sidebar the next time it opens. An invalid value is an error
-naming the option, and the previous configuration stays in force. Turning
-`pr_review.enabled` back off takes a restart.
-
-
-SIDEBAR KEYS                                     *changeset.nvim-sidebar-keys*
-
-Moving through the tree previews each change in the window you were last in,
-under a band; `<CR>` (or a split or tab key) opens it there for real. Keys
-shown are the defaults; each sidebar key is renamed by the `keymaps` option in
-its row of |changeset.nvim-options|.
-
-  -----------------------------------------------------------------------
-  Key         Where       Does
-  ----------- ----------- -----------------------------------------------
-  j / k       sidebar     move, previewing into the window you were last
-                          in, without leaving the sidebar
-
-  <CR>        sidebar     open it there: focus that window at the row’s
-                          position, keeping the jump; nothing on a
-                          section header
-
-  <S-CR>      sidebar     open it, then close the sidebar behind you
-
-  q           sidebar     close, restore focus and restore the windows it
-                          previewed into
-
-  h / l       sidebar     collapse / expand; on a header, fold / unfold
-                          its section; h with nothing left to shut steps
-                          out to the parent, so repeated h walks up to
-                          the filename and then its section header; l on
-                          a compressed chain expands it to full nesting
-
-  H / L       sidebar     collapse / expand every file, the whole-tree
-                          form of h / l; never folds or unfolds a section
-
-  ]] / [[     sidebar     move to the next / previous section header, a
-                          folded one included; stays put when there is
-                          none that way
-
-  F           sidebar     open the symbol-kind menu
-
-  x           kind menu   hide or show the kind under the cursor,
-                          redrawing the tree at once
-
-  <CR> / r /  kind menu   remember this set everywhere / for this
-  b                       repository / for this branch, then close
-
-  q / <Esc>   kind menu   close, putting the tree back to the set on disk
-
-  f           sidebar     filter as you type, keeping ancestors so
-                          matches stay placed and lighting every match
-                          until the filter goes; <Esc> restores the last
-                          filter
-
-  R           sidebar     rebuild now
-
-  y           sidebar     yank the row’s path:line to the clipboard;
-                          nothing on a section header
-
-  / - <C-t>   sidebar     open it in a vsplit / split / new tab instead
-
-  ?           sidebar     list the keys the sidebar bound, the step keys
-                          included when set: which-key’s popup where it
-                          is installed, a float where it is not
-
-  ]h / [h     anywhere,   off unless set as keymaps.next / keymaps.prev;
-              while open  advance the sidebar’s selection, previewing as
-                          it goes and stepping over section headers —
-                          review without focusing the sidebar
-  -----------------------------------------------------------------------
-Hidden symbol kinds are remembered for this branch, this repository or
-everywhere; the narrowest scope with a saved set wins.
+Each `setup()` call starts from the defaults, not from the previous call. The
+sidebar picks up its options the next time it opens. Turning on
+`pr_review.enabled` takes effect at once, but turning it off again takes a
+restart. An invalid value raises an error naming the option, and the previous
+configuration stays in force.
 
 
 HIGHLIGHT GROUPS                             *changeset.nvim-highlight-groups*
 
-The sidebar defines these groups as defaults derived from your colorscheme, and
-re-derives them on `:colorscheme`.
+The sidebar derives each group’s default from your colorscheme, and derives
+it again on `:colorscheme`.
 
   --------------------------------------------------------------------------
   Group                   Colours                     Default
@@ -336,7 +390,7 @@ re-derives them on `:colorscheme`.
                           band                        on the band
   --------------------------------------------------------------------------
 A colorscheme’s definition of a group wins. So does your own `nvim_set_hl`,
-until the next `:colorscheme` clears it; to keep an override across colorscheme
+until the next `:colorscheme` clears it. To keep an override across colorscheme
 changes, set it from a `ColorScheme` autocmd:
 
 >lua
@@ -352,55 +406,24 @@ file’s glyph one colour. The status rail beside each file uses gitsigns’
 `GitSignsAdd`, `GitSignsChange`, `GitSignsDelete` and `GitSignsUntracked`.
 
 
-PR REVIEW MODE                                 *changeset.nvim-pr-review-mode*
-
->lua
-    require("changeset").setup({ pr_review = { enabled = true } })
-<
-
-It needs gitsigns, and uses `gh`, when present, to find an open PR’s target
-branch. It points gitsigns’ gutter at the branch’s fork point from the
-default branch, or from its open PR’s target, so the gutter marks everything
-the branch changed rather than only uncommitted work. It stays off on the
-default branch. `:Changeset review` turns it off for the current branch, or
-back on, for the rest of the session. It is independent of the sidebar: either
-works without the other.
-
-
-PICKER                                                 *changeset.nvim-picker*
-
-With mini.pick set up, `require("changeset.pick").pick()` searches the same
-rows as the sidebar. `:Pick changeset` does too when mini.pick was set up by
-the end of startup. A mini.pick set up later misses that registration; add it
-yourself:
-
->lua
-    MiniPick.registry.changeset = function() return require("changeset.pick").pick() end
-<
-
-
 HEALTH                                                 *changeset.nvim-health*
 
-`:checkhealth changeset` reports the requirements — Neovim 0.12+ and `git`
-— and each optional integration the sidebar quietly does without: `gh` for
-the PR’s target branch, mini.icons or nvim-web-devicons, which-key,
-mini.pick, gitsigns (required once `pr_review.enabled` is set), a language
-server answering `textDocument/documentSymbol`, and the `rust`, `typescript`
-and `tsx` treesitter parsers that mark test symbols. It then prints the options
-in force. It checks the way the sidebar loads, so a plugin your manager has
-held back may load, but it installs nothing, starts no language server and asks
-nothing of the network.
+`:checkhealth changeset` reports the requirements, each optional integration
+the sidebar does without, and the options in force.
+
+It loads plugins the way the sidebar does, so it may load one your plugin
+manager deferred. It installs nothing, starts no language server and makes no
+network request.
 
 
 WHERE STATE IS STORED                   *changeset.nvim-where-state-is-stored*
 
-- The symbol cache: one JSON file per repository under
-    `stdpath("cache")/changeset/`. Safe to delete; the next build is slow
-    once.
+- The symbol cache: one JSON file per repository under `stdpath("cache")/changeset/`. You
+    can delete it; the next build is slow once.
 - Hidden symbol kinds: `stdpath("state")/changeset/filters.json`.
-- `:mksession` restores the sidebar when `'sessionoptions'` contains
-    `blank` (the default), and its position too when it contains `globals`.
-- Folds are kept in memory per repository until Neovim exits.
+- Sessions: `:mksession` restores the sidebar when `'sessionoptions'` contains `blank`
+    (the default), and its cursor row too when it also contains `globals`.
+- Folds: kept in memory per repository until Neovim exits.
 
 Generated by panvimdoc <https://github.com/kdheepak/panvimdoc>
 
