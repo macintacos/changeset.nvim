@@ -108,12 +108,18 @@ describe("changeset row highlights", function()
     vim.fn.delete(tmp, "rf")
   end)
 
-  it("marks where you are: the orphan group for a line in an orphan hunk, else the file", function()
+  it("marks the orphan group for where you are on a line in an orphan hunk", function()
     vim.cmd.edit("mod.lua")
     vim.api.nvim_win_set_cursor(0, { 8, 0 })
     open_sidebar()
 
     assert.truthy(line_with(render.HERE_HL):find("Other changes", 1, true))
+  end)
+
+  it("marks the file for where you are on a line in no hunk", function()
+    vim.cmd.edit("mod.lua")
+    vim.api.nvim_win_set_cursor(0, { 8, 0 })
+    open_sidebar()
 
     vim.cmd.wincmd("p")
     vim.api.nvim_win_set_cursor(0, { 5, 0 })
@@ -165,13 +171,21 @@ describe("changeset row highlights", function()
     assert.is_nil(line_with(render.HERE_HL))
   end)
 
-  it("marks the row opened with <CR>, and keeps it through a jump to another changed file", function()
+  it("marks the row opened with <CR>", function()
     vim.cmd.edit("mod.lua")
     open_sidebar()
     sidebar_cursor_to("L8")
 
     vim.cmd.normal(vim.keycode("<CR>"))
+
     assert.truthy(line_with(render.PICKED_HL):find("L8", 1, true))
+  end)
+
+  it("keeps the row opened with <CR> marked through a jump to another changed file", function()
+    vim.cmd.edit("mod.lua")
+    open_sidebar()
+    sidebar_cursor_to("L8")
+    vim.cmd.normal(vim.keycode("<CR>"))
 
     vim.cmd.edit("other.lua")
 
