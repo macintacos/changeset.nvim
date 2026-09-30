@@ -110,6 +110,17 @@ describe("changeset.pick_preview", function()
       assert.equal(1, seen.count)
       assert.equal("a1", seen.first)
       assert.equal("b1", seen.second)
+    end)
+
+    it("closes the preview when the picker stops", function()
+      local opened
+      drive({ source = { items = { numbered_file(dir, "e", 1) } }, window = preview.window() }, {
+        function()
+          opened = #side_floats()
+        end,
+      })
+
+      assert.equal(1, opened)
       assert.same({}, side_floats())
     end)
 
