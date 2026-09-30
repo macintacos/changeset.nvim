@@ -12,7 +12,7 @@ M.data_home = root .. "/.tests/data"
 ---@type string
 M.site = M.data_home .. "/nvim/site"
 
-local langs = { "rust", "typescript", "tsx" }
+local langs = { "python", "rust", "toml", "tsx", "typescript" }
 local INSTALL_TIMEOUT_MS = 5 * 60 * 1000
 
 ---Install or rebuild whichever parser is missing or stale, raising if any still is afterwards.
