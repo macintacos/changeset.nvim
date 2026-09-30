@@ -147,7 +147,7 @@ describe("changeset setup", function()
 
     assert.is_nil(buffer_map(buf, "R"))
     press("?")
-    assert.falsy(help_text():find("Rebuild the tree", 1, true))
+    assert.is_false(vim.list_contains(help_keys(), "R"))
   end)
 
   it("lists under ? exactly the keys bound on the sidebar", function()
