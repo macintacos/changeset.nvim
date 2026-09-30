@@ -404,6 +404,18 @@ describe("changeset position in a session", function()
       assert.truthy(sidebar_cursor_line():find("other.lua", 1, true))
     end)
 
+    it("lets entering the sidebar before the build finishes win over the recorded row", function()
+      vim.cmd.edit("plain.lua")
+      restore_session({ row = { id = row_id("mod.lua", "step"), path = "mod.lua" } })
+      diff_arrived()
+
+      window.focus()
+      answer("mod.lua", { symbol("step", 7, 9) })
+      flush()
+
+      assert.truthy(sidebar_cursor_line():find("Implementation", 1, true))
+    end)
+
     it("restores a split file's row onto its own copy and paints you there on the Tests copy", function()
       vim.fn.mkdir("src", "p")
       vim.fn.writefile({ "fn load() {}", "", "mod tests {", "    fn refreshes() {", "    }", "}" }, "src/session.rs")
