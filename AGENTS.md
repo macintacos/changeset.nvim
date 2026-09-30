@@ -11,8 +11,8 @@ Run these once in each new clone or worktree, in order:
 
 1. `mise trust`, because mise refuses to load an untrusted `mise.toml`.
 2. `mise run setup`, which installs the tools and registers the hk git hooks.
-3. `mise run parsers`, because the specs that parse Rust or TypeScript fail without the
-   parsers it installs.
+3. `mise run parsers`, because the specs that parse source files fail without the parsers
+   `tests/support/parsers.lua` lists.
 
 `mise tasks` lists every other task with what it does.
 

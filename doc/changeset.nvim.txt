@@ -32,7 +32,7 @@ REQUIREMENTS                                     *changeset.nvim-requirements*
 
 changeset needs Neovim 0.12 or newer and `git`.
 
-Each optional integration adds one feature:
+Each optional integration adds a feature:
 
 - `gh`: a branch whose open PR targets another branch is compared against that branch.
 - A language server that lists a file’s symbols (`textDocument/documentSymbol`): the

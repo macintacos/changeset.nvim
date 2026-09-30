@@ -145,6 +145,17 @@ describe("changeset.build", function()
       assert.same(found, changeset._tree().comments["mod.lua"])
     end)
 
+    it("does not cache the comment lines read from a silent file's buffer holding unwritten edits", function()
+      answer(nil, { new = { comment = { { 1, 1 } }, directive = {}, blank = {} } })
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, { "-- note", "return 3" })
+      build_and_collect()
+
+      refresh_and_collect()
+
+      assert.equal(1, asked)
+      assert.is_nil(changeset._tree().comments["mod.lua"])
+    end)
+
     it("asks again about a silent file once a symbol-listing server attaches to it", function()
       answer(nil)
       build_and_collect()

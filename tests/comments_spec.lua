@@ -67,6 +67,17 @@ describe("comments", function()
     )
   end)
 
+  it("reads a Rust doc comment directly above an item", function()
+    assert.same({ "comment", "code" }, kinds("src/a.rs", { "/// b", "fn f() {}" }))
+  end)
+
+  it("picks the language of an extensionless script from its shebang", function()
+    assert.same(
+      { "directive", "comment", "code" },
+      kinds("bin/deploy", { "#!/usr/bin/env python3", "# note", "x = 1" })
+    )
+  end)
+
   it("reads TypeScript line and doc comments", function()
     assert.same(
       { "comment", "comment", "comment", "comment", "code" },

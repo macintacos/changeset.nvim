@@ -29,7 +29,7 @@ local M = {}
 ---@field commits integer? Commits on the branch since `base`, once the diff has been read.
 ---@field collected boolean Whether the diff has been read yet.
 ---@field symbols table<string, changeset.CachedSymbol[]> Absent key means "still resolving".
----@field comments table<string, changeset.Comments> Absent key means none read, or no parser for the file.
+---@field comments table<string, changeset.Comments> Absent key means none read or parsed for the file.
 ---@field cancel fun()?
 ---@field timer uv.uv_timer_t?
 ---@field request table? The refresh whose answers this session is still listening for.
@@ -120,15 +120,15 @@ local function file_answer(root, path, answer, stamp)
   -- otherwise leave "this file has no symbols" on disk, fresh until the file
   -- next moves; and a stamp taken off the file cannot describe what a server
   -- read out of a buffer holding unwritten edits.
-  local items = answer.items
-  if items and not unwritten(root .. "/" .. path) then
+  local items, dirty = answer.items, unwritten(root .. "/" .. path)
+  if items and not dirty then
     memo.entries[path] = { stamp = stamp, symbols = cache.project(items), comments = answer.comments }
     save_soon()
   elseif not items then
     -- Not asked again on every refresh — each ask waits out the attach timeout
     -- under a "reading symbols" row — only once the file moves or a server
     -- arrives for it.
-    memo.entries[path] = { stamp = stamp, symbols = {}, comments = answer.comments, silent = true }
+    memo.entries[path] = { stamp = stamp, symbols = {}, comments = not dirty and answer.comments or nil, silent = true }
   end
 end
 

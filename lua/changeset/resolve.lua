@@ -10,6 +10,7 @@ local buffers = require("changeset.buffers")
 local comments = require("changeset.comments")
 local diff = require("changeset.diff")
 local kinds = require("changeset.kinds")
+local sections = require("changeset.sections")
 local symbols = require("changeset.symbols")
 
 -- Resolving every changed file at once would open forty buffers and fire forty
@@ -84,12 +85,10 @@ local function await_client(bufnr, on_client)
   end, ATTACH_TIMEOUT_MS)
 end
 
----Flattened symbols for one loaded buffer, with the inline tests its syntax marks flagged.
+---Flattened symbols for one loaded buffer.
 ---@param bufnr integer
----@param path string
----@param source string The buffer's text as the server is about to read it.
----@param on_done fun(items: changeset.Symbol[]?)
-local function request(bufnr, path, source, on_done)
+---@param on_done fun(items: changeset.Symbol[])
+local function request(bufnr, on_done)
   local keep = kinds.for_filetype(vim.bo[bufnr].filetype)
   local params = { textDocument = vim.lsp.util.make_text_document_params(bufnr) }
   vim.lsp.buf_request_all(bufnr, "textDocument/documentSymbol", params, function(results)
@@ -97,7 +96,6 @@ local function request(bufnr, path, source, on_done)
     for _, res in pairs(results) do
       vim.list_extend(items, symbols.flatten(res.result or {}, keep))
     end
-    attributes.mark(items, path, source)
     on_done(items)
   end)
 end
@@ -124,7 +122,15 @@ local function resolve_one(repo, file, on_done)
   if not bufnr then
     return on_done(nil)
   end
-  read_base(repo, file, function(old_text)
+  -- A Docs file lists whole, so its comment lines would be read for nothing.
+  local docs = sections.classify(path, file.generated) == "docs"
+  local function read(on_text)
+    if docs then
+      return on_text(nil)
+    end
+    read_base(repo, file, on_text)
+  end
+  read(function(old_text)
     await_client(bufnr, function(ok)
       -- The waits end in a timer, an autocommand or a git callback, by which time a `:bwipeout`
       -- or another plugin's buffer sweep may have taken this one. Answering nothing
@@ -135,12 +141,13 @@ local function resolve_one(repo, file, on_done)
       -- One snapshot for both readers: symbol lines and comment lines have to agree, and an
       -- unwritten edit would move either away from the file on disk.
       local source = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-      local new = comments.read(source, path)
+      local new = not docs and comments.read(source, path) or nil
       local found = new and { new = new, old = old_text and comments.read(old_text, file.oldpath or path) }
       if not ok then
         return on_done(nil, found)
       end
-      request(bufnr, path, source, function(items)
+      request(bufnr, function(items)
+        attributes.mark(items, path, source)
         on_done(items, found)
       end)
     end)

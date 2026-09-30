@@ -167,6 +167,7 @@ describe("changeset.resolve", function()
       vim.fn.delete(root, "rf")
     end)
 
+    -- "added": a modified file reads its base first, which would put these waits behind a git call.
     ---Resolve `mod.lua`, returning the paths reported before `start` returned.
     ---@return string[]
     local function reported_at_once()
@@ -303,6 +304,24 @@ describe("changeset.resolve", function()
       local found = assert(report.comments)
       assert.same({ "comment", "code" }, { comments.kind(found.new, 1), comments.kind(found.new, 2) })
       assert.same({ "code", "comment" }, { comments.kind(assert(found.old), 1), comments.kind(found.old, 2) })
+    end)
+
+    it("reads no comment lines for a Docs file, whose rows never split out comments", function()
+      Fixture.init_repo("trunk", root)
+      vim.fn.writefile({ "# Title" }, root .. "/README.md")
+      Fixture.commit("base", root)
+      vim.fn.writefile({ "# Title", "<!-- note -->" }, root .. "/README.md")
+      local report
+      local file = { path = "README.md", status = "modified", added = 1, removed = 0, hunks = {} }
+
+      resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items, found)
+        report = { items = items, comments = found }
+      end)
+
+      assert.is_true(vim.wait(5000, function()
+        return report ~= nil
+      end, 25))
+      assert.is_nil(report.comments)
     end)
 
     it("marks a test its attribute names in a file no one opened", function()

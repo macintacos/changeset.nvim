@@ -21,7 +21,7 @@ local M = {}
 ---@class changeset.CacheEntry
 ---@field stamp string The file as it stood when its symbols were read.
 ---@field symbols changeset.CachedSymbol[]
----@field comments changeset.Comments? Which of the file's lines are comments, at its base and now; nil without a parser.
+---@field comments changeset.Comments? Which of the file's lines are comments, at its base and now; nil when none were read or parsed.
 ---@field silent true? No server answered for the file. Kept out of the file on disk: a
 ---server installed or started later must get asked, where one Neovim can stop asking.
 

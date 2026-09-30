@@ -1038,6 +1038,13 @@ describe("changeset.tree", function()
 
         assert.same({ DOCS_ID, DOCS_ID .. "\0f" }, ids(rows[1].children))
       end)
+
+      it("gives a doc comment to a container, not the member starting on its line", function()
+        local symbols = { sym("handlers", "Variable", 0, 2, 2), sym("onClick", "Method", 1, 2, 2) }
+        local rows = build_lua({ h(1, 1) }, symbols, comments({ comment = { { 1, 1 } } }))
+
+        assert.same({ DOCS_ID, DOCS_ID .. "\0handlers" }, ids(rows[1].children))
+      end)
     end)
 
     describe("orphan hunks", function()

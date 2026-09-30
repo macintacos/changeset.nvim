@@ -97,12 +97,10 @@ parser keeps just the name rules. They match exactly: `cfg(test)` alone, not
 ```
 
 A file whose changes reach both shows under Implementation and Tests, each copy listing
-only its own symbols; `Other changes` stays on the Implementation copy. Each copy counts
-toward its own section's header. The Tests copy's `+N` is the added lines inside test
-symbols and its `-N` the removed lines of hunks whose first symbol is a test; the
-Implementation copy takes the rest, so the two sum to the file's. A copy with nothing to
-list is left out, and the one left carries the file's whole stat. Go, Lua and bash get no
-symbol rules: their tests live in files the path rules already catch.
+only its own symbols and hunks; each copy counts toward its own section's header, its stat
+as § Stats splits it. A copy with nothing to list is left out, and the one left carries
+the file's whole stat. Go, Lua and bash get no symbol rules: their tests live in files the
+path rules already catch.
 
 A change that touches only comments shows under a Docs copy of its file, whatever section
 its path gives it. The unit is a changed symbol, or a hunk outside every symbol, which
@@ -122,23 +120,23 @@ base for removed ones:
 
 A doc comment belongs to the declaration below it: a symbol's range reaches up over the
 comment and directive lines directly above it, stopping at the previous sibling and at its
-parent's first line. So editing a function's doc comment moves that function to Docs,
-and a class's first method still takes its own. A removed line counts as code when git
-cannot read the base, and a file whose parser is not installed keeps today's placement.
-Generated files and files the path rules already put in Docs are left alone.
+parent's own first line, never the parent's doc comment. So editing a function's doc
+comment moves that function to Docs, and a class's first method still takes its own. A
+removed line counts as code when git cannot read the base, and a file whose parser is not
+installed, or fails to parse, keeps today's placement. The language comes from the file's
+name and contents, so an extensionless shebang script is read too. Generated files and
+files the path rules already put in Docs are left alone: neither their base nor their
+comments are read.
 
 ```text
 󰴉  Implementation      1 file    +6 -1
 ▎ 󰌠 session.py               +6 -1
   └─󰊕 refresh                  +6 -1
 
-  Docs                1 file    +3 -1
+󱂷  Docs                1 file    +3 -1
 ▎ 󰌠 session.py               +3 -1
   └─󰊕 load                     +3 -1
 ```
-
-Docs takes its units' lines, Tests its test lines, and the path copy the rest, so the
-copies still sum to git's count.
 
 ### Icons come from an icon plugin, never hand-picked
 
@@ -235,8 +233,8 @@ A line belongs to the deepest symbol row whose body holds it, else to the file's
 several sections answers from the copy with the deeper match. On a tie in depth, a changed
 row beats an unchanged ancestor, so a comment-only class holding a changed method answers
 from its Docs row rather than its bare copy. Any other tie, and a line no copy matches, go
-to the path section's copy. When the row is off screen — folded, filtered, or inside a compressed
-chain — its nearest visible ancestor wears the highlight instead.
+to the path section's copy. When the row is off screen — folded, filtered, or inside a
+compressed chain — its nearest visible ancestor wears the highlight instead.
 
 Focusing the sidebar, by `:Changeset`, a click or `<C-w>`, puts its cursor on that same
 row, and previews it the way moving onto it would. Focused before your file's symbols
@@ -315,8 +313,8 @@ them to neither. A file's `+N` is git's count for the whole file and can therefo
 the sum of its symbols'. A file split across its path section, Tests and Docs shows its own
 share on each copy, and the shares sum to git's count. Docs takes the lines of its
 comment-only units, Tests its test lines less any Docs units inside them, and the path
-copy the rest. Removed lines have no position in the
-new file to split on, so a hunk's `-N` goes wholly to the first symbol it reaches.
+copy the rest. Removed lines have no position in the new file to split on, so a hunk's
+`-N` goes wholly to the first symbol it reaches.
 
 ### Header
 
@@ -360,12 +358,12 @@ rather than claiming that nothing changed.
 
 The sidebar's own `statusline`. With `laststatus=3` a window's own statusline is drawn
 only while that window has focus, so it takes the global bar's place exactly when the
-sidebar's keys are worth naming, and hands it back the moment you leave. The badge is
-the header glyph's `Directory` colour, reversed, standing where the mode badge would. The
-position counts the files on screen — a folded section's files are not — and names no
-file while the cursor is on a section header. A file shown in two sections counts once, at
-its first row. The filter in force is named, since once its prompt closes the lit matches
-are the only other trace of it. Only four actions are offered, each under the key
+sidebar's keys are worth naming, and hands it back the moment you leave. The badge is the
+header glyph's `Directory` colour, reversed, standing where the mode badge would. The
+position counts the files on screen — a folded section's files are not — and names no file
+while the cursor is on a section header. A file shown in more than one section counts
+once, at its first row. The filter in force is named, since once its prompt closes the lit
+matches are the only other trace of it. Only four actions are offered, each under the key
 `keymaps` gives it and left out when set to `false` — `?` lists the rest.
 
 The sidebar turns off `scrollEOF.nvim`, which would otherwise scroll the tree past its end
@@ -446,9 +444,9 @@ own buffer loads would fire it too, restarting the walk they came from.
 Asking a language server about every changed file is what makes a cold build slow: 28
 files took about nine seconds in the config the plugin was extracted from, and the tree
 fills a row at a time while it waits. Symbols are cached per file instead, stamped with
-the file's size and mtime and the base it was diffed against, so the next build asks a server only about what has changed
-since — the same tree comes back complete in under 300ms, which is the `git diff` and
-nothing else.
+the file's size and mtime and the base it was diffed against, so the next build asks a
+server only about what has changed since — the same tree comes back complete in under
+300ms, which is the `git diff` and nothing else.
 
 The cache is one JSON file per repo under `stdpath("cache")/changeset/`, holding only the
 fields the tree reads from a symbol. Every refresh narrows it to the files the current diff
@@ -533,8 +531,8 @@ repository's deliberate choice is none of that save's business.
   restore the cursor to the same row *identity* and preserve collapse state, including an
   `l`-expanded chain. One key scheme serves all three. Every redraw re-anchors the same
   way; when the cursor's file row is gone from screen — its changes all turned out to be
-  tests or comments, or a filter kept only one copy — the cursor moves to the first file row with that
-  path.
+  tests or comments, or a filter kept only one copy — the cursor moves to the first file
+  row with that path.
 - **Opening the sidebar is an ordinary split.** It takes its width with `winfixwidth`
   (a drawer its height, with `winfixheight`) already set and then lets `'equalalways'`
   settle the rest, so the windows that were already open share out what is left instead
@@ -559,7 +557,9 @@ repository's deliberate choice is none of that save's business.
 - **Only an answer is cached.** A server that never attached, and a file whose buffer held
   unwritten edits when it was read, are both left out: a stamp taken off the file on disk
   cannot describe either, and either one filed as fresh would outlive the edit that made
-  it wrong — across restarts, until the file next moves.
+  it wrong — across restarts, until the file next moves. A file no server answers for,
+  with unwritten edits in its buffer, has its comment lines left out the same way until it
+  is written.
 - **No answer is remembered, but only in memory.** A file no server answers for — `go.sum`,
   a `Makefile` — is not asked about again on every refresh, each of which would wait out
   the attach timeout under a `reading symbols` row, and every write refreshes the tree.
