@@ -100,6 +100,27 @@ describe("PR Review Mode", function()
     assert.same({}, on_notices(1000))
   end)
 
+  it("falls back to the default-branch base, with a warning, when the PR target has no merge base", function()
+    review.fixture(dir, "orphan-target", { "a.txt" })
+    vim.env.FAKE_GH_PR = '{"baseRefName":"gone","state":"OPEN"}'
+    vim.fn.chdir(dir)
+    local bufs = edit({ "a.txt" })
+    local base = review.merge_base(dir)
+    assert.is_true(await(bufs, base, 5000))
+    toggle()
+    assert.is_true(await(bufs, nil, 5000))
+
+    toggle()
+
+    local on = on_notices(5000)
+    assert.equal(1, #on)
+    assert.matches("vs main", on[1])
+    assert.is_true(vim.iter(notices):any(function(n)
+      return n.level == vim.log.levels.WARN and n.msg:find("gone", 1, true) ~= nil
+    end))
+    assert.equal(base, revision(bufs[1]))
+  end)
+
   it("diffs a stacked branch against its PR's target branch", function()
     stack("stacked")
     vim.env.FAKE_GH_PR = '{"baseRefName":"parent","state":"OPEN"}'
