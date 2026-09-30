@@ -4,6 +4,7 @@ local Fixture = require("support.git")
 require("support.gh") -- a fake gh on PATH: never the real one, never the network
 
 ---Runs `fn`, keeping the argv of every process started through `vim.system` or `vim.fn.systemlist`.
+---A wait belongs inside `fn`: `check-attr` starts from a scheduled callback, after `build()` returns.
 ---@param fn fun()
 ---@return string[][]
 local function recording(fn)
@@ -68,8 +69,6 @@ describe("changeset.build", function()
     vim.fn.chdir(previous_dir)
     vim.fn.delete(tmp, "rf")
   end)
-
-  -- Each wait stays inside `recording`: `check-attr` starts from a scheduled callback, after `build()` returns.
 
   it("a refresh starts no merge-base, rev-parse or gh process", function()
     build_and_collect()
