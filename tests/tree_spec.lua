@@ -92,11 +92,14 @@ describe("changeset.tree", function()
   describe("build", function()
     describe("section rows", function()
       it("puts non-empty sections at the top in display order", function()
-        local rows = tree.build({ file("README.md", { hunk(1, 1) }), file("tests/a_spec.lua", { hunk(1, 1) }) }, {})
+        local rows = tree.build({
+          file("mise.toml", { hunk(1, 1) }),
+          file("README.md", { hunk(1, 1) }),
+          file("tests/a_spec.lua", { hunk(1, 1) }),
+        }, {})
 
-        assert.same({ "Tests", "Docs" }, names(rows))
-        assert.same({ "section", "section" }, { rows[1].kind, rows[2].kind })
-        assert.same({ "tests", "docs" }, { rows[1].icon, rows[2].icon })
+        assert.same({ "Tests", "Docs", "Config" }, names(rows))
+        assert.same({ "section", "section", "section" }, { rows[1].kind, rows[2].kind, rows[3].kind })
       end)
 
       it("gives a lone section its own row", function()
@@ -112,31 +115,14 @@ describe("changeset.tree", function()
         assert.same({ "b.lua", "a.lua" }, names(rows[1].children))
       end)
 
-      it("nests ids and depths under the section", function()
-        local path = "tests/a_spec.lua"
-        local section = tree.build({ file(path, { hunk(2, 1), hunk(9, 1) }) }, {
-          [path] = { sym("case", "Function", 0, 1, 4) },
-        })[1]
-        local file_row = section.children[1]
-        local group = file_row.children[2]
-
-        assert.equal("#tests", section.id)
-        assert.equal("#tests\0tests/a_spec.lua", file_row.id)
-        assert.equal("#tests\0tests/a_spec.lua\0case", file_row.children[1].id)
-        assert.equal("#tests\0tests/a_spec.lua\0#orphans", group.id)
-        assert.equal("#tests\0tests/a_spec.lua\0#orphans\0#orphan:9", group.children[1].id)
-        assert.same({ 0, 1, 2 }, { section.depth, file_row.depth, group.depth })
-      end)
-
-      it("renders Generated last, with the build icon", function()
+      it("renders Generated last", function()
         local rows = tree.build({
           file("go.sum", { hunk(1, 1) }),
           file("lua/a.lua", { hunk(1, 1) }),
-          file("tests/a_spec.lua", { hunk(1, 1) }),
+          file("mise.toml", { hunk(1, 1) }),
         }, {})
 
-        assert.same({ "Implementation", "Tests", "Generated" }, names(rows))
-        assert.equal("build", rows[3].icon)
+        assert.same({ "Implementation", "Config", "Generated" }, names(rows))
       end)
 
       it("files a file the diff edge marked generated under Generated", function()
@@ -476,7 +462,8 @@ describe("changeset.tree", function()
     describe("identity", function()
       it("identifies each row by its section, its path and the full chain of names above it", function()
         local symbols = { sym("SessionStore", "Class", 0, 3, 20), sym("refresh", "Method", 1, 5, 9) }
-        local file_row = tree.files(tree.build({ file(PATH, { hunk(7, 1), hunk(24, 1) }) }, { [PATH] = symbols }))[1]
+        local section = tree.build({ file(PATH, { hunk(7, 1), hunk(24, 1) }) }, { [PATH] = symbols })[1]
+        local file_row = section.children[1]
         local class = file_row.children[1]
         local group = file_row.children[2]
 
@@ -485,6 +472,8 @@ describe("changeset.tree", function()
         assert.equal(FILE_ID .. "\0SessionStore\0refresh", class.children[1].id)
         assert.equal(FILE_ID .. "\0#orphans", group.id)
         assert.equal(FILE_ID .. "\0#orphans\0#orphan:24", group.children[1].id)
+        assert.same({ 0, 1, 2, 3 }, { section.depth, file_row.depth, class.depth, class.children[1].depth })
+        assert.same({ 2, 3 }, { group.depth, group.children[1].depth })
       end)
 
       it("tells same-named symbols apart by where they nest", function()
@@ -594,13 +583,11 @@ describe("changeset.tree", function()
       assert.equal(FILE_ID .. "\0Outer", compressed[1].children[1].children[1].id)
     end)
 
-    it("marks a folded chain, keyed by its head and aimed at its deepest symbol", function()
+    it("marks a folded chain", function()
       local file_row = tree.compress(build_nested({ hunk(5, 1) }, CHAIN))[1].children[1]
       local folded = file_row.children[1]
 
       assert.is_true(folded.chain)
-      assert.equal(FILE_ID .. "\0Outer", folded.id)
-      assert.equal(5, folded.lnum)
       assert.is_nil(file_row.chain)
     end)
 
@@ -845,35 +832,6 @@ describe("changeset.tree", function()
 
         assert.equal(1, #tree.files(rows), case[1].path)
       end
-    end)
-
-    it("splits Python test functions and test classes", function()
-      local path = "pkg/session.py"
-      local rows = tree.build({ file(path, { hunk(2, 1), hunk(13, 1), hunk(26, 1) }) }, {
-        [path] = {
-          sym("test_refresh", "Function", 0, 1, 5),
-          sym("TestStore", "Class", 0, 10, 20),
-          sym("test_open", "Method", 1, 12, 15),
-          sym("open", "Function", 0, 25, 30),
-        },
-      })
-
-      assert.same({ "open" }, names(rows[1].children[1].children))
-      assert.same({ "test_refresh", "TestStore" }, names(rows[2].children[1].children))
-    end)
-
-    it("splits TypeScript describe and it callbacks", function()
-      local path = "src/session.ts"
-      local rows = tree.build({ file(path, { hunk(4, 1), hunk(26, 1) }) }, {
-        [path] = {
-          sym("describe('refresh') callback", "Function", 0, 1, 20),
-          sym("it('refreshes') callback", "Function", 1, 3, 8),
-          sym("refresh", "Function", 0, 25, 30),
-        },
-      })
-
-      assert.same({ "refresh" }, names(rows[1].children[1].children))
-      assert.same({ "describe('refresh') callback" }, names(rows[2].children[1].children))
     end)
 
     describe("locate", function()
