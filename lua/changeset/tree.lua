@@ -1,3 +1,5 @@
+---Builds the row tree.
+
 local sections = require("changeset.sections")
 
 local M = {}

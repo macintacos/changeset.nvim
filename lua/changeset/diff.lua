@@ -1,3 +1,5 @@
+---Runs the branch's git diff and parses it into files and hunks.
+
 local M = {}
 
 ---@class changeset.Hunk A run of changed lines, in new-file coordinates.
