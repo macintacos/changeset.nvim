@@ -98,4 +98,40 @@ describe("changeset.build", function()
       return runs(argv, "gh")
     end, argvs))
   end)
+
+  describe("asking about symbols", function()
+    local asked
+
+    ---Answer every file with `items` at once, counting each time `path` is asked about.
+    ---@param items table[]?
+    local function answer(items)
+      asked = 0
+      resolve.start = function(_, files, on_file)
+        for _, file in ipairs(files) do
+          asked = asked + (file.path == "mod.lua" and 1 or 0)
+          on_file(file.path, items)
+        end
+        return function() end
+      end
+    end
+
+    ---Refresh, waiting for the new diff.
+    local function refresh_and_collect()
+      local before = assert(changeset._tree()).files
+      changeset.refresh()
+      assert.is_true(vim.wait(10000, function()
+        return changeset._tree().files ~= before
+      end, 25))
+    end
+
+    it("does not cache the symbols read from a buffer holding unwritten edits", function()
+      answer({ { name = "f", kind = "Function", depth = 0, lnum = 1, range_lnum = 1, range_end_lnum = 1 } })
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, { "return 3" })
+      build_and_collect()
+
+      refresh_and_collect()
+
+      assert.equal(2, asked)
+    end)
+  end)
 end)
