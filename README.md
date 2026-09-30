@@ -264,6 +264,6 @@ asks nothing of the network.
 
 <!-- panvimdoc-ignore-start -->
 
-Contributors: the design and its rationale are in [docs/design.md](docs/design.md).
+Contributors: the design and its rationale are in [doc/agents/design.md](doc/agents/design.md).
 
 <!-- panvimdoc-ignore-end -->

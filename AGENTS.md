@@ -1,221 +1,89 @@
 # changeset.nvim
 
 A Neovim sidebar mapping what the current branch changed: its files, and the symbols each
-hunk touched. `README.md` is the user-facing reference; `docs/design.md` is the design
-record.
+hunk touched. `README.md` is the user reference, and `doc/agents/design.md` records why the
+sidebar looks and behaves as it does. Each file under `lua/changeset/` opens with a
+one-line summary of what it owns.
 
-## Layout
+## Setup
 
-```text
-.
-├── .github/             CI (lint, docs check and test on push to main and PRs) and Dependabot
-├── mise.toml            tools; postinstall registers the hk git hooks
-├── mise.lock            exact tool versions (`lockfile = true`)
-├── hk.pkl               formatters, linters and git hooks
-├── .luarc.check.json    lua-language-server config for `mise run typecheck`
-├── selene.toml          selene config for lua/ and plugin/ (tests/selene.toml for specs)
-├── vim.yml              selene's vim std: the globals lua/ and plugin/ may read
-├── stylua.toml          StyLua config
-├── .rumdl.toml          Markdown lint config
-├── taplo.toml           TOML format config
-├── typos.toml           spell-check config
-├── .mise/tasks/         one script per `mise run` task
-├── doc/                 generated vimdoc — `mise run docs`, never edited by hand
-├── docs/design.md       why the sidebar looks and behaves as it does
-├── plugin/changeset.lua `:Changeset`, `<Plug>(changeset-toggle)`, session restore, mini.pick registry
-├── lua/changeset/
-│   ├── init.lua         glue: the public API and the window state machine
-│   ├── actions.lua      what each sidebar key does, and binding them
-│   ├── attributes.lua   inline test markers the syntax shows, via treesitter
-│   ├── build.lua        builds the tree and keeps its diff and symbols fresh
-│   ├── buffers.lua      loads the files the sidebar reads
-│   ├── cache.lua        symbols kept between builds and restarts
-│   ├── config.lua       the user's options: defaults, and what `setup()` made of them
-│   ├── diff.lua         runs the branch's git diff and parses it into files and hunks
-│   ├── draw.lua         puts `render`'s lines, the header and the row states on the sidebar's buffer
-│   ├── git.lua          git and gh queries that pick the base branch
-│   ├── health.lua       `:checkhealth changeset`: requirements, optional integrations, options in force
-│   ├── help.lua         the `?` key reference
-│   ├── icons.lua        mini.icons → nvim-web-devicons → blank
-│   ├── jsonfile.lua     small JSON records under `stdpath`
-│   ├── kinds.lua        which LSP symbol kinds are listed, per filetype
-│   ├── menu.lua         the symbol-kind popup
-│   ├── paths.lua        project root and clipboard copy
-│   ├── pick.lua         the rows as a mini.pick picker
-│   ├── pick_preview.lua its side-by-side preview
-│   ├── prefs.lua        hidden kinds, persisted
-│   ├── render.lua       rows → buffer lines + extmarks
-│   ├── resolve.lua      asks LSP servers for symbols
-│   ├── review.lua       PR Review Mode
-│   ├── sections.lua     Implementation/Tests/Docs/Config/Generated classification
-│   ├── state.lua        cursor and folds across rebuilds
-│   ├── symbols.lua      flattens documentSymbol trees
-│   ├── tree.lua         builds the row tree
-│   ├── view.lua         filters it
-│   └── window.lua       window bookkeeping and layout
-├── tests/               specs, minimal_init.lua, support/ fixtures, busted.yml
-└── .tests/              gitignored: installed deps, suite data dir, luals logs, coverage output
-```
+Run these once in each new clone or worktree, in order:
 
-## Tasks
+1. `mise trust`, because mise refuses to load an untrusted `mise.toml`.
+2. `mise run setup`, which installs the tools and registers the hk git hooks.
+3. `mise run parsers`, because the specs that parse Rust or TypeScript fail without the
+   parsers it installs.
 
-Run `mise trust`, then `mise run setup`, once in each new clone or worktree: mise refuses
-to load an untrusted `mise.toml`. Then run `mise run parsers` once: without the parsers it
-installs into `.tests/data` (see Treesitter parsers), the specs that parse Rust or
-TypeScript fail.
-
-- `mise run setup` — `mise install`; its postinstall hook installs the hk git hooks.
-- `mise run deps` — checks out the pinned test and docs dependencies under `.tests/deps`.
-- `mise run docs` — regenerates `doc/changeset.nvim.txt` from `README.md` with the pinned
-  panvimdoc and pandoc. Depends on `deps`.
-- `mise run parsers` — installs the specs' treesitter parsers into `.tests/data`. Depends
-  on `deps`.
-- `mise run format` — `hk fix --all --no-stage`: every formatter, in write mode.
-- `mise run lint` — `hk check --all`: format check, selene, shellcheck, rumdl, taplo,
-  pkl, typos, the git checks and `typecheck`. Depends on `deps`.
-- `mise run typecheck` — lua-language-server at Warning level with `.luarc.check.json`.
-  Depends on `deps`.
-- `mise run test [path ...]` — the plenary suite; default `tests/`, or the spec files
-  given. Depends on `deps`.
-- `mise run coverage` — the suite under luacov; prints line coverage of `lua/`, full
-  report in `.tests/luacov/report.out`. Depends on `deps`.
-- `mise run preflight` — `lint` + `test`.
-
-The pre-commit hook runs the formatters and linters on staged files; pre-push runs the
-type check and the suite. Never bypass them with `--no-verify`.
-
-Run one spec with `mise run test tests/<name>_spec.lua`, not `:PlenaryBustedFile`: that
-command takes no options, so its child Neovim skips `tests/minimal_init.lua` and can load
-the wrong checkout of the plugin — from a worktree, silently the main one.
+`mise tasks` lists every other task with what it does.
 
 ## Testing
 
-### Specs
+Write a failing spec before any behaviour change.
 
-Plenary busted specs, flat in `tests/`, named `<module>_spec.lua` or for a behaviour
-(`sidebar_spec.lua`, `band_spec.lua`). Each spec file runs in its own child Neovim under
-`tests/minimal_init.lua`, which removes the user config from `rtp`, points
-`XDG_STATE_HOME` and `XDG_CACHE_HOME` at temporary directories, scrubs `GIT_*`, and points
-global and system git config at `/dev/null`. It points `XDG_DATA_HOME` at `.tests/data`
-and drops the editor's data `site` from `runtimepath`.
+Run specs with `mise run test [spec ...]`, never `:PlenaryBustedFile`. That command takes
+no options, so its child Neovim skips `tests/minimal_init.lua` and can load another
+checkout of the plugin: from a worktree, silently the main one.
 
-A test creates its temporary files and repositories itself and removes them after it.
-Private functions a spec needs are exposed as `M._name` (see Conventions).
+Specs sit flat in `tests/`, named `<module>_spec.lua` or for a behaviour
+(`sidebar_spec.lua`). Each spec file runs in its own child Neovim under
+`tests/minimal_init.lua`. It drops your config from `rtp`, gives state and cache temporary
+directories, makes `.tests/data` the data directory, and hides your git environment and
+global git config.
 
-### Fixtures
+A spec creates its temporary files and repositories and removes them after. Build them with
+the fixtures in `tests/support/`, such as `require("support.git")`, rather than shelling
+out to git. Change directory only when the code under test resolves the repository from
+the process directory.
 
-Specs load these as `require("support.<name>")`:
+A private function a spec needs is exposed as `M._name` on its module. It is not public
+API.
 
-- `tests/support/deps.lua` — the pins and their installer; `path(name)` locates a
-  checkout.
-- `tests/support/git.lua` — `git`, `init_repo` and `commit` helpers that take a `cwd`.
-- `tests/support/gh.lua` — puts a fake `gh` on `PATH`, driven by `FAKE_GH_PR` and
-  `FAKE_GH_DELAY`.
-- `tests/support/pr_review.lua` — the PR Review Mode fixture: gitsigns, `changeset.review`
-  and a fake gh.
-- `tests/support/cursor.lua` — whether `guicursor` hides the cursor.
-- `tests/support/coverage.lua` — the luacov hooks.
-- `tests/support/parsers.lua` — `data_home`, the suite's data dir that `minimal_init.lua`
-  sets, and `site` under it, which it prepends to `rtp`; `nvim -l` on it is the
-  `mise run parsers` installer.
+## Lua conventions
 
-Use `support.git` rather than shelling out to git by hand. `chdir` only when the code
-under test resolves the repository from the process directory.
-
-### Test dependencies
-
-The `pins` table in `tests/support/deps.lua` maps each plugin and tool to a source and a
-full commit SHA. `mise run deps` fetches each into `.tests/deps/<name>`; `test`,
-`lint`, `typecheck`, `coverage`, `parsers` and `docs` depend on it. To bump one, edit its
-SHA, run `mise run deps`, then run the suite; after bumping `nvim-treesitter`, run
-`mise run parsers` first, which rebuilds every parser whose recorded revision differs
-from the new pin's. After bumping `panvimdoc`, or `pandoc` in `mise.toml`, run
-`mise run docs` and commit the regenerated `doc/`.
-
-A new plugin goes into `pins` first, is prepended on `rtp` where it is used with
-`vim.opt.rtp:prepend(require("support.deps").path("<name>"))`, and is added to
-`.luarc.check.json`'s `workspace.library` — every pin but luacov and panvimdoc. luacov is
-no Neovim plugin: its modules live under `src/` and load through `package.path`.
-panvimdoc is a shell script and pandoc Lua filters that `mise run docs` runs, not a
-Neovim plugin.
-
-### Treesitter parsers
-
-The suite needs the `rust`, `typescript` and `tsx` parsers; `tests/attributes_spec.lua`
-asserts they load. They live in `.tests/data/nvim/site/parser`, and `mise run parsers`
-installs them with the nvim-treesitter pinned in `tests/support/deps.lua` and the
-`tree-sitter` CLI pinned in `mise.toml`. The install needs a C compiler. Parsers under
-your own `stdpath("data")` are never read. After a pin bump, re-run
-`mise run parsers` (see Test dependencies). `test` does not depend on `parsers`: a
-missing parser fails the suite rather than compiling during pre-push.
-
-## Conventions
-
-- TDD: a failing spec before any behaviour change.
-- Private functions a spec needs are exposed as `M._name` on their module (e.g.
-  `M._parse_hunks` in `diff.lua`). They are not public API.
-- LuaCATS: a module file opens with a one-line `---` summary; every public function has a
-  one-line `---` summary plus `---@param` / `---@return`; types are
-  `---@class changeset.<Name>` with `---@field`; a module-level value whose initializer
-  does not show its type (a `nil` start, an empty table, a table that must match a class)
-  gets `---@type`. `mise run typecheck` checks the annotations that are present, not that
-  they are present.
-- Comments say why, never what the code does or how it changed.
-- Every `nvim_create_autocmd` says what fires it and why, in a `-- Fires:` comment above
-  it or in its `desc`. Keymaps are set with a `desc`.
-- StyLua formats (2 spaces, 120 columns). A global selene rejects goes in `vim.yml`, or
-  in `tests/busted.yml` when only specs use it. A `-- selene: allow(...)` suppression
-  sits under a one-line comment giving the reason.
-
-## Public API
-
-`require("changeset").setup(opts)` is optional; zero-config works. Its options are the
-`changeset.Config` class in `lua/changeset/config.lua` (`keymaps`,
-`layout.min_file_width`, `pr_review.enabled`), deep-merged over `DEFAULTS` and validated;
-each call starts again from the defaults. The resolved result is `changeset.Options`, in
-the same file. `keymaps.next` / `keymaps.prev` default to `false`, so the sidebar binds no
-step keys unless the user sets them. A new option gets its `---@field` (on
-`changeset.Options` too when it is a new top-level table), a default in `DEFAULTS`, a
-check in `validate()`, and a row in README `## Options`, then `mise run docs`. A module
-reads it through `config.get()` when it acts, never when it loads, so a later `setup()`
-reaches it.
-
-`tests/docs_spec.lua` fails until every option, `:Changeset` subcommand, `<Plug>` map and
-highlight group — the `Changeset*` names on `render.lua` — appears in the vimdoc: add it
-to the README, then `mise run docs`.
-
-`plugin/changeset.lua` binds no keys. It defines `<Plug>(changeset-toggle)` and
-`:Changeset {toggle|refresh|review}`, and refills the sidebar via `restore()` on
-`SessionLoadPost` only when a `changeset://` window is left. It sets
-`MiniPick.registry.changeset` when mini.pick exists once startup is over — on `VimEnter`,
-or at once when the plugin loads after it. Both autocmds sit in the `changeset.plugin`
-augroup. It requires no `changeset.*` module at load. `require("changeset")` exposes
-`toggle` and `restore`, which those entry points call, and `open`, `close`, `refresh` and
-`rows()`, which `pick.lua` is built on; its doc block in `init.lua` says what it returns
-and how long its first call blocks. `build` and `footer` serve the plugin's own modules
-and specs; `footer` stays public because the sidebar's statusline evaluates
-`v:lua.require'changeset'.footer()`, a string the type check cannot follow. Beyond that:
-`require("changeset.pick").pick()` and `require("changeset.review").toggle()` /
-`activate()`. `:Changeset` is the only user command. `:checkhealth changeset` reports
-which optional dependencies are missing and the options in force.
-
-For the options and keys themselves, see README `## Options` and `## Sidebar keys`.
-
-## Vendored modules
-
-`git.lua`, `jsonfile.lua`, `paths.lua`, `symbols.lua`, `kinds.lua` and
-`pick_preview.lua` began as copies of the author's Neovim config. They are owned by this
-repository and not synced with any other copy, so they change as this plugin needs.
-
-## Behaviour that is easy to break
-
-Check a change against
-[docs/design.md#behaviour-that-is-easy-to-get-wrong](docs/design.md#behaviour-that-is-easy-to-get-wrong).
+- Annotate with LuaCATS. A module opens with a one-line `---` summary. A public function
+  has a one-line summary plus `---@param` and `---@return`. A type is
+  `---@class changeset.<Name>` with `---@field`. A module-level value whose initializer
+  hides its type, such as `nil` or an empty table, gets `---@type`. `mise run typecheck`
+  checks the annotations that exist, not that they exist.
+- A comment says why, never what the code does or how it changed.
+- Every `nvim_create_autocmd` says what fires it and why, in a `-- Fires:` comment above it
+  or in its `desc`. Every keymap has a `desc`.
+- StyLua formats. A global selene rejects goes in `vim.yml`, or in `tests/busted.yml` when
+  only specs use it. A `-- selene: allow(...)` suppression sits under a one-line comment
+  giving the reason.
 
 ## Before a PR
 
-`mise run preflight` stays green on every PR. A PR that changes the layout, a task, a
-fixture or the public API updates `AGENTS.md` in the same PR. Every `README.md` edit is
-followed by `mise run format && mise run docs` — format first: the pre-commit hook's
-Markdown fixes change what pandoc renders — and the regenerated `doc/` is committed in
-the same PR. `preflight` does not check it; CI does.
+Run `mise run preflight` and make it pass. The pre-commit hook formats and lints the staged
+files, and pre-push runs the type check and the suite. Never bypass them with
+`--no-verify`.
+
+Follow every `README.md` edit with `mise run format && mise run docs`, and commit the
+regenerated `doc/` in the same PR. Format first, because the pre-commit hook's Markdown
+fixes change what pandoc renders. CI runs `mise run docs` and fails if `doc/` changes, but
+`preflight` does not.
+
+## Routing
+
+Read this digraph as a checklist, not a single path: load every file whose edge matches
+your change before you edit that area.
+
+```graphviz
+digraph rules_router {
+    node [shape=box];
+
+    "Changing the repo" [shape=doublecircle];
+    "What does the change touch?" [shape=diamond];
+
+    "Changing the repo" -> "What does the change touch?";
+    "What does the change touch?" -> "Load doc/agents/design.md" [label="anything a user can see the sidebar do: its look, keys, previews, rebuilds, caching, windows"];
+    "What does the change touch?" -> "Load doc/agents/api-rules.md" [label="what users call or configure: options, :Changeset, <Plug> maps, highlight groups, public functions"];
+    "What does the change touch?" -> "Load doc/agents/dependency-rules.md" [label="test dependencies: pins, treesitter parsers, .luarc.check.json"];
+}
+```
+
+## Keeping docs current
+
+When your change makes a doc wrong or incomplete, update that doc in the same change. A new
+rule goes in this file until its area needs a rule file of its own. Add that file's edge to
+`## Routing` in the same change.

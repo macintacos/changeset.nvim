@@ -1,6 +1,6 @@
 ---A read-only sidebar mapping what this branch changed, nested by symbol.
 ---
----See docs/design.md for the design. This file is the public API and the window state
+---See doc/agents/design.md for the design. This file is the public API and the window state
 ---machine: `build` keeps the tree, `draw` puts it on the sidebar's buffer, and what each key
 ---does is `actions`. The thinking happens in the pure modules they call.
 
