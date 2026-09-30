@@ -3,18 +3,11 @@
 changeset.nvim opens a read-only sidebar listing the files your branch changed and, under
 each file, the symbols those changes touched.
 
-```text
-󰴉  Implementation      2 files      +12 -3
-▎ 󰛦 session.ts                       +12 -3
-  ├─󰌗 SessionStore › refresh › deadline  +8 -1
-  ├─󰏿 SESSION_TTL                     +1 -0
-  └─󰘦 Other changes                   +3 -2
-▎ 󰛦 auth.ts (legacy) deleted
+<!-- panvimdoc-ignore-start -->
 
-󱁿  Config              1 file        +2 -0
-▎ 󰛡 Makefile                          +2 -0
-  └─󰘦 Other changes                   +2 -0
-```
+![The changeset sidebar previewing a branch's changes as it moves, collapses and expands the tree](.github/demo.gif)
+
+<!-- panvimdoc-ignore-end -->
 
 Use it to read a branch before you push it, or one you checked out to review. The same
 changes also show in gitsigns' gutter, through [PR Review Mode](#pr-review-mode), and in
