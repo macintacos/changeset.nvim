@@ -119,16 +119,22 @@ describe("changeset sidebar", function()
     assert.truthy(text:find("other.lua", 1, true))
   end)
 
-  -- `render` sits a filter match one above `MARK_PRIORITY`, which only holds while
-  -- the marks it outranks are stamped at `MARK_PRIORITY` here.
-  it("stamps a mark that carries no priority of its own at the default", function()
+  it("paints a filter match over the colour of the row it sits in", function()
     local buf = open_sidebar()
+    vim.api.nvim_set_current_win((assert(window.win())))
+    -- `x` mode drains the typeahead `f`'s blocking prompt reads from.
+    vim.api.nvim_feedkeys(vim.keycode("fchanges<CR>"), "xt", false)
+    local lnum = line_of(buf, "Other changes")
+    local col = lines_of(buf)[lnum]:find("changes", 1, true) - 1
 
-    local row_mark = vim.tbl_filter(function(mark)
-      return mark[4].hl_group ~= nil
-    end, vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true }))[1]
+    local top
+    for _, mark in ipairs(vim.inspect_pos(buf, lnum - 1, col).extmarks) do
+      if mark.opts.hl_group and (not top or mark.opts.priority > top.opts.priority) then
+        top = mark
+      end
+    end
 
-    assert.equal(render.MARK_PRIORITY, row_mark[4].priority)
+    assert.equal(render.MATCH_HL, assert(top).opts.hl_group)
   end)
 
   it("leads a nested file's row with its filename and dims its directory", function()
