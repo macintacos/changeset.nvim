@@ -113,10 +113,9 @@ hooks {
 
   ["pre-push"] {
     steps = new Mapping<String, Step> {
-      ...typecheck
-      ["Lua(Test)         [[plenary]]"] = new Step {
-        depends = "Lua(Types)        [[lua-language-server]]"
-        check = "mise run test"
+      // One mise run, so the `deps` both tasks depend on syncs once: two steps would race it.
+      ["Lua(Types+Test)   [[lua-language-server, plenary]]"] = new Step {
+        check = "mise run typecheck ::: test"
       }
     }
   }
