@@ -30,6 +30,18 @@ describe("PR Review Mode", function()
     assert.is_true(await(bufs, review.merge_base(dir), 10000))
   end)
 
+  it("moves buffers back to the index after an external switch to the default branch", function()
+    local files = { "a.txt", "b.txt" }
+    review.fixture(dir, "left", files)
+    vim.fn.chdir(dir)
+    local bufs = edit(files)
+    assert.is_true(await(bufs, review.merge_base(dir), 10000))
+
+    support.git({ "switch", "-q", "main" }, dir)
+
+    assert.is_true(await(bufs, nil, 10000))
+  end)
+
   it("keeps a lone buffer on the merge base after an external branch switch", function()
     vim.fn.chdir(dir)
     for i = 1, 5 do
