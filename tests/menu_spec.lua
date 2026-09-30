@@ -105,6 +105,14 @@ describe("changeset.menu", function()
       return vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
     end
 
+    ---@param win integer
+    ---@return string
+    local function footer(win)
+      return table.concat(vim.tbl_map(function(chunk)
+        return chunk[1]
+      end, vim.api.nvim_win_get_config(win).footer))
+    end
+
     before_each(function()
       tmp = vim.fn.tempname()
       vim.fn.mkdir(tmp, "p")
@@ -143,6 +151,22 @@ describe("changeset.menu", function()
       assert.equal("▎ K Variable", before:gsub("%s+31$", ""))
       assert.equal("  K Variable", after:gsub("%s+31$", ""))
       assert.same({ Variable = true }, reported_hidden)
+    end)
+
+    it("the menu's border reads unsaved changes after x and names the scope again after toggling back", function()
+      local _, menu_win = open_menu(
+        { global = { "Variable" } },
+        { counts = { Variable = 31 }, hidden = { Variable = true } }
+      )
+      local scoped = footer(menu_win)
+
+      mapping_callback("x")()
+      local drifted = footer(menu_win)
+      mapping_callback("x")()
+
+      assert.truthy(drifted:find("unsaved", 1, true))
+      assert.equal(scoped, footer(menu_win))
+      assert.not_equal(scoped, drifted)
     end)
 
     it("saves the hidden set globally", function()
