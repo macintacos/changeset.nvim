@@ -32,6 +32,10 @@ Each optional integration adds one feature:
     `#[…::test]` attribute, such as `#[tokio::test]`.
   - TypeScript, with the `typescript` parser, or `tsx` for `.tsx` files: an
     `if (import.meta.vitest) { … }` block.
+
+  Parsers also move comment-only changes under Docs: a symbol whose changed lines are all
+  comments, or a hunk outside every symbol that changes only comments. This works for any
+  language whose parser is installed, and needs no language server.
 - mini.icons (once set up) or nvim-web-devicons: icons. nvim-web-devicons covers files
   only.
 - which-key: `?` opens its popup instead of a float.
