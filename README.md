@@ -13,29 +13,6 @@ Use it to read a branch before you push it, or one you checked out to review. Th
 changes also show in gitsigns' gutter, through [PR Review Mode](#pr-review-mode), and in
 mini.pick, through the [Picker](#picker). Each works without the others.
 
-## What it shows
-
-The sidebar compares the working tree with the commit where your branch forked from the
-default branch, so it lists everything the branch changed, committed or not. When both
-`origin`'s copy of the default branch and your local one exist, it uses whichever gives
-the later fork point.
-
-When `gh` finds an open PR that targets a branch other than the default, the sidebar
-compares against that branch instead. A stacked branch therefore shows only its own
-changes, not those of the branch below it.
-
-Untracked files are listed. So are deleted files, but moving onto one previews a notice
-that the file was deleted, and the sidebar never opens it.
-
-Under each file, the sidebar lists only the symbols a change touched, plus the symbols
-that enclose them. It leaves out unchanged siblings, so the tree maps the diff rather than
-outlining the file. Changes outside any listed symbol go under "Other changes", one row
-per hunk.
-
-Files sort into Implementation, Tests, Docs, Config and Generated sections, in that order.
-Within a section, files are grouped by directory, with a directory's own files ahead of
-its subdirectories'. Generated starts folded.
-
 ## Requirements
 
 changeset needs Neovim 0.12 or newer and `git`.
