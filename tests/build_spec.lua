@@ -133,5 +133,39 @@ describe("changeset.build", function()
 
       assert.equal(2, asked)
     end)
+
+    it("asks again about a silent file once a symbol-listing server attaches to it", function()
+      answer(nil)
+      build_and_collect()
+
+      local client = vim.lsp.start({
+        name = "stub_symbols",
+        cmd = function(dispatchers)
+          return {
+            request = function(method, _, callback)
+              local result = method == "initialize" and { capabilities = { documentSymbolProvider = true } } or {}
+              vim.schedule(function()
+                callback(nil, result)
+              end)
+              return true, 1
+            end,
+            notify = function() end,
+            is_closing = function()
+              return false
+            end,
+            terminate = function()
+              dispatchers.on_exit(0, 15)
+            end,
+          }
+        end,
+      })
+
+      local reasked = vim.wait(10000, function()
+        return asked == 2
+      end, 25)
+      assert(vim.lsp.get_client_by_id(assert(client))):stop(true)
+
+      assert.is_true(reasked)
+    end)
   end)
 end)
