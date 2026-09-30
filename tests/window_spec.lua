@@ -444,6 +444,30 @@ describe("changeset.window", function()
       assert.same({ 3, 0 }, vim.api.nvim_win_get_cursor(right))
     end)
 
+    it("commits into a vertical split beside the window it came from", function()
+      local _, right, one = staged()
+      local before = #vim.api.nvim_tabpage_list_wins(0)
+
+      window.commit(one, 2, "vsplit")
+
+      local split = vim.api.nvim_get_current_win()
+      assert.equal(before + 1, #vim.api.nvim_tabpage_list_wins(0))
+      assert.equal(vim.api.nvim_win_get_position(right)[1], vim.api.nvim_win_get_position(split)[1])
+      assert.not_equal(vim.api.nvim_win_get_position(right)[2], vim.api.nvim_win_get_position(split)[2])
+    end)
+
+    it("commits into a split above or below the window it came from", function()
+      local _, right, one = staged()
+      local before = #vim.api.nvim_tabpage_list_wins(0)
+
+      window.commit(one, 2, "split")
+
+      local split = vim.api.nvim_get_current_win()
+      assert.equal(before + 1, #vim.api.nvim_tabpage_list_wins(0))
+      assert.equal(vim.api.nvim_win_get_position(right)[2], vim.api.nvim_win_get_position(split)[2])
+      assert.not_equal(vim.api.nvim_win_get_position(right)[1], vim.api.nvim_win_get_position(split)[1])
+    end)
+
     it("opens a new tabpage for a commit that asks for one", function()
       local _, _, one = staged()
       local before = #vim.api.nvim_list_tabpages()
