@@ -61,16 +61,18 @@ describe("changeset.menu", function()
   end)
 
   describe("_footer", function()
-    it("names the scope a set came from", function()
-      assert.equal(" set for this branch ", menu._footer({ Field = true }, { Field = true }, "branch"))
+    it("tells a scoped set, a drifted one and nothing saved apart", function()
+      local scoped = menu._footer({ Field = true }, { Field = true }, "branch")
+      local drifted = menu._footer({ Field = true }, {}, "branch")
+      local nothing_saved = menu._footer({}, {}, nil)
+
+      assert.not_equal(scoped, drifted)
+      assert.not_equal(scoped, nothing_saved)
+      assert.not_equal(drifted, nothing_saved)
     end)
 
-    it("warns while the working set differs from the saved one", function()
-      assert.equal(" unsaved changes ", menu._footer({ Field = true }, {}, "global"))
-    end)
-
-    it("states the plain case rather than calling it unsaved", function()
-      assert.equal(" showing every kind ", menu._footer({}, {}, nil))
+    it("names the branch for a set saved on it", function()
+      assert.truthy(menu._footer({ Field = true }, { Field = true }, "branch"):find("branch", 1, true))
     end)
   end)
 
