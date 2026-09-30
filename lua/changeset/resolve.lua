@@ -132,9 +132,8 @@ local function resolve_one(repo, file, on_done)
   end
   read(function(old_text)
     await_client(bufnr, function(ok)
-      -- The waits end in a timer, an autocommand or a git callback, by which time a `:bwipeout`
-      -- or another plugin's buffer sweep may have taken this one. Answering nothing
-      -- keeps the walk pumping; raising here would strand one of its four lanes.
+      -- The buffer may have been wiped during the waits; answering nothing keeps the walk
+      -- pumping, where raising would strand one of its four lanes.
       if not vim.api.nvim_buf_is_valid(bufnr) then
         return on_done(nil)
       end
