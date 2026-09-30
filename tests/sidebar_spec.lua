@@ -718,6 +718,105 @@ describe("changeset sidebar", function()
     end)
   end)
 
+  describe("with comment-only changes", function()
+    local resolve = require("changeset.resolve")
+    local real_start = resolve.start
+    ---@type string[][]
+    local asked
+
+    before_each(function()
+      Fixture.git({ "checkout", "-q", "trunk" }, tmp)
+      write("conf.toml", { "# the answer", "[a]", "b = 1" })
+      Fixture.commit("toml", tmp)
+      Fixture.git({ "checkout", "-q", "feature" }, tmp)
+      Fixture.git({ "merge", "-q", "--no-edit", "trunk" }, tmp)
+      write("conf.toml", { "# the real answer", "[a]", "b = 2" })
+      asked = {}
+      resolve.start = function(root, files, on_file)
+        table.insert(
+          asked,
+          vim.tbl_map(function(file)
+            return file.path
+          end, files)
+        )
+        return real_start(root, files, on_file)
+      end
+    end)
+
+    after_each(function()
+      resolve.start = real_start
+    end)
+
+    ---The sidebar opened from line `lnum` of `conf.toml`, with every file resolved.
+    ---@param lnum integer
+    ---@return integer buf
+    local function open_from(lnum)
+      vim.cmd.edit("conf.toml")
+      vim.api.nvim_win_set_cursor(0, { lnum, 0 })
+      changeset.open()
+      local buf
+      assert(
+        vim.wait(10000, function()
+          buf = window.buf()
+          return buf ~= nil
+            and #vim.tbl_filter(function(line)
+                return line:find("conf.toml", 1, true) ~= nil
+              end, lines_of(buf))
+              == 2
+        end, 25),
+        "conf.toml never split into two copies"
+      )
+      return buf
+    end
+
+    it("lists the file under Config and under Docs", function()
+      local buf = open_from(3)
+      local docs, config = line_of(buf, "Docs"), line_of(buf, "Config")
+
+      assert.truthy(docs < line_of(buf, "conf.toml", docs) and line_of(buf, "conf.toml", docs) < config)
+      line_of(buf, "conf.toml", config)
+    end)
+
+    it("lands the cursor on a comment line's row in the Docs copy", function()
+      local buf = open_from(1)
+      local docs, config = line_of(buf, "Docs"), line_of(buf, "Config")
+
+      changeset.toggle()
+
+      local lnum = vim.api.nvim_win_get_cursor((assert(window.win())))[1]
+      assert.equal(line_of(buf, "Other changes", docs), lnum)
+      assert.truthy(lnum < config)
+    end)
+
+    it("steps from the Docs copy's rows onto the Config copy", function()
+      local buf = open_from(1)
+      local config = line_of(buf, "Config")
+      local win = assert(window.win())
+      vim.api.nvim_set_current_win(win)
+      vim.api.nvim_win_set_cursor(win, { line_of(buf, "L1", line_of(buf, "Docs")), 0 })
+
+      press("]h")
+
+      assert.truthy(vim.api.nvim_win_get_cursor((assert(window.win())))[1] > config)
+    end)
+
+    it("files the file under Docs again on a refresh without asking about it", function()
+      local buf = open_from(3)
+      asked = {}
+
+      changeset.refresh()
+      assert(
+        vim.wait(5000, function()
+          return #asked > 0
+        end, 10),
+        "the refresh never reached the symbols"
+      )
+
+      assert.is_false(vim.tbl_contains(asked[1], "conf.toml"))
+      line_of(buf, "conf.toml", line_of(buf, "Docs"))
+    end)
+  end)
+
   describe("with generated files", function()
     before_each(function()
       write("go.sum", { "example.com/m v1.0.0 h1:abc=" })

@@ -75,8 +75,8 @@ function M.set_chain_open(st, id, open)
 end
 
 ---The line to put the cursor on after any redraw: the row it sat on, else, for a file row, the first file row
----with the same path (a file whose changes all turn out to be tests moves to Tests; a filter can keep one copy
----and drop the other), else `fallback`.
+---with the same path (a file whose changes all turn out to be tests or comments moves to Tests or Docs; a filter
+---can keep one copy and drop the others), else `fallback`.
 ---@param rows changeset.Row[] On screen, in display order.
 ---@param previous_row changeset.Row? The row the cursor sat on before the redraw.
 ---@param fallback integer Line to keep when nothing matches.

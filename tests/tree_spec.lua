@@ -1115,6 +1115,35 @@ describe("changeset.tree", function()
       assert.same({ "README.md", LUA, "docs/b.md" }, names(rows[1].children))
     end)
 
+    describe("locate", function()
+      local TWO = { sym("a", "Function", 0, 3, 10), sym("b", "Function", 0, 12, 20) }
+      local DATA = comments({ comment = { { 4, 5 } } })
+
+      it("finds a comment-only symbol in the Docs copy", function()
+        assert.equal(DOCS_ID .. "\0a", tree.locate(build_lua({ h(4, 1), h(15, 1) }, TWO, DATA), LUA, 7).id)
+      end)
+
+      it("finds a code symbol in the path section's copy", function()
+        assert.equal(IMPL_ID .. "\0b", tree.locate(build_lua({ h(4, 1), h(15, 1) }, TWO, DATA), LUA, 15).id)
+      end)
+
+      it("prefers a changed row to a bare ancestor at the same depth", function()
+        -- `C`'s own doc comment on line 2 changes, and so does code in its method `m`.
+        local class = { sym("C", "Class", 0, 1, 30), sym("m", "Method", 1, 10, 20) }
+        local rows = build_lua({ h(2, 1), h(15, 1) }, class, comments({ comment = { { 2, 2 } } }))
+
+        assert.equal(DOCS_ID .. "\0C", tree.locate(rows, LUA, 25).id)
+      end)
+
+      it("falls back to the path section's copy even when it lists after Docs", function()
+        local rows = build({ file("mise.toml", { h(1, 1), h(5, 1) }) }, { ["mise.toml"] = {} }, {
+          ["mise.toml"] = comments({ comment = { { 1, 1 } } }),
+        })
+
+        assert.equal("#config\0mise.toml", tree.locate(rows, "mise.toml", 9).id)
+      end)
+    end)
+
     describe("a file keeps its path's copy alone", function()
       local ALL = comments({ comment = { { 1, 9 } } })
 

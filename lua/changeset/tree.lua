@@ -691,26 +691,39 @@ local function within(file, lnum)
   end
 end
 
+---Whether match `a` from one copy of a file outranks match `b` from another: deeper, or as deep and changed
+---where `b` is a bare ancestor.
+---@param a changeset.Row
+---@param b changeset.Row
+---@return boolean
+local function beats(a, b)
+  return a.depth > b.depth or a.depth == b.depth and b.ancestor and not a.ancestor
+end
+
 ---The row a line of a file belongs to: the deepest symbol row whose body holds it, else the file's
----"Other changes" row when one of its hunks does, else the file row. A file shown in two sections answers from
----the copy with the deeper match, and falls back to its first copy, which is the path section's whenever that
----copy shows.
+---"Other changes" row when one of its hunks does, else the file row. A file shown in several sections answers
+---from the copy with the deeper match; on an equal-depth tie a changed row beats a bare ancestor, and any
+---remaining tie or miss goes to the path section's copy.
 ---@param rows changeset.Row[] Section rows from `build`, uncompressed.
 ---@param path string Repo-relative.
 ---@param lnum integer
 ---@return changeset.Row? nil when the changeset does not hold `path`.
 function M.locate(rows, path, lnum)
-  local first_copy, deepest
+  local home = M.section_id(sections.classify(path)) .. "\0" .. path
+  local copies = {}
   for _, file in ipairs(M.files(rows)) do
     if file.path == path then
-      first_copy = first_copy or file
-      local found = within(file, lnum)
-      if found and (not deepest or found.depth > deepest.depth) then
-        deepest = found
-      end
+      table.insert(copies, file.id == home and 1 or #copies + 1, file)
     end
   end
-  return deepest or first_copy
+  local best
+  for _, file in ipairs(copies) do
+    local found = within(file, lnum)
+    if found and (not best or beats(found, best)) then
+      best = found
+    end
+  end
+  return best or copies[1]
 end
 
 ---The row with `id`, at any depth.

@@ -83,6 +83,15 @@ describe("changeset.view", function()
         assert.same({ "Tests", "a_spec.lua" }, names({ kept }))
         assert.same({ 2, 7, 3 }, { kept.files, kept.added, kept.removed })
       end)
+
+      it("keeps only the copy of a file whose symbol matches", function()
+        local rows = {
+          row("#implementation", "Implementation", { row("i", "a.lua", { sym("i1", "run", "Function") }) }),
+          row("#docs", "Docs", { row("d", "a.lua", { sym("d1", "describe", "Function") }) }),
+        }
+
+        assert.same({ "Docs", "a.lua", "describe" }, names(view.filter(rows, "describe")))
+      end)
     end)
   end)
   describe("by_kind", function()
@@ -201,6 +210,15 @@ describe("changeset.view", function()
       it("names no file on the second header", function()
         assert.is_nil((view.position(split, 4)))
       end)
+    end)
+
+    it("counts a file shown in three sections once", function()
+      local rows = {}
+      for _, path in ipairs({ "a.rs", "b.rs", "a.rs", "a.rs" }) do
+        vim.list_extend(rows, { { depth = 0 }, { depth = 1, path = path } })
+      end
+
+      assert.same({ 1, 2 }, { view.position(rows, 8) })
     end)
 
     it("has no position on an empty tree", function()

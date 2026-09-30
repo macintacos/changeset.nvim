@@ -95,7 +95,7 @@ function M.kind_counts(rows)
 end
 
 ---Where the file holding line `lnum` stands among the files on screen; a file
----shown in two sections counts once.
+---shown in several sections counts once.
 ---@param rows { depth: integer, path: string }[] One per line, as `render.lines` hands them back: 0 a section header, 1 a file.
 ---@param lnum integer
 ---@return integer? index nil on a section header's line, or when no file is at or above `lnum`.
