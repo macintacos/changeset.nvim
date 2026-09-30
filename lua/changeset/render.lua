@@ -546,16 +546,18 @@ end
 ---instead: a clipped list answers nothing.
 ---@param kinds string[] Hidden kinds the tree actually has.
 ---@param width integer Cells available under the tree.
+---@param key string|false? The key bound to the kind menu; without one the note offers none.
 ---@return string? nil when nothing is hidden.
-function M.hidden_note(kinds, width)
+function M.hidden_note(kinds, width, key)
   if #kinds == 0 then
     return nil
   end
-  local named = ("Hiding %s. F to change."):format(M.kind_list(kinds))
+  local hint = key and (" %s to change."):format(key) or ""
+  local named = ("Hiding %s.%s"):format(M.kind_list(kinds), hint)
   if vim.fn.strdisplaywidth(named) <= width then
     return named
   end
-  return ("Hiding %d kinds of symbol. F to change."):format(#kinds)
+  return ("Hiding %d kinds of symbol.%s"):format(#kinds, hint)
 end
 
 ---The header's first row, for the sidebar's winbar: the ref the tree is compared

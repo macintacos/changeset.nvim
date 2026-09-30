@@ -146,10 +146,8 @@ end
 ---Hang the "what is being hidden" note under the tree as a virtual line.
 ---@param buf integer
 ---@param anchor_line integer 0-based line the note hangs under.
----@param width integer Sidebar width; the note gets one cell less, for its leading space.
----@param hidden_kinds table Kinds being hidden, as `view.hiding` reports them.
-local function hidden_note_line(buf, anchor_line, width, hidden_kinds)
-  local note = render.hidden_note(hidden_kinds, width - 1)
+---@param note string? From `render.hidden_note`, fitted to one cell less than the sidebar for its leading space.
+local function hidden_note_line(buf, anchor_line, note)
   if note then
     -- A virtual line rather than a row: the cursor cannot reach it, so it needs no
     -- place in `visible` and no guard in everything that reads a row off a line.
@@ -216,7 +214,8 @@ local function draw_header(buf, win, width)
 end
 
 ---Draw the tree from the session's current view state, then its header and row states.
-function M.draw()
+---@param kinds_key string|false? The key bound to the kind menu, which the hidden-kinds note names.
+function M.draw(kinds_key)
   local session = current()
   local buf, win = window.buf(), window.win()
   if not (buf and win and vim.api.nvim_buf_is_valid(buf)) then
@@ -269,7 +268,8 @@ function M.draw()
 
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   apply_marks(buf, lines)
-  hidden_note_line(buf, #text - 1, width, view.hiding(view.kind_counts(session.rows), session.hidden))
+  local hiding = view.hiding(view.kind_counts(session.rows), session.hidden)
+  hidden_note_line(buf, #text - 1, render.hidden_note(hiding, width - 1, kinds_key))
 
   vim.api.nvim_win_set_cursor(win, { state._reanchor(session.visible, previous_row, previous_line), 0 })
 

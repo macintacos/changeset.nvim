@@ -680,26 +680,54 @@ describe("changeset sidebar", function()
       assert(ok, err)
     end)
 
-    it("notes under the tree which kinds it is hiding", function()
+    describe("while a kind is hidden", function()
       local prefs = require("changeset.prefs")
-      local prefs_file = prefs.path()
-      assert(prefs.save(prefs_file, { global = { "Function" } }), "could not save the hidden kinds")
 
-      local ok, err = pcall(function()
+      ---The text of each virtual line hung under a buffer line, with the 0-based line it hangs from.
+      ---@param buf integer
+      ---@return { text: string, line: integer }[]
+      local function notes_under(buf)
+        local notes = {}
+        for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
+          local virt_lines = mark[4].virt_lines
+          local text = virt_lines and not mark[4].virt_lines_above and virt_lines[#virt_lines][1][1]
+          -- A section's trailing blank is a virtual line too.
+          if text and text ~= "" then
+            notes[#notes + 1] = { text = text, line = mark[2] }
+          end
+        end
+        return notes
+      end
+
+      before_each(function()
+        assert(prefs.save(prefs.path(), { global = { "Function" } }), "could not save the hidden kinds")
+      end)
+
+      after_each(function()
+        vim.fn.delete(prefs.path())
+        changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
+      end)
+
+      it("notes under the tree which kinds it is hiding", function()
         open_unanswered()
         answer_all()
-        local buf, win = assert(window.buf()), assert(window.win())
-        local expected = " " .. assert(render.hidden_note({ "Function" }, vim.api.nvim_win_get_width(win) - 1))
+        local buf = assert(window.buf())
 
-        local notes = vim.tbl_filter(function(mark)
-          local virt_lines = mark[4].virt_lines
-          return virt_lines ~= nil and #virt_lines == 2 and virt_lines[2][1][1] == expected
-        end, vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true }))
+        local notes = notes_under(buf)
         assert.equal(1, #notes)
-        assert.equal(#lines_of(buf) - 1, notes[1][2])
+        assert.truthy(notes[1].text:find("functions", 1, true))
+        assert.equal(#lines_of(buf) - 1, notes[1].line)
       end)
-      vim.fn.delete(prefs_file)
-      assert(ok, err)
+
+      it("names the key it bound to the kind menu in that note", function()
+        changeset.setup({ keymaps = { next = "]h", prev = "[h", filter_kinds = "<C-k>" } })
+        open_unanswered()
+        answer_all()
+
+        local notes = notes_under(assert(window.buf()))
+        assert.equal(1, #notes)
+        assert.truthy(notes[1].text:find("<C-k>", 1, true))
+      end)
     end)
   end)
 

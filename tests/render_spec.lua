@@ -1225,17 +1225,27 @@ describe("changeset.render", function()
 
   describe("hidden_note", function()
     it("says nothing when every kind is showing", function()
-      assert.is_nil(render.hidden_note({}, 44))
+      assert.is_nil(render.hidden_note({}, 44, "F"))
     end)
 
     it("names the one kind it is hiding", function()
-      assert.equal("Hiding variables. F to change.", render.hidden_note({ "Variable" }, 44))
+      assert.equal("Hiding variables. F to change.", render.hidden_note({ "Variable" }, 44, "F"))
     end)
 
     it("counts the kinds instead once naming them would not fit", function()
-      local note = render.hidden_note({ "Constructor", "Interface", "Property", "Variable" }, 44)
+      local note = render.hidden_note({ "Constructor", "Interface", "Property", "Variable" }, 44, "F")
 
       assert.equal("Hiding 4 kinds of symbol. F to change.", note)
+    end)
+
+    for _, kinds in ipairs({ { "Variable" }, { "Constructor", "Interface", "Property", "Variable" } }) do
+      it(("names the key bound to the kind menu when hiding %d kind(s)"):format(#kinds), function()
+        assert.truthy(assert(render.hidden_note(kinds, 44, "<C-k>")):find("<C-k>", 1, true))
+      end)
+    end
+
+    it("ends at the kinds when the kind menu has no key", function()
+      assert.truthy(vim.endswith(assert(render.hidden_note({ "Variable" }, 44, false)), "variables."))
     end)
   end)
 end)

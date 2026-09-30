@@ -72,6 +72,11 @@ local left_float = false
 ---@type changeset.Config.Keymaps
 local bound_keys = {}
 
+---Draw the tree, naming the keys the sidebar bound.
+local function redraw()
+  draw.draw(bound_keys.filter_kinds)
+end
+
 local function preview_current()
   local session = current()
   local row = draw.row_at_cursor()
@@ -248,7 +253,7 @@ local function rebuild()
     release("row")
   end
   session.rows = tree.build(session.files, session.symbols, line_text)
-  draw.draw()
+  redraw()
   if follow then
     land(vim.api.nvim_get_current_win())
   else
@@ -279,7 +284,7 @@ build.attach({
     }
   end,
   rebuild = rebuild,
-  redraw = draw.draw,
+  redraw = redraw,
   failed = function()
     -- Nothing would ever settle a restored position, and it silences `remember`.
     assert(current(), "changeset: no open session").restoring = nil
@@ -376,7 +381,7 @@ function M.open()
   actions.set_keymaps(
     buf,
     bound_keys,
-    { row_at_cursor = draw.row_at_cursor, draw = draw.draw, pick = pick, close = M.close }
+    { row_at_cursor = draw.row_at_cursor, draw = redraw, pick = pick, close = M.close }
   )
 
   -- Fires: the sidebar's window going without the plugin being asked — `:q`, `:only`,
@@ -427,7 +432,7 @@ function M.open()
     desc = "changeset: move the tree beside or below the files as the editor's width allows",
     callback = function()
       window.relayout()
-      draw.draw()
+      redraw()
     end,
   })
   -- Fires: leaving any window while the sidebar is open. Remembers whether it was a
@@ -482,7 +487,7 @@ function M.open()
   })
   actions.bind_step_keys(bound_keys, preview_current)
 
-  draw.draw()
+  redraw()
   -- A kept tree misses what nothing announced, such as a file edited outside Neovim while it kept focus.
   if current() == kept then
     M.refresh()
