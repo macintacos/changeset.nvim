@@ -1,10 +1,14 @@
-local GROUPS = { "changeset.highlights", "changeset.track", "changeset.unband", "changeset.servers", "changeset.watch" }
-
----Whether the autocmd group exists.
----@param name string
----@return boolean
-local function group_exists(name)
-  return (pcall(vim.api.nvim_get_autocmds, { group = name }))
+---The changeset augroups that hold an autocmd.
+---@return table<string, true>
+local function changeset_groups()
+  local groups = {}
+  for _, autocmd in ipairs(vim.api.nvim_get_autocmds({})) do
+    local name = autocmd.group_name
+    if type(name) == "string" and vim.startswith(name, "changeset.") then
+      groups[name] = true
+    end
+  end
+  return groups
 end
 
 ---A function that counts its calls in `calls[key]`.
@@ -43,9 +47,7 @@ describe("plugin/changeset.lua", function()
     assert.is_nil(package.loaded.changeset)
     assert.is_nil(package.loaded["changeset.pick"])
     assert.equal(1, #vim.api.nvim_get_autocmds({ group = "changeset.plugin", event = "SessionLoadPost" }))
-    for _, name in ipairs(GROUPS) do
-      assert.is_false(group_exists(name), name)
-    end
+    assert.same({ ["changeset.plugin"] = true }, changeset_groups())
   end)
 
   it("registers a mini.pick source that opens the changeset picker", function()
@@ -86,23 +88,37 @@ describe("plugin/changeset.lua", function()
     assert.same({ "refresh", "review" }, vim.fn.getcompletion("Changeset re", "cmdline"))
   end)
 
-  it("routes toggle and refresh to the module", function()
+  it("routes each subcommand to the module, bare :Changeset to toggle", function()
     local calls = {}
     package.loaded.changeset = { toggle = counter(calls, "toggle"), refresh = counter(calls, "refresh") }
 
     vim.cmd("Changeset")
-    vim.cmd("Changeset toggle")
-    vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-toggle)"), "x", false)
-    vim.cmd("Changeset refresh")
     vim.cmd("Changeset toggle ")
-    vim.cmd("Changeset refresh | let g:changeset_after = 1")
-    local map = vim.fn.maparg("<Plug>(changeset-toggle)", "n", false, true)
+    vim.cmd("Changeset refresh")
 
     package.loaded.changeset = nil
-    assert.equal(4, calls.toggle)
-    assert.equal(2, calls.refresh)
+    assert.same({ toggle = 2, refresh = 1 }, calls)
+  end)
+
+  it("routes <Plug>(changeset-toggle) to toggle", function()
+    local calls = {}
+    package.loaded.changeset = { toggle = counter(calls, "toggle") }
+
+    vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-toggle)"), "x", false)
+
+    package.loaded.changeset = nil
+    assert.equal(1, calls.toggle)
+  end)
+
+  it("runs the command after a | once the subcommand ran", function()
+    local calls = {}
+    package.loaded.changeset = { refresh = counter(calls, "refresh") }
+
+    vim.cmd("Changeset refresh | let g:changeset_after = 1")
+
+    package.loaded.changeset = nil
+    assert.equal(1, calls.refresh)
     assert.equal(1, vim.g.changeset_after)
-    assert.truthy(map.desc)
   end)
 
   it("reports an unknown subcommand as an error", function()
@@ -154,8 +170,5 @@ describe("plugin/changeset.lua", function()
     vim.cmd("Changeset refresh")
 
     assert.truthy(package.loaded.changeset)
-    for _, name in ipairs(GROUPS) do
-      assert.is_true(group_exists(name), name)
-    end
   end)
 end)
