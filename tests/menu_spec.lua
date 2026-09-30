@@ -77,7 +77,7 @@ describe("changeset.menu", function()
   end)
 
   describe("mappings", function()
-    local tmp, preferences_file, sidebar, sidebar_buf, reported_hidden
+    local tmp, preferences_file, sidebar, sidebar_buf, reported_hidden, notify, notices
 
     local function mapping_callback(lhs)
       local mapping = vim.fn.maparg(lhs, "n", false, true)
@@ -114,6 +114,11 @@ describe("changeset.menu", function()
     end
 
     before_each(function()
+      notices = {}
+      notify = vim.notify
+      vim.notify = function(msg)
+        notices[#notices + 1] = msg
+      end
       tmp = vim.fn.tempname()
       vim.fn.mkdir(tmp, "p")
       preferences_file = tmp .. "/filters.json"
@@ -131,6 +136,7 @@ describe("changeset.menu", function()
     end)
 
     after_each(function()
+      vim.notify = notify
       menu.close()
       if sidebar and vim.api.nvim_win_is_valid(sidebar) then
         vim.api.nvim_win_close(sidebar, true)
@@ -193,6 +199,26 @@ describe("changeset.menu", function()
       assert.same({
         repos = { [ROOT] = { branches = { [BRANCH] = { "Field", "Variable" } } } },
       }, read_json(preferences_file))
+    end)
+
+    it("confirms a save for the repository with the repository's name", function()
+      open_menu({}, { hidden = { Field = true } })
+
+      mapping_callback("r")()
+
+      assert.equal(1, #notices)
+      assert.truthy(notices[1]:find("repo", 1, true))
+      assert.is_nil(notices[1]:find("fixture", 1, true))
+      assert.is_nil(notices[1]:find(BRANCH, 1, true))
+    end)
+
+    it("confirms that every kind is showing after saving with nothing hidden", function()
+      open_menu({}, { hidden = {} })
+
+      mapping_callback("<CR>")()
+
+      assert.equal(1, #notices)
+      assert.truthy(notices[1]:find("every kind", 1, true))
     end)
 
     for _, lhs in ipairs({ "q", "<Esc>" }) do
