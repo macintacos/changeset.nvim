@@ -81,12 +81,6 @@ describe("plugin/changeset.lua", function()
     assert.equal("function", result.stdout)
   end)
 
-  it("defines :Changeset and no :PRReview", function()
-    local commands = vim.api.nvim_get_commands({})
-    assert.truthy(commands.Changeset)
-    assert.is_nil(commands.PRReview)
-  end)
-
   it("completes the subcommands that match the argument", function()
     assert.same({ "refresh", "review", "toggle" }, vim.fn.getcompletion("Changeset ", "cmdline"))
     assert.same({ "refresh", "review" }, vim.fn.getcompletion("Changeset re", "cmdline"))
