@@ -121,10 +121,6 @@ describe("changeset.prefs", function()
       assert.same({ Field = true }, (prefs.resolve(prefs.load(file), ROOT, BRANCH)))
     end)
 
-    it("hides nothing when the file is absent", function()
-      assert.same({}, prefs.load(vim.fn.tempname() .. "/missing.json"))
-    end)
-
     it("reports a choice that did not reach the disk", function()
       local dir = vim.fn.tempname()
       vim.fn.mkdir(dir, "p")

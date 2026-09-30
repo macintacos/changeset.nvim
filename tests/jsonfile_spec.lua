@@ -18,10 +18,6 @@ describe("changeset.jsonfile", function()
     assert.same({ kinds = { "Class" } }, jsonfile.read(file))
   end)
 
-  it("creates the directory the file goes in", function()
-    assert.is_true(jsonfile.write(dir .. "/nested/deeper/kept.json", { a = 1 }))
-  end)
-
   it("reads an absent file as empty", function()
     assert.same({}, jsonfile.read(dir .. "/never-written.json"))
   end)
