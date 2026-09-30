@@ -156,6 +156,18 @@ describe("changeset position in a session", function()
     assert.same({ path = "mod.lua", lnum = 8 }, changeset._tree().here)
   end)
 
+  it("keeps where you are while focus sits in a help window", function()
+    vim.cmd.edit("mod.lua")
+    vim.api.nvim_win_set_cursor(0, { 8, 0 })
+    changeset.open()
+    settle()
+
+    vim.cmd.help("help")
+    flush()
+
+    assert.same({ path = "mod.lua", lnum = 8 }, changeset._tree().here)
+  end)
+
   it("restores where you were and the sidebar's cursor row from what it recorded", function()
     vim.cmd.edit("mod.lua")
     local file_win = vim.api.nvim_get_current_win()
