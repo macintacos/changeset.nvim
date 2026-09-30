@@ -349,11 +349,12 @@ describe("changeset position in a session", function()
     end)
 
     it("lets a row you move to in a focused sidebar win over the recorded one", function()
-      restore_session({ row = { id = "mod.lua", path = "mod.lua" } }, true)
+      restore_session({ row = { id = "#implementation\0mod.lua\0step", path = "mod.lua" } }, true)
       diff_arrived()
 
       sidebar_cursor_to("other.lua")
-      answer("mod.lua", {})
+      answer("mod.lua", { symbol("step", 7, 9) })
+      flush()
 
       assert.truthy(sidebar_cursor_line():find("other.lua", 1, true))
     end)

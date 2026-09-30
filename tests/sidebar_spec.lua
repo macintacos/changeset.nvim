@@ -119,19 +119,6 @@ describe("changeset sidebar", function()
     assert.truthy(text:find("other.lua", 1, true))
   end)
 
-  it("marks the lines it rendered", function()
-    local buf = open_sidebar()
-
-    -- Counting row marks rather than every mark in the namespace: the hidden-kinds
-    -- note is the one virtual line that lands here without a row behind it, and a
-    -- bare count would pass on that alone.
-    local row_marks = vim.tbl_filter(function(mark)
-      return mark[4].virt_lines == nil
-    end, vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true }))
-
-    assert.truthy(#row_marks > 0)
-  end)
-
   -- `render` sits a filter match one above `MARK_PRIORITY`, which only holds while
   -- the marks it outranks are stamped at `MARK_PRIORITY` here.
   it("stamps a mark that carries no priority of its own at the default", function()

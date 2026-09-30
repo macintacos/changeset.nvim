@@ -206,15 +206,27 @@ describe("changeset.health", function()
     assert.is_nil(package.loaded["changeset"])
   end)
 
-  it("check() starts each section in order and emits only health levels", function()
-    local starts = {}
+  it("check() files each finding under its section's heading", function()
+    local heading, findings = 0, {}
     for _, call in ipairs(checked()) do
       if call[1] == "start" then
-        table.insert(starts, call[2])
+        heading = heading + 1
       else
-        assert.is_true(vim.list_contains({ "ok", "warn", "error", "info" }, call[1]), call[1])
+        findings[#findings + 1] = { msg = call[2], heading = heading }
       end
     end
-    assert.same({ "Requirements", "Optional integrations", "Configuration" }, starts)
+
+    ---The heading, counted from 1, that the first finding mentioning `text` sits under.
+    local function heading_of(text)
+      for _, finding in ipairs(findings) do
+        if finding.msg:find(text, 1, true) then
+          return finding.heading
+        end
+      end
+      error("no finding mentions " .. text)
+    end
+    assert.equal(1, heading_of("Neovim"))
+    assert.equal(2, heading_of("`gh`"))
+    assert.equal(3, heading_of("min_file_width"))
   end)
 end)
