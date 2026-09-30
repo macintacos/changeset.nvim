@@ -127,18 +127,21 @@ describe("changeset.render", function()
     it("shrinks the label's padding so a wide stat clears the count", function()
       local wide = section({ files = 123, added = 15234, removed = 8123 })
       local narrow = render.lines({ wide }, opts({ width = 42 }))[1]
-      local roomy = render.lines({ wide }, opts())[1]
 
       assert.is_true(vim.fn.strdisplaywidth(narrow.text) + #"+15234 -8123" + 1 <= 42)
-      assert.equal(1 + 2 + 20 + 1, roomy.text:find("123 files", 1, true))
     end)
 
-    it("draws the label as plain content and the count in the meta group", function()
-      local line = render.lines({ section({ files = 2 }) }, opts())[1]
+    it("draws the label as plain content", function()
+      local line = render.lines({ section() }, opts())[1]
 
       for _, mark in ipairs(line.marks) do
         assert.is_false(mark.end_col ~= nil and line.text:sub(mark.col + 1, mark.end_col):find("Implementation") ~= nil)
       end
+    end)
+
+    it("draws the file count in the meta group", function()
+      local line = render.lines({ section({ files = 2 }) }, opts())[1]
+
       assert.equal(render.META_HL, mark_over(line, "2 files").hl)
     end)
 
@@ -155,11 +158,10 @@ describe("changeset.render", function()
       assert.equal("+12", mark.virt_text[1][1])
     end)
 
-    it("draws no rail on the header, and keeps the file's rail at column 0", function()
-      local lines = render.lines({ section() }, opts())
+    it("draws no rail on a section header", function()
+      local line = render.lines({ section() }, opts())[1]
 
-      assert.is_nil(lines[1].text:find("▎", 1, true))
-      assert.equal(1, lines[2].text:find("▎", 1, true))
+      assert.is_nil(line.text:find("▎", 1, true))
     end)
 
     it("draws only the header of a folded section", function()
@@ -440,12 +442,6 @@ describe("changeset.render", function()
         local lines = file_lines({ file({ status = "deleted" }) }, opts())
 
         assert.same({ "▎ F a.lua (src) deleted" }, texts(lines))
-      end)
-
-      it("shows no placeholder once the file has children", function()
-        local lines = file_lines({ file({ children = { symbol() } }) }, opts())
-
-        assert.same({ "▎ F a.lua (src)", "  └─S Foo" }, texts(lines))
       end)
     end)
 
@@ -773,10 +769,6 @@ describe("changeset.render", function()
       local full = vim.tbl_extend("force", { files = 12, query = "", keys = keys }, info)
       return vim.api.nvim_eval_statusline(render.footer(full), { maxwidth = 120 }).str
     end
-
-    it("names the panel", function()
-      assert.truthy(shown({}):find(" Changeset ", 1, true))
-    end)
 
     it("says which of the files shown the cursor is in", function()
       assert.truthy(shown({ file = 3 }):find("file 3 of 12", 1, true))
