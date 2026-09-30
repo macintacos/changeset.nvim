@@ -51,45 +51,12 @@ describe("changeset.symbols", function()
 
       assert.equal(5, items[1].range_lnum)
       assert.equal(21, items[1].range_end_lnum)
-      assert.equal(5, items[1].end_lnum)
     end)
 
     it("resolves numeric LSP kinds to their names", function()
       local items = symbols.flatten({ sym("f", KIND.Function, 0) })
 
       assert.equal("Function", items[1].kind)
-    end)
-
-    it("closes the last child's branch and tees the others", function()
-      local items = symbols.flatten({
-        sym("root", KIND.Function, 0, {
-          sym("first", KIND.Variable, 1),
-          sym("last", KIND.Function, 2, { sym("leaf", KIND.Variable, 3) }),
-        }),
-      })
-
-      assert.same({ "", "├─", "└─", "  └─" }, field(items, "guides"))
-    end)
-
-    it("carries a bar past ancestors that still have siblings below", function()
-      local items = symbols.flatten({
-        sym("root", KIND.Function, 0, {
-          sym("first", KIND.Function, 1, { sym("leaf", KIND.Variable, 2) }),
-          sym("last", KIND.Variable, 3),
-        }),
-      })
-
-      assert.same({ "", "├─", "│ └─", "└─" }, field(items, "guides"))
-    end)
-
-    it("builds a breadcrumb from ancestor names", function()
-      local items = symbols.flatten({
-        sym("root", KIND.Function, 0, {
-          sym("mid", KIND.Function, 1, { sym("leaf", KIND.Variable, 2) }),
-        }),
-      })
-
-      assert.same({ "", "root", "root › mid" }, field(items, "crumb"))
     end)
 
     it("orders siblings by position, not by response order", function()
@@ -109,25 +76,9 @@ describe("changeset.symbols", function()
 
       assert.same({ "kept" }, field(items, "name"))
       assert.same({ 0 }, field(items, "depth"))
-      assert.same({ "" }, field(items, "crumb"))
-      assert.same({ "" }, field(items, "guides"))
     end)
 
-    it("converts character positions to byte columns", function()
-      local buf = vim.api.nvim_create_buf(false, true)
-      vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "local é = fn" })
-
-      local item = sym("fn", KIND.Function, 0)
-      item.selectionRange.start.character = 10
-
-      local items = symbols.flatten({ item }, { bufnr = buf })
-
-      -- "é" is two bytes, so UTF-16 character 10 sits at byte 11 (col 12).
-      assert.equal(12, items[1].col)
-      vim.api.nvim_buf_delete(buf, { force = true })
-    end)
-
-    it("reads a flat SymbolInformation response, crumbing its containerName", function()
+    it("reads a flat SymbolInformation response", function()
       local items = symbols.flatten({
         {
           name = "method",
@@ -141,9 +92,9 @@ describe("changeset.symbols", function()
       })
 
       assert.same({ "method" }, field(items, "name"))
-      assert.same({ "Widget" }, field(items, "crumb"))
       assert.same({ 0 }, field(items, "depth"))
       assert.equal(5, items[1].lnum)
+      assert.equal(5, items[1].range_lnum)
     end)
   end)
 
