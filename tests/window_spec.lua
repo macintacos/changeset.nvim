@@ -175,16 +175,25 @@ describe("changeset.window", function()
       return out
     end
 
-    it("takes its width out of the layout and leaves the other windows even", function()
+    it("leaves the other windows even", function()
       vim.cmd("vsplit")
       vim.cmd("vsplit")
 
-      local win = window.open(vim.api.nvim_create_buf(false, true))
+      window.open(vim.api.nvim_create_buf(false, true))
 
-      assert.equal(44, vim.api.nvim_win_get_width(win))
       local widths = others()
       assert.equal(3, #widths)
       assert.is_true(widths[3] - widths[1] <= 1)
+    end)
+
+    it("keeps its width while the other windows even out", function()
+      local win = window.open(vim.api.nvim_create_buf(false, true))
+      local width = vim.api.nvim_win_get_width(win)
+
+      vim.cmd("vsplit")
+      vim.cmd("wincmd =")
+
+      assert.equal(width, vim.api.nvim_win_get_width(win))
     end)
 
     it("takes over the window a restored session left, instead of opening another", function()
@@ -244,15 +253,17 @@ describe("changeset.window", function()
     end)
 
     it("moves back beside the files at its own width when the editor widens", function()
-      vim.o.columns = 100
       vim.cmd("vsplit")
+      local width = vim.api.nvim_win_get_width(window.open(vim.api.nvim_create_buf(false, true)))
+      window.close()
+      vim.o.columns = 100
       local win = window.open(vim.api.nvim_create_buf(false, true))
 
       vim.o.columns = 200
       window.relayout()
 
       assert.equal("right", edge(win))
-      assert.equal(44, vim.api.nvim_win_get_width(win))
+      assert.equal(width, vim.api.nvim_win_get_width(win))
       local widths = others()
       assert.is_true(widths[2] - widths[1] <= 1)
     end)
