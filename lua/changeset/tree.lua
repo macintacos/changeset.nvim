@@ -92,16 +92,16 @@ local ABOVE = { comment = true, directive = true }
 ---@param kinds changeset.LineKinds The new side's.
 ---@return changeset.Symbol[]
 local function widen(symbols, kinds)
-  local out, last_at, last_src = {}, {}, {}
+  local out, widened_at_depth, original_at_depth = {}, {}, {}
   for i, sym in ipairs(symbols) do
-    local prev, parent = last_at[sym.depth], last_src[sym.depth - 1]
-    local floor = math.max(prev and prev.range_end_lnum + 1 or 1, parent and parent.range_lnum or 1)
+    local prev_sibling, parent = widened_at_depth[sym.depth], original_at_depth[sym.depth - 1]
+    local floor = math.max(prev_sibling and prev_sibling.range_end_lnum + 1 or 1, parent and parent.range_lnum or 1)
     local first = sym.range_lnum
     while first > floor and ABOVE[comments.kind(kinds, first - 1)] do
       first = first - 1
     end
     out[i] = first == sym.range_lnum and sym or vim.tbl_extend("force", sym, { range_lnum = first })
-    last_at[sym.depth], last_src[sym.depth] = out[i], sym
+    widened_at_depth[sym.depth], original_at_depth[sym.depth] = out[i], sym
   end
   return out
 end
@@ -126,14 +126,14 @@ end
 
 ---Mark each of `hunk`'s lines on the unit that owns it.
 ---@param hunk changeset.Hunk
----@param data changeset.Comments
+---@param comment_lines changeset.Comments
 ---@param owner changeset.tree.Owner
-local function judge(hunk, data, owner)
+local function judge(hunk, comment_lines, owner)
   for lnum = hunk.lnum, hunk.lnum + hunk.count - 1 do
-    mark(owner.at(lnum), data.new, lnum)
+    mark(owner.at(lnum), comment_lines.new, lnum)
   end
   for lnum = hunk.old_lnum, hunk.old_lnum + hunk.removed - 1 do
-    mark(owner.removed, data.old, lnum)
+    mark(owner.removed, comment_lines.old, lnum)
   end
 end
 
@@ -194,21 +194,21 @@ end
 ---Credit `hunk` to the symbols it lands in.
 ---@param roots changeset.Node[]
 ---@param hunk changeset.Hunk
----@param data changeset.Comments?
+---@param comment_lines changeset.Comments?
 ---@return changeset.Node[] hits Empty when the hunk touches no symbol.
-local function attribute(roots, hunk, data)
+local function attribute(roots, hunk, comment_lines)
   local first, last = span(hunk)
   local hits = deepest_hits(roots, first, last, {})
-  if data and #hits > 0 then
+  if comment_lines and #hits > 0 then
     -- Lines outside every hit, like removed ones, go to the first: a code line beside a doc comment keeps it code.
-    local at = 1
-    judge(hunk, data, {
+    local cursor = 1
+    judge(hunk, comment_lines, {
       -- Hits are disjoint and in document order, so a cursor follows the ascending lines.
       at = function(lnum)
-        while at < #hits and hits[at].sym.range_end_lnum < lnum do
-          at = at + 1
+        while cursor < #hits and hits[cursor].sym.range_end_lnum < lnum do
+          cursor = cursor + 1
         end
-        return touches(hits[at].sym, lnum, lnum) and hits[at] or hits[1]
+        return touches(hits[cursor].sym, lnum, lnum) and hits[cursor] or hits[1]
       end,
       removed = hits[1],
     })
@@ -249,16 +249,16 @@ end
 ---Credit `file`'s hunks to the symbol tree `roots`.
 ---@param file changeset.File
 ---@param roots changeset.Node[] From `nest`.
----@param data changeset.Comments?
+---@param comment_lines changeset.Comments?
 ---@return changeset.tree.Credited
-local function credit(file, roots, data)
+local function credit(file, roots, comment_lines)
   local out = { roots = roots, orphans = { kept = {}, docs = {} }, test_stat = { added = 0, removed = 0 } }
   for _, hunk in ipairs(file.hunks) do
-    local hits = attribute(roots, hunk, data)
+    local hits = attribute(roots, hunk, comment_lines)
     if #hits == 0 then
       local flags = {}
-      if data then
-        judge(hunk, data, {
+      if comment_lines then
+        judge(hunk, comment_lines, {
           at = function()
             return flags
           end,
@@ -291,9 +291,9 @@ local function split(nodes)
     local own = node.changed and destination(node)
     for copy, children in pairs(split(node.children)) do
       if own == copy or #children > 0 then
-        local placed = own == copy and { children = children }
+        local overrides = own == copy and { children = children }
           or { children = children, changed = false, added = 0, removed = 0 }
-        table.insert(out[copy], vim.tbl_extend("force", node, placed))
+        table.insert(out[copy], vim.tbl_extend("force", node, overrides))
       end
     end
   end
@@ -575,18 +575,22 @@ local function add_file(section_rows, file, symbols, lines)
   if not symbols or file.status == "deleted" or key == "generated" then
     return append(section, file_row(file, symbols ~= nil, section), file)
   end
-  local data = key ~= "docs" and lines.comments and lines.comments[file.path] or nil
-  local credited = credit(file, nest(data and widen(symbols, data.new) or symbols, sections.test_rule(file.path)), data)
-  local homes = { kept = section, tests = section_rows.tests, docs = section_rows.docs }
+  local comment_lines = key ~= "docs" and lines.comments and lines.comments[file.path] or nil
+  local credited = credit(
+    file,
+    nest(comment_lines and widen(symbols, comment_lines.new) or symbols, sections.test_rule(file.path)),
+    comment_lines
+  )
+  local section_for = { kept = section, tests = section_rows.tests, docs = section_rows.docs }
   local rows, shown = {}, {}
   for copy, nodes in pairs(split(credited.roots)) do
     local part = { nodes = nodes, orphans = credited.orphans[copy] or {} }
-    rows[copy] = fill(file_row(file, true, homes[copy]), part, lines.text)
+    rows[copy] = fill(file_row(file, true, section_for[copy]), part, lines.text)
     shown[copy] = #rows[copy].children > 0 or nil
   end
   for copy, stat in pairs(shares(file, credited, shown)) do
     rows[copy].added, rows[copy].removed = stat.added, stat.removed
-    append(homes[copy], rows[copy], stat)
+    append(section_for[copy], rows[copy], stat)
   end
 end
 
@@ -762,11 +766,11 @@ end
 ---@param lnum integer
 ---@return changeset.Row? nil when the changeset does not hold `path`.
 function M.locate(rows, path, lnum)
-  local home = file_id(M.section_id(sections.classify(path)), path)
+  local home_id = file_id(M.section_id(sections.classify(path)), path)
   local copies = {}
   for _, file in ipairs(M.files(rows)) do
     if file.path == path then
-      table.insert(copies, file.id == home and 1 or #copies + 1, file)
+      table.insert(copies, file.id == home_id and 1 or #copies + 1, file)
     end
   end
   local best

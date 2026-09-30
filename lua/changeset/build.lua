@@ -187,16 +187,16 @@ function M.refresh()
     hooks.rebuild()
 
     local root = session.root
-    session.cancel = resolve.start({ root = root, base = session.base }, unknown, function(path, items, found)
+    session.cancel = resolve.start({ root = root, base = session.base }, unknown, function(path, items, comment_lines)
       -- Filed even once a newer refresh has replaced this one: the stamp predates
       -- the request, so the answer still describes the file it was read from.
-      file_answer(root, path, { items = items, comments = found }, stamps[path])
+      file_answer(root, path, { items = items, comments = comment_lines }, stamps[path])
       if session and session.request == request then
         -- A server that answers nothing is "resolved with no symbols", which is what
         -- turns every hunk in an unsupported file into an orphan row. Leaving the key
         -- absent would instead read as "still resolving", forever.
         session.symbols[path] = items or {}
-        session.comments[path] = found
+        session.comments[path] = comment_lines
         hooks.rebuild()
       end
     end)

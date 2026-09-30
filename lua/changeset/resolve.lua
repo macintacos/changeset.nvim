@@ -123,9 +123,9 @@ local function resolve_one(repo, file, on_done)
     return on_done(nil)
   end
   -- A Docs file lists whole, so its comment lines would be read for nothing.
-  local docs = sections.classify(path, file.generated) == "docs"
+  local is_docs_file = sections.classify(path, file.generated) == "docs"
   local function read(on_text)
-    if docs then
+    if is_docs_file then
       return on_text(nil)
     end
     read_base(repo, file, on_text)
@@ -140,14 +140,15 @@ local function resolve_one(repo, file, on_done)
       -- One snapshot for both readers: symbol lines and comment lines have to agree, and an
       -- unwritten edit would move either away from the file on disk.
       local source = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-      local new = not docs and comments.read(source, path) or nil
-      local found = new and { new = new, old = old_text and comments.read(old_text, file.oldpath or path) }
+      local new_kinds = not is_docs_file and comments.read(source, path) or nil
+      local comment_lines = new_kinds
+        and { new = new_kinds, old = old_text and comments.read(old_text, file.oldpath or path) }
       if not ok then
-        return on_done(nil, found)
+        return on_done(nil, comment_lines)
       end
       request(bufnr, function(items)
         attributes.mark(items, path, source)
-        on_done(items, found)
+        on_done(items, comment_lines)
       end)
     end)
   end)
@@ -172,12 +173,12 @@ function M._walk(queue, run, on_file)
     -- The pcall below also catches a raise arriving after `run` has answered, and
     -- pumping twice for one lane would put more than CONCURRENCY in flight.
     local answered = false
-    local function step(items, found)
+    local function step(items, comment_lines)
       if answered then
         return
       end
       answered = true
-      on_file(path, items, found)
+      on_file(path, items, comment_lines)
       pump()
     end
     if not pcall(run, path, step) then
@@ -205,12 +206,12 @@ end
 ---@param on_file fun(path: string, items: changeset.Symbol[]?, comments: changeset.Comments?)
 ---@return fun() cancel
 function M.start(repo, files, on_file)
-  local by_path = {}
+  local file_by_path = {}
   for _, file in ipairs(files) do
-    by_path[file.path] = file
+    file_by_path[file.path] = file
   end
   return M._walk(M._resolvable(files), function(path, done)
-    resolve_one(repo, by_path[path], done)
+    resolve_one(repo, file_by_path[path], done)
   end, on_file)
 end
 

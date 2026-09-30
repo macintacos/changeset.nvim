@@ -61,8 +61,8 @@ end
 local function docstring(body)
   for child in body:iter_children() do
     if child:named() and child:type() ~= "comment" then
-      local only = child:named_child_count() == 1 and child:named_child(0)
-      return child:type() == "expression_statement" and only and only:type() == "string" and child or nil
+      local only_child = child:named_child_count() == 1 and child:named_child(0)
+      return child:type() == "expression_statement" and only_child and only_child:type() == "string" and child or nil
     end
   end
 end
