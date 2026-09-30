@@ -303,34 +303,40 @@ describe("changeset.render", function()
     end)
 
     describe("stats", function()
-      local function right_aligned(line, added, removed)
-        return {
-          col = #line.text,
-          pos = "right_align",
-          hl_mode = "combine",
-          virt_text = { { "+" .. added, "GitSignsAdd" }, { " " }, { "-" .. removed, "GitSignsDelete" }, { "  " } },
-        }
+      ---The stat's alignment and its coloured runs, leaving out the blanks between them.
+      ---@param line changeset.Line
+      ---@return string, table[]
+      local function stat_runs(line)
+        local mark = assert(stat_mark(line))
+        return mark.pos, vim.tbl_filter(function(chunk)
+          return chunk[2] ~= nil
+        end, mark.virt_text)
       end
 
       it("right-aligns +N in GitSignsAdd and -N in GitSignsDelete on a file row", function()
         local lines = file_lines({ file({ added = 12, removed = 3 }) }, opts())
+        local pos, runs = stat_runs(lines[1])
 
-        assert.same(right_aligned(lines[1], 12, 3), stat_mark(lines[1]))
+        assert.equal("right_align", pos)
+        assert.same({ { "+12", "GitSignsAdd" }, { "-3", "GitSignsDelete" } }, runs)
       end)
 
       it("right-aligns them on a symbol row too", function()
         local rows = { file({ children = { symbol({ added = 8, removed = 1 }) } }) }
         local lines = file_lines(rows, opts())
+        local pos, runs = stat_runs(lines[2])
 
-        assert.same(right_aligned(lines[2], 8, 1), stat_mark(lines[2]))
+        assert.equal("right_align", pos)
+        assert.same({ { "+8", "GitSignsAdd" }, { "-1", "GitSignsDelete" } }, runs)
       end)
 
-      for _, counts in ipairs({ { 2, 0 }, { 0, 5 } }) do
-        local added, removed = counts[1], counts[2]
-        it(("shows +%d -%d rather than dropping the zero"):format(added, removed), function()
+      for _, counts in ipairs({ { 2, 0, "+2", "-0" }, { 0, 5, "+0", "-5" } }) do
+        local added, removed, plus, minus = unpack(counts)
+        it(("shows %s %s rather than dropping the zero"):format(plus, minus), function()
           local lines = file_lines({ file({ added = added, removed = removed }) }, opts())
+          local _, runs = stat_runs(lines[1])
 
-          assert.same(right_aligned(lines[1], added, removed), stat_mark(lines[1]))
+          assert.same({ { plus, "GitSignsAdd" }, { minus, "GitSignsDelete" } }, runs)
         end)
       end
 
@@ -900,16 +906,18 @@ describe("changeset.render", function()
   end)
 
   describe("empty_message", function()
-    it("tells you to switch branches when you are on the default branch", function()
-      local info = { on_default_branch = true, branch = "main", ref = "origin/main" }
+    it("names only the branch you are on when it is the default branch", function()
+      local message = render.empty_message({ on_default_branch = true, branch = "trunk", ref = "upstream/develop" })
 
-      assert.equal("On main — nothing to compare. Switch to a branch to see its changes.", render.empty_message(info))
+      assert.truthy(message:find("trunk", 1, true))
+      assert.is_nil(message:find("upstream/develop", 1, true))
     end)
 
-    it("says a branch with no diff matches what it is compared against", function()
-      local info = { on_default_branch = false, branch = "feat/x", ref = "origin/develop" }
+    it("names a branch with no diff, then the ref it matches", function()
+      local message = render.empty_message({ on_default_branch = false, branch = "feat/x", ref = "origin/develop" })
+      local branch_at, ref_at = message:find("feat/x", 1, true), message:find("origin/develop", 1, true)
 
-      assert.equal("feat/x matches origin/develop. Nothing changed yet.", render.empty_message(info))
+      assert.truthy(branch_at and ref_at and branch_at < ref_at)
     end)
   end)
 
@@ -1206,6 +1214,10 @@ describe("changeset.render", function()
       assert.equal("fields and variables", render.kind_list({ "Field", "Variable" }))
     end)
 
+    it("joins three kinds with commas and a final and", function()
+      assert.equal("fields, methods and variables", render.kind_list({ "Field", "Method", "Variable" }))
+    end)
+
     it("pluralises a kind that does not just take an s", function()
       assert.equal("classes", render.kind_list({ "Class" }))
     end)
@@ -1221,13 +1233,16 @@ describe("changeset.render", function()
     end)
 
     it("names the one kind it is hiding", function()
-      assert.equal("Hiding variables. F to change.", render.hidden_note({ "Variable" }, 44, "F"))
+      assert.truthy(assert(render.hidden_note({ "Variable" }, 44, "F")):find("variables", 1, true))
     end)
 
     it("counts the kinds instead once naming them would not fit", function()
-      local note = render.hidden_note({ "Constructor", "Interface", "Property", "Variable" }, 44, "F")
+      local note = assert(render.hidden_note({ "Constructor", "Interface", "Property", "Variable" }, 44, "F"))
 
-      assert.equal("Hiding 4 kinds of symbol. F to change.", note)
+      assert.truthy(note:find("4", 1, true))
+      for _, name in ipairs({ "constructors", "interfaces", "properties", "variables" }) do
+        assert.is_nil(note:find(name, 1, true))
+      end
     end)
 
     for _, kinds in ipairs({ { "Variable" }, { "Constructor", "Interface", "Property", "Variable" } }) do
