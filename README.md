@@ -22,13 +22,16 @@ Each optional integration adds one feature:
 - `gh`: a branch whose open PR targets another branch is compared against that branch.
 - A language server that lists a file's symbols (`textDocument/documentSymbol`): the
   symbol rows under each file. Without one, a file lists only its changes.
-- The `rust`, `typescript` and `tsx` treesitter parsers: inline tests (`#[test]`,
-  `#[cfg(test)]`, `import.meta.vitest`) are recognised by their syntax, not only by their
-  name.
+- The `rust`, `typescript` and `tsx` treesitter parsers, plus a language server: splitting
+  a Rust or TypeScript file's inline tests from the rest of the file. When a branch changes
+  both, the file shows twice, under the sidebar's Implementation and Tests sections.
+  Treesitter finds the tests by syntax, such as `#[test]` or `import.meta.vitest`. Without
+  a file's parser, only tests found by name, such as a `tests` module, are split out.
+  nvim-treesitter installs the parsers with `:TSInstall rust typescript tsx`.
 - mini.icons (once set up) or nvim-web-devicons: icons. nvim-web-devicons covers files
   only.
 - which-key: `?` opens its popup instead of a float.
-- mini.pick: the [Picker](#picker).
+- mini.pick (once set up): the [Picker](#picker).
 - gitsigns: [PR Review Mode](#pr-review-mode), and the colours of the status rail (the
   `▎` bar beside each file).
 
@@ -37,7 +40,14 @@ Each optional integration adds one feature:
 With `vim.pack`:
 
 ```lua
-vim.pack.add({ "https://github.com/macintacos/changeset.nvim" })
+vim.pack.add({
+  "https://github.com/macintacos/changeset.nvim",
+  -- Optional:
+  "https://github.com/lewis6991/gitsigns.nvim", -- PR Review Mode, status rail colours
+  "https://github.com/nvim-mini/mini.icons", -- icons, once set up
+  "https://github.com/nvim-mini/mini.pick", -- the Picker, once set up
+  "https://github.com/folke/which-key.nvim", -- `?` opens its popup
+})
 ```
 
 With lazy.nvim:
