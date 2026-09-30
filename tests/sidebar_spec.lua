@@ -869,26 +869,27 @@ describe("changeset sidebar", function()
 
     it("opens nothing, copies nothing and says nothing on <CR> or y", function()
       on_header()
+      local target = vim.fn.win_getid(vim.fn.winnr("#"))
+      local shown = vim.api.nvim_win_get_buf(target)
+      local wins = #vim.api.nvim_list_wins()
+      -- The clipboard provider is the one piece a headless Neovim lacks.
       local Paths = require("changeset.paths")
-      local commit, copy, notify = window.commit, Paths.copy, vim.notify
-      local calls = {}
-      window.commit = function()
-        table.insert(calls, "commit")
+      local copy, copied = Paths.copy, {}
+      Paths.copy = function(content)
+        table.insert(copied, content)
       end
-      Paths.copy = function()
-        table.insert(calls, "copy")
-      end
-      vim.notify = function(msg)
-        table.insert(calls, msg)
-      end
+      vim.cmd("messages clear")
 
       local ok, err = pcall(function()
         press(vim.keycode("<CR>"))
         press("y")
       end)
-      window.commit, Paths.copy, vim.notify = commit, copy, notify
+      Paths.copy = copy
       assert(ok, err)
-      assert.same({}, calls)
+      assert.equal(shown, vim.api.nvim_win_get_buf(target))
+      assert.equal(wins, #vim.api.nvim_list_wins())
+      assert.same({}, copied)
+      assert.equal("", vim.fn.execute("messages"))
     end)
   end)
 
