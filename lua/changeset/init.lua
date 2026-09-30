@@ -544,7 +544,7 @@ end
 ---What `toggle()` does next, given where the sidebar and the cursor are.
 ---@param st { visible: boolean, focused: boolean }
 ---@return "open"|"focus"|"close"
-function M._next_action(st)
+local function next_action(st)
   if not st.visible then
     return "open"
   end
@@ -553,7 +553,7 @@ end
 
 ---Open, focus, or dismiss the sidebar, depending on where the cursor is.
 function M.toggle()
-  local action = M._next_action({ visible = window.is_visible(), focused = window.is_focused() })
+  local action = next_action({ visible = window.is_visible(), focused = window.is_focused() })
   if action == "open" then
     M.open()
     window.focus()
