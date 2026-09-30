@@ -226,5 +226,21 @@ describe("changeset.pick", function()
 
       assert.are.equal("Changeset (vs trunk)", name)
     end)
+
+    it("warns rather than opening the picker when there is no changeset", function()
+      Fixture.git({ "checkout", "-q", "--orphan", "unrelated" }, tmp)
+      Fixture.commit("unrelated", tmp)
+      local notify, notes = vim.notify, {}
+      vim.notify = function(msg, level)
+        table.insert(notes, { msg = msg, level = level })
+      end
+
+      local ok, err = pcall(pick.pick)
+
+      vim.notify = notify
+      assert(ok, err)
+      assert.equal(1, #notes)
+      assert.equal(vim.log.levels.WARN, notes[1].level)
+    end)
   end)
 end)
