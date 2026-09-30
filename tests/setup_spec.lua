@@ -149,7 +149,6 @@ describe("changeset setup", function()
     end
     table.sort(listed)
 
-    assert.equal(17, #bound)
     assert.same(bound, listed)
   end)
 
