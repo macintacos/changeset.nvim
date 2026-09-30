@@ -144,6 +144,25 @@ describe("PR Review Mode", function()
     assert.is_true(await(bufs, base, 5000))
   end)
 
+  it("keeps the mode off on a branch it was toggled off on, across a switch away and back", function()
+    review.fixture(dir, "kept-off", { "a.txt" })
+    vim.fn.chdir(dir)
+    local bufs = edit({ "a.txt" })
+    assert.is_true(await(bufs, review.merge_base(dir), 5000))
+    toggle()
+    assert.is_true(await(bufs, nil, 5000))
+
+    for _, branch in ipairs({ "main", "kept-off" }) do
+      support.git({ "switch", "-q", branch }, dir)
+      assert.is_true(vim.wait(10000, function()
+        return vim.b[bufs[1]].gitsigns_head == branch
+      end, 20))
+    end
+
+    assert.is_true(settle())
+    assert.is_nil(revision(bufs[1]))
+  end)
+
   it("diffs a stacked branch against its PR's target branch", function()
     stack("stacked")
     vim.env.FAKE_GH_PR = '{"baseRefName":"parent","state":"OPEN"}'
