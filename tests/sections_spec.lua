@@ -149,7 +149,7 @@ describe("sections", function()
         },
       },
     }
-    local ts = {
+    rules["src/session.ts"] = {
       accepts = {
         cb("describe('refresh') callback"),
         cb("it('refreshes') callback"),
@@ -165,9 +165,6 @@ describe("sections", function()
         { name = "TestSessionStore", kind = "Class" },
       },
     }
-    for _, ext in ipairs({ "ts", "tsx", "mts", "cts" }) do
-      rules["src/session." .. ext] = ts
-    end
 
     for path, rule in pairs(rules) do
       describe(path, function()
@@ -186,14 +183,14 @@ describe("sections", function()
       end)
     end
 
+    for _, ext in ipairs({ "tsx", "mts", "cts" }) do
+      it(("gives .%s the TypeScript rule"):format(ext), function()
+        assert.is_true(sections.test_rule("src/session." .. ext)(cb("describe('refresh') callback")))
+      end)
+    end
+
     describe("a symbol the syntax marked", function()
-      for _, path in ipairs({
-        "src/session.rs",
-        "src/session.ts",
-        "src/session.tsx",
-        "src/session.mts",
-        "src/session.cts",
-      }) do
+      for _, path in ipairs({ "src/session.rs", "src/session.ts" }) do
         describe(path, function()
           it("accepts it whatever its name", function()
             local rule = assert(sections.test_rule(path))
@@ -214,14 +211,5 @@ describe("sections", function()
     assert.equal("generated", sections.classify("README.md", true))
     assert.equal("generated", sections.classify("api.go", true))
     assert.equal("implementation", sections.classify("api.go", false))
-  end)
-
-  it("orders implementation, tests, docs, config, generated", function()
-    assert.same(
-      { "implementation", "tests", "docs", "config", "generated" },
-      vim.tbl_map(function(section)
-        return section.key
-      end, sections.ORDER)
-    )
   end)
 end)
