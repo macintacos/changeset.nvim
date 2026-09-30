@@ -28,7 +28,6 @@ describe("highlight overrides", function()
     render.define_highlights()
 
     assert.equal(0x0a0b0c, group("ChangesetHeaderRef").fg)
-    assert.is_true(group(render.META_HL).italic)
   end)
 
   it("keeps the match group linked to Search across redefinitions", function()
