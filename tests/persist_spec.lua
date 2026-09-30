@@ -1,5 +1,6 @@
 local changeset = require("changeset")
 local render = require("changeset.render")
+local tree = require("changeset.tree")
 local window = require("changeset.window")
 local Fixture = require("support.git")
 local Cursor = require("support.cursor")
@@ -100,6 +101,14 @@ local function sidebar_cursor_line()
   return sidebar_lines()[vim.api.nvim_win_get_cursor(win)[1]]
 end
 
+---The id of the Implementation row for `path`, or for the symbol chain under it.
+---@param path string
+---@param ... string Symbol names, outermost first.
+---@return string
+local function row_id(path, ...)
+  return table.concat({ tree.section_id("implementation"), path, ... }, "\0")
+end
+
 ---Restore as a session read does: a leftover sidebar window, the recorded global, then
 ---`SessionLoadPost`'s refill. Focus stays where it was unless `focused`.
 ---@param position table|string A position, or the global's raw value.
@@ -147,19 +156,27 @@ describe("changeset position in a session", function()
     assert.same({ path = "mod.lua", lnum = 8 }, changeset._tree().here)
   end)
 
-  it("records where you are and the sidebar's cursor row in a session global", function()
+  it("restores where you were and the sidebar's cursor row from what it recorded", function()
     vim.cmd.edit("mod.lua")
+    local file_win = vim.api.nvim_get_current_win()
     vim.api.nvim_win_set_cursor(0, { 8, 0 })
     changeset.open()
     settle()
-
     sidebar_cursor_to("other.lua")
     flush()
+    local recorded = vim.g.ChangesetPosition
+    changeset.close()
+    vim.api.nvim_set_current_win(file_win)
+    vim.api.nvim_win_set_cursor(0, { 2, 0 })
+    flush()
+    focus_terminal()
 
-    assert.same(
-      { here = { path = "mod.lua", lnum = 8 }, row = { id = "#implementation\0other.lua", path = "other.lua" } },
-      vim.json.decode(vim.g.ChangesetPosition)
-    )
+    restore_session(recorded)
+    settle()
+    flush()
+
+    assert.same({ path = "mod.lua", lnum = 8 }, changeset._tree().here)
+    assert.truthy(sidebar_cursor_line():find("other.lua", 1, true))
   end)
 
   it("restores where you were and the sidebar's cursor row with focus in a terminal", function()
@@ -168,7 +185,7 @@ describe("changeset position in a session", function()
 
     restore_session({
       here = { path = "mod.lua", lnum = 8 },
-      row = { id = "#implementation\0other.lua", path = "other.lua" },
+      row = { id = row_id("other.lua"), path = "other.lua" },
     })
     settle()
     flush()
@@ -221,7 +238,7 @@ describe("changeset position in a session", function()
 
     restore_session({
       here = { path = "gone.lua", lnum = 3 },
-      row = { id = "#implementation\0other.lua\0gone", path = "other.lua" },
+      row = { id = row_id("other.lua", "gone"), path = "other.lua" },
     })
     settle()
     flush()
@@ -241,7 +258,7 @@ describe("changeset position in a session", function()
     local file_win = vim.api.nvim_get_current_win()
     focus_terminal()
 
-    restore_session({ row = { id = "#implementation\0plain.lua", path = "plain.lua" } })
+    restore_session({ row = { id = row_id("plain.lua"), path = "plain.lua" } })
     settle()
     flush()
 
@@ -323,7 +340,7 @@ describe("changeset position in a session", function()
       focus_terminal()
       restore_session({
         here = { path = "mod.lua", lnum = 8 },
-        row = { id = "#implementation\0mod.lua\0step", path = "mod.lua" },
+        row = { id = row_id("mod.lua", "step"), path = "mod.lua" },
       })
       diff_arrived()
 
@@ -349,7 +366,7 @@ describe("changeset position in a session", function()
     end)
 
     it("lets a row you move to in a focused sidebar win over the recorded one", function()
-      restore_session({ row = { id = "#implementation\0mod.lua\0step", path = "mod.lua" } }, true)
+      restore_session({ row = { id = row_id("mod.lua", "step"), path = "mod.lua" } }, true)
       diff_arrived()
 
       sidebar_cursor_to("other.lua")
@@ -367,7 +384,7 @@ describe("changeset position in a session", function()
       focus_terminal()
       restore_session({
         here = { path = "src/session.rs", lnum = 4 },
-        row = { id = "#implementation\0src/session.rs", path = "src/session.rs" },
+        row = { id = row_id("src/session.rs"), path = "src/session.rs" },
       })
       diff_arrived()
 
