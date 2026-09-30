@@ -252,7 +252,7 @@ local function rebuild()
   if session.restoring and window.is_focused() and session.restoring.at ~= at then
     release("row")
   end
-  session.rows = tree.build(session.files, session.symbols, line_text)
+  session.rows = tree.build(session.files, session.symbols, { text = line_text, comments = session.comments })
   redraw()
   if follow then
     land(vim.api.nvim_get_current_win())

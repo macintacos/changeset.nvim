@@ -1,5 +1,6 @@
 ---Builds the row tree.
 
+local comments = require("changeset.comments")
 local sections = require("changeset.sections")
 
 local M = {}
@@ -42,7 +43,17 @@ local SEP = " › "
 ---Text of a line of `path` in the working tree, used to caption orphan hunks.
 ---@alias changeset.LineText fun(path: string, lnum: integer): string?
 
----@class changeset.Node
+---What `build` reads of a file's lines beyond its hunks.
+---@class changeset.tree.Lines
+---@field text changeset.LineText? Captions orphan hunks; without it they are named by line range alone.
+---@field comments table<string, changeset.Comments>? By file path; a file without an entry never gets a Docs copy.
+
+---Which kinds of changed line a unit holds.
+---@class changeset.tree.Flags
+---@field comment boolean?
+---@field code boolean? A directive counts as code.
+
+---@class changeset.Node : changeset.tree.Flags
 ---@field sym changeset.Symbol
 ---@field children changeset.Node[]
 ---@field changed boolean
@@ -68,6 +79,58 @@ local function nest(symbols, is_test)
     stack[#stack + 1] = node
   end
   return roots
+end
+
+---Copies of `symbols` whose ranges reach up over the comment and directive lines directly above them, stopping
+---below the previous sibling and never above the parent, so a doc comment belongs to what it documents.
+---@param symbols changeset.Symbol[] `symbols.flatten` order.
+---@param kinds changeset.LineKinds The new side's.
+---@return changeset.Symbol[]
+local function widen(symbols, kinds)
+  local out, last_at = {}, {}
+  for i, sym in ipairs(symbols) do
+    local prev, parent = last_at[sym.depth], last_at[sym.depth - 1]
+    local floor = math.max(prev and prev.range_end_lnum + 1 or 1, parent and parent.range_lnum or 1)
+    local first = sym.range_lnum
+    while first > floor and vim.list_contains({ "comment", "directive" }, comments.kind(kinds, first - 1)) do
+      first = first - 1
+    end
+    out[i] = vim.tbl_extend("force", sym, { range_lnum = first })
+    last_at[sym.depth] = out[i]
+  end
+  return out
+end
+
+---Note line `lnum`'s kind on `flags`; a blank line is neither comment nor code.
+---@param flags changeset.tree.Flags
+---@param kinds changeset.LineKinds? nil when the side could not be read, so every line is code.
+---@param lnum integer
+local function mark(flags, kinds, lnum)
+  local kind = kinds and comments.kind(kinds, lnum) or "code"
+  if kind == "comment" then
+    flags.comment = true
+  elseif kind ~= "blank" then
+    flags.code = true
+  end
+end
+
+---Mark each of `hunk`'s lines on the unit that owns it.
+---@param hunk changeset.Hunk
+---@param data changeset.Comments
+---@param owner fun(lnum: integer?): changeset.tree.Flags Takes a new line, or nil for the removed lines.
+local function judge(hunk, data, owner)
+  for lnum = hunk.lnum, hunk.lnum + hunk.count - 1 do
+    mark(owner(lnum), data.new, lnum)
+  end
+  for lnum = hunk.old_lnum, hunk.old_lnum + hunk.removed - 1 do
+    mark(owner(nil), data.old, lnum)
+  end
+end
+
+---@param flags changeset.tree.Flags
+---@return boolean
+local function is_docs(flags)
+  return flags.comment == true and not flags.code
 end
 
 ---The new-file lines a hunk covers; a deletion hunk sits on the line it follows.
@@ -121,10 +184,19 @@ end
 ---Credit `hunk` to the symbols it lands in.
 ---@param roots changeset.Node[]
 ---@param hunk changeset.Hunk
+---@param data changeset.Comments?
 ---@return changeset.Node[] hits Empty when the hunk touches no symbol.
-local function attribute(roots, hunk)
+local function attribute(roots, hunk, data)
   local first, last = span(hunk)
   local hits = deepest_hits(roots, first, last, {})
+  if data and #hits > 0 then
+    -- Lines outside every hit, like removed ones, go to the first: a code line beside a doc comment keeps it code.
+    judge(hunk, data, function(lnum)
+      return lnum and vim.iter(hits):find(function(node)
+        return touches(node.sym, lnum, lnum)
+      end) or hits[1]
+    end)
+  end
   for i, node in ipairs(hits) do
     node.changed = true
     node.added = node.added + added_inside(hunk, node.sym)
@@ -153,43 +225,69 @@ end
 ---@param file changeset.File
 ---@param symbols changeset.Symbol[]
 ---@param is_test changeset.SymbolRule?
+---@param data changeset.Comments?
 ---@return changeset.Node[] roots
----@return changeset.Hunk[] orphans Hunks that touch no symbol.
+---@return changeset.Hunk[] orphans Hunks that touch no symbol and hold code.
+---@return changeset.Hunk[] doc_orphans Hunks that touch no symbol and change only comments.
 ---@return changeset.diff.Stat test_stat Added lines inside a test subtree, and a hunk's removed lines when `attribute` hands them to a test.
-local function credit(file, symbols, is_test)
-  local roots, orphans, test_stat = nest(symbols, is_test), {}, { added = 0, removed = 0 }
+local function credit(file, symbols, is_test, data)
+  local roots, orphans, doc_orphans, test_stat = nest(symbols, is_test), {}, {}, { added = 0, removed = 0 }
   for _, hunk in ipairs(file.hunks) do
-    local hits = attribute(roots, hunk)
+    local hits = attribute(roots, hunk, data)
     if #hits == 0 then
-      orphans[#orphans + 1] = hunk
+      local flags = {}
+      if data then
+        judge(hunk, data, function()
+          return flags
+        end)
+      end
+      local into = is_docs(flags) and doc_orphans or orphans
+      into[#into + 1] = hunk
     elseif is_test then
       test_stat.added = test_stat.added + added_in_tests(roots, hunk)
       test_stat.removed = test_stat.removed + (hits[1].test and hunk.removed or 0)
     end
   end
-  return roots, orphans, test_stat
+  return roots, orphans, doc_orphans, test_stat
 end
 
----Split credited `nodes` between the path section's copy and the Tests copy. A test node goes whole; a node
----holding one goes to both, bare on the Tests side, so the test stays placed under it.
+---The copy a changed node's own change puts it in.
+---@param node changeset.Node
+---@return "kept"|"tests"|"docs"
+local function destination(node)
+  return is_docs(node) and "docs" or node.test and "tests" or "kept"
+end
+
+---Split credited `nodes` between the path section's copy, the Tests copy and the Docs copy. A node goes where its
+---own change puts it, and bare to every other copy, so a descendant listed there stays placed under it.
 ---@param nodes changeset.Node[]
----@return changeset.Node[] kept
----@return changeset.Node[] test_nodes
+---@return table<"kept"|"tests"|"docs", changeset.Node[]>
 local function split(nodes)
-  local kept, tests = {}, {}
+  local out = { kept = {}, tests = {}, docs = {} }
   for _, node in ipairs(nodes) do
-    if node.test then
-      tests[#tests + 1] = node
-    else
-      local kept_children, test_children = split(node.children)
-      kept[#kept + 1] = vim.tbl_extend("force", node, { children = kept_children })
-      if #test_children > 0 then
-        tests[#tests + 1] =
-          vim.tbl_extend("force", node, { children = test_children, changed = false, added = 0, removed = 0 })
-      end
+    local own = node.changed and destination(node)
+    for copy, children in pairs(split(node.children)) do
+      local placed = own == copy and { children = children }
+        or { children = children, changed = false, added = 0, removed = 0 }
+      table.insert(out[copy], vim.tbl_extend("force", node, placed))
     end
   end
-  return kept, tests
+  return out
+end
+
+---Lines the Docs nodes under `nodes` account for, all of them and those inside a test subtree.
+---@param nodes changeset.Node[]
+---@param all changeset.diff.Stat
+---@param in_tests changeset.diff.Stat
+local function docs_stat(nodes, all, in_tests)
+  for _, node in ipairs(nodes) do
+    if node.changed and is_docs(node) then
+      for _, stat in ipairs(node.test and { all, in_tests } or { all }) do
+        stat.added, stat.removed = stat.added + node.added, stat.removed + node.removed
+      end
+    end
+    docs_stat(node.children, all, in_tests)
+  end
 end
 
 ---Rows for the changed symbols under `parent` and the ancestors needed to place them.
@@ -372,63 +470,93 @@ local function append(section, row, stat)
   section.removed = section.removed + (stat.removed or 0)
 end
 
----File `file` under its path's section and, when its changes reach inline tests, under Tests as well: each copy
----lists only its own symbols, "Other changes" stays on the path's copy, and a copy with neither is left out.
----Two copies split the file's stat; a lone copy carries all of it.
+---A file row under `section` listing `nodes`, then `orphans` under "Other changes".
+---@param file changeset.File
+---@param section changeset.Row
+---@param nodes changeset.Node[]
+---@param orphans changeset.Hunk[]
+---@param line_text changeset.LineText?
+---@return changeset.Row
+local function copy_row(file, section, nodes, orphans, line_text)
+  local row = file_row(file, true, section)
+  row.children = symbol_rows(nodes, row)
+  if #orphans > 0 then
+    row.children[#row.children + 1] = orphans_row(orphans, row, line_text)
+  end
+  return row
+end
+
+---File `file` under its path's section, under Tests when its changes reach inline tests, and under Docs when
+---some change only comments: each copy lists only its own symbols and "Other changes", and a copy with neither is
+---left out. Docs takes its own lines; Tests takes its test lines when the path's copy shows too, and whichever
+---of those two shows takes the rest. A lone copy carries the whole stat.
 ---@param section_rows table<changeset.SectionKey, changeset.Row>
 ---@param file changeset.File
 ---@param symbols changeset.Symbol[]? nil while the file is still resolving.
----@param line_text changeset.LineText?
-local function add_file(section_rows, file, symbols, line_text)
+---@param lines changeset.tree.Lines
+local function add_file(section_rows, file, symbols, lines)
   local key = sections.classify(file.path, file.generated)
   local section = section_rows[key]
-  local path_copy = file_row(file, symbols ~= nil, section)
   if not symbols or file.status == "deleted" or key == "generated" then
-    return append(section, path_copy, file)
+    return append(section, file_row(file, symbols ~= nil, section), file)
   end
-  local is_test = sections.test_rule(file.path)
-  local roots, orphans, test_stat = credit(file, symbols, is_test)
-  local kept, test_nodes = roots, {}
-  if is_test then
-    kept, test_nodes = split(roots)
+  local data = key ~= "docs" and lines.comments and lines.comments[file.path] or nil
+  local roots, orphans, doc_orphans, test_stat =
+    credit(file, data and widen(symbols, data.new) or symbols, sections.test_rule(file.path), data)
+  local nodes = split(roots)
+  local path_copy = copy_row(file, section, nodes.kept, orphans, lines.text)
+  local tests_copy = copy_row(file, section_rows.tests, nodes.tests, {}, lines.text)
+  local docs_copy = copy_row(file, section_rows.docs, nodes.docs, doc_orphans, lines.text)
+  local shown = vim.tbl_filter(function(copy)
+    return #copy[2].children > 0
+  end, { { section, path_copy }, { section_rows.tests, tests_copy }, { section_rows.docs, docs_copy } })
+  if #shown <= 1 then
+    local only = shown[1] or { section, path_copy }
+    return append(only[1], only[2], file)
   end
-  path_copy.children = symbol_rows(kept, path_copy)
-  if #orphans > 0 then
-    path_copy.children[#path_copy.children + 1] = orphans_row(orphans, path_copy, line_text)
+  local docs, docs_in_tests = { added = 0, removed = 0 }, { added = 0, removed = 0 }
+  docs_stat(roots, docs, docs_in_tests)
+  for _, hunk in ipairs(doc_orphans) do
+    docs.added, docs.removed = docs.added + hunk.added, docs.removed + hunk.removed
   end
-  local tests_copy = file_row(file, true, section_rows.tests)
-  tests_copy.children = symbol_rows(test_nodes, tests_copy)
-  if #tests_copy.children == 0 then
-    return append(section, path_copy, file)
+  docs_copy.added, docs_copy.removed = docs.added, docs.removed
+  local rest = { added = file.added - docs.added, removed = file.removed - docs.removed }
+  if #tests_copy.children > 0 then
+    if #path_copy.children > 0 then
+      tests_copy.added, tests_copy.removed =
+        test_stat.added - docs_in_tests.added, test_stat.removed - docs_in_tests.removed
+    else
+      tests_copy.added, tests_copy.removed = rest.added, rest.removed
+    end
+    rest = { added = rest.added - tests_copy.added, removed = rest.removed - tests_copy.removed }
   end
-  if #path_copy.children == 0 then
-    return append(section_rows.tests, tests_copy, file)
+  path_copy.added, path_copy.removed = rest.added, rest.removed
+  for _, copy in ipairs(shown) do
+    append(copy[1], copy[2], copy[2])
   end
-  tests_copy.added, tests_copy.removed = test_stat.added, test_stat.removed
-  path_copy.added, path_copy.removed = file.added - test_stat.added, file.removed - test_stat.removed
-  append(section, path_copy, path_copy)
-  append(section_rows.tests, tests_copy, tests_copy)
 end
 
 ---Map what a branch changed onto the symbols that own it: one section row per non-empty section, one row per
 ---file under it, changed symbols beneath (with the ancestors needed to place them), and an "Other changes"
 ---group for hunks outside every symbol. A Rust, Python or TypeScript file whose changes reach inline tests shows
----under Tests too, holding just those tests, or only there when every change is a test.
+---under Tests too, holding just those tests. A symbol or orphan hunk whose changed lines are comments and no code
+---shows under a Docs copy instead, a doc comment counting with the symbol below it. A copy is left out when it
+---would be empty.
 ---
 ---A file absent from `symbols_by_path` is still resolving and gets no children; a file mapped to `{}`
 ---has no symbols, so all its hunks are orphans. A deleted or Generated file never gets children: a Generated
 ---file's hunks are not worth a row each.
 ---@param files changeset.File[] Hunks ascending by line, as `git diff` emits them.
 ---@param symbols_by_path table<string, changeset.Symbol[]> Flat `symbols.flatten` output by file path.
----@param line_text changeset.LineText? Captions orphan hunks; without it they are named by line range alone.
+---@param lines changeset.tree.Lines?
 ---@return changeset.Row[]
-function M.build(files, symbols_by_path, line_text)
+function M.build(files, symbols_by_path, lines)
   local section_rows = {}
   for _, section in ipairs(sections.ORDER) do
     section_rows[section.key] = section_row(section)
   end
   for _, file in ipairs(files) do
-    add_file(section_rows, file, symbols_by_path[file.path], line_text)
+    add_file(section_rows, file, symbols_by_path[file.path], lines or {})
   end
   return vim
     .iter(sections.ORDER)

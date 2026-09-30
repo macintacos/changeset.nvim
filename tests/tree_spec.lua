@@ -324,7 +324,7 @@ describe("changeset.tree", function()
       ---@param line_text? fun(path: string, lnum: integer): string?
       ---@return changeset.Row[]
       local function build_store(hunks, line_text)
-        return tree.files(tree.build({ file(PATH, hunks) }, { [PATH] = STORE }, line_text))[1].children
+        return tree.files(tree.build({ file(PATH, hunks) }, { [PATH] = STORE }, { text = line_text }))[1].children
       end
 
       it("gathers hunks outside every symbol into one group after the symbol rows", function()
@@ -867,6 +867,270 @@ describe("changeset.tree", function()
 
         assert.equal(TESTS_ID .. "\0tests\0refreshes", tree.relocate(rows, picked).id)
       end)
+    end)
+  end)
+  describe("comment-only changes", function()
+    local LUA = "src/session.lua"
+    local IMPL_ID, DOCS_ID = "#implementation\0" .. LUA, "#docs\0" .. LUA
+
+    ---A `git diff --unified=0` hunk whose removed lines start at `old_lnum`.
+    ---@param lnum integer
+    ---@param count integer
+    ---@param removed integer?
+    ---@param old_lnum integer?
+    ---@return changeset.Hunk
+    local function h(lnum, count, removed, old_lnum)
+      return { lnum = lnum, count = count, added = count, removed = removed or 0, old_lnum = old_lnum or lnum }
+    end
+
+    ---@param runs { comment: table?, directive: table?, blank: table? }
+    ---@return changeset.LineKinds
+    local function kinds(runs)
+      return { comment = runs.comment or {}, directive = runs.directive or {}, blank = runs.blank or {} }
+    end
+
+    ---@param new table
+    ---@param old table?
+    ---@return changeset.Comments
+    local function comments(new, old)
+      return { new = kinds(new), old = kinds(old or {}) }
+    end
+
+    ---@param files changeset.File[]
+    ---@param symbols_by_path table<string, table[]>
+    ---@param comments_by_path table<string, changeset.Comments>
+    ---@return changeset.Row[]
+    local function build(files, symbols_by_path, comments_by_path)
+      return tree.build(files, symbols_by_path, { comments = comments_by_path })
+    end
+
+    ---The one-file build of `LUA`.
+    ---@param hunks changeset.Hunk[]
+    ---@param symbols table[]
+    ---@param data changeset.Comments?
+    ---@return changeset.Row[]
+    local function build_lua(hunks, symbols, data)
+      return build({ file(LUA, hunks) }, { [LUA] = symbols }, {
+        [LUA] = data --[[@as changeset.Comments]],
+      })
+    end
+
+    ---@param row changeset.Row
+    ---@return integer[]
+    local function stat(row)
+      return { row.added, row.removed }
+    end
+
+    describe("two functions", function()
+      -- `a` holds a docstring on lines 4–5.
+      local TWO = { sym("a", "Function", 0, 3, 10), sym("b", "Function", 0, 12, 20) }
+      local DATA = comments({ comment = { { 4, 5 } } }, { comment = { { 4, 5 } } })
+
+      it("lists a comment-only symbol under Docs and a code change under its path's section", function()
+        local rows = build_lua({ h(4, 1, 1), h(15, 1, 1) }, TWO, DATA)
+
+        assert.same({ "Implementation", "Docs" }, names(rows))
+        assert.same({ IMPL_ID, IMPL_ID .. "\0b" }, ids(rows[1].children))
+        assert.same({ DOCS_ID, DOCS_ID .. "\0a" }, ids(rows[2].children))
+        assert.same({ 1, 1 }, stat(rows[1].children[1]))
+        assert.same({ 1, 1 }, stat(rows[2].children[1]))
+      end)
+
+      it("keeps a symbol whose comment and code both change whole under its path's section", function()
+        local rows = build_lua({ h(4, 1), h(7, 1) }, TWO, DATA)
+
+        assert.same({ "Implementation" }, names(rows))
+        assert.same({ IMPL_ID, IMPL_ID .. "\0a" }, ids(rows[1].children))
+      end)
+    end)
+
+    it("places a comment-only method under Docs beneath its bare class", function()
+      local class = { sym("C", "Class", 0, 1, 30), sym("a", "Method", 1, 3, 10), sym("b", "Method", 1, 12, 20) }
+      local rows = build_lua({ h(4, 1), h(15, 1) }, class, comments({ comment = { { 4, 4 } } }))
+
+      assert.same({ IMPL_ID, IMPL_ID .. "\0C", IMPL_ID .. "\0C\0b" }, ids(rows[1].children))
+      assert.same({ DOCS_ID, DOCS_ID .. "\0C", DOCS_ID .. "\0C\0a" }, ids(rows[2].children))
+      assert.is_true(rows[2].children[1].children[1].ancestor)
+    end)
+
+    describe("inline tests", function()
+      local RS = "src/session.rs"
+      local SYMBOLS = {
+        sym("SessionStore", "Struct", 0, 1, 20),
+        sym("refresh", "Method", 1, 5, 12),
+        sym("tests", "Module", 0, 30, 60),
+        sym("refreshes", "Function", 1, 32, 40),
+        sym("expires", "Function", 1, 42, 50),
+      }
+
+      it("lists a comment-only test under Docs rather than Tests", function()
+        local rows = build(
+          { file(RS, { h(33, 1) }) },
+          { [RS] = SYMBOLS },
+          { [RS] = comments({ comment = { { 33, 33 } } }) }
+        )
+
+        assert.same({ "Docs" }, names(rows))
+        assert.same(
+          { "#docs\0" .. RS, "#docs\0" .. RS .. "\0tests", "#docs\0" .. RS .. "\0tests\0refreshes" },
+          ids(rows[1].children)
+        )
+      end)
+
+      it("splits a file's stat across three copies, each counted in its own section", function()
+        local data = comments({ comment = { { 43, 43 } } }, { comment = { { 43, 43 } } })
+        local rows = build({ file(RS, { h(6, 2, 1), h(35, 1), h(43, 1, 1) }) }, { [RS] = SYMBOLS }, { [RS] = data })
+
+        assert.same({ "Implementation", "Tests", "Docs" }, names(rows))
+        assert.same({ 2, 1 }, stat(rows[1].children[1]))
+        assert.same({ 1, 0 }, stat(rows[2].children[1]))
+        assert.same({ 1, 1 }, stat(rows[3].children[1]))
+        for _, section in ipairs(rows) do
+          assert.same(stat(section.children[1]), stat(section))
+        end
+      end)
+    end)
+
+    it("gives a file in any other path section a Docs copy", function()
+      local spec = "tests/session_spec.lua"
+      local rows = build(
+        { file(spec, { h(3, 1), h(15, 1) }), file("mise.toml", { h(1, 1), h(5, 1) }) },
+        { [spec] = { sym("a", "Function", 0, 1, 10), sym("b", "Function", 0, 12, 20) }, ["mise.toml"] = {} },
+        { [spec] = comments({ comment = { { 3, 3 } } }), ["mise.toml"] = comments({ comment = { { 1, 1 } } }) }
+      )
+
+      assert.same({ "Tests", "Docs", "Config" }, names(rows))
+      assert.same({ spec, "mise.toml" }, names(rows[2].children))
+    end)
+
+    describe("a doc comment above a symbol", function()
+      -- `f`'s range starts on line 5, below its doc comment on lines 3–4.
+      local F = { sym("f", "Function", 0, 5, 10) }
+      local DATA = comments({ comment = { { 3, 4 } } })
+      -- `m`'s range starts on line 4, below its doc comment on lines 2–3.
+      local CLASS = { sym("C", "Class", 0, 1, 20), sym("m", "Method", 1, 4, 8) }
+      local CLASS_DATA = comments({ comment = { { 2, 3 } } })
+
+      for _, case in ipairs({
+        { "whose body changes too", F, DATA, { h(3, 1), h(7, 1) } },
+        { "changed in one hunk with its first code line", F, DATA, { h(4, 2) } },
+        { "of a class's first method whose body changes too", CLASS, CLASS_DATA, { h(2, 1), h(6, 1) } },
+        { "of a class's first method changed with its first code line", CLASS, CLASS_DATA, { h(3, 2) } },
+        { "beside a code line added directly above it", F, DATA, { h(2, 2) } },
+      }) do
+        it("keeps the symbol under its path's section when a doc comment " .. case[1] .. " changes", function()
+          local rows = build_lua(case[4], case[2], case[3])
+
+          assert.same({ "Implementation" }, names(rows))
+          assert.is_nil(tree.find(rows, IMPL_ID .. "\0#orphans"))
+        end)
+      end
+
+      it("lists the symbol under Docs when only its doc comment changes", function()
+        local rows = build_lua({ h(3, 1) }, F, DATA)
+
+        assert.same({ DOCS_ID, DOCS_ID .. "\0f" }, ids(rows[1].children))
+      end)
+
+      it("keeps a doc comment above a directive with its symbol", function()
+        local data = comments({ comment = { { 2, 2 } }, directive = { { 3, 3 } } })
+        local rows = build_lua({ h(2, 1) }, { sym("f", "Function", 0, 4, 10) }, data)
+
+        assert.same({ DOCS_ID, DOCS_ID .. "\0f" }, ids(rows[1].children))
+      end)
+    end)
+
+    describe("orphan hunks", function()
+      it("gives each copy its own Other changes group", function()
+        local rows = build_lua(
+          { h(2, 1), h(25, 1) },
+          { sym("f", "Function", 0, 10, 20) },
+          comments({ comment = { { 2, 2 } } })
+        )
+
+        assert.same({ "Other changes" }, names(rows[1].children[1].children))
+        assert.same({ "L25" }, names(rows[1].children[1].children[1].children))
+        assert.same({ "L2" }, names(rows[2].children[1].children[1].children))
+      end)
+
+      it("judges each hunk of a file without symbols on its own", function()
+        local rows = build_lua({ h(2, 1), h(5, 1) }, {}, comments({ comment = { { 2, 2 } } }))
+
+        assert.same({ "Implementation", "Docs" }, names(rows))
+        assert.same({ "L5" }, names(rows[1].children[1].children[1].children))
+        assert.same({ "L2" }, names(rows[2].children[1].children[1].children))
+      end)
+    end)
+
+    it("shows a file whose every change is a comment under Docs alone, with its whole stat", function()
+      local data = comments({ comment = { { 2, 4 } } }, { comment = { { 3, 3 } } })
+      local rows = build_lua({ h(2, 1), h(3, 2, 1) }, {}, data)
+
+      assert.same({ "Docs" }, names(rows))
+      assert.same({ 3, 1 }, stat(rows[1].children[1]))
+    end)
+
+    describe("removed lines", function()
+      local F = { sym("f", "Function", 0, 5, 10) }
+
+      it("lists a symbol that only loses comment lines under Docs", function()
+        local rows = build_lua({ h(6, 0, 2) }, F, comments({}, { comment = { { 6, 7 } } }))
+
+        assert.same({ "Docs" }, names(rows))
+      end)
+
+      for _, case in ipairs({
+        { "deletes code and adds a comment", comments({ comment = { { 6, 6 } } }, { comment = { { 9, 9 } } }) },
+        { "comments code out", comments({ comment = { { 6, 6 } } }) },
+        { "has no base side", { new = kinds({ comment = { { 6, 6 } } }) } },
+      }) do
+        it("keeps a symbol under its path's section when its change " .. case[1], function()
+          local rows = build_lua({ h(6, 1, 1) }, F, case[2])
+
+          assert.same({ "Implementation" }, names(rows))
+        end)
+      end
+    end)
+
+    describe("blank lines", function()
+      local F = { sym("f", "Function", 0, 5, 10) }
+      local DATA = comments({ comment = { { 6, 6 } }, blank = { { 7, 7 } } })
+
+      it("lists a comment changed beside a blank line under Docs", function()
+        assert.same({ "Docs" }, names(build_lua({ h(6, 2) }, F, DATA)))
+      end)
+
+      it("keeps a symbol whose only change is a blank line under its path's section", function()
+        assert.same({ "Implementation" }, names(build_lua({ h(7, 1) }, F, DATA)))
+      end)
+    end)
+
+    it("orders Docs copies among the files in Docs by the order it is handed them", function()
+      local rows = build(
+        { file("README.md", { h(1, 1) }), file(LUA, { h(2, 1) }), file("docs/b.md", { h(1, 1) }) },
+        { ["README.md"] = {}, [LUA] = {}, ["docs/b.md"] = {} },
+        { [LUA] = comments({ comment = { { 2, 2 } } }) }
+      )
+
+      assert.same({ "README.md", LUA, "docs/b.md" }, names(rows[1].children))
+    end)
+
+    describe("a file keeps its path's copy alone", function()
+      local ALL = comments({ comment = { { 1, 9 } } })
+
+      for _, case in ipairs({
+        { "while it is still resolving", LUA, nil, ALL, "Implementation" },
+        { "without comment data", LUA, {}, nil, "Implementation" },
+        { "when it is Generated", "go.sum", {}, ALL, "Generated" },
+        { "when its path puts it in Docs", "README.md", {}, ALL, "Docs" },
+      }) do
+        it(case[1], function()
+          local rows = build({ file(case[2], { h(2, 1) }) }, { [case[2]] = case[3] }, { [case[2]] = case[4] })
+
+          assert.same({ case[5] }, names(rows))
+          assert.equal(1, #tree.files(rows))
+        end)
+      end
     end)
   end)
 end)
