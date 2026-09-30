@@ -27,17 +27,7 @@ describe("changeset.state", function()
       assert.is_true(state.is_collapsed(st, "auth.ts"))
     end)
 
-    it("expands everything at once", function()
-      local st = state.new()
-      state.collapse_all(st, { "api.ts", "auth.ts" })
-
-      state.expand_all(st, {})
-
-      assert.is_false(state.is_collapsed(st, "api.ts"))
-      assert.is_false(state.is_collapsed(st, "auth.ts"))
-    end)
-
-    it("leaves the rows it is told to keep folded", function()
+    it("expands every row but those it is told to keep folded", function()
       local st = state.new()
       state.collapse_all(st, { "#tests", "#tests\0a_spec.lua" })
 
@@ -133,7 +123,7 @@ describe("changeset.state", function()
       assert.equal(2, parent_lnum)
     end)
 
-    it("does nothing on a shut file row, which has no parent to step out to", function()
+    it("does nothing on a shut section header", function()
       assert.is_nil(state._outward(at_depths(0, 0), 1))
     end)
   end)
