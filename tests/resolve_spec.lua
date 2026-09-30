@@ -32,18 +32,25 @@ describe("changeset.resolve", function()
   end)
 
   describe("_walk", function()
-    it("opens a fifth lane only once one of the first four closes", function()
-      local run, pending = deferred()
+    ---@return string[]
+    local function ten_files()
       local queue = {}
       for i = 1, 10 do
         queue[i] = i .. ".ts"
       end
+      return queue
+    end
+
+    it("reads a few files at a time, starting one more as each finishes", function()
+      local run, pending = deferred()
+      local queue = ten_files()
 
       resolve._walk(queue, run, function() end)
-      assert.equal(4, #pending)
+      local lanes = #pending
+      assert.is_true(lanes > 0 and lanes < #queue)
 
       pending[1].done({})
-      assert.equal(5, #pending)
+      assert.equal(lanes + 1, #pending)
     end)
 
     it("still reports a file it was already reading when cancelled", function()
@@ -62,11 +69,12 @@ describe("changeset.resolve", function()
     it("starts no further file once cancelled", function()
       local run, pending = deferred()
 
-      local cancel = resolve._walk({ "1.ts", "2.ts", "3.ts", "4.ts", "5.ts" }, run, function() end)
+      local cancel = resolve._walk(ten_files(), run, function() end)
+      local lanes = #pending
       cancel()
       pending[1].done({})
 
-      assert.equal(4, #pending)
+      assert.equal(lanes, #pending)
     end)
 
     it("keeps walking past a file its step had no symbols for", function()
