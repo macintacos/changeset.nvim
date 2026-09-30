@@ -72,7 +72,7 @@ describe("changeset.symbols", function()
     it("drops a filtered kind but keeps its children", function()
       local items = symbols.flatten({
         sym("some_table", KIND.Object, 0, { sym("kept", KIND.Function, 1) }),
-      }, { kinds = { Function = true } })
+      }, { Function = true })
 
       assert.same({ "kept" }, field(items, "name"))
       assert.same({ 0 }, field(items, "depth"))

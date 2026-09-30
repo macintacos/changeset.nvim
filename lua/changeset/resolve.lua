@@ -99,17 +99,8 @@ local function request(bufnr, path, on_done)
   local source = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
   vim.lsp.buf_request_all(bufnr, "textDocument/documentSymbol", params, function(results)
     local items = {}
-    for id, res in pairs(results) do
-      local client = vim.lsp.get_client_by_id(id)
-      vim.list_extend(
-        items,
-        symbols.flatten(res.result or {}, {
-          bufnr = bufnr,
-          path = path,
-          kinds = keep,
-          encoding = client and client.offset_encoding,
-        })
-      )
+    for _, res in pairs(results) do
+      vim.list_extend(items, symbols.flatten(res.result or {}, keep))
     end
     attributes.mark(items, path, source)
     on_done(items)

@@ -214,15 +214,9 @@ describe("changeset sidebar focus", function()
     local function symbol(name, first, last)
       return {
         name = name,
-        text = name,
         kind = "Function",
-        path = "mod.lua",
         lnum = first,
-        col = 1,
-        end_lnum = first,
-        end_col = #name + 1,
         depth = 0,
-        guides = "",
         range_lnum = first,
         range_end_lnum = last,
       }

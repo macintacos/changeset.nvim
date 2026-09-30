@@ -55,23 +55,9 @@ describe("changeset.cache", function()
   end)
 
   describe("project", function()
-    it("keeps only the fields the tree reads", function()
+    it("keeps the fields the tree reads", function()
       local projected = cache.project({
-        {
-          name = "send",
-          kind = "Function",
-          depth = 1,
-          lnum = 12,
-          range_lnum = 12,
-          range_end_lnum = 30,
-          text = "send",
-          path = "api.ts",
-          col = 6,
-          end_col = 10,
-          end_lnum = 12,
-          guides = { "│", "├" },
-          crumb = "Client",
-        },
+        { name = "send", kind = "Function", depth = 1, lnum = 12, range_lnum = 12, range_end_lnum = 30 },
       })
 
       assert.same({

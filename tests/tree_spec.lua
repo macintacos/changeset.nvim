@@ -12,16 +12,9 @@ local PATH = "src/session.ts"
 local function sym(name, kind, depth, first, last)
   return {
     name = name,
-    text = name,
     kind = kind,
-    path = PATH,
     lnum = first,
-    col = 1,
-    end_lnum = first,
-    end_col = #name + 1,
     depth = depth,
-    guides = "",
-    crumb = "",
     range_lnum = first,
     range_end_lnum = last,
   }

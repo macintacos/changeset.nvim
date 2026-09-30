@@ -320,24 +320,18 @@ describe("changeset position in a session", function()
     ---@type fun(path: string, items: table[]?)
     local answer
 
-    ---A symbol spanning `first`..`last` of `path` (a top-level `mod.lua` function unless told otherwise).
+    ---A symbol spanning `first`..`last` (a top-level function unless told otherwise).
     ---@param name string
     ---@param first integer
     ---@param last integer
-    ---@param opts { kind: string?, depth: integer?, path: string? }?
+    ---@param opts { kind: string?, depth: integer? }?
     local function symbol(name, first, last, opts)
       opts = opts or {}
       return {
         name = name,
-        text = name,
         kind = opts.kind or "Function",
-        path = opts.path or "mod.lua",
         lnum = first,
-        col = 1,
-        end_lnum = first,
-        end_col = #name + 1,
         depth = opts.depth or 0,
-        guides = "",
         range_lnum = first,
         range_end_lnum = last,
       }
@@ -431,9 +425,9 @@ describe("changeset position in a session", function()
       answer("mod.lua", {})
       answer("other.lua", {})
       answer("src/session.rs", {
-        symbol("load", 1, 1, { path = "src/session.rs" }),
-        symbol("tests", 3, 6, { kind = "Module", path = "src/session.rs" }),
-        symbol("refreshes", 4, 5, { depth = 1, path = "src/session.rs" }),
+        symbol("load", 1, 1),
+        symbol("tests", 3, 6, { kind = "Module" }),
+        symbol("refreshes", 4, 5, { depth = 1 }),
       })
       flush()
 

@@ -419,33 +419,27 @@ describe("changeset sidebar", function()
     ---@type fun(path: string, items: table[]?)
     local answer
 
-    ---A symbol spanning `first`..`last` of `path`, as a server would report it.
-    ---@param s { path: string, name: string, kind: string, depth: integer, first: integer, last: integer }
+    ---A symbol spanning `first`..`last`, as a server would report it.
+    ---@param s { name: string, kind: string, depth: integer, first: integer, last: integer }
     local function sym(s)
       return {
         name = s.name,
-        text = s.name,
         kind = s.kind,
-        path = s.path,
         lnum = s.first,
-        col = 1,
-        end_lnum = s.first,
-        end_col = #s.name + 1,
         depth = s.depth,
-        guides = "",
         range_lnum = s.first,
         range_end_lnum = s.last,
       }
     end
 
     local SESSION = {
-      sym({ path = "src/session.rs", name = "load", kind = "Function", depth = 0, first = 1, last = 3 }),
-      sym({ path = "src/session.rs", name = "tests", kind = "Module", depth = 0, first = 5, last = 9 }),
-      sym({ path = "src/session.rs", name = "refreshes", kind = "Function", depth = 1, first = 6, last = 8 }),
+      sym({ name = "load", kind = "Function", depth = 0, first = 1, last = 3 }),
+      sym({ name = "tests", kind = "Module", depth = 0, first = 5, last = 9 }),
+      sym({ name = "refreshes", kind = "Function", depth = 1, first = 6, last = 8 }),
     }
     local ONLY_TESTS = {
-      sym({ path = "src/only_tests.rs", name = "tests", kind = "Module", depth = 0, first = 1, last = 5 }),
-      sym({ path = "src/only_tests.rs", name = "works", kind = "Function", depth = 1, first = 2, last = 4 }),
+      sym({ name = "tests", kind = "Module", depth = 0, first = 1, last = 5 }),
+      sym({ name = "works", kind = "Function", depth = 1, first = 2, last = 4 }),
     }
 
     ---@return integer
