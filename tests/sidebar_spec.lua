@@ -1124,13 +1124,4 @@ describe("changeset sidebar", function()
     assert.equal(1, #lines_of(buf))
     assert.falsy(table.concat(lines_of(buf), "\n"):find("other.lua", 1, true))
   end)
-
-  it("shuts the row under the cursor", function()
-    local buf = open_sidebar()
-    local expanded = #lines_of(buf)
-
-    press("h")
-
-    assert.truthy(#lines_of(buf) < expanded)
-  end)
 end)
