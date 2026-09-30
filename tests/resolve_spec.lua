@@ -81,15 +81,16 @@ describe("changeset.resolve", function()
       local run, pending = deferred()
       local seen = {}
 
-      resolve._walk({ "api.ts", "auth.ts", "db.ts", "ui.ts", "log.ts" }, run, function(path, items)
+      resolve._walk(ten_files(), run, function(path, items)
         seen[#seen + 1] = { path = path, items = items }
       end)
+      local lanes = #pending
       pending[1].done(nil)
 
       assert.equal(1, #seen)
-      assert.equal("api.ts", seen[1].path)
+      assert.equal("1.ts", seen[1].path)
       assert.is_nil(seen[1].items)
-      assert.equal(5, #pending)
+      assert.equal(lanes + 1, #pending)
     end)
 
     it("reports a file whose step raised, rather than stranding its lane", function()
