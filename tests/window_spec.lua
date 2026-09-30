@@ -225,6 +225,17 @@ describe("changeset.window", function()
       assert.equal("bottom", edge(win))
     end)
 
+    it("keeps the drawer's height while the other windows even out", function()
+      vim.o.columns = 100
+      local win = window.open(vim.api.nvim_create_buf(false, true))
+      local height = vim.api.nvim_win_get_height(win)
+
+      vim.cmd("split")
+      vim.cmd("wincmd =")
+
+      assert.equal(height, vim.api.nvim_win_get_height(win))
+    end)
+
     it("opens along the bottom below a raised layout.min_file_width", function()
       vim.o.columns = 200
       require("changeset.config").setup({ layout = { min_file_width = 160 } })
