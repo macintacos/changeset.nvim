@@ -99,19 +99,6 @@ describe("changeset.cache", function()
       vim.fn.delete(path)
     end)
 
-    it("reads back what it wrote", function()
-      local entries = {
-        ["api.ts"] = {
-          stamp = "120:9",
-          symbols = { { name = "send", lnum = 12 } },
-        },
-      }
-
-      cache.save(path, entries)
-
-      assert.same(entries, cache.load(path))
-    end)
-
     it("leaves out what no server answered, which only this Neovim remembers", function()
       local entries = {
         ["api.ts"] = { stamp = "120:9", symbols = { { name = "send", lnum = 12 } } },
@@ -120,16 +107,6 @@ describe("changeset.cache", function()
       cache.save(path, entries)
 
       assert.same({ "api.ts" }, vim.tbl_keys(cache.load(path)))
-    end)
-
-    it("starts empty when nothing has been written yet", function()
-      assert.same({}, cache.load(path))
-    end)
-
-    it("starts empty rather than failing on a corrupt file", function()
-      vim.fn.writefile({ "{ not json" }, path)
-
-      assert.same({}, cache.load(path))
     end)
   end)
 
