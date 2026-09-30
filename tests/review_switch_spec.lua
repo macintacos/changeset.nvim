@@ -105,7 +105,7 @@ describe("PR Review Mode", function()
     assert.is_nil(revision(blob))
   end)
 
-  it("moves each buffer onto a new base once", function()
+  it("moves each buffer onto a new base once after a switch", function()
     local files = {}
     for i = 1, 18 do
       files[i] = i .. ".txt"
@@ -132,13 +132,23 @@ describe("PR Review Mode", function()
     assert.is_true(await(bufs, base, 10000))
     assert.is_true(settle())
     assert.equal(12, review.moves - before)
+  end)
+
+  it("moves a buffer that lost its base once, across a burst of updates", function()
+    local files = { "a.txt", "b.txt", "c.txt", "d.txt" }
+    review.fixture(dir, "burst", files)
+    vim.fn.chdir(dir)
+    local base = review.merge_base(dir)
+    local bufs = edit(files)
+    assert.is_true(await(bufs, base, 10000))
+    assert.is_true(settle())
 
     -- As if every buffer had attached on the old base, then caught a burst of
     -- events before its move landed.
     for _, buf in ipairs(bufs) do
       require("gitsigns.cache").cache[buf].git_obj.revision = nil
     end
-    before = review.moves
+    local before = review.moves
     for _ = 1, 3 do
       vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate" })
     end
