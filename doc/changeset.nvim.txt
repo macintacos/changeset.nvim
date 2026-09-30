@@ -73,7 +73,16 @@ With `vim.pack`:
 With lazy.nvim:
 
 >lua
-    { "macintacos/changeset.nvim" }
+    {
+      "macintacos/changeset.nvim",
+      dependencies = {
+        -- Optional:
+        { "lewis6991/gitsigns.nvim", opts = {} }, -- PR Review Mode, status rail colours
+        { "nvim-mini/mini.icons", opts = {} }, -- icons
+        { "nvim-mini/mini.pick", opts = {} }, -- the Picker
+        { "folke/which-key.nvim", opts = {} }, -- `?` opens its popup
+      },
+    }
 <
 
 `setup()` is optional: without it, the sidebar uses the defaults in
