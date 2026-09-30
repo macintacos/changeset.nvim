@@ -194,12 +194,8 @@ describe("changeset.view", function()
         assert.equal(2, select(2, view.position(split, 1)))
       end)
 
-      it("numbers the second copy as the file's first", function()
-        assert.equal(1, (view.position(split, 5)))
-      end)
-
-      it("places a symbol under the second copy on that file", function()
-        assert.equal(1, (view.position(split, 6)))
+      it("numbers the second copy, and the lines under it, as the file's first", function()
+        assert.same({ 1, 1 }, { (view.position(split, 5)), (view.position(split, 6)) })
       end)
 
       it("names no file on the second header", function()
