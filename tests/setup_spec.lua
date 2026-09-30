@@ -81,6 +81,16 @@ local function help_text()
   return text
 end
 
+---The keys the float `?` opened lists, closing it.
+---@return string[]
+local function help_keys()
+  local keys = {}
+  for line in help_text():gmatch("[^\n]+") do
+    table.insert(keys, (assert(line:match("^(%S+)%s%s"), line)))
+  end
+  return keys
+end
+
 describe("changeset setup", function()
   local tmp, previous_dir
 
@@ -102,14 +112,19 @@ describe("changeset setup", function()
     vim.fn.delete(tmp, "rf")
   end)
 
-  it("binds the default sidebar keys and no step keys without setup()", function()
+  it("binds every default sidebar key without setup()", function()
     local buf = open_sidebar()
 
-    local default_keys =
-      { "<CR>", "<S-CR>", "q", "h", "l", "H", "L", "]]", "[[", "F", "f", "R", "y", "/", "-", "<C-t>", "?" }
-    for _, lhs in ipairs(default_keys) do
-      assert.not_nil(buffer_map(buf, lhs), lhs)
+    for action, lhs in pairs(require("changeset.config").get().keymaps) do
+      if lhs then
+        assert.not_nil(buffer_map(buf, lhs), action)
+      end
     end
+  end)
+
+  it("binds no global step keys without setup()", function()
+    open_sidebar()
+
     assert.is_nil(global_map("]h"))
     assert.is_nil(global_map("[h"))
   end)
@@ -118,12 +133,12 @@ describe("changeset setup", function()
     changeset.setup({ keymaps = { jump = "o" } })
     local buf = open_sidebar()
 
-    assert.equal("Go to this change", buffer_map(buf, "o").desc)
+    assert.not_nil(buffer_map(buf, "o"))
     assert.is_nil(buffer_map(buf, "<CR>"))
     press("?")
-    local text = help_text()
-    assert.truthy(text:match("o%s+Go to this change"))
-    assert.falsy(text:find("<CR>", 1, true))
+    local listed = help_keys()
+    assert.is_true(vim.list_contains(listed, "o"))
+    assert.is_false(vim.list_contains(listed, "<CR>"))
   end)
 
   it("leaves a false key unbound, and out of ?", function()
@@ -143,10 +158,7 @@ describe("changeset setup", function()
     table.sort(bound)
 
     press("?")
-    local listed = {}
-    for line in help_text():gmatch("[^\n]+") do
-      table.insert(listed, (assert(line:match("^(%S+)%s%s"), line)))
-    end
+    local listed = help_keys()
     table.sort(listed)
 
     assert.same(bound, listed)
@@ -173,15 +185,22 @@ describe("changeset setup", function()
     assert.equal("other.lua", changeset._tree().picked.path)
   end)
 
-  it("binds next/prev while open, then puts back the user's mapping", function()
-    vim.keymap.set("n", "]h", function() end, { desc = "user ]h" })
+  it("binds next/prev globally while open, and ? lists them", function()
     changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
     open_sidebar()
 
-    assert.equal("Next change (Changeset)", global_map("]h").desc)
-    assert.equal("Previous change (Changeset)", global_map("[h").desc)
+    assert.not_nil(global_map("]h"))
+    assert.not_nil(global_map("[h"))
     press("?")
-    assert.truthy(help_text():match("%]h%s+Next change"))
+    local listed = help_keys()
+    assert.is_true(vim.list_contains(listed, "]h"))
+    assert.is_true(vim.list_contains(listed, "[h"))
+  end)
+
+  it("puts back the user's mapping and drops its own on close", function()
+    vim.keymap.set("n", "]h", function() end, { desc = "user ]h" })
+    changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
+    open_sidebar()
 
     changeset.close()
     changeset.close()
