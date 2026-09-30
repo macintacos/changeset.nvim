@@ -281,6 +281,22 @@ describe("changeset position in a session", function()
     assert.same({ path = "mod.lua", lnum = 2 }, vim.json.decode(vim.g.ChangesetPosition).here)
   end)
 
+  it("closes a restored sidebar window it cannot fill", function()
+    local outside = vim.fn.tempname()
+    vim.fn.mkdir(outside, "p")
+    vim.fn.chdir(outside)
+    local before = #vim.api.nvim_tabpage_list_wins(0)
+    local notify = vim.notify
+    vim.notify = function() end
+
+    local ok, err = pcall(restore_session, { here = { path = "mod.lua", lnum = 8 } })
+    vim.notify = notify
+    vim.fn.chdir(tmp)
+    vim.fn.delete(outside, "rf")
+    assert(ok, err)
+    assert.equal(before, #vim.api.nvim_tabpage_list_wins(0))
+  end)
+
   for name, value in pairs({
     ["not JSON"] = "{here",
     ["null"] = "null",
