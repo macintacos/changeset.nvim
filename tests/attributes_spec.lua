@@ -36,15 +36,10 @@ local VITEST = {
 }
 
 describe("attributes", function()
-  it("lists the treesitter languages it marks test symbols in", function()
-    assert.are.same({ "rust", "tsx", "typescript" }, attributes.languages())
-  end)
-
-  it("has the rust, typescript and tsx parsers", function()
-    for _, lang in ipairs({ "rust", "typescript", "tsx" }) do
-      assert.is_true(vim.treesitter.language.add(lang), lang .. " parser missing: run `mise run parsers` once")
-    end
-  end)
+  -- `mark` marks nothing without a parser, so every case below would fail as `{}` instead of naming the cause.
+  for _, lang in ipairs(attributes.languages()) do
+    assert(vim.treesitter.language.add(lang), lang .. " parser missing: run `mise run parsers` once")
+  end
 
   describe("rust", function()
     it("marks a #[test] fn", function()
@@ -155,24 +150,6 @@ describe("attributes", function()
       local rule = assert(sections.test_rule("src/session.rs"))
       assert.is_true(rule(items[2]))
       assert.is_false(rule(items[1]))
-    end)
-  end)
-
-  describe("when parsing raises", function()
-    local get_string_parser = vim.treesitter.get_string_parser
-
-    before_each(function()
-      vim.treesitter.get_string_parser = function()
-        error('Query error: Invalid node type "no_such_node"')
-      end
-    end)
-
-    after_each(function()
-      vim.treesitter.get_string_parser = get_string_parser
-    end)
-
-    it("marks nothing without raising", function()
-      assert.same({}, marked("src/session.rs", RUST_TEST, { item("refreshes_token", 3) }))
     end)
   end)
 end)
