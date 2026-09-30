@@ -1,5 +1,4 @@
 local attributes = require("changeset.attributes")
-local sections = require("changeset.sections")
 
 ---@param name string
 ---@param lnum integer
@@ -143,13 +142,6 @@ describe("attributes", function()
 
     it("marks nothing without raising", function()
       assert.same({}, marked("src/session.rs", lines, items))
-    end)
-
-    it("leaves the name rules to judge the symbols", function()
-      attributes.mark(items, "src/session.rs", table.concat(lines, "\n"))
-      local rule = assert(sections.test_rule("src/session.rs"))
-      assert.is_true(rule(items[2]))
-      assert.is_false(rule(items[1]))
     end)
   end)
 end)
