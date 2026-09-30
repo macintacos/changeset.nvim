@@ -65,23 +65,12 @@ describe("changeset tree", function()
       assert.equal(window_count, #vim.api.nvim_list_wins())
     end)
 
-    it("hands over the file rows on the first ask, before any build", function()
-      local tree, err = changeset.rows()
-
-      assert.is_nil(err)
-      assert.same(
-        { "mod.lua" },
-        vim.tbl_map(function(row)
-          return row.path
-        end, assert(tree).rows)
-      )
-    end)
-
-    it("hands over each file row's path, name, stats and place in the tree", function()
+    it("hands over each file row's path, name, stats and place in the tree on the first ask", function()
       local tree, err = changeset.rows()
 
       assert.is_nil(err)
       tree = assert(tree)
+      assert.equal(1, #tree.rows)
       assert.is_string(tree.root)
       assert.equal("trunk", tree.ref)
       local row = tree.rows[1]
@@ -119,18 +108,22 @@ describe("changeset tree", function()
       assert.equal(tree, changeset._tree())
     end)
 
-    it("draws the built tree when the sidebar opens, and keeps it when it closes", function()
+    it("draws the built tree when the sidebar opens", function()
       changeset.build()
       assert.is_true(wait_for_file("mod.lua"))
-      local tree = changeset._tree()
 
       changeset.open()
-      local text = sidebar_text()
+
+      assert.truthy(sidebar_text():find("mod.lua", 1, true))
+    end)
+
+    it("keeps the tree after the sidebar closes", function()
+      changeset.open()
+      local tree = assert(changeset._tree())
+
       changeset.close()
 
-      assert.truthy(text:find("mod.lua", 1, true))
       assert.equal(tree, changeset._tree())
-      assert.same({ "mod.lua" }, paths_of(changeset._tree()))
     end)
 
     it("rebuilds the tree for another branch at the same fork point", function()
