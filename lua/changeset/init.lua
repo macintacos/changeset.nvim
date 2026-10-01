@@ -1,13 +1,15 @@
 ---A read-only sidebar mapping what this branch changed, nested by symbol.
 ---
 ---See doc/agents/design.md for the design. This file is the public API and the window state
----machine: `build` keeps the tree, `draw` puts it on the sidebar's buffer, and what each key
----does is `actions`. The thinking happens in the pure modules they call.
+---machine: `build` keeps the tree, `draw` puts it on the sidebar's buffer, `position` says where
+---the user stands in it, and what each key does is `actions`. The thinking happens in the pure
+---modules they call.
 
 local actions = require("changeset.actions")
 local build = require("changeset.build")
 local config = require("changeset.config")
 local draw = require("changeset.draw")
+local position = require("changeset.position")
 local prefs = require("changeset.prefs")
 local render = require("changeset.render")
 local state = require("changeset.state")
@@ -25,9 +27,6 @@ local M = {}
 
 local augroup = vim.api.nvim_create_augroup("changeset", { clear = true })
 
----@class changeset.Landing
----@field id string? nil when it landed before the tree had rows; the table's presence is what marks a landing pending.
-
 ---@class changeset.Session: changeset.Tree
 ---@field file string Preferences file for this changeset session.
 ---@field rows changeset.Row[]
@@ -35,16 +34,7 @@ local augroup = vim.api.nvim_create_augroup("changeset", { clear = true })
 ---@field st changeset.State
 ---@field query string
 ---@field hidden table<string, true> Symbol kinds the tree is not showing.
----@field here changeset.Spot? Where the cursor is, while that is a file in this repository.
----@field picked changeset.Picked? The row last opened from the sidebar.
----@field landing changeset.Landing? The row focusing the sidebar put its cursor on, until the user moves it.
----@field restoring changeset.Position? A restored session's position, until the tree can hold each half.
-
----What a session saved of where you were: the file you were in and the sidebar's cursor row.
----@class changeset.Position
----@field here changeset.Spot? The file and line you were in.
----@field row { id: string, path: string }? The row the sidebar's cursor was on.
----@field at string? Id of the row under the sidebar's cursor when last checked; another means the user moved it.
+---@field position changeset.Position Where the user stands in this tree.
 
 ---The tree `build` keeps, with the sidebar's own fields on it.
 ---Read it again after anything that can replace the tree: `M.build()`, `vim.wait`, a later callback.
@@ -105,20 +95,6 @@ end
 
 local PASSING_BUFTYPES = { terminal = true, help = true }
 
----Stop waiting to restore one half of a session's position.
----@param half "here"|"row"
-local function release(half)
-  local session = current()
-  assert(session, "changeset: no open session")
-  local wanted = session.restoring
-  if wanted then
-    wanted[half] = nil
-    if not (wanted.here or wanted.row) then
-      session.restoring = nil
-    end
-  end
-end
-
 ---Note the file and line the cursor is in. The sidebar, floats, terminals and help
 ---are not somewhere the user is, so they leave the last place standing.
 local function track()
@@ -135,8 +111,7 @@ local function track()
   end
   local name = vim.api.nvim_buf_get_name(buf)
   local path = name ~= "" and vim.fs.relpath(session.root, vim.fs.normalize(name)) or nil
-  session.here = path and { path = path, lnum = vim.api.nvim_win_get_cursor(win)[1] } or nil
-  release("here")
+  session.position:track(path and { path = path, lnum = vim.api.nvim_win_get_cursor(win)[1] } or nil)
   draw.paint()
 end
 
@@ -144,34 +119,28 @@ end
 ---every session write carries them without work of its own at write time.
 local function remember()
   local session = current()
-  -- Not while a restored position waits: a write then would save the half-built tree's.
-  if session and not session.restoring then
-    local row = draw.row_at_cursor()
-    vim.g[POSITION_GLOBAL] = vim.json.encode({ here = session.here, row = row and { id = row.id, path = row.path } })
+  local saved = session and session.position:saved(draw.row_at_cursor())
+  if saved then
+    vim.g[POSITION_GLOBAL] = vim.json.encode(saved)
   end
 end
 
----Put the sidebar's cursor on "you are here", or its nearest ancestor on screen,
----and note where it landed.
----@param win integer The sidebar's window.
-local function land(win)
-  local session = current()
-  assert(session, "changeset: no open session")
-  local here = session.here
-  local row = here and tree.locate(session.rows, here.path, here.lnum)
-  local lnum = row and state._nearest(draw.visible_ids(), row.id)
-  if lnum then
+---Put the sidebar's cursor on the line `position` chose, when it chose one, and repaint the row marks.
+---@param lnum integer?
+local function apply(lnum)
+  local win = window.win()
+  if lnum and win then
     vim.api.nvim_win_set_cursor(win, { lnum, 0 })
   end
-  session.landing = { id = (draw.row_at_cursor() or {}).id }
+  draw.paint()
 end
 
----Make `row` the one last opened. A folded chain is recorded by its tip, the symbol it jumps to.
+---Make `row` the one last opened.
 ---@param row changeset.Row
 local function pick(row)
   local session = current()
   assert(session, "changeset: no open session")
-  session.picked = { id = row.tip or row.id, path = row.path, lnum = row.lnum or 1 }
+  session.position:pick(row)
   draw.paint()
 end
 
@@ -215,55 +184,14 @@ local function decided(path)
     end)
 end
 
----Apply each half of a restored position once its file is decided, and drop a half
----the tree no longer holds.
-local function apply_restored()
-  local session = current()
-  assert(session, "changeset: no open session")
-  local wanted = session.restoring
-  if wanted and wanted.here and decided(wanted.here.path) then
-    if tree.locate(session.rows, wanted.here.path, wanted.here.lnum) then
-      session.here = wanted.here
-      draw.paint()
-    end
-    release("here")
-  end
-  if wanted and wanted.row and decided(wanted.row.path) then
-    local win = window.win()
-    local lnum = win and tree.find(session.rows, wanted.row.id) and state._nearest(draw.visible_ids(), wanted.row.id)
-    if win and lnum then
-      vim.api.nvim_win_set_cursor(win, { lnum, 0 })
-      -- Else a pending landing's follow would pull the cursor back off it.
-      session.landing = nil
-    end
-    release("row")
-  end
-end
-
 local function rebuild()
   local session = current()
   assert(session, "changeset: no open session")
-  -- Taken before the rows change. Before the first diff the landing and the row under
-  -- the cursor are both nil, which is still "not moved". Only a rebuild follows: a
-  -- fold or filter redraw brings no deeper row.
-  local at = (draw.row_at_cursor() or {}).id
-  local follow = session.landing and window.is_focused() and session.landing.id == at
-  -- The same "until the user moves it" rule holds a restored row.
-  if session.restoring and window.is_focused() and session.restoring.at ~= at then
-    release("row")
-  end
+  -- Taken before the rows change: whether the cursor moved is judged by the row it was on.
+  local before = (draw.row_at_cursor() or {}).id
   session.rows = tree.build(session.files, session.symbols, { text = line_text, comments = session.comments })
   redraw()
-  if follow then
-    land(vim.api.nvim_get_current_win())
-  else
-    session.landing = nil
-  end
-  -- After the landing: a restored row overrides it.
-  apply_restored()
-  if session.restoring then
-    session.restoring.at = (draw.row_at_cursor() or {}).id
-  end
+  apply(session.position:rebuilt(draw.view(), before, decided))
 end
 
 build.attach({
@@ -281,13 +209,13 @@ build.attach({
       st = folds[root],
       query = "",
       hidden = prefs.resolve(prefs.load(preferences_file), root, branch),
+      position = position.new(),
     }
   end,
   rebuild = rebuild,
   redraw = redraw,
   failed = function()
-    -- Nothing would ever settle a restored position, and it silences `remember`.
-    assert(current(), "changeset: no open session").restoring = nil
+    assert(current(), "changeset: no open session").position:failed()
   end,
 })
 
@@ -453,10 +381,9 @@ function M.open()
     buffer = buf,
     desc = "changeset: put the sidebar's cursor on the row you are on",
     callback = function()
-      local entered = vim.api.nvim_get_current_win()
-      if current() and entered == window.win() and not left_float then
-        release("row")
-        land(entered)
+      local session = current()
+      if session and vim.api.nvim_get_current_win() == window.win() and not left_float then
+        apply(session.position:entered(draw.view()))
       end
     end,
   })
@@ -502,20 +429,6 @@ function M.close()
   window.close()
 end
 
----The position a session recorded, keeping only the parts shaped as `remember` writes them.
----@param value any The position global, as the session left it.
----@return changeset.Position?
-local function recorded(value)
-  local ok, position = pcall(vim.json.decode, value)
-  if not ok or type(position) ~= "table" then
-    return nil
-  end
-  local here, row = position.here, position.row
-  here = type(here) == "table" and type(here.path) == "string" and type(here.lnum) == "number" and here or nil
-  row = type(row) == "table" and type(row.id) == "string" and type(row.path) == "string" and row or nil
-  return (here or row) and { here = here, row = row } or nil
-end
-
 ---Fill the window a restored session left standing where the sidebar was, and bring
 ---back where you were and the sidebar's cursor row once the tree holds them.
 ---
@@ -534,11 +447,8 @@ function M.restore()
   end
   local session = current()
   assert(session, "changeset: no open session")
-  session.restoring = recorded(vim.g[POSITION_GLOBAL])
-  if session.restoring then
-    session.restoring.at = (draw.row_at_cursor() or {}).id
-    apply_restored()
-  end
+  local ok, recorded = pcall(vim.json.decode, vim.g[POSITION_GLOBAL])
+  apply(session.position:restore(ok and recorded or nil, draw.view(), decided))
 end
 
 ---What `toggle()` does next, given where the sidebar and the cursor are.
