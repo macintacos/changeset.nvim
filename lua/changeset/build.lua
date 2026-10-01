@@ -3,6 +3,7 @@
 local Git = require("changeset.git")
 local Paths = require("changeset.paths")
 local cache = require("changeset.cache")
+local fork_point = require("changeset.fork_point")
 local resolve = require("changeset.resolve")
 local sections = require("changeset.sections")
 
@@ -50,11 +51,6 @@ local memo
 
 ---@type uv.uv_timer_t?
 local save_timer
-
----Each open PR's target and number, by repository and branch; false while gh is asked.
----No answer is not kept, so a PR opened later is found on the next build.
----@type table<string, { target: string, number: integer }|false>
-local targets = {}
 
 ---@type changeset.BuildHooks
 local hooks
@@ -214,31 +210,6 @@ local function drop()
   session = nil
 end
 
----The branch `branch`'s open PR, once gh has said. Asks it otherwise, and builds
----again when the answer lands on the repository and branch still in view.
----@param root string
----@param branch string
----@return { target: string, number: integer }?
-local function pr_target(root, branch)
-  local key = root .. "\n" .. branch
-  if targets[key] == nil then
-    targets[key] = false
-    Git.pr_target(root, function(target, number)
-      targets[key] = target and { target = target, number = number } or nil
-      if target and session and session.root == root and session.branch == branch and Paths.root(0) == root then
-        local kept = session
-        M.build()
-        -- A PR onto the branch already compared against leaves the tree standing,
-        -- and only the header has news.
-        if session == kept then
-          hooks.redraw()
-        end
-      end
-    end)
-  end
-  return targets[key] or nil
-end
-
 ---Build the tree for the current buffer's repository, unless it is already built there.
 ---
 ---The buffer's repository, not Neovim's directory: with the two different, a base
@@ -247,23 +218,14 @@ end
 ---branch, which includes a buffer outside any repository.
 function M.build()
   local root = Paths.root(0)
-  local base, _, ref = Git.merge_base(root)
-  if not base then
+  local branch = Git.lines({ "git", "rev-parse", "--abbrev-ref", "HEAD" }, root)[1] or "HEAD"
+  local point = fork_point.get(root, branch)
+  if not point then
     return false
   end
-  local branch = Git.lines({ "git", "rev-parse", "--abbrev-ref", "HEAD" }, root)[1] or "HEAD"
-  -- A stacked branch reads its fork point from its PR's target; one that target
-  -- has none with (never fetched, say) stays on the default branch's.
-  local pr, number = pr_target(root, branch), nil
-  if pr then
-    local stacked, _, stacked_ref = Git.merge_base(root, pr.target)
-    if stacked then
-      -- Named only while the tree is measured against the ref the PR merges into.
-      base, ref, number = stacked, stacked_ref, pr.number
-    end
-  end
+  local base = point.base
   if session and session.root == root and session.base == base and session.branch == branch then
-    session.pr = number
+    session.pr = point.pr
     return true
   end
   drop()
@@ -273,14 +235,13 @@ function M.build()
   end
 
   local sidebar_fields = hooks.view(root, branch)
-  local default_branch = Git.default_base(root)
   session = vim.tbl_extend("error", {
     root = root,
     base = base,
-    ref = ref or default_branch,
+    ref = point.ref or point.default_branch,
     branch = branch,
-    default_branch = default_branch,
-    pr = number,
+    default_branch = point.default_branch,
+    pr = point.pr,
     files = {},
     collected = false,
     symbols = {},
@@ -289,6 +250,23 @@ function M.build()
   M.refresh()
   return true
 end
+
+-- An answer that moves nothing is dropped: rebuilding on an answer of no PR would ask gh again.
+fork_point.subscribe(function(root, branch, point)
+  if
+    not (session and session.root == root and session.branch == branch and Paths.root(0) == root)
+    or (session.base == point.base and session.pr == point.pr)
+  then
+    return
+  end
+  local kept = session
+  M.build()
+  -- A PR onto the branch already compared against leaves the tree standing,
+  -- and only the header has news.
+  if session == kept then
+    hooks.redraw()
+  end
+end)
 
 ---The tree the last build() made, with the fields BuildHooks.view supplied; nil before the first.
 ---Read it again after anything that can replace the tree: `build()`, `vim.wait`, a later callback.
