@@ -1,8 +1,29 @@
----Narrowing the row tree to what the user asked to see.
+---What the sidebar shows of the tree: its folds, opened chains, narrowing and
+---hidden kinds, and the row on each line, with the moves that read and change them.
 ---
 ---Which rows are *on screen* is the renderer's job — it walks the tree for the
----guides anyway, so it owns visibility and hands each line's row back. This is
----the other half: the transform that happens before that walk.
+---guides anyway, so it owns visibility and hands each line's row back. The pure
+---narrowing transforms here run before that walk.
+
+local render = require("changeset.render")
+local tree = require("changeset.tree")
+
+---@class changeset.view.Folds
+---@field collapsed table<string, true> Rows whose children are hidden.
+---@field chains table<string, true> Compressed chains the user opened out.
+
+---@class changeset.view.Layout
+---@field icon fun(row: changeset.Row): string, string Glyph and highlight for a row.
+---@field width integer
+---@field cursor integer The cursor's line before this redraw.
+
+---@class changeset.View
+---@field private folds changeset.view.Folds Shared by every view of one repository root.
+---@field private narrowed string
+---@field private kinds_hidden table<string, true>
+---@field private shown changeset.Row[] The row on each line, as `show` last laid them out.
+local View = {}
+View.__index = View
 
 local M = {}
 
@@ -135,6 +156,209 @@ function M.hiding(counts, hidden)
   end
   table.sort(out)
   return out
+end
+
+---Folds outlive the tree: a rebuild for a moved fork point, or a trip to another
+---repository and back, keeps them. Kept per repository: row ids are built from
+---repo-relative paths, so one table would share a fold between two checkouts that
+---both have a `lua/config/options.lua`.
+---@type table<string, changeset.view.Folds>
+local folds_by_root = {}
+
+---A view over `folds`, narrowed by nothing yet.
+---@param folds changeset.view.Folds
+---@param hidden table<string, true> Symbol kinds to leave out.
+---@return changeset.View
+function M.new(folds, hidden)
+  return setmetatable({ folds = folds, narrowed = "", kinds_hidden = hidden, shown = {} }, View)
+end
+
+---A view sharing its folds with every other view of `root`.
+---@param root string
+---@param hidden table<string, true> Symbol kinds to leave out.
+---@return changeset.View
+function M.for_root(root, hidden)
+  if not folds_by_root[root] then
+    -- Only on creation, so an unfold is kept like any other fold.
+    folds_by_root[root] = { collapsed = { [tree.section_id("generated")] = true }, chains = {} }
+  end
+  return M.new(folds_by_root[root], hidden)
+end
+
+---The line to put the cursor on after any redraw: the row it sat on, else, for a file row, the first file row
+---with the same path (a file whose changes all turn out to be tests or comments moves to Tests or Docs; a filter
+---can keep one copy and drop the others), else `fallback`.
+---@param rows changeset.Row[] On screen, in display order.
+---@param previous_row changeset.Row? The row the cursor sat on before the redraw.
+---@param fallback integer Line to keep when nothing matches.
+---@return integer lnum 1-based, always within `rows`.
+local function reanchor(rows, previous_row, fallback)
+  local same_file
+  for lnum, row in ipairs(rows) do
+    if previous_row and row.id == previous_row.id then
+      return lnum
+    end
+    if
+      not same_file
+      and previous_row
+      and previous_row.kind == "file"
+      and previous_row.depth == 1
+      and row.kind == "file"
+      and row.path == previous_row.path
+    then
+      same_file = lnum
+    end
+  end
+  return same_file or math.max(1, math.min(fallback, #rows))
+end
+
+---Narrow, compress and render `rows`, keeping the row on each line.
+---@param rows changeset.Row[] The tree, uncompressed.
+---@param layout changeset.view.Layout
+---@return changeset.Line[] lines
+---@return integer lnum Where the cursor goes: the row it sat on, wherever that is now.
+function View:show(rows, layout)
+  local previous_row = self.shown[layout.cursor]
+  local compressed = tree.compress(M.by_kind(M.filter(rows, self.narrowed), self.kinds_hidden), function(id)
+    return self.folds.chains[id] == true
+  end)
+  -- `render.lines` walks the tree for its guides, so it is the one place that
+  -- decides which rows are on screen; each line carries its row back, which is
+  -- how a cursor line maps to a row without re-deriving that walk here.
+  local lines = render.lines(compressed, {
+    icon = layout.icon,
+    collapsed = function(id)
+      return self.folds.collapsed[id] == true
+    end,
+    width = layout.width,
+    query = self.narrowed,
+  })
+  self.shown = vim.tbl_map(function(line)
+    return line.row
+  end, lines)
+  return lines, reanchor(self.shown, previous_row, layout.cursor)
+end
+
+---The row on line `lnum`.
+---@param lnum integer
+---@return changeset.Row?
+function View:row(lnum)
+  return self.shown[lnum]
+end
+
+---The row on each line.
+---@return changeset.Row[]
+function View:visible()
+  return self.shown
+end
+
+---Show more under the row on `lnum`: a shut chain's rows first, else its children.
+---@param lnum integer
+---@return boolean changed false when no row is on `lnum`.
+function View:open(lnum)
+  local row = self.shown[lnum]
+  if not row then
+    return false
+  end
+  -- Separate axes: compression hides a chain's *intermediate* rows, folding hides
+  -- a row's children. `l` on a compressed row means the first while it is shut.
+  if row.chain and not self.folds.chains[row.id] then
+    self.folds.chains[row.id] = true
+  else
+    self.folds.collapsed[row.id] = nil
+  end
+  return true
+end
+
+---What `h` does from `lnum`: fold the row, or step out to its parent.
+---@param lnum integer
+---@return integer? parent The parent's line, when stepping out.
+---@return boolean shut Whether the row was folded.
+function View:step_out(lnum)
+  local row = self.shown[lnum]
+  if not row then
+    return nil, false
+  end
+  -- Whether children are showing is read off the next line rather than the fold
+  -- state, because a compressed chain shows them while it is itself still shut — so
+  -- `h` closes one in the same two steps `l` opened it in.
+  local below = self.shown[lnum + 1]
+  if below and below.depth > row.depth then
+    self.folds.collapsed[row.id] = true
+    return nil, true
+  end
+  for i = lnum - 1, 1, -1 do
+    if self.shown[i].depth < row.depth then
+      return i, false
+    end
+  end
+  return nil, false
+end
+
+---Fold every file row in `rows`.
+---@param rows changeset.Row[] Section rows from `tree.build`.
+function View:fold_files(rows)
+  for _, row in ipairs(tree.files(rows)) do
+    self.folds.collapsed[row.id] = true
+  end
+end
+
+---Unfold every row but the section headers, leaving opened chains as they are.
+---Keeps every section's fold, including one whose section is empty for now.
+function View:unfold_files()
+  local kept = {}
+  for _, id in ipairs(tree.section_ids()) do
+    kept[id] = self.folds.collapsed[id]
+  end
+  self.folds.collapsed = kept
+end
+
+---Where `]h`/`[h` go from a line: the nearest row past it in `delta`'s direction
+---that is not a section header, or the line itself when there is none that way.
+---@param lnum integer
+---@param delta integer 1 or -1.
+---@return integer
+function View:step(lnum, delta)
+  local i = lnum + delta
+  while self.shown[i] and self.shown[i].kind == "section" do
+    i = i + delta
+  end
+  return self.shown[i] and i or lnum
+end
+
+---Where `]]`/`[[` go from a line: the nearest section header past it in `delta`'s
+---direction, a folded one included, or the line itself when there is none that way.
+---@param lnum integer
+---@param delta integer 1 or -1.
+---@return integer
+function View:step_section(lnum, delta)
+  local i = lnum + delta
+  while self.shown[i] and self.shown[i].kind ~= "section" do
+    i = i + delta
+  end
+  return self.shown[i] and i or lnum
+end
+
+---Keep only rows matching `query`; empty shows them all.
+---@param query string
+function View:narrow(query)
+  self.narrowed = query
+end
+
+---@return string
+function View:query()
+  return self.narrowed
+end
+
+---Leave the symbol kinds in `kinds` out of the tree.
+---@param kinds table<string, true>
+function View:hide(kinds)
+  self.kinds_hidden = kinds
+end
+
+---@return table<string, true>
+function View:hidden()
+  return self.kinds_hidden
 end
 
 return M
