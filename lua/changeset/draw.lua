@@ -127,7 +127,7 @@ end
 local function hidden_note_line(buf, anchor_line, note)
   if note then
     -- A virtual line rather than a row: the cursor cannot reach it, so it needs no
-    -- place in `visible` and no guard in everything that reads a row off a line.
+    -- place among the view's rows and no guard in everything that reads a row off a line.
     vim.api.nvim_buf_set_extmark(buf, ns, anchor_line, 0, {
       virt_lines = { { { "" } }, { { " " .. note, render.META_HL } } },
     })
