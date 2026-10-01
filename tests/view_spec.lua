@@ -520,15 +520,15 @@ describe("changeset.view", function()
 
   describe("View step_section", function()
     -- 1 Implementation, 2 mod.lua, 3 Tests (folded), 4 Docs, 5 README.md.
-    local THREE = tree.build(
+    local THREE_SECTIONS = tree.build(
       { Rows.file("mod.lua", { 5 }), Rows.file("mod_spec.lua", { 2 }), Rows.file("README.md", { 1 }) },
       {}
     )
     local v = fresh()
-    v:fold_files(THREE)
-    show(v, THREE)
+    v:fold_files(THREE_SECTIONS)
+    show(v, THREE_SECTIONS)
     v:step_out(3)
-    show(v, THREE)
+    show(v, THREE_SECTIONS)
 
     it("goes down from a file to the next header, a folded one included", function()
       assert.equal(3, v:step_section(2, 1))

@@ -219,9 +219,9 @@ function M.set_keymaps(buf, keys, hooks)
     if not lnum then
       return
     end
-    local parent, shut = open_session.view:step_out(lnum)
-    if parent then
-      move(parent)
+    local parent_lnum, shut = open_session.view:step_out(lnum)
+    if parent_lnum then
+      move(parent_lnum)
     elseif shut then
       redraw()
     end
