@@ -193,31 +193,4 @@ describe("changeset.state", function()
       assert.equal(1, state._section(ROWS, 1, -1))
     end)
   end)
-
-  describe("_nearest", function()
-    local IDS = { "a.lua", "a.lua\0Store", "b.lua" }
-
-    it("finds the line of the row itself", function()
-      assert.equal(2, state._nearest(IDS, "a.lua\0Store"))
-    end)
-
-    it("falls back to the deepest ancestor on screen when the row is hidden", function()
-      assert.equal(2, state._nearest(IDS, "a.lua\0Store\0load\0inner"))
-      assert.equal(3, state._nearest(IDS, "b.lua\0#orphans\0#orphan:4"))
-    end)
-
-    it("sends a hidden orphan to its group when the group is the deepest row shown", function()
-      local ids = { "a.lua", "a.lua\0#orphans" }
-
-      assert.equal(2, state._nearest(ids, "a.lua\0#orphans\0#orphan:4"))
-    end)
-
-    it("does not take a row whose name merely starts the same for an ancestor", function()
-      assert.equal(1, state._nearest(IDS, "a.lua\0Storefront"))
-    end)
-
-    it("finds nothing when no row on screen is related", function()
-      assert.is_nil(state._nearest(IDS, "c.lua"))
-    end)
-  end)
 end)

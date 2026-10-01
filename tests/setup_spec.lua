@@ -157,7 +157,7 @@ describe("changeset setup", function()
     vim.cmd.normal(vim.keycode("<S-CR>"))
 
     assert.is_nil(window.win())
-    assert.equal("other.lua", changeset._tree().picked.path)
+    assert.equal("other.lua", vim.fs.basename(vim.api.nvim_buf_get_name(0)))
   end)
 
   it("binds next/prev globally while open, and ? lists them", function()

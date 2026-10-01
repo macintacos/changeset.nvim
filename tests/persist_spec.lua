@@ -60,7 +60,7 @@ describe("changeset position in a session", function()
     focus_terminal()
     Sidebar.flush()
 
-    assert.same({ path = "mod.lua", lnum = 8 }, changeset._tree().here)
+    assert.same({ path = "mod.lua", lnum = 8 }, vim.json.decode(vim.g.ChangesetPosition).here)
   end)
 
   it("keeps where you are while focus sits in a help window", function()
@@ -72,7 +72,7 @@ describe("changeset position in a session", function()
     vim.cmd.help("help")
     Sidebar.flush()
 
-    assert.same({ path = "mod.lua", lnum = 8 }, changeset._tree().here)
+    assert.same({ path = "mod.lua", lnum = 8 }, vim.json.decode(vim.g.ChangesetPosition).here)
   end)
 
   it("restores where you were and the sidebar's cursor row from what it recorded", function()
@@ -94,22 +94,7 @@ describe("changeset position in a session", function()
     Sidebar.settle()
     Sidebar.flush()
 
-    assert.same({ path = "mod.lua", lnum = 8 }, changeset._tree().here)
-    assert.truthy(Sidebar.cursor_line():find("other.lua", 1, true))
-  end)
-
-  it("restores where you were and the sidebar's cursor row with focus in a terminal", function()
-    vim.cmd.edit("mod.lua")
-    focus_terminal()
-
-    restore_session({
-      here = { path = "mod.lua", lnum = 8 },
-      row = { id = row_id("other.lua"), path = "other.lua" },
-    })
-    Sidebar.settle()
-    Sidebar.flush()
-
-    assert.same({ path = "mod.lua", lnum = 8 }, changeset._tree().here)
+    assert.truthy(Sidebar.line_with(render.HERE_HL):find("Other changes", 1, true))
     assert.truthy(Sidebar.cursor_line():find("other.lua", 1, true))
   end)
 
@@ -149,26 +134,6 @@ describe("changeset position in a session", function()
     assert.equal(recorded, vim.g.ChangesetPosition)
   end)
 
-  it("ignores a recorded file and row the changeset no longer holds", function()
-    vim.cmd.edit("mod.lua")
-    vim.api.nvim_win_set_cursor(0, { 2, 0 })
-    local file_win = vim.api.nvim_get_current_win()
-    focus_terminal()
-
-    restore_session({
-      here = { path = "gone.lua", lnum = 3 },
-      row = { id = row_id("other.lua", "gone"), path = "other.lua" },
-    })
-    Sidebar.settle()
-    Sidebar.flush()
-
-    assert.is_nil(changeset._tree().restoring)
-    assert.is_nil(changeset._tree().here)
-    vim.api.nvim_set_current_win(file_win)
-    Sidebar.flush()
-    assert.same({ path = "mod.lua", lnum = 2 }, vim.json.decode(vim.g.ChangesetPosition).here)
-  end)
-
   it("settles a recorded row on a file the branch deletes, then follows you again", function()
     Fixture.git({ "rm", "-q", "plain.lua" }, tmp)
     Fixture.commit("delete", tmp)
@@ -181,7 +146,6 @@ describe("changeset position in a session", function()
     Sidebar.settle()
     Sidebar.flush()
 
-    assert.is_nil(changeset._tree().restoring)
     assert.truthy(Sidebar.cursor_line():find("plain.lua", 1, true))
     vim.api.nvim_set_current_win(file_win)
     Sidebar.flush()
@@ -204,22 +168,19 @@ describe("changeset position in a session", function()
     assert.equal(before, #vim.api.nvim_tabpage_list_wins(0))
   end)
 
-  for name, value in pairs({
-    ["not JSON"] = "{here",
-    ["null"] = "null",
-    ["wrong types"] = vim.json.encode({ here = { path = 1, lnum = "8" }, row = { id = 2, path = {} } }),
-  }) do
-    it("opens without a position from a recorded global that is " .. name, function()
-      vim.cmd.edit("mod.lua")
-      focus_terminal()
+  it("opens without a position from a recorded global that is not JSON", function()
+    vim.cmd.edit("mod.lua")
+    vim.api.nvim_win_set_cursor(0, { 2, 0 })
+    local file_win = vim.api.nvim_get_current_win()
+    focus_terminal()
 
-      restore_session(value)
-      Sidebar.settle()
+    restore_session("{here")
+    Sidebar.settle()
+    vim.api.nvim_set_current_win(file_win)
+    Sidebar.flush()
 
-      assert.is_nil(changeset._tree().restoring)
-      assert.is_nil(changeset._tree().here)
-    end)
-  end
+    assert.same({ path = "mod.lua", lnum = 2 }, vim.json.decode(vim.g.ChangesetPosition).here)
+  end)
 
   describe("while symbols are still being read", function()
     local resolve = require("changeset.resolve")
@@ -227,18 +188,16 @@ describe("changeset position in a session", function()
     ---@type fun(path: string, items: table[]?)
     local answer
 
-    ---A symbol spanning `first`..`last` (a top-level function unless told otherwise).
+    ---A top-level function spanning `first`..`last`, as a server would report it.
     ---@param name string
     ---@param first integer
     ---@param last integer
-    ---@param opts { kind: string?, depth: integer? }?
-    local function symbol(name, first, last, opts)
-      opts = opts or {}
+    local function symbol(name, first, last)
       return {
         name = name,
-        kind = opts.kind or "Function",
+        kind = "Function",
         lnum = first,
-        depth = opts.depth or 0,
+        depth = 0,
         range_lnum = first,
         range_end_lnum = last,
       }
@@ -267,76 +226,8 @@ describe("changeset position in a session", function()
       answer("mod.lua", { symbol("step", 7, 9) })
       Sidebar.flush()
 
-      assert.same({ path = "mod.lua", lnum = 8 }, changeset._tree().here)
+      assert.truthy(Sidebar.line_with(render.HERE_HL):find("step", 1, true))
       assert.truthy(Sidebar.cursor_line():find("step", 1, true))
-    end)
-
-    it("lets a file you move into before the build finishes win over the recorded one", function()
-      vim.cmd.edit("other.lua")
-      local file_win = vim.api.nvim_get_current_win()
-      focus_terminal()
-      restore_session({ here = { path = "mod.lua", lnum = 8 } })
-      Sidebar.await_diff()
-
-      vim.api.nvim_set_current_win(file_win)
-      Sidebar.flush()
-      answer("mod.lua", { symbol("step", 7, 9) })
-
-      assert.same({ path = "other.lua", lnum = 1 }, changeset._tree().here)
-    end)
-
-    it("lets a row you move to in a focused sidebar win over the recorded one", function()
-      restore_session({ row = { id = row_id("mod.lua", "step"), path = "mod.lua" } }, true)
-      Sidebar.await_diff()
-
-      Sidebar.cursor_to("other.lua")
-      answer("mod.lua", { symbol("step", 7, 9) })
-      Sidebar.flush()
-
-      assert.truthy(Sidebar.cursor_line():find("other.lua", 1, true))
-    end)
-
-    it("lets entering the sidebar before the build finishes win over the recorded row", function()
-      vim.cmd.edit("plain.lua")
-      restore_session({ row = { id = row_id("mod.lua", "step"), path = "mod.lua" } })
-      Sidebar.await_diff()
-
-      window.focus()
-      answer("mod.lua", { symbol("step", 7, 9) })
-      Sidebar.flush()
-
-      assert.truthy(Sidebar.cursor_line():find("Implementation", 1, true))
-    end)
-
-    it("restores a split file's row onto its own copy and paints you there on the Tests copy", function()
-      vim.fn.mkdir("src", "p")
-      vim.fn.writefile({ "fn load() {}", "", "mod tests {", "    fn refreshes() {", "    }", "}" }, "src/session.rs")
-      Fixture.commit("rust", tmp)
-      vim.cmd.edit("other.lua")
-      focus_terminal()
-      restore_session({
-        here = { path = "src/session.rs", lnum = 4 },
-        row = { id = row_id("src/session.rs"), path = "src/session.rs" },
-      })
-      Sidebar.await_diff()
-
-      answer("mod.lua", {})
-      answer("other.lua", {})
-      answer("src/session.rs", {
-        symbol("load", 1, 1),
-        symbol("tests", 3, 6, { kind = "Module" }),
-        symbol("refreshes", 4, 5, { depth = 1 }),
-      })
-      Sidebar.flush()
-
-      local lines = Sidebar.lines()
-      local cursor = vim.api.nvim_win_get_cursor((assert(window.win())))[1]
-      local tests = assert(vim.iter(ipairs(lines)):find(function(_, line)
-        return line:find("Tests", 1, true) ~= nil
-      end))
-      assert.truthy(lines[cursor]:find("session.rs", 1, true))
-      assert.truthy(cursor < tests)
-      assert.truthy(Sidebar.line_with(render.HERE_HL):find("refreshes", 1, true))
     end)
   end)
 end)

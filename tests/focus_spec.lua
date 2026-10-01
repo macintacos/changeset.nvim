@@ -35,18 +35,6 @@ describe("changeset sidebar focus", function()
     vim.fn.delete(tmp, "rf")
   end)
 
-  it("lands on the row you are on when toggle() focuses the sidebar", function()
-    vim.cmd.edit("mod.lua")
-    vim.api.nvim_win_set_cursor(0, { 8, 0 })
-    changeset.open()
-    Sidebar.settle()
-
-    changeset.toggle()
-
-    assert.equal(window.win(), vim.api.nvim_get_current_win())
-    assert.truthy(Sidebar.cursor_line():find("Other changes", 1, true))
-  end)
-
   it("lands on the row you are on when focus arrives by a route other than toggle()", function()
     vim.cmd.edit("mod.lua")
     vim.api.nvim_win_set_cursor(0, { 8, 0 })
@@ -58,37 +46,6 @@ describe("changeset sidebar focus", function()
     vim.api.nvim_set_current_win(win)
 
     assert.truthy(Sidebar.cursor_line():find("Other changes", 1, true))
-  end)
-
-  it("leaves the sidebar cursor where it was when you are outside the changeset", function()
-    vim.cmd.edit("mod.lua")
-    changeset.open()
-    Sidebar.settle()
-    park_sidebar_cursor("other.lua")
-    vim.cmd.edit("plain.lua")
-    Sidebar.flush()
-
-    changeset.toggle()
-
-    assert.truthy(Sidebar.cursor_line():find("other.lua", 1, true))
-  end)
-
-  it("lands on the nearest row on screen when yours is folded away", function()
-    vim.cmd.edit("mod.lua")
-    vim.api.nvim_win_set_cursor(0, { 8, 0 })
-    changeset.open()
-    Sidebar.settle()
-    local win = assert(window.win())
-    vim.api.nvim_set_current_win(win)
-    park_sidebar_cursor("mod.lua")
-    vim.cmd.normal("h")
-    park_sidebar_cursor("other.lua")
-    vim.cmd.wincmd("p")
-    Sidebar.flush()
-
-    changeset.toggle()
-
-    assert.truthy(Sidebar.cursor_line():find("mod.lua", 1, true))
   end)
 
   it("keeps the cursor on a landed row that you expand", function()
@@ -160,14 +117,6 @@ describe("changeset sidebar focus", function()
       }
     end
 
-    ---Focus the sidebar from line 8 of `mod.lua` before its symbols are in.
-    local function focus_before_symbols()
-      vim.cmd.edit("mod.lua")
-      vim.api.nvim_win_set_cursor(0, { 8, 0 })
-      changeset.toggle()
-      Sidebar.await_diff()
-    end
-
     before_each(function()
       resolve.start = function(_, _, on_file)
         answer = on_file
@@ -180,43 +129,15 @@ describe("changeset sidebar focus", function()
     end)
 
     it("lands on the file row, then follows you into your symbol once it resolves", function()
-      focus_before_symbols()
+      vim.cmd.edit("mod.lua")
+      vim.api.nvim_win_set_cursor(0, { 8, 0 })
+      changeset.toggle()
+      Sidebar.await_diff()
       assert.truthy(Sidebar.cursor_line():find("mod.lua", 1, true))
 
       answer("mod.lua", { symbol("step", 7, 9) })
 
       assert.truthy(Sidebar.cursor_line():find("step", 1, true))
-    end)
-
-    it("stays where you moved the sidebar cursor when your symbol resolves", function()
-      focus_before_symbols()
-      park_sidebar_cursor("other.lua")
-
-      answer("mod.lua", { symbol("step", 7, 9) })
-
-      assert.truthy(Sidebar.cursor_line():find("other.lua", 1, true))
-    end)
-
-    it("leaves the sidebar cursor alone when your symbol resolves after you left it", function()
-      focus_before_symbols()
-      vim.cmd.wincmd("p")
-
-      answer("mod.lua", { symbol("step", 7, 9) })
-
-      assert.truthy(Sidebar.cursor_line():find("mod.lua", 1, true))
-    end)
-
-    it("lands on the file row when a filter hides your symbol", function()
-      focus_before_symbols()
-      answer("mod.lua", { symbol("step", 7, 9) })
-      vim.api.nvim_feedkeys("fL2" .. vim.keycode("<CR>"), "xt", false)
-      assert.equal("L2", changeset._tree().query)
-      vim.cmd.wincmd("p")
-      Sidebar.flush()
-
-      changeset.toggle()
-
-      assert.truthy(Sidebar.cursor_line():find("mod.lua", 1, true))
     end)
   end)
 

@@ -68,14 +68,18 @@ function M.band_for(row, jump)
   }
 end
 
----The ids of the rows on screen; errors when there is no session.
----@return string[] ids Of the rows on screen, in display order.
-function M.visible_ids()
+---The sidebar as drawn, for `changeset.position`; errors when there is no session.
+---@return changeset.position.View
+function M.view()
   local session = current()
   assert(session, "changeset: no open session")
-  return vim.tbl_map(function(row)
-    return row.id
-  end, session.visible)
+  local win = window.win()
+  return {
+    rows = session.rows,
+    visible = session.visible,
+    cursor = win and vim.api.nvim_win_get_cursor(win)[1],
+    focused = window.is_focused(),
+  }
 end
 
 ---@param buf integer
@@ -93,9 +97,7 @@ local function mark_row(buf, lnum, marks)
   end
 end
 
----Mark the row under the sidebar's cursor as selected while the sidebar has focus,
----the row for where you are, and the row last opened, each of the last two on its
----nearest ancestor on screen. A row several would mark shows the first of those.
+---Mark the rows `changeset.position` says are selected, where you are, and last opened.
 function M.paint()
   local session = current()
   local buf, win = window.buf(), window.win()
@@ -103,25 +105,9 @@ function M.paint()
     return
   end
   vim.api.nvim_buf_clear_namespace(buf, rows_ns, 0, -1)
-  local ids = M.visible_ids()
-  ---@param row changeset.Row?
-  ---@return integer?
-  local function on_screen(row)
-    return row and state._nearest(ids, row.id)
-  end
-  local here, picked = session.here, session.picked
-  local states = {
-    { "selected", window.is_focused() and M.row_at_cursor() and vim.api.nvim_win_get_cursor(win)[1] },
-    { "here", on_screen(here and tree.locate(session.rows, here.path, here.lnum)) },
-    { "picked", on_screen(picked and tree.relocate(session.rows, picked)) },
-  }
-  local width, taken = vim.api.nvim_win_get_width(win), {}
-  for _, entry in ipairs(states) do
-    local kind, lnum = entry[1], entry[2]
-    if lnum and not taken[lnum] then
-      taken[lnum] = true
-      mark_row(buf, lnum, render.state_marks(kind, width))
-    end
+  local width = vim.api.nvim_win_get_width(win)
+  for _, mark in ipairs(session.position:marks(M.view())) do
+    mark_row(buf, mark.lnum, render.state_marks(mark.kind, width))
   end
 end
 

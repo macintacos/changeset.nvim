@@ -195,10 +195,15 @@ describe("changeset row highlights", function()
 
     vim.cmd.edit("other.lua")
 
+    ---Where you are, as the session records it.
+    ---@return changeset.Spot?
+    local function recorded_here()
+      return vim.g.ChangesetPosition and vim.json.decode(vim.g.ChangesetPosition).here
+    end
     vim.wait(200, function()
-      return (changeset._tree().here or {}).path == "other.lua"
+      return (recorded_here() or {}).path == "other.lua"
     end, 10)
-    assert.same({ path = "other.lua", lnum = 1 }, changeset._tree().here)
+    assert.same({ path = "other.lua", lnum = 1 }, recorded_here())
   end)
 
   it("does not count a deleted file's notice as being in that file", function()
