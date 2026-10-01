@@ -1,11 +1,15 @@
 ---PR Review Mode points gitsigns' base at this branch's fork point from the
 ---default branch, or from its open PR's target branch when that is another
 ---branch, so the gutter marks everything the branch changed rather than just
----uncommitted work. The PR target comes from gh once the default-branch base is
----applied, so a stacked branch starts on that base and then moves. Requiring it
+---uncommitted work. It measures in the repository of the buffer gitsigns last
+---updated. A stacked branch whose PR gh has not named yet starts on the
+---default-branch base and moves once the answer lands. Requiring it
 ---registers nothing; once `activate()` has run, it turns itself on for every
 ---branch but the default, `toggle()` turns it off, and each branch remembers
 ---that choice for the session.
+local Git = require("changeset.git")
+local fork_point = require("changeset.fork_point")
+
 local M = {}
 
 ---@type table<string, true> Branches the mode was switched off on.
@@ -26,8 +30,8 @@ local ours = {}
 ---@type table<integer, string|false> Buffers with a move in flight, by target; false is the index.
 local moving = {}
 
----@type integer Bumped by every `apply`, so a PR lookup can tell it was superseded.
-local generation = 0
+---@type fun(point: changeset.ForkPoint)? Continues `enable` once gh answers; `apply` drops it.
+local waiting
 
 ---Whether the mode is on (its intent; gitsigns may still be catching up).
 ---@return boolean
@@ -86,9 +90,8 @@ end
 ---@param base string?
 ---@param done fun(err: string?)? Called once every move has landed, with the first error.
 local function apply(base, done)
-  generation = generation + 1
+  waiting = nil
   want = base
-  toplevel = require("changeset.git").lines({ "git", "rev-parse", "--show-toplevel" })[1]
   if base then
     ours[base] = true
   end
@@ -114,25 +117,12 @@ local function apply(base, done)
   landed()
 end
 
----Diff against the fork point from `target`.
----@param target string? The default branch when nil.
----@param done fun(err: string?) Called once every move has landed, with the first error.
----@return string? branch The branch diffed against; nil when there is no fork point.
-local function point_at(target, done)
-  local base, branch = require("changeset.git").merge_base(nil, target)
-  if base then
-    apply(base, done)
-    return branch
-  end
-end
-
 ---@param err string
 local function fail(err)
   vim.notify("PR Review Mode: " .. err, vim.log.levels.ERROR)
 end
 
----Diff against the fork point from the default branch at once, then from the
----PR's target branch once gh names one that differs.
+---Diff against the fork point, and follow gh's answer when it is still on its way.
 ---@param report boolean Announce success; failures announce regardless.
 local function enable(report)
   local function announce(branch)
@@ -140,57 +130,60 @@ local function enable(report)
       vim.notify("PR Review Mode: on (vs " .. branch .. ")")
     end
   end
-  -- The default-branch notice waits on both its apply and the lookup, in either order.
-  local default, landed, settled
-  default = point_at(nil, function(err)
+  local function warn_skipped(point)
+    if point.skipped then
+      vim.notify(
+        "PR Review Mode: no merge base with " .. point.skipped .. "; diffing against " .. point.default_branch,
+        vim.log.levels.WARN
+      )
+    end
+  end
+  local point, asking = fork_point.get(toplevel --[[@as string]], applied --[[@as string]])
+  if not point then
+    return vim.notify("PR Review Mode: no merge base with the default branch", vim.log.levels.WARN)
+  end
+  -- The first notice waits on both its apply and the lookup, in either order.
+  local landed, settled = false, not asking
+  apply(point.base, function(err)
     if err then
       return fail(err)
     end
     landed = true
     if settled then
-      announce(default)
+      announce(point.against)
     end
   end)
-  if not default then
-    return vim.notify("PR Review Mode: no merge base with the default branch", vim.log.levels.WARN)
+  if not asking then
+    return warn_skipped(point)
   end
-  local token = generation
-  require("changeset.git").pr_target(nil, function(target)
-    if token ~= generation then
-      return
-    end
-    if target and target ~= default then
-      local moved = point_at(target, function(err)
+  waiting = function(answer)
+    if answer.base ~= want then
+      return apply(answer.base, function(err)
         if err then
           fail(err)
         else
-          announce(target)
+          announce(answer.against)
         end
       end)
-      if moved then
-        return
-      end
-      vim.notify(
-        "PR Review Mode: no merge base with " .. target .. "; diffing against " .. default,
-        vim.log.levels.WARN
-      )
     end
+    warn_skipped(answer)
     settled = true
     if landed then
-      announce(default)
+      announce(answer.against)
     end
-  end)
+  end
 end
 
----Follow a branch change. Re-resolves the base even when the mode is already
----on, since the fork point belongs to the branch that was left behind.
+---Follow a change of repository or branch. Re-resolves the base even when the
+---mode is already on, since the fork point belongs to the branch left behind.
+---@param root string
 ---@param branch string
-local function sync(branch)
-  if branch == applied then
+local function sync(root, branch)
+  if root == toplevel and branch == applied then
     return
   end
-  applied = branch
-  if dismissed[branch] or branch == require("changeset.git").default_base() then
+  toplevel, applied = root, branch
+  if dismissed[branch] or branch == Git.default_base(root) then
     if is_on() then
       apply(nil)
     end
@@ -199,10 +192,30 @@ local function sync(branch)
   end
 end
 
+---The repository and branch of a buffer gitsigns tracks.
+---@param buf integer
+---@return string? root nil when gitsigns doesn't track `buf` or it has no branch.
+---@return string? branch
+local function tracked(buf)
+  -- Read from the status gitsigns publishes, not its cache: attach announces the
+  -- status before it caches the buffer.
+  local status = vim.b[buf].gitsigns_status_dict
+  if status and status.root and status.head and status.head ~= "" then
+    return status.root, status.head
+  end
+end
+
 ---Switch the mode off for the current buffer's branch for the rest of the session, or back on.
 ---Needs `activate()`: without it the mode never follows a branch change.
 function M.toggle()
-  local branch = vim.b.gitsigns_head or ""
+  local root, branch = tracked(vim.api.nvim_get_current_buf())
+  if not root then
+    root, branch = toplevel, applied
+  end
+  if not root or not branch then
+    return vim.notify("PR Review Mode: no buffer gitsigns tracks", vim.log.levels.WARN)
+  end
+  sync(root, branch)
   if is_on() then
     apply(nil)
     dismissed[branch] = true
@@ -213,9 +226,21 @@ function M.toggle()
   end
 end
 
+---@param root string
+---@param branch string
+---@param point changeset.ForkPoint
+local function on_answer(root, branch, point)
+  if waiting and root == toplevel and branch == applied then
+    local continue = waiting
+    waiting = nil
+    continue(point)
+  end
+end
+
 ---Register the `User GitSignsUpdate` autocmd that turns the mode on for every branch but the
 ---default and keeps buffers on its base. Safe to call more than once.
 function M.activate()
+  fork_point.subscribe(on_answer)
   -- gitsigns republishes a buffer's branch on every sign refresh, including after
   -- a checkout made outside Neovim, so this doubles as a branch-change hook, and
   -- each event also moves buffers that missed the base. Its cwd-wide sibling
@@ -226,9 +251,12 @@ function M.activate()
     pattern = "GitSignsUpdate",
     desc = "changeset: keep buffers on PR Review Mode's base as the branch changes",
     callback = function(args)
-      local branch = args.data and vim.b[args.data.buffer].gitsigns_head
-      if branch and branch ~= "" then
-        sync(branch)
+      local root, branch
+      if args.data then
+        root, branch = tracked(args.data.buffer)
+      end
+      if root and branch then
+        sync(root, branch)
       end
       reconcile()
     end,

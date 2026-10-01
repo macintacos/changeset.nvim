@@ -53,4 +53,32 @@ describe("PR Review Mode", function()
       return revision(bufs[1]) ~= parent
     end, 20))
   end)
+
+  it("diffs against the merge base of the buffer's own repository", function()
+    review.fixture(dir, "elsewhere", { "a.txt" })
+    local outside = vim.fn.tempname()
+    vim.fn.mkdir(outside, "p")
+    vim.fn.chdir(outside)
+
+    local bufs = edit({ dir .. "/a.txt" })
+
+    assert.is_true(await(bufs, review.merge_base(dir), 5000))
+  end)
+
+  it("toggles the tracked buffers from a buffer gitsigns does not track", function()
+    review.fixture(dir, "untracked", { "a.txt" })
+    local outside = vim.fn.tempname()
+    vim.fn.mkdir(outside, "p")
+    vim.fn.chdir(outside)
+    local bufs = edit({ dir .. "/a.txt" })
+    local base = review.merge_base(dir)
+    assert.is_true(await(bufs, base, 5000))
+    vim.cmd.enew()
+
+    require("changeset.review").toggle()
+    assert.is_true(await(bufs, nil, 5000))
+    require("changeset.review").toggle()
+
+    assert.is_true(await(bufs, base, 5000))
+  end)
 end)
