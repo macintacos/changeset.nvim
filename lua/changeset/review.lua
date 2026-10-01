@@ -2,11 +2,11 @@
 ---default branch, or from its open PR's target branch when that is another
 ---branch, so the gutter marks everything the branch changed rather than just
 ---uncommitted work. It measures in the repository of the buffer gitsigns last
----updated. A stacked branch whose PR gh has not named yet starts on the
----default-branch base and moves once the answer lands. Requiring it
----registers nothing; once `activate()` has run, it turns itself on for every
----branch but the default, `toggle()` turns it off, and each branch remembers
----that choice for the session.
+---updated, or the one `toggle()` ran in. A stacked branch whose PR gh has not
+---named yet starts on the default-branch base and moves once the answer lands.
+---Requiring it registers nothing; once `activate()` has run, it turns itself on
+---for every branch but the default, `toggle()` turns it off, and each branch
+---remembers that choice for the session.
 local Git = require("changeset.git")
 local fork_point = require("changeset.fork_point")
 
@@ -123,11 +123,13 @@ local function fail(err)
 end
 
 ---Diff against the fork point, and follow gh's answer when it is still on its way.
+---@param root string
+---@param branch string
 ---@param report boolean Announce success; failures announce regardless.
-local function enable(report)
-  local function announce(branch)
+local function enable(root, branch, report)
+  local function announce(target)
     if report then
-      vim.notify("PR Review Mode: on (vs " .. branch .. ")")
+      vim.notify("PR Review Mode: on (vs " .. target .. ")")
     end
   end
   local function warn_skipped(point)
@@ -138,26 +140,29 @@ local function enable(report)
       )
     end
   end
-  local point, asking = fork_point.get(toplevel --[[@as string]], applied --[[@as string]])
+  local point, asking = fork_point.get(root, branch)
   if not point then
+    if is_on() then
+      apply(nil)
+    end
     return vim.notify("PR Review Mode: no merge base with the default branch", vim.log.levels.WARN)
   end
   -- The first notice waits on both its apply and the lookup, in either order.
-  local landed, settled = false, not asking
+  local landed, settled, against = false, not asking, point.against
   apply(point.base, function(err)
     if err then
       return fail(err)
     end
     landed = true
     if settled then
-      announce(point.against)
+      announce(against)
     end
   end)
   if not asking then
     return warn_skipped(point)
   end
   waiting = function(answer)
-    if answer.base ~= want then
+    if answer.against ~= answer.default_branch and answer.base ~= want then
       return apply(answer.base, function(err)
         if err then
           fail(err)
@@ -167,9 +172,10 @@ local function enable(report)
       end)
     end
     warn_skipped(answer)
+    against = answer.against
     settled = true
     if landed then
-      announce(answer.against)
+      announce(against)
     end
   end
 end
@@ -188,17 +194,17 @@ local function sync(root, branch)
       apply(nil)
     end
   else
-    enable(false)
+    enable(root, branch, false)
   end
 end
 
----The repository and branch of a buffer gitsigns tracks.
+---The repository and branch gitsigns published for `buf`, attached or not.
 ---@param buf integer
----@return string? root nil when gitsigns doesn't track `buf` or it has no branch.
+---@return string? root nil when gitsigns published nothing for `buf` or it has no branch.
 ---@return string? branch
 local function tracked(buf)
-  -- Read from the status gitsigns publishes, not its cache: attach announces the
-  -- status before it caches the buffer.
+  -- gitsigns publishes the status before it caches the buffer, so this reads the
+  -- status. Its `root` is `git_obj.repo.toplevel`, the spelling `owned()` compares.
   local status = vim.b[buf].gitsigns_status_dict
   if status and status.root and status.head and status.head ~= "" then
     return status.root, status.head
@@ -206,6 +212,7 @@ local function tracked(buf)
 end
 
 ---Switch the mode off for the current buffer's branch for the rest of the session, or back on.
+---A buffer gitsigns doesn't track toggles the mode's own repository and branch.
 ---Needs `activate()`: without it the mode never follows a branch change.
 function M.toggle()
   local root, branch = tracked(vim.api.nvim_get_current_buf())
@@ -222,7 +229,7 @@ function M.toggle()
     vim.notify("PR Review Mode: off")
   else
     dismissed[branch] = nil
-    enable(true)
+    enable(root, branch, true)
   end
 end
 
@@ -242,14 +249,14 @@ end
 function M.activate()
   fork_point.subscribe(on_answer)
   -- gitsigns republishes a buffer's branch on every sign refresh, including after
-  -- a checkout made outside Neovim, so this doubles as a branch-change hook, and
-  -- each event also moves buffers that missed the base. Its cwd-wide sibling
-  -- event carries no buffer and is skipped: that watcher never starts in a
-  -- worktree, where `.git` is a file rather than a directory.
+  -- a checkout made outside Neovim, so this doubles as a repository- and
+  -- branch-change hook, and each event also moves buffers that missed the base.
+  -- Its cwd-wide sibling event carries no buffer and is skipped: that watcher
+  -- never starts in a worktree, where `.git` is a file rather than a directory.
   vim.api.nvim_create_autocmd("User", {
     group = vim.api.nvim_create_augroup("changeset.review", { clear = true }),
     pattern = "GitSignsUpdate",
-    desc = "changeset: keep buffers on PR Review Mode's base as the branch changes",
+    desc = "changeset: keep buffers on PR Review Mode's base as the repository or branch changes",
     callback = function(args)
       local root, branch
       if args.data then

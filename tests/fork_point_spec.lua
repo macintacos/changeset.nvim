@@ -26,13 +26,12 @@ local function await_heard(root, count)
   end)
 end
 
----@param dir string
+---@param root string
 ---@param name string
----@param cwd string
 ---@return string
-local function commit_file(dir, name, cwd)
-  vim.fn.writefile({ name }, dir .. "/" .. name)
-  return fixture.commit(name, cwd)
+local function commit_file(root, name)
+  vim.fn.writefile({ name }, root .. "/" .. name)
+  return fixture.commit(name, root)
 end
 
 ---A repository with `main`, then `parent` off it, then `feature` off that, checked out.
@@ -43,11 +42,11 @@ local function stacked_repo()
   local root = vim.fn.resolve(vim.fn.tempname())
   vim.fn.mkdir(root, "p")
   fixture.init_repo("main", root)
-  local default_base = commit_file(root, "main.txt", root)
+  local default_base = commit_file(root, "main.txt")
   fixture.git({ "checkout", "-q", "-b", "parent" }, root)
-  local parent_base = commit_file(root, "parent.txt", root)
+  local parent_base = commit_file(root, "parent.txt")
   fixture.git({ "checkout", "-q", "-b", "feature" }, root)
-  commit_file(root, "feature.txt", root)
+  commit_file(root, "feature.txt")
   return root, default_base, parent_base
 end
 

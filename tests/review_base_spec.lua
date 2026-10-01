@@ -4,7 +4,7 @@ local review = require("support.pr_review")
 local await, await_cached, edit, revision = review.await, review.await_cached, review.edit, review.revision
 
 describe("PR Review Mode", function()
-  local dir, cwd
+  local dir, cwd, outside, other
 
   before_each(function()
     cwd = vim.fn.getcwd()
@@ -13,6 +13,10 @@ describe("PR Review Mode", function()
 
   after_each(function()
     review.teardown(dir, cwd)
+    for _, extra in ipairs({ outside, other }) do
+      vim.fn.delete(extra, "rf")
+    end
+    outside, other = nil, nil
   end)
 
   it("diffs a single edited file against the merge base", function()
@@ -56,9 +60,7 @@ describe("PR Review Mode", function()
 
   it("diffs against the merge base of the buffer's own repository", function()
     review.fixture(dir, "elsewhere", { "a.txt" })
-    local outside = vim.fn.tempname()
-    vim.fn.mkdir(outside, "p")
-    vim.fn.chdir(outside)
+    outside = support.enter_tempdir()
 
     local bufs = edit({ dir .. "/a.txt" })
 
@@ -67,9 +69,7 @@ describe("PR Review Mode", function()
 
   it("toggles the tracked buffers from a buffer gitsigns does not track", function()
     review.fixture(dir, "untracked", { "a.txt" })
-    local outside = vim.fn.tempname()
-    vim.fn.mkdir(outside, "p")
-    vim.fn.chdir(outside)
+    outside = support.enter_tempdir()
     local bufs = edit({ dir .. "/a.txt" })
     local base = review.merge_base(dir)
     assert.is_true(await(bufs, base, 5000))
@@ -80,5 +80,47 @@ describe("PR Review Mode", function()
     require("changeset.review").toggle()
 
     assert.is_true(await(bufs, base, 5000))
+  end)
+
+  it("measures a branch name two repositories share in each one's own repository", function()
+    other = review.repo()
+    vim.fn.writefile({ "one" }, other .. "/b.txt")
+    support.commit("base", other)
+    local theirs = edit({ other .. "/b.txt" })
+    assert.is_true(await_cached(theirs))
+    review.fixture(dir, "shared", { "a.txt" })
+    assert.is_true(await(edit({ dir .. "/a.txt" }), review.merge_base(dir), 5000))
+
+    support.git({ "switch", "-q", "-c", "shared" }, other)
+    vim.fn.writefile({ "one", "two" }, other .. "/b.txt")
+    support.commit("change", other)
+    assert.is_true(vim.wait(5000, function()
+      return vim.b[theirs[1]].gitsigns_head == "shared"
+    end, 20))
+
+    assert.is_true(await(theirs, review.merge_base(other), 5000))
+  end)
+
+  it("leaves a repository with no fork point off the other repository's base", function()
+    other = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(other, "p")
+    support.init_repo("dev", other)
+    vim.fn.writefile({ "one" }, other .. "/b.txt")
+    support.commit("base", other)
+    local theirs = edit({ other .. "/b.txt" })
+    assert.is_true(await_cached(theirs))
+    review.fixture(dir, "forked", { "a.txt" })
+    local base = review.merge_base(dir)
+    assert.is_true(await(edit({ dir .. "/a.txt" }), base, 5000))
+    assert.is_true(review.settle())
+    local moves = review.moves_to[base]
+
+    vim.api.nvim_set_current_buf(theirs[1])
+    vim.api.nvim_buf_set_lines(theirs[1], 0, -1, false, { "edited" })
+
+    assert.is_false(vim.wait(1500, function()
+      return review.moves_to[base] ~= moves
+    end, 20))
+    assert.is_nil(revision(theirs[1]))
   end)
 end)

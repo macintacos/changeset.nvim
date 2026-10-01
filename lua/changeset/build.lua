@@ -238,7 +238,7 @@ function M.build()
   session = vim.tbl_extend("error", {
     root = root,
     base = base,
-    ref = point.ref or point.default_branch,
+    ref = point.ref,
     branch = branch,
     default_branch = point.default_branch,
     pr = point.pr,
@@ -251,12 +251,13 @@ function M.build()
   return true
 end
 
--- An answer that moves nothing is dropped: rebuilding on an answer of no PR would ask gh again.
+-- Fires: gh answering a fork_point lookup, for any repository and branch.
 fork_point.subscribe(function(root, branch, point)
-  if
-    not (session and session.root == root and session.branch == branch and Paths.root(0) == root)
-    or (session.base == point.base and session.pr == point.pr)
-  then
+  if not (session and session.root == root and session.branch == branch and Paths.root(0) == root) then
+    return
+  end
+  -- Rebuilding on an answer of no PR would ask gh again.
+  if session.base == point.base and session.pr == point.pr then
     return
   end
   local kept = session

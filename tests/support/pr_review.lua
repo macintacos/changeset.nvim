@@ -6,11 +6,12 @@ local support = require("support.git")
 vim.opt.rtp:prepend(require("support.deps").path("gitsigns.nvim"))
 
 -- `changeset.review` is required once, so its state outlives each case. `review.repo()`
--- gives each case a fresh repository, so neither `fork_point`'s cached answers nor
--- review's `toplevel` and `applied` carry into the next case; `want`, `ours` and
--- `moving` are tied to a repo each teardown deletes. `dismissed` stays keyed by branch,
--- so each case opens its first buffer on a branch other than the one the case before it
--- ended on. A gh lookup still in flight is dropped by the next case's first apply.
+-- gives each case a fresh repository, so the next case neither matches review's
+-- `toplevel` and `applied` nor hits `fork_point`'s cached answers; `want`, `ours` and
+-- `moving` are tied to a repo each teardown deletes. `dismissed` is keyed by branch
+-- alone and outlives the repository, so each case opens its first buffer on a branch
+-- other than the one the case before it ended on. A gh lookup still in flight is
+-- dropped by the next case's first apply.
 require("gitsigns").setup()
 require("changeset.review").activate()
 
@@ -24,12 +25,19 @@ local M = {}
 ---@type integer
 M.moves = 0
 
+---Base changes started so far toward each revision.
+---@type table<string, integer>
+M.moves_to = {}
+
 local in_flight = 0
 local Obj = require("gitsigns.git").Obj
 local change_revision = Obj.change_revision
-Obj.change_revision = function(...)
+Obj.change_revision = function(self, revision)
   in_flight, M.moves = in_flight + 1, M.moves + 1
-  local result = change_revision(...)
+  if revision then
+    M.moves_to[revision] = (M.moves_to[revision] or 0) + 1
+  end
+  local result = change_revision(self, revision)
   in_flight = in_flight - 1
   return result
 end
