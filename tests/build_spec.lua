@@ -46,16 +46,8 @@ describe("changeset.build", function()
   local real_start = resolve.start
 
   before_each(function()
-    tmp = vim.fn.tempname()
-    vim.fn.mkdir(tmp, "p")
-    previous_dir = vim.fn.chdir(tmp)
-    assert(previous_dir ~= "", "could not enter the fixture directory")
-    Fixture.init_repo("trunk", tmp)
-    vim.fn.writefile({ "return 1" }, "mod.lua")
-    Fixture.commit("base", tmp)
-    Fixture.git({ "checkout", "-q", "-b", "feature" }, tmp)
-    vim.fn.writefile({ "return 2" }, "mod.lua")
-    Fixture.commit("change", tmp)
+    tmp, previous_dir = Fixture.enter_tempdir()
+    Fixture.feature_one_file(tmp)
     vim.cmd.edit("mod.lua")
     resolve.start = function()
       return function() end

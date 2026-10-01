@@ -5,27 +5,6 @@ local changeset = require("changeset")
 local window = require("changeset.window")
 local Fixture = require("support.git")
 
----@param path string
----@param lines string[]
-local function write(path, lines)
-  vim.fn.writefile(lines, path)
-end
-
----A repo on `trunk` with two files, then a `feature` branch that changes both.
----@param cwd string
-local function init_feature_repo(cwd)
-  Fixture.init_repo("trunk", cwd)
-
-  write("mod.lua", { "local M = {}", "", "function M.one()", "  return 1", "end", "", "return M" })
-  write("other.lua", { "return { a = 1 }" })
-  Fixture.commit("base", cwd)
-
-  Fixture.git({ "checkout", "-q", "-b", "feature" }, cwd)
-  write("mod.lua", { "local M = {}", "", "function M.one()", "  return 2", "end", "", "return M" })
-  write("other.lua", { "return { a = 1, b = 2 }" })
-  Fixture.commit("change", cwd)
-end
-
 ---@param buf integer
 ---@return string[]
 local function lines_of(buf)
@@ -95,12 +74,8 @@ describe("changeset setup", function()
   local tmp, previous_dir
 
   before_each(function()
-    tmp = vim.fn.tempname()
-    vim.fn.mkdir(tmp, "p")
-    previous_dir = vim.fn.chdir(tmp)
-    assert(previous_dir ~= "", "could not enter the fixture directory")
-
-    init_feature_repo(tmp)
+    tmp, previous_dir = Fixture.enter_tempdir()
+    Fixture.feature_two_files(tmp)
   end)
 
   after_each(function()

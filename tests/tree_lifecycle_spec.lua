@@ -1,6 +1,7 @@
 local changeset = require("changeset")
 local window = require("changeset.window")
 local Fixture = require("support.git")
+local Sidebar = require("support.sidebar")
 require("support.gh")
 
 ---@param tree changeset.Session?
@@ -9,11 +10,6 @@ local function paths_of(tree)
   return vim.tbl_map(function(file)
     return file.path
   end, tree and tree.files or {})
-end
-
----@return string
-local function sidebar_text()
-  return table.concat(vim.api.nvim_buf_get_lines(assert(window.buf()), 0, -1, false), "\n")
 end
 
 ---@param path string
@@ -31,10 +27,7 @@ describe("changeset tree", function()
   -- The tree resolves its repo from the current buffer, which falls back to the
   -- process cwd, so the fixture has to be entered rather than merely pointed at.
   before_each(function()
-    tmp = vim.fn.tempname()
-    vim.fn.mkdir(tmp, "p")
-    previous_dir = vim.fn.chdir(tmp)
-    assert(previous_dir ~= "", "could not enter the fixture directory")
+    tmp, previous_dir = Fixture.enter_tempdir()
   end)
 
   after_each(function()
@@ -46,12 +39,7 @@ describe("changeset tree", function()
 
   describe("on a branch forked from trunk", function()
     before_each(function()
-      Fixture.init_repo("trunk", tmp)
-      vim.fn.writefile({ "return 1" }, "mod.lua")
-      Fixture.commit("base", tmp)
-      Fixture.git({ "checkout", "-q", "-b", "feature" }, tmp)
-      vim.fn.writefile({ "return 2" }, "mod.lua")
-      Fixture.commit("change", tmp)
+      Fixture.feature_one_file(tmp)
       vim.cmd.edit("mod.lua")
     end)
 
@@ -114,7 +102,7 @@ describe("changeset tree", function()
 
       changeset.open()
 
-      assert.truthy(sidebar_text():find("mod.lua", 1, true))
+      assert.truthy(Sidebar.text():find("mod.lua", 1, true))
     end)
 
     it("keeps the tree after the sidebar closes", function()
@@ -154,9 +142,9 @@ describe("changeset tree", function()
     it("leaves the sidebar blank until the diff is read", function()
       changeset.open()
 
-      assert.equal("", sidebar_text())
+      assert.equal("", Sidebar.text())
       assert.is_true(vim.wait(10000, function()
-        return sidebar_text():find("mod.lua", 1, true) ~= nil
+        return Sidebar.text():find("mod.lua", 1, true) ~= nil
       end, 25))
     end)
 

@@ -4,26 +4,7 @@ local draw = require("changeset.draw")
 local render = require("changeset.render")
 local window = require("changeset.window")
 local Fixture = require("support.git")
-
----A repo on `trunk` with two files, then a `feature` branch that changes both.
----@param cwd string
-local function init_feature_repo(cwd)
-  Fixture.init_repo("trunk", cwd)
-  vim.fn.writefile({ "local M = {}", "", "function M.one()", "  return 1", "end", "", "return M" }, "mod.lua")
-  vim.fn.writefile({ "return { a = 1 }" }, "other.lua")
-  vim.fn.writefile({ "return 0" }, "plain.lua")
-  Fixture.commit("base", cwd)
-
-  Fixture.git({ "checkout", "-q", "-b", "feature" }, cwd)
-  vim.fn.writefile({ "local M = {}", "", "function M.one()", "  return 2", "end", "", "return M" }, "mod.lua")
-  vim.fn.writefile({ "return { a = 1, b = 2 }" }, "other.lua")
-  Fixture.commit("change", cwd)
-end
-
----@return string
-local function sidebar_text()
-  return table.concat(vim.api.nvim_buf_get_lines(assert(window.buf()), 0, -1, false), "\n")
-end
+local Sidebar = require("support.sidebar")
 
 ---Open the sidebar from `mod.lua`, leaving the cursor in the file window.
 ---@return integer file The window the sidebar was opened from, where previews go.
@@ -31,11 +12,7 @@ local function open_sidebar()
   vim.cmd.edit("mod.lua")
   local file = vim.api.nvim_get_current_win()
   changeset.open()
-  local settled = vim.wait(10000, function()
-    local text = window.buf() and sidebar_text() or ""
-    return text:find("other.lua", 1, true) ~= nil and not text:find("reading symbols", 1, true)
-  end, 25)
-  assert(settled, "the sidebar never settled")
+  Sidebar.settle()
   return file
 end
 
@@ -71,10 +48,8 @@ describe("changeset preview band", function()
   local tmp, previous_dir
 
   before_each(function()
-    tmp = vim.fn.tempname()
-    vim.fn.mkdir(tmp, "p")
-    previous_dir = vim.fn.chdir(tmp)
-    init_feature_repo(tmp)
+    tmp, previous_dir = Fixture.enter_tempdir()
+    Fixture.feature_two_files(tmp)
   end)
 
   after_each(function()

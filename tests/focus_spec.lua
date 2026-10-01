@@ -3,72 +3,13 @@ changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
 local window = require("changeset.window")
 local Fixture = require("support.git")
 local Cursor = require("support.cursor")
-
----@param count integer
----@param changed table<integer, true>? Lines to rewrite.
----@return string[]
-local function numbered(count, changed)
-  local lines = {}
-  for i = 1, count do
-    lines[i] = (changed or {})[i] and ("changed " .. i) or ("line " .. i)
-  end
-  return lines
-end
-
----A `feature` branch changing lines 2 and 8 of `mod.lua` and the last of `other.lua`,
----beside a `plain.lua` it leaves alone. No server answers in the specs, so every
----hunk is an orphan: `mod.lua` → "Other changes" → L2, L8.
----@param cwd string
-local function init_feature_repo(cwd)
-  Fixture.init_repo("trunk", cwd)
-  vim.fn.writefile(numbered(10), "mod.lua")
-  vim.fn.writefile({ "local a = 1", "", "return 1" }, "other.lua")
-  vim.fn.writefile({ "return 0" }, "plain.lua")
-  Fixture.commit("base", cwd)
-
-  Fixture.git({ "checkout", "-q", "-b", "feature" }, cwd)
-  vim.fn.writefile(numbered(10, { [2] = true, [8] = true }), "mod.lua")
-  vim.fn.writefile({ "local a = 1", "", "return 2" }, "other.lua")
-  Fixture.commit("change", cwd)
-end
-
----@return string
-local function sidebar_text()
-  return table.concat(vim.api.nvim_buf_get_lines(assert(window.buf()), 0, -1, false), "\n")
-end
-
----Wait for the tree to hold both files with every file's symbols read.
-local function settle()
-  local settled = vim.wait(10000, function()
-    local text = window.buf() and sidebar_text() or ""
-    return text:find("other.lua", 1, true) ~= nil and not text:find("reading symbols", 1, true)
-  end, 25)
-  assert(settled, "the sidebar never settled")
-end
-
----Let the scheduled "you are here" tracking run.
-local function flush()
-  local flushed = false
-  vim.schedule(function()
-    flushed = true
-  end)
-  vim.wait(1000, function()
-    return flushed
-  end)
-end
-
----The text of the line the sidebar's cursor is on.
----@return string
-local function sidebar_cursor_line()
-  local win = assert(window.win())
-  return vim.api.nvim_buf_get_lines(assert(window.buf()), vim.api.nvim_win_get_cursor(win)[1] - 1, -1, false)[1]
-end
+local Sidebar = require("support.sidebar")
 
 ---Put the sidebar's cursor on the first line containing `text`. Headless, setting a
 ---cursor fires no `CursorMoved`, so this stands in for the user moving it without a preview.
 ---@param text string
 local function park_sidebar_cursor(text)
-  for i, line in ipairs(vim.api.nvim_buf_get_lines(assert(window.buf()), 0, -1, false)) do
+  for i, line in ipairs(Sidebar.lines()) do
     if line:find(text, 1, true) then
       vim.api.nvim_win_set_cursor(assert(window.win()), { i, 0 })
       return
@@ -81,13 +22,10 @@ describe("changeset sidebar focus", function()
   local tmp, previous_dir
 
   -- The tree resolves its repo from the current buffer, which falls back to the
-  -- process cwd, and the fixture writes relative paths, so it has to be entered.
+  -- process cwd, and the cases edit relative paths, so it has to be entered.
   before_each(function()
-    tmp = vim.fn.tempname()
-    vim.fn.mkdir(tmp, "p")
-    previous_dir = vim.fn.chdir(tmp)
-    assert(previous_dir ~= "", "could not enter the fixture directory")
-    init_feature_repo(tmp)
+    tmp, previous_dir = Fixture.enter_tempdir()
+    Fixture.feature_numbered(tmp)
   end)
 
   after_each(function()
@@ -101,81 +39,81 @@ describe("changeset sidebar focus", function()
     vim.cmd.edit("mod.lua")
     vim.api.nvim_win_set_cursor(0, { 8, 0 })
     changeset.open()
-    settle()
+    Sidebar.settle()
 
     changeset.toggle()
 
     assert.equal(window.win(), vim.api.nvim_get_current_win())
-    assert.truthy(sidebar_cursor_line():find("Other changes", 1, true))
+    assert.truthy(Sidebar.cursor_line():find("Other changes", 1, true))
   end)
 
   it("lands on the row you are on when focus arrives by a route other than toggle()", function()
     vim.cmd.edit("mod.lua")
     vim.api.nvim_win_set_cursor(0, { 8, 0 })
     changeset.open()
-    settle()
+    Sidebar.settle()
     park_sidebar_cursor("other.lua")
 
     local win = assert(window.win())
     vim.api.nvim_set_current_win(win)
 
-    assert.truthy(sidebar_cursor_line():find("Other changes", 1, true))
+    assert.truthy(Sidebar.cursor_line():find("Other changes", 1, true))
   end)
 
   it("leaves the sidebar cursor where it was when you are outside the changeset", function()
     vim.cmd.edit("mod.lua")
     changeset.open()
-    settle()
+    Sidebar.settle()
     park_sidebar_cursor("other.lua")
     vim.cmd.edit("plain.lua")
-    flush()
+    Sidebar.flush()
 
     changeset.toggle()
 
-    assert.truthy(sidebar_cursor_line():find("other.lua", 1, true))
+    assert.truthy(Sidebar.cursor_line():find("other.lua", 1, true))
   end)
 
   it("lands on the nearest row on screen when yours is folded away", function()
     vim.cmd.edit("mod.lua")
     vim.api.nvim_win_set_cursor(0, { 8, 0 })
     changeset.open()
-    settle()
+    Sidebar.settle()
     local win = assert(window.win())
     vim.api.nvim_set_current_win(win)
     park_sidebar_cursor("mod.lua")
     vim.cmd.normal("h")
     park_sidebar_cursor("other.lua")
     vim.cmd.wincmd("p")
-    flush()
+    Sidebar.flush()
 
     changeset.toggle()
 
-    assert.truthy(sidebar_cursor_line():find("mod.lua", 1, true))
+    assert.truthy(Sidebar.cursor_line():find("mod.lua", 1, true))
   end)
 
   it("keeps the cursor on a landed row that you expand", function()
     vim.cmd.edit("mod.lua")
     vim.api.nvim_win_set_cursor(0, { 8, 0 })
     changeset.open()
-    settle()
+    Sidebar.settle()
     local win = assert(window.win())
     vim.api.nvim_set_current_win(win)
     park_sidebar_cursor("mod.lua")
     vim.cmd.normal("h")
     vim.cmd.wincmd("p")
-    flush()
+    Sidebar.flush()
     changeset.toggle()
 
     vim.cmd.normal("l")
 
-    assert.truthy(sidebar_cursor_line():find("mod.lua", 1, true))
+    assert.truthy(Sidebar.cursor_line():find("mod.lua", 1, true))
   end)
 
   it("steps from where the cursor is when the sidebar is the only window", function()
     vim.cmd.edit("mod.lua")
     vim.api.nvim_win_set_cursor(0, { 8, 0 })
     changeset.toggle()
-    settle()
+    Sidebar.settle()
     park_sidebar_cursor("other.lua")
     local win = assert(window.win())
     local parked = vim.api.nvim_win_get_cursor(win)[1]
@@ -190,7 +128,7 @@ describe("changeset sidebar focus", function()
     vim.cmd.edit("mod.lua")
     vim.api.nvim_win_set_cursor(0, { 8, 0 })
     changeset.toggle()
-    settle()
+    Sidebar.settle()
     park_sidebar_cursor("other.lua")
     local float = vim.api.nvim_open_win(
       vim.api.nvim_create_buf(false, true),
@@ -201,7 +139,7 @@ describe("changeset sidebar focus", function()
     vim.api.nvim_win_close(float, true)
 
     assert.equal(window.win(), vim.api.nvim_get_current_win())
-    assert.truthy(sidebar_cursor_line():find("other.lua", 1, true))
+    assert.truthy(Sidebar.cursor_line():find("other.lua", 1, true))
   end)
 
   describe("while symbols are still being read", function()
@@ -227,12 +165,7 @@ describe("changeset sidebar focus", function()
       vim.cmd.edit("mod.lua")
       vim.api.nvim_win_set_cursor(0, { 8, 0 })
       changeset.toggle()
-      assert(
-        vim.wait(10000, function()
-          return window.buf() ~= nil and sidebar_text():find("other.lua", 1, true) ~= nil
-        end, 25),
-        "the diff never arrived"
-      )
+      Sidebar.await_diff()
     end
 
     before_each(function()
@@ -248,11 +181,11 @@ describe("changeset sidebar focus", function()
 
     it("lands on the file row, then follows you into your symbol once it resolves", function()
       focus_before_symbols()
-      assert.truthy(sidebar_cursor_line():find("mod.lua", 1, true))
+      assert.truthy(Sidebar.cursor_line():find("mod.lua", 1, true))
 
       answer("mod.lua", { symbol("step", 7, 9) })
 
-      assert.truthy(sidebar_cursor_line():find("step", 1, true))
+      assert.truthy(Sidebar.cursor_line():find("step", 1, true))
     end)
 
     it("stays where you moved the sidebar cursor when your symbol resolves", function()
@@ -261,7 +194,7 @@ describe("changeset sidebar focus", function()
 
       answer("mod.lua", { symbol("step", 7, 9) })
 
-      assert.truthy(sidebar_cursor_line():find("other.lua", 1, true))
+      assert.truthy(Sidebar.cursor_line():find("other.lua", 1, true))
     end)
 
     it("leaves the sidebar cursor alone when your symbol resolves after you left it", function()
@@ -270,7 +203,7 @@ describe("changeset sidebar focus", function()
 
       answer("mod.lua", { symbol("step", 7, 9) })
 
-      assert.truthy(sidebar_cursor_line():find("mod.lua", 1, true))
+      assert.truthy(Sidebar.cursor_line():find("mod.lua", 1, true))
     end)
 
     it("lands on the file row when a filter hides your symbol", function()
@@ -279,18 +212,18 @@ describe("changeset sidebar focus", function()
       vim.api.nvim_feedkeys("fL2" .. vim.keycode("<CR>"), "xt", false)
       assert.equal("L2", changeset._tree().query)
       vim.cmd.wincmd("p")
-      flush()
+      Sidebar.flush()
 
       changeset.toggle()
 
-      assert.truthy(sidebar_cursor_line():find("mod.lua", 1, true))
+      assert.truthy(Sidebar.cursor_line():find("mod.lua", 1, true))
     end)
   end)
 
   it("hides the cursor while focus is in the sidebar", function()
     vim.cmd.edit("mod.lua")
     changeset.toggle()
-    settle()
+    Sidebar.settle()
 
     assert.is_true(Cursor.hidden())
   end)
@@ -298,7 +231,7 @@ describe("changeset sidebar focus", function()
   it("shows the cursor once focus leaves the sidebar", function()
     vim.cmd.edit("mod.lua")
     changeset.toggle()
-    settle()
+    Sidebar.settle()
 
     vim.cmd.wincmd("p")
 
@@ -308,7 +241,7 @@ describe("changeset sidebar focus", function()
   it("shows the cursor once the focused sidebar closes", function()
     vim.cmd.edit("mod.lua")
     changeset.toggle()
-    settle()
+    Sidebar.settle()
 
     changeset.close()
 
@@ -319,7 +252,7 @@ describe("changeset sidebar focus", function()
     vim.cmd.edit("mod.lua")
     local file_win = vim.api.nvim_get_current_win()
     changeset.toggle()
-    settle()
+    Sidebar.settle()
 
     changeset.toggle()
 

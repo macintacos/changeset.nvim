@@ -40,4 +40,84 @@ function M.commit(message, cwd)
   return M.git({ "rev-parse", "HEAD" }, cwd)
 end
 
+---Make a fresh temporary directory the process cwd, for code under test that resolves
+---its repo from there.
+---@return string dir
+---@return string previous The cwd to return to.
+function M.enter_tempdir()
+  local dir = vim.fn.tempname()
+  vim.fn.mkdir(dir, "p")
+  local previous = vim.fn.chdir(dir)
+  assert(previous ~= "", "could not enter the fixture directory")
+  return dir, previous
+end
+
+---Write `files`, keyed by path relative to `cwd`.
+---@param files table<string, string[]>
+---@param cwd string
+local function write_all(files, cwd)
+  for path, lines in pairs(files) do
+    vim.fn.writefile(lines, vim.fs.joinpath(cwd, path))
+  end
+end
+
+---A repo on `trunk` with `base`, then a `feature` branch that writes `change` over it.
+---@param base table<string, string[]>
+---@param change table<string, string[]>
+---@param cwd string
+local function init_feature_repo(base, change, cwd)
+  M.init_repo("trunk", cwd)
+  write_all(base, cwd)
+  M.commit("base", cwd)
+  M.git({ "checkout", "-q", "-b", "feature" }, cwd)
+  write_all(change, cwd)
+  M.commit("change", cwd)
+end
+
+---@param count integer
+---@param changed table<integer, true>? Lines to rewrite.
+---@return string[]
+function M.numbered(count, changed)
+  local lines = {}
+  for i = 1, count do
+    lines[i] = (changed or {})[i] and ("changed " .. i) or ("line " .. i)
+  end
+  return lines
+end
+
+---A `feature` branch off `trunk` changing the one line of `mod.lua`.
+---@param cwd string
+function M.feature_one_file(cwd)
+  init_feature_repo({ ["mod.lua"] = { "return 1" } }, { ["mod.lua"] = { "return 2" } }, cwd)
+end
+
+---A `feature` branch off `trunk` changing `M.one` in `mod.lua` and the table in
+---`other.lua`, beside a `plain.lua` it leaves alone.
+---@param cwd string
+function M.feature_two_files(cwd)
+  init_feature_repo({
+    ["mod.lua"] = { "local M = {}", "", "function M.one()", "  return 1", "end", "", "return M" },
+    ["other.lua"] = { "return { a = 1 }" },
+    ["plain.lua"] = { "return 0" },
+  }, {
+    ["mod.lua"] = { "local M = {}", "", "function M.one()", "  return 2", "end", "", "return M" },
+    ["other.lua"] = { "return { a = 1, b = 2 }" },
+  }, cwd)
+end
+
+---A `feature` branch off `trunk` changing lines 2 and 8 of `mod.lua` and the last of
+---`other.lua`, beside a `plain.lua` it leaves alone. Unless a spec stubs `resolve.start`,
+---no server answers, so every hunk is an orphan: `mod.lua` → "Other changes" → L2, L8.
+---@param cwd string
+function M.feature_numbered(cwd)
+  init_feature_repo({
+    ["mod.lua"] = M.numbered(10),
+    ["other.lua"] = { "local a = 1", "", "return 1" },
+    ["plain.lua"] = { "return 0" },
+  }, {
+    ["mod.lua"] = M.numbered(10, { [2] = true, [8] = true }),
+    ["other.lua"] = { "local a = 1", "", "return 2" },
+  }, cwd)
+end
+
 return M

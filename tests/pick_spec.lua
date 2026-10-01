@@ -187,10 +187,7 @@ describe("changeset.pick", function()
     local tmp, previous_dir
 
     before_each(function()
-      tmp = vim.fn.tempname()
-      vim.fn.mkdir(tmp, "p")
-      previous_dir = vim.fn.chdir(tmp)
-      assert(previous_dir ~= "", "could not enter the fixture directory")
+      tmp, previous_dir = Fixture.enter_tempdir()
       Fixture.init_repo("trunk", tmp)
       vim.fn.writefile({ "return 1" }, "mod.lua")
       Fixture.commit("base", tmp)

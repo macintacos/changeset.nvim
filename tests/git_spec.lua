@@ -7,10 +7,7 @@ describe("changeset.git", function()
   -- Every assertion here calls `Git` with no cwd, so the fixture repo has to be
   -- the process cwd rather than merely a directory git is pointed at.
   before_each(function()
-    tmp = vim.fn.tempname()
-    vim.fn.mkdir(tmp, "p")
-    previous_dir = vim.fn.chdir(tmp)
-    assert(previous_dir ~= "", "could not enter the fixture directory")
+    tmp, previous_dir = Fixture.enter_tempdir()
   end)
 
   after_each(function()

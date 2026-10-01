@@ -6,6 +6,7 @@ changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
 local render = require("changeset.render")
 local window = require("changeset.window")
 local Fixture = require("support.git")
+local Sidebar = require("support.sidebar")
 
 local ns = vim.api.nvim_get_namespaces()["changeset"]
 
@@ -13,21 +14,6 @@ local ns = vim.api.nvim_get_namespaces()["changeset"]
 ---@param lines string[]
 local function write(path, lines)
   vim.fn.writefile(lines, path)
-end
-
----A repo on `trunk` with two files, then a `feature` branch that changes both.
----@param cwd string
-local function init_feature_repo(cwd)
-  Fixture.init_repo("trunk", cwd)
-
-  write("mod.lua", { "local M = {}", "", "function M.one()", "  return 1", "end", "", "return M" })
-  write("other.lua", { "return { a = 1 }" })
-  Fixture.commit("base", cwd)
-
-  Fixture.git({ "checkout", "-q", "-b", "feature" }, cwd)
-  write("mod.lua", { "local M = {}", "", "function M.one()", "  return 2", "end", "", "return M" })
-  write("other.lua", { "return { a = 1, b = 2 }" })
-  Fixture.commit("change", cwd)
 end
 
 ---@param buf integer
@@ -97,12 +83,8 @@ describe("changeset sidebar", function()
   -- The sidebar resolves its repo from the process cwd, and `write` above takes
   -- relative paths, so the fixture has to be entered rather than merely pointed at.
   before_each(function()
-    tmp = vim.fn.tempname()
-    vim.fn.mkdir(tmp, "p")
-    previous_dir = vim.fn.chdir(tmp)
-    assert(previous_dir ~= "", "could not enter the fixture directory")
-
-    init_feature_repo(tmp)
+    tmp, previous_dir = Fixture.enter_tempdir()
+    Fixture.feature_two_files(tmp)
   end)
 
   after_each(function()
@@ -459,16 +441,6 @@ describe("changeset sidebar", function()
       return vim.api.nvim_win_get_cursor((assert(window.win())))[1]
     end
 
-    local function flush()
-      local flushed = false
-      vim.schedule(function()
-        flushed = true
-      end)
-      vim.wait(1000, function()
-        return flushed
-      end)
-    end
-
     ---Open from `mod.lua` so "you are here" stays out of the `.rs` files, and wait for the diff alone.
     local function open_unanswered()
       vim.cmd.edit("mod.lua")
@@ -487,7 +459,7 @@ describe("changeset sidebar", function()
       answer("other.lua", {})
       answer("src/only_tests.rs", ONLY_TESTS)
       answer("src/session.rs", SESSION)
-      flush()
+      Sidebar.flush()
     end
 
     ---@return string
@@ -526,7 +498,7 @@ describe("changeset sidebar", function()
       cursor_to(line_of(assert(window.buf()), "session.rs"))
 
       answer("src/session.rs", SESSION)
-      flush()
+      Sidebar.flush()
 
       assert.truthy(tests_header() < line_of(assert(window.buf()), "session.rs", tests_header()))
       assert.equal(line_of(assert(window.buf()), "session.rs"), cursor_line())
@@ -538,7 +510,7 @@ describe("changeset sidebar", function()
       cursor_to(line_of(assert(window.buf()), "only_tests.rs"))
 
       answer("src/only_tests.rs", ONLY_TESTS)
-      flush()
+      Sidebar.flush()
 
       assert.equal(line_of(assert(window.buf()), "only_tests.rs"), cursor_line())
       assert.truthy(cursor_line() > tests_header())
@@ -658,7 +630,7 @@ describe("changeset sidebar", function()
         for _, path in ipairs(asked) do
           answer(path, {})
         end
-        flush()
+        Sidebar.flush()
 
         assert.truthy(tests_header() < line_of(assert(window.buf()), "load"))
         assert.is_false(vim.tbl_contains(asked, "src/session.rs"))
