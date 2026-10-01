@@ -380,6 +380,24 @@ function M._reveal_cursor()
   vim.fn.winrestview({ topline = top_line(vim.fn.line("."), rows) })
 end
 
+---Have gitsigns sign `buf`, now on screen in a preview.
+---
+---Previews swap buffers from a `CursorMoved` callback, where autocommands do not nest, so
+---neither fires: `BufRead`, which gitsigns attaches on, nor `BufEnter`, which it waits for
+---before signing a buffer it attached off screen, as it does every file the symbol walk
+---loads. Only gitsigns' own `BufEnter` runs: any other would take the preview for a visit.
+---@param buf integer
+local function sign(buf)
+  local ok, gitsigns = pcall(require, "gitsigns")
+  if not ok then
+    return
+  end
+  gitsigns.attach({ bufnr = buf })
+  if vim.fn.exists("#gitsigns#BufEnter") == 1 then
+    vim.api.nvim_exec_autocmds("BufEnter", { group = "gitsigns", buffer = buf, modeline = false })
+  end
+end
+
 ---Show `path` at `lnum` in the pinned window without leaving the sidebar.
 ---@param path string
 ---@param lnum integer? A deletion hunk at the top of a file reports 0, so this is clamped.
@@ -390,13 +408,8 @@ function M.preview(path, lnum, band, pick)
   if not buf then
     return
   end
-  -- Previews load from a `CursorMoved` callback, where `BufRead` (gitsigns' attach
-  -- trigger) does not fire.
-  local ok, gitsigns = pcall(require, "gitsigns")
-  if ok then
-    gitsigns.attach({ bufnr = buf })
-  end
   local win = borrow(buf, band, pick)
+  sign(buf)
   if lnum then
     local last = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
     vim.api.nvim_win_set_cursor(win, { M._clamp(lnum, last), 0 })

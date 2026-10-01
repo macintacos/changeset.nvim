@@ -502,7 +502,9 @@ repository's deliberate choice is none of that save's business.
   would to a file you opened. The filetype has to be named explicitly: previews happen in
   a `CursorMoved` callback, autocommands do not nest, and the read therefore skips the
   `BufRead` chain that would otherwise detect one. gitsigns is attached explicitly for the
-  same reason: `BufRead` is what it attaches on.
+  same reason: `BufRead` is what it attaches on. Its own `BufEnter` is run explicitly too,
+  and only its own: gitsigns puts off signing a buffer it attached off screen — every file
+  the symbol walk loaded — until that buffer is entered, which a preview never does.
 - **`?` documents the sidebar, not its buffer.** A buffer collects mappings from whoever
   wants one — a blanket `FileType` autocmd elsewhere in a user's config is all it takes —
   and those keys are not this sidebar's interface. The keys it sets are recorded as it
