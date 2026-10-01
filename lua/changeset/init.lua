@@ -273,7 +273,7 @@ function M.open()
   vim.bo[buf].modifiable = false
   -- The tree draws its own guides; a scope line would be a second set.
   vim.b[buf].miniindentscope_disable = true
-  -- The hidden cursor rests on each row's rail, which would wear the word underline.
+  -- The hidden cursor would still underline whatever word a click leaves it on.
   vim.b[buf].minicursorword_disable = true
 
   render.define_highlights()

@@ -118,6 +118,12 @@ describe("changeset.render", function()
       assert.truthy(two.text:find("2 files$"))
     end)
 
+    it("leaves the cell before its icon blank, as the header strip does", function()
+      local line = render.lines({ section() }, opts())[1]
+
+      assert.equal(" S", line.text:sub(1, 2))
+    end)
+
     it("starts every header's count in the same column", function()
       local lines = render.lines({ section(), section({ id = "#docs", name = "Docs" }) }, opts())
 
@@ -209,15 +215,15 @@ describe("changeset.render", function()
         it(("draws the rail in %s for status '%s'"):format(hl, status), function()
           local lines = file_lines({ file({ status = status }) }, opts())
 
-          assert.equal("▎", lines[1].text:sub(1, #"▎"))
-          assert.same({ col = 0, end_col = #"▎", hl = hl }, mark_over(lines[1], "▎"))
+          assert.equal(" ▎", lines[1].text:sub(1, #" ▎"))
+          assert.same({ col = 1, end_col = 1 + #"▎", hl = hl }, mark_over(lines[1], "▎"))
         end)
       end
 
       it("puts the icon, coloured by the caller's group, between the rail and the filename", function()
         local lines = file_lines({ file() }, opts())
 
-        assert.equal("▎ F a.lua (src)", lines[1].text)
+        assert.equal(" ▎ F a.lua (src)", lines[1].text)
         assert.equal("IconHl", mark_over(lines[1], "F").hl)
       end)
 
@@ -232,14 +238,14 @@ describe("changeset.render", function()
       it("draws a file at the repository root with no directory", function()
         local lines = file_lines({ file({ path = "a.lua" }) }, opts())
 
-        assert.equal("▎ F a.lua", lines[1].text)
+        assert.equal(" ▎ F a.lua", lines[1].text)
       end)
 
       for _, status in ipairs({ "deleted", "renamed" }) do
         it(("ends a file with status '%s' with a Comment marker"):format(status), function()
           local lines = file_lines({ file({ status = status }) }, opts())
 
-          assert.equal("▎ F a.lua (src) " .. status, lines[1].text)
+          assert.equal(" ▎ F a.lua (src) " .. status, lines[1].text)
           assert.equal("Comment", mark_over(lines[1], " " .. status).hl)
         end)
       end
@@ -248,7 +254,7 @@ describe("changeset.render", function()
         it(("adds no marker for status '%s'"):format(status), function()
           local lines = file_lines({ file({ status = status }) }, opts())
 
-          assert.equal("▎ F a.lua (src)", lines[1].text)
+          assert.equal(" ▎ F a.lua (src)", lines[1].text)
         end)
       end
     end)
@@ -259,7 +265,7 @@ describe("changeset.render", function()
           file({ children = { symbol({ name = "Alpha" }), symbol({ name = "Beta" }) } }),
         }
 
-        assert.same({ "▎ F a.lua (src)", "  ├─S Alpha", "  └─S Beta" }, texts(file_lines(rows, opts())))
+        assert.same({ " ▎ F a.lua (src)", "   ├─S Alpha", "   └─S Beta" }, texts(file_lines(rows, opts())))
       end)
 
       it("carries a bar down under a parent with later siblings, and blank under the last", function()
@@ -273,11 +279,11 @@ describe("changeset.render", function()
         }
 
         assert.same({
-          "▎ F a.lua (src)",
-          "  ├─S First",
-          "  │ └─S Inner",
-          "  └─S Last",
-          "    └─S Tail",
+          " ▎ F a.lua (src)",
+          "   ├─S First",
+          "   │ └─S Inner",
+          "   └─S Last",
+          "     └─S Tail",
         }, texts(file_lines(rows, opts())))
       end)
 
@@ -426,14 +432,14 @@ describe("changeset.render", function()
       it("adds a placeholder child under a file whose children have not arrived", function()
         local lines = file_lines({ file({ resolved = false }) }, opts())
 
-        assert.same({ "▎ F a.lua (src)", "  └─⋯ reading symbols" }, texts(lines))
+        assert.same({ " ▎ F a.lua (src)", "   └─⋯ reading symbols" }, texts(lines))
         assert.equal(render.META_HL, mark_over(lines[2], "⋯ reading symbols").hl)
       end)
 
       it("shows only the file row once a file is resolved but nothing inside it changed", function()
         local lines = file_lines({ file({ resolved = true }) }, opts())
 
-        assert.same({ "▎ F a.lua (src)" }, texts(lines))
+        assert.same({ " ▎ F a.lua (src)" }, texts(lines))
       end)
 
       it("nests the placeholder under the file as a row of its own", function()
@@ -447,7 +453,7 @@ describe("changeset.render", function()
       it("shows no placeholder for a deleted file, whose subtree is empty by design", function()
         local lines = file_lines({ file({ status = "deleted" }) }, opts())
 
-        assert.same({ "▎ F a.lua (src) deleted" }, texts(lines))
+        assert.same({ " ▎ F a.lua (src) deleted" }, texts(lines))
       end)
     end)
 
@@ -488,13 +494,13 @@ describe("changeset.render", function()
         local rows = { file({ children = { symbol() } }) }
         local lines = file_lines(rows, opts({ collapsed = collapsed_ids("src/a.lua") }))
 
-        assert.same({ "▎ F a.lua (src)" }, texts(lines))
+        assert.same({ " ▎ F a.lua (src)" }, texts(lines))
       end)
 
       it("hides the placeholder of a collapsed file still resolving", function()
         local lines = file_lines({ file({ resolved = false }) }, opts({ collapsed = collapsed_ids("src/a.lua") }))
 
-        assert.same({ "▎ F a.lua (src)" }, texts(lines))
+        assert.same({ " ▎ F a.lua (src)" }, texts(lines))
       end)
 
       it("pairs each line with the row it draws, in display order, omitting what a collapsed file hides", function()
@@ -526,41 +532,41 @@ describe("changeset.render", function()
         }
         local lines = file_lines(rows, opts({ collapsed = collapsed_ids("outer") }))
 
-        assert.same({ "▎ F a.lua (src)", "  ├─S Outer", "  └─S Next" }, texts(lines))
+        assert.same({ " ▎ F a.lua (src)", "   ├─S Outer", "   └─S Next" }, texts(lines))
       end)
     end)
 
     describe("fitting to the window width", function()
       it("trims a long symbol chain from the left so its stat stays on screen", function()
         local chain = symbol({ name = "SessionStore › refresh › deadline", added = 8, removed = 1 })
-        local lines = file_lines({ file({ children = { chain } }) }, opts({ width = 30 }))
+        local lines = file_lines({ file({ children = { chain } }) }, opts({ width = 31 }))
 
-        assert.equal("  └─S … › deadline", lines[2].text)
+        assert.equal("   └─S … › deadline", lines[2].text)
         assert.not_nil(stat_mark(lines[2]))
       end)
 
       it("trims a long directory from the left, keeping the whole filename and the marker", function()
         local deleted = file({ status = "deleted", path = "very/long/dir/structure/deleted_file.lua" })
         deleted.added, deleted.removed = nil, nil
-        local lines = file_lines({ deleted }, opts({ width = 46 }))
+        local lines = file_lines({ deleted }, opts({ width = 47 }))
 
-        assert.equal("▎ F deleted_file.lua (…/structure) deleted", lines[1].text)
+        assert.equal(" ▎ F deleted_file.lua (…/structure) deleted", lines[1].text)
       end)
 
       it("drops the directory when the filename leaves no room for it", function()
         local deleted = file({ status = "deleted", path = "very/long/dir/structure/deleted_file.lua" })
         deleted.added, deleted.removed = nil, nil
-        local lines = file_lines({ deleted }, opts({ width = 30 }))
+        local lines = file_lines({ deleted }, opts({ width = 31 }))
 
-        assert.equal("▎ F deleted_file.lua deleted", lines[1].text)
+        assert.equal(" ▎ F deleted_file.lua deleted", lines[1].text)
       end)
 
       it("trims an orphan hunk from the right, keeping its line range", function()
         local hunk = symbol({ kind = "orphan", name = "L4–6 local x = 1 + something long" })
         hunk.added, hunk.removed = nil, nil
-        local lines = file_lines({ file({ children = { hunk } }) }, opts({ width = 30 }))
+        local lines = file_lines({ file({ children = { hunk } }) }, opts({ width = 31 }))
 
-        assert.equal("  └─S L4–6 local x = 1 + so…", lines[2].text)
+        assert.equal("   └─S L4–6 local x = 1 + so…", lines[2].text)
       end)
     end)
   end)
@@ -648,14 +654,14 @@ describe("changeset.render", function()
       assert.falsy(text:find("<", 1, true))
     end)
 
-    it("names the branch's open PR at the right edge", function()
-      assert.equal(" #412", eval({ ref = "origin/trunk", pr = 412 }).str:sub(-5))
+    it("names the branch's open PR at the right edge, a blank cell clear of it", function()
+      assert.equal(" #412 ", eval({ ref = "origin/trunk", pr = 412 }).str:sub(-6))
     end)
 
     it("gives up the ref's tail rather than the PR number", function()
       local text = eval({ ref = LONG, pr = 412 }, 30).str
 
-      assert.equal(" #412", text:sub(-5))
+      assert.equal(" #412 ", text:sub(-6))
       assert.truthy(text:find("origin/jt", 1, true))
       assert.truthy(text:find("…", 1, true))
       assert.falsy(text:find("<", 1, true))

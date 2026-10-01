@@ -190,6 +190,9 @@ end
 
 local RAIL = "▎"
 
+-- Opens every tree row, so its icons line up under the header's.
+local MARGIN = " "
+
 -- The branch and diff glyphs are the ones mini.statusline already draws.
 local BRANCH_ICON = ""
 local PR_ICON = ""
@@ -322,12 +325,13 @@ local function file_line(file, opts)
   local marker = STATUS_MARKER[file.status]
   local stat = M.stat_chunks(file)
   local room = opts.width
-    - vim.fn.strdisplaywidth(RAIL .. " " .. glyph .. " ")
+    - vim.fn.strdisplaywidth(MARGIN .. RAIL .. " " .. glyph .. " ")
     - (marker and vim.fn.strdisplaywidth(marker) or 0)
     - stat_cells(stat)
   local filename, dir = vim.fs.basename(file.path), vim.fs.dirname(file.path)
   local dir_room = room - vim.fn.strdisplaywidth(filename .. " ()")
   local chunks = {
+    { MARGIN },
     { RAIL, RAIL_HL[file.status] },
     { " " },
     { glyph, icon_hl },
@@ -355,9 +359,10 @@ local function section_line(section, opts)
   local glyph, icon_hl = opts.icon(section)
   local stat = M.stat_chunks(section)
   local count = ("%d file%s"):format(section.files, section.files == 1 and "" or "s")
-  local fixed_cells = vim.fn.strdisplaywidth(glyph .. "  " .. section.name .. count) + stat_cells(stat)
+  local fixed_cells = vim.fn.strdisplaywidth(MARGIN .. glyph .. "  " .. section.name .. count) + stat_cells(stat)
   local pad = math.max(1, math.min(LABEL_CELLS - vim.fn.strdisplaywidth(section.name), opts.width - fixed_cells))
   return compose(section, {
+    { MARGIN },
     { glyph, icon_hl },
     { "  " },
     { section.name .. (" "):rep(pad) },
@@ -372,12 +377,13 @@ end
 local function child_line(row, guides, opts)
   local glyph, icon_hl = opts.icon(row)
   local stat = M.stat_chunks(row)
-  local room = opts.width - vim.fn.strdisplaywidth("  " .. guides .. glyph .. " ") - stat_cells(stat)
+  local room = opts.width - vim.fn.strdisplaywidth(MARGIN .. "  " .. guides .. glyph .. " ") - stat_cells(stat)
   local name, name_hl = symbols.fit(row.name, room), row.ancestor and "Comment" or nil
   if META_KINDS[row.kind] then
     icon_hl, name, name_hl = M.META_HL, clip_right(row.name, room), M.META_HL
   end
   return compose(row, {
+    { MARGIN },
     { "  " },
     { guides, "Comment" },
     { glyph, icon_hl },
@@ -396,7 +402,7 @@ local function placeholder_line(file)
     depth = file.depth + 1,
     children = {},
   })
-  return compose(row, { { "  " }, { "└─", "Comment" }, { "⋯ reading symbols", M.META_HL } })
+  return compose(row, { { MARGIN }, { "  " }, { "└─", "Comment" }, { "⋯ reading symbols", M.META_HL } })
 end
 
 ---@param out changeset.Line[]
@@ -573,7 +579,7 @@ function M.header(summary, width)
   local pr = summary.pr and ("%s #%d"):format(PR_ICON, summary.pr)
   local room = width
     - vim.fn.strdisplaywidth((" %s "):format(BRANCH_ICON))
-    - (pr and vim.fn.strdisplaywidth(pr) + 1 or 0)
+    - (pr and vim.fn.strdisplaywidth(pr) + 2 or 0)
   local ref = clip_right(summary.ref, room)
   local remote = ref:match("^origin/") or ""
   return table.concat({
@@ -581,7 +587,7 @@ function M.header(summary, width)
     ("%%#%s#%s"):format(M.HEADER_DIM_HL, remote),
     ("%%#%s#%s"):format(M.HEADER_REF_HL, escaped(ref:sub(#remote + 1))),
     ("%%#%s#%%="):format(M.HEADER_HL),
-    pr and ("%%#%s#%s"):format(M.HEADER_DIM_HL, pr) or "",
+    pr and ("%%#%s#%s "):format(M.HEADER_DIM_HL, pr) or "",
   })
 end
 

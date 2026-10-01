@@ -874,10 +874,10 @@ describe("changeset sidebar", function()
 
     local marks = vim.tbl_filter(function(mark)
       return mark[4].hl_group == hl
-    end, vim.api.nvim_buf_get_extmarks(buf, ns, { 0, 0 }, { 0, 0 }, { details = true }))
+    end, vim.api.nvim_buf_get_extmarks(buf, ns, { 0, 1 }, { 0, 1 }, { details = true }))
 
     assert.equal(1, #marks)
-    assert.equal(glyph, lines_of(buf)[1]:sub(1, #glyph))
+    assert.equal(" " .. glyph, lines_of(buf)[1]:sub(1, 1 + #glyph))
   end)
 
   ---@class changeset.spec.Previewed

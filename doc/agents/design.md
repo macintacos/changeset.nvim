@@ -11,7 +11,7 @@ somewhere in that config.
 
 ### The status rail is the one bold element
 
-Column 0 of every file row is a `▎` coloured by change type, drawn in **gitsigns' own
+Every file row leads with a `▎` coloured by change type, drawn in **gitsigns' own
 sign highlight groups** — `GitSignsAdd`, `GitSignsChange`, `GitSignsDelete`,
 `GitSignsUntracked`. The colours are therefore identical to the signs already in the
 margin, track the theme for free, and need no legend: it is the same language the gutter
@@ -28,7 +28,7 @@ trimmed from the front before the name ever is.
 ### Sections
 
 ```text
-󱞊  Tests               3 files      +40 -2
+ 󱞊  Tests               3 files      +40 -2
 ```
 
 A header is the section's directory icon, its label as plain content, the file count in
@@ -39,8 +39,10 @@ never lit as a filter match; it stays on screen only while one of its rows match
 
 An empty section is left out. A lone section is still headed, so what a file was
 classified as is always on screen. Files are not indented under their header: the rail
-stays in column 0, where the eye already scans for it. A blank virtual line hangs between
-sections — not a row, so the cursor cannot land on it.
+stays in the header icon's column, where the eye already scans for it. Every row opens
+with one blank cell, as the header's do, so the tree's icons line up under the header's
+glyphs. A blank virtual line hangs between sections — not a row, so the cursor cannot land
+on it.
 
 `h` / `l` on a section header fold and unfold the section, and the fold is remembered per
 repo like a file's. `]]` / `[[` move from header to header, a folded one included.
@@ -86,14 +88,14 @@ parser keeps just the name rules. They match exactly: `cfg(test)` alone, not
 `cfg(all(test, …))`.
 
 ```text
-󰴉  Implementation      1 file   +16 -4
-▎ 󰛦 session.rs              +16 -4
-  ├─󰌗 SessionStore › refresh  +8 -1
-  └─󰘦 Other changes          +3 -2
+ 󰴉  Implementation      1 file   +16 -4
+ ▎ 󰛦 session.rs              +16 -4
+   ├─󰌗 SessionStore › refresh  +8 -1
+   └─󰘦 Other changes          +3 -2
 
-󱞊  Tests               1 file    +8 -0
-▎ 󰛦 session.rs               +8 -0
-  └─󰆧 tests › refreshes        +8 -0
+ 󱞊  Tests               1 file    +8 -0
+ ▎ 󰛦 session.rs               +8 -0
+   └─󰆧 tests › refreshes        +8 -0
 ```
 
 A file whose changes reach both shows under Implementation and Tests, each copy listing
@@ -129,13 +131,13 @@ files the path rules already put in Docs are left alone: neither their base nor 
 comments are read.
 
 ```text
-󰴉  Implementation      1 file    +6 -1
-▎ 󰌠 session.py               +6 -1
-  └─󰊕 refresh                  +6 -1
+ 󰴉  Implementation      1 file    +6 -1
+ ▎ 󰌠 session.py               +6 -1
+   └─󰊕 refresh                  +6 -1
 
-󱂷  Docs                1 file    +3 -1
-▎ 󰌠 session.py               +3 -1
-  └─󰊕 load                     +3 -1
+ 󱂷  Docs                1 file    +3 -1
+ ▎ 󰌠 session.py               +3 -1
+   └─󰊕 load                     +3 -1
 ```
 
 ### Icons come from an icon plugin, never hand-picked
@@ -198,9 +200,9 @@ last as long as the filter does, not as long as the prompt.
 ### Three rows say what is selected, where you are and what you opened
 
 ```text
-▎ 󰢱 more.lua                         +7 -0 ◀
-  ├─ M.setup                        +3 -1 •
-  └─ Other changes                  +1 -1 ◁
+ ▎ 󰢱 more.lua                         +7 -0 ◀
+   ├─ M.setup                        +3 -1 •
+   └─ Other changes                  +1 -1 ◁
 ```
 
 The only row highlights the tree has. **Selected** is the row under the sidebar's cursor,
@@ -221,12 +223,12 @@ token keeps its own colour on top. It draws beneath every row mark, so the rail,
 colours and a filter match stay on top; the glyph draws over the stat's blank tail.
 
 The cursor itself is hidden while it is in the sidebar, and the selected row stands in for
-it: the cursor would sit on each row's first cell, which on a section header is its icon.
+it: the cursor would sit on each row's first cell, a block in the margin beside the row.
 Only in normal and visual mode, so a prompt on the command line still shows one. It hides
 through a `'guicursor'` entry whose group is fully blended, which needs `termguicolors`; a
 plugin that appends its own entry on entering a window, as modes.nvim does, has to skip
 the `changeset` filetype or its entry wins. mini.cursorword is off in the sidebar, as the
-hidden cursor rests on each row's rail and it would underline that.
+hidden cursor would still underline whatever word a click leaves it on.
 
 A line belongs to the deepest symbol row whose body holds it, else to the file's
 `Other changes` row when one of its hunks does, else to the file row. A file shown in
@@ -290,8 +292,8 @@ answers that, the same way it does in the sidebar.
 ### A hidden kind is admitted under the tree
 
 ```text
-▎ Makefile                            +2 -0
-  └─󰘦 Other changes                   +2 -0
+ ▎ Makefile                            +2 -0
+   └─󰘦 Other changes                   +2 -0
 
  Hiding variables and fields. F to change.
 ```
@@ -322,8 +324,8 @@ copy the rest. Removed lines have no position in the new file to split on, so a 
   origin/jt/exc-1200-stacked-parent…  #412
   4 files            2 commits  +142 -38
 
-󰴉  Implementation      2 files      +12 -3
-▎ 󰛦 session.ts                       +12 -3
+ 󰴉  Implementation      2 files      +12 -3
+ ▎ 󰛦 session.ts                       +12 -3
 ```
 
 Two rows on one strip, the strip `TabLine`'s background: what a colorscheme paints its own
@@ -334,8 +336,8 @@ what" is the one question the rows themselves cannot answer. It leads with mini.
 own branch glyph in `Directory`'s colour, and dims `origin/` so the branch name reads first.
 A ref too long for the width loses its tail, never its head: stacked branches are told apart
 by how their names start, which is why the cut is made here rather than by the statusline's
-`%<`, which keeps the tail. The branch's open PR sits at the right edge while the tree is
-measured against the branch that PR merges into.
+`%<`, which keeps the tail. The branch's open PR sits at the right edge, one blank cell in,
+while the tree is measured against the branch that PR merges into.
 
 The second row counts what the branch holds, the numbers lit and their nouns dimmed: files
 on the left, commits at the right beside the line totals, which end in the column the
