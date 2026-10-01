@@ -32,3 +32,44 @@ _Avoid_: arrival row, focus row
 **Restored position**:
 A position a saved session recorded, waiting for the rebuilt tree to hold its rows.
 _Avoid_: pending restore, saved cursor
+
+### The view
+
+**View**:
+What the sidebar shows of the tree: its folds, opened chains, narrowing and hidden kinds,
+and the row on each line. The snapshot `changeset.position` reads is a picture of it, not
+the View.
+_Avoid_: view state, display state
+
+**Open**:
+Show more under a row: a shut chain's rows first, else the row's children.
+_Avoid_: expand
+
+**Fold**:
+Hide a row's children. A file's fold and a section's fold are kept per repository.
+_Avoid_: collapse
+
+**Chain**:
+A run of single-child symbol rows drawn as one row until opened. Opening a chain is
+separate from unfolding.
+_Avoid_: compressed row
+
+**Step**:
+Move to the next or previous row that is not a section header.
+_Avoid_: next change, jump
+
+**Section step**:
+Move to the next or previous section header, folded ones included.
+_Avoid_: section jump
+
+**Step out**:
+Fold the row whose children are showing, else move to its parent.
+_Avoid_: collapse or parent
+
+**Narrow**:
+Keep only rows matching the query, with their ancestors and children.
+_Avoid_: filter state
+
+**Hidden kinds**:
+Symbol kinds the tree leaves out, per repository and branch.
+_Avoid_: kind filter
