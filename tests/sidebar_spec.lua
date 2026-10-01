@@ -639,6 +639,19 @@ describe("changeset sidebar", function()
       assert(ok, err)
     end)
 
+    it("drops a kind's rows once the kind menu hides it", function()
+      open_unanswered()
+      answer_all()
+      local buf = assert(window.buf())
+      assert.truthy(table.concat(lines_of(buf), "\n"):find("load", 1, true))
+
+      press("F")
+      vim.api.nvim_win_set_cursor(0, { line_of(vim.api.nvim_get_current_buf(), "Function"), 0 })
+      vim.cmd.normal("x")
+
+      assert.falsy(table.concat(lines_of(buf), "\n"):find("load", 1, true))
+    end)
+
     describe("while a kind is hidden", function()
       local prefs = require("changeset.prefs")
 
@@ -1185,6 +1198,17 @@ describe("changeset sidebar", function()
       assert.equal(notice, vim.api.nvim_win_get_buf(target))
       assert.equal(listed, #vim.fn.getbufinfo({ buflisted = 1 }))
     end)
+  end)
+
+  it("keeps the earlier narrowing when a later filter prompt is cancelled", function()
+    local buf = open_sidebar()
+    vim.api.nvim_set_current_win((assert(window.win())))
+    vim.api.nvim_feedkeys(vim.keycode("fother<CR>"), "xt", false)
+    local narrowed = lines_of(buf)
+
+    vim.api.nvim_feedkeys(vim.keycode("fmod<Esc>"), "xt", false)
+
+    assert.same(narrowed, lines_of(buf))
   end)
 
   it("filters on a query the pattern matcher would choke on", function()
