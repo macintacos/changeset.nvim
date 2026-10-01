@@ -1,5 +1,5 @@
 ---What each sidebar key does, and the keymaps that bind them.
----Each key reads the cursor line, asks the session's `view` one thing, then moves the cursor or redraws.
+---The fold, step and filter keys ask the session's view, then move the cursor or redraw.
 
 local Paths = require("changeset.paths")
 local build = require("changeset.build")
@@ -113,8 +113,8 @@ end
 
 ---Open the symbol-kind filter menu, redrawing as kinds are toggled.
 ---@param open_session changeset.Session
----@param keys changeset.Config.Keymaps
-local function open_kind_menu(open_session, keys)
+---@param redraw fun() Redraw the tree.
+local function open_kind_menu(open_session, redraw)
   require("changeset.menu").open({
     root = open_session.root,
     branch = open_session.branch,
@@ -127,15 +127,15 @@ local function open_kind_menu(open_session, keys)
     sidebar = assert(window.win(), "changeset: sidebar is closed"),
     on_change = function(hidden)
       open_session.view:hide(hidden)
-      draw.draw(keys.filter_kinds)
+      redraw()
     end,
   })
 end
 
 ---Narrow the tree from the command line, restoring the previous query on cancel.
 ---@param open_session changeset.Session
----@param keys changeset.Config.Keymaps
-local function prompt_filter(open_session, keys)
+---@param redraw fun() Redraw the tree.
+local function prompt_filter(open_session, redraw)
   local previous_query = open_session.view:query()
   local group = vim.api.nvim_create_augroup("changeset.filter", { clear = true })
   -- input() edits on the command line, so every keystroke is a CmdlineChanged
@@ -145,7 +145,7 @@ local function prompt_filter(open_session, keys)
     desc = "changeset: filter the tree on each keystroke of the filter prompt",
     callback = function()
       open_session.view:narrow(vim.fn.getcmdline())
-      draw.draw(keys.filter_kinds)
+      redraw()
       vim.cmd("redraw")
     end,
   })
@@ -158,7 +158,7 @@ local function prompt_filter(open_session, keys)
   vim.api.nvim_del_augroup_by_id(group)
 
   open_session.view:narrow((ok and typed ~= CANCELLED) and typed or previous_query)
-  draw.draw(keys.filter_kinds)
+  redraw()
 end
 
 ---Bind `keys` on the sidebar's buffer. `?` lists exactly these and the step keys.
@@ -263,10 +263,10 @@ function M.set_keymaps(buf, keys, hooks)
     )
   end, "Show these keymaps")
   map(keys.filter_kinds, function(open_session)
-    open_kind_menu(open_session, keys)
+    open_kind_menu(open_session, redraw)
   end, "Filter by symbol kind")
   map(keys.filter, function(open_session)
-    prompt_filter(open_session, keys)
+    prompt_filter(open_session, redraw)
   end, "Filter the tree")
 end
 

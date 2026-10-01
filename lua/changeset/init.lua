@@ -1,9 +1,9 @@
 ---A read-only sidebar mapping what this branch changed, nested by symbol.
 ---
 ---See doc/agents/design.md for the design. This file is the public API and the window state
----machine: `build` keeps the tree, `view` holds its folds and narrowing, `draw` puts it on the sidebar's buffer, `position` says where
----the user stands in it, and what each key does is `actions`. The thinking happens in the pure
----modules they call.
+---machine: `build` keeps the tree, `view` holds its folds and narrowing, `draw` puts it on
+---the sidebar's buffer, `position` says where the user stands in it, and what each key does
+---is `actions`. The thinking happens in the pure modules they call.
 
 local actions = require("changeset.actions")
 local build = require("changeset.build")

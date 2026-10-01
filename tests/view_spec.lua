@@ -258,6 +258,14 @@ describe("changeset.view", function()
     ["mod_spec.lua"] = {},
   })
   local FILES_ONLY = { "Implementation", "mod.lua", "Tests", "mod_spec.lua" }
+  local RS = "src/session.rs"
+  local RS_SYMBOLS = {
+    Rows.sym("load", "Function", 0, 1, 1),
+    Rows.sym("tests", "Module", 0, 3, 6),
+    Rows.sym("refreshes", "Function", 1, 4, 5),
+  }
+  -- 1 Implementation, 2 session.rs, 3 load, 4 Tests, 5 session.rs, 6 tests › refreshes.
+  local SPLIT = tree.build({ Rows.file(RS, { 1, 4 }) }, { [RS] = RS_SYMBOLS })
 
   describe("View folds", function()
     it("shows a row's children until something folds it", function()
@@ -320,21 +328,12 @@ describe("changeset.view", function()
     end)
 
     it("folds each copy of a file split across sections on its own", function()
-      local rs = "src/session.rs"
-      -- 1 Implementation, 2 session.rs, 3 load, 4 Tests, 5 session.rs, 6 tests › refreshes.
-      local split = tree.build({ Rows.file(rs, { 1, 4 }) }, {
-        [rs] = {
-          Rows.sym("load", "Function", 0, 1, 1),
-          Rows.sym("tests", "Module", 0, 3, 6),
-          Rows.sym("refreshes", "Function", 1, 4, 5),
-        },
-      })
       local v = fresh()
-      show(v, split)
+      show(v, SPLIT)
 
       v:step_out(5)
 
-      assert.same({ "Implementation", rs, "load", "Tests", rs }, show(v, split))
+      assert.same({ "Implementation", RS, "load", "Tests", RS }, show(v, SPLIT))
     end)
 
     it("opens a shut chain's rows rather than unfolding the row", function()
@@ -386,6 +385,14 @@ describe("changeset.view", function()
       assert.same({ 2, false }, { v:step_out(4) })
     end)
 
+    it("steps out of a shut file to its section header", function()
+      local v = fresh()
+      v:fold_files(ROWS)
+      show(v, ROWS)
+
+      assert.same({ 1, false }, { v:step_out(2) })
+    end)
+
     it("does nothing on a shut section header", function()
       local v = fresh()
       show(v, ROWS)
@@ -405,15 +412,17 @@ describe("changeset.view", function()
     end)
   end)
 
+  describe("View hide", function()
+    it("leaves a hidden kind's row out but keeps its children", function()
+      local v = fresh()
+      v:hide({ Class = true })
+
+      assert.same({ "Implementation", "mod.lua", "load", "Other changes" }, vim.list_slice(show(v, ROWS), 1, 4))
+      assert.same({ Class = true }, v:hidden())
+    end)
+  end)
+
   describe("View show", function()
-    local RS = "src/session.rs"
-    local RS_SYMBOLS = {
-      Rows.sym("load", "Function", 0, 1, 1),
-      Rows.sym("tests", "Module", 0, 3, 6),
-      Rows.sym("refreshes", "Function", 1, 4, 5),
-    }
-    -- 1 Implementation, 2 session.rs, 3 load, 4 Tests, 5 session.rs, 6 tests › refreshes.
-    local SPLIT = tree.build({ Rows.file(RS, { 1, 4 }) }, { [RS] = RS_SYMBOLS })
     -- 1 Tests, 2 session.rs, 3 tests › refreshes.
     local TESTS_ONLY = tree.build({ Rows.file(RS, { 4 }) }, { [RS] = RS_SYMBOLS })
     -- 1 Implementation, 2 mod.lua, 3 Store › load, 4 Tests, 5 mod_spec.lua, 6 Other changes, 7 L2.

@@ -35,10 +35,14 @@ _Avoid_: pending restore, saved cursor
 
 ### The view
 
+The `keymaps` option names and key descriptions keep the user-facing words expand, collapse
+and change.
+
 **View**:
 What the sidebar shows of the tree: its folds, opened chains, narrowing and hidden kinds,
 and the row on each line. The snapshot `changeset.position` reads is a picture of it, not
-the View.
+the View. `BuildHooks.view` is the hook that supplies a new tree's sidebar fields, the View
+among them.
 _Avoid_: view state, display state
 
 **Open**:
@@ -71,5 +75,6 @@ Keep only rows matching the query, with their ancestors and children.
 _Avoid_: filter state
 
 **Hidden kinds**:
-Symbol kinds the tree leaves out, per repository and branch.
+Symbol kinds the tree leaves out, saved for this branch, this repository or everywhere,
+narrowest first.
 _Avoid_: kind filter

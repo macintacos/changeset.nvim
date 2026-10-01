@@ -190,7 +190,7 @@ local function draw_header(buf, win, width)
   M.reveal_header(win)
 end
 
----Draw the tree from the session's current view state, then its header and row states.
+---Draw the session's view of the tree, then its header and row states.
 ---@param kinds_key string|false? The key bound to the kind menu, which the hidden-kinds note names.
 function M.draw(kinds_key)
   local session = build.current()

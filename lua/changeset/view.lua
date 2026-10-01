@@ -1,9 +1,5 @@
 ---What the sidebar shows of the tree: its folds, opened chains, narrowing and
 ---hidden kinds, and the row on each line, with the moves that read and change them.
----
----Which rows are *on screen* is the renderer's job — it walks the tree for the
----guides anyway, so it owns visibility and hands each line's row back. The pure
----narrowing transforms here run before that walk.
 
 local render = require("changeset.render")
 local tree = require("changeset.tree")
@@ -19,8 +15,8 @@ local tree = require("changeset.tree")
 
 ---@class changeset.View
 ---@field private folds changeset.view.Folds Shared by every view of one repository root.
----@field private narrowed string
----@field private kinds_hidden table<string, true>
+---@field private narrowed string The query rows must match; empty for none.
+---@field private kinds_hidden table<string, true> Symbol kinds left out of the tree.
 ---@field private shown changeset.Row[] The row on each line, as `show` last laid them out.
 local View = {}
 View.__index = View
@@ -173,13 +169,13 @@ function M.new(folds, hidden)
   return setmetatable({ folds = folds, narrowed = "", kinds_hidden = hidden, shown = {} }, View)
 end
 
----A view sharing its folds with every other view of `root`.
+---A view sharing its folds with every other view of `root`; a root's first view starts with Generated folded.
 ---@param root string
 ---@param hidden table<string, true> Symbol kinds to leave out.
 ---@return changeset.View
 function M.for_root(root, hidden)
   if not folds_by_root[root] then
-    -- Only on creation, so an unfold is kept like any other fold.
+    -- Only on creation, so an unfold is kept.
     folds_by_root[root] = { collapsed = { [tree.section_id("generated")] = true }, chains = {} }
   end
   return M.new(folds_by_root[root], hidden)
@@ -191,7 +187,7 @@ end
 ---@param rows changeset.Row[] On screen, in display order.
 ---@param previous_row changeset.Row? The row the cursor sat on before the redraw.
 ---@param fallback integer Line to keep when nothing matches.
----@return integer lnum 1-based, always within `rows`.
+---@return integer lnum 1-based; within `rows` unless `rows` is empty.
 local function reanchor(rows, previous_row, fallback)
   local same_file
   for lnum, row in ipairs(rows) do
@@ -254,14 +250,14 @@ end
 
 ---Show more under the row on `lnum`: a shut chain's rows first, else its children.
 ---@param lnum integer
----@return boolean changed false when no row is on `lnum`.
+---@return boolean acted false when no row is on `lnum`.
 function View:open(lnum)
   local row = self.shown[lnum]
   if not row then
     return false
   end
   -- Separate axes: compression hides a chain's *intermediate* rows, folding hides
-  -- a row's children. `l` on a compressed row means the first while it is shut.
+  -- a row's children.
   if row.chain and not self.folds.chains[row.id] then
     self.folds.chains[row.id] = true
   else
@@ -270,7 +266,7 @@ function View:open(lnum)
   return true
 end
 
----What `h` does from `lnum`: fold the row, or step out to its parent.
+---Step out from `lnum`: fold its row while children show, else find its parent's line.
 ---@param lnum integer
 ---@return integer? parent The parent's line, when stepping out.
 ---@return boolean shut Whether the row was folded.
@@ -303,8 +299,7 @@ function View:fold_files(rows)
   end
 end
 
----Unfold every row but the section headers, leaving opened chains as they are.
----Keeps every section's fold, including one whose section is empty for now.
+---Unfold every file and symbol row. Each section keeps its fold, even one empty for now, and opened chains stay open.
 function View:unfold_files()
   local kept = {}
   for _, id in ipairs(tree.section_ids()) do
@@ -313,8 +308,8 @@ function View:unfold_files()
   self.folds.collapsed = kept
 end
 
----Where `]h`/`[h` go from a line: the nearest row past it in `delta`'s direction
----that is not a section header, or the line itself when there is none that way.
+---The nearest row past `lnum` in `delta`'s direction that is not
+---a section header, or the line itself when there is none that way.
 ---@param lnum integer
 ---@param delta integer 1 or -1.
 ---@return integer
@@ -326,8 +321,8 @@ function View:step(lnum, delta)
   return self.shown[i] and i or lnum
 end
 
----Where `]]`/`[[` go from a line: the nearest section header past it in `delta`'s
----direction, a folded one included, or the line itself when there is none that way.
+---The nearest section header past `lnum` in `delta`'s direction, a folded
+---one included, or the line itself when there is none that way.
 ---@param lnum integer
 ---@param delta integer 1 or -1.
 ---@return integer
@@ -345,6 +340,7 @@ function View:narrow(query)
   self.narrowed = query
 end
 
+---The query the tree is narrowed by; empty for none.
 ---@return string
 function View:query()
   return self.narrowed
@@ -356,6 +352,7 @@ function View:hide(kinds)
   self.kinds_hidden = kinds
 end
 
+---The symbol kinds the tree leaves out.
 ---@return table<string, true>
 function View:hidden()
   return self.kinds_hidden

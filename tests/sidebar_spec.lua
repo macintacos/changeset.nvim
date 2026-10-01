@@ -1082,8 +1082,10 @@ describe("changeset sidebar", function()
   it("keeps the earlier narrowing when a later filter prompt is cancelled", function()
     local buf = open_sidebar()
     vim.api.nvim_set_current_win((assert(window.win())))
-    vim.api.nvim_feedkeys(vim.keycode("fother<CR>"), "xt", false)
+    local unfiltered = lines_of(buf)
+    vim.api.nvim_feedkeys(vim.keycode("fother.lua<CR>"), "xt", false)
     local narrowed = lines_of(buf)
+    assert.not_same(unfiltered, narrowed)
 
     vim.api.nvim_feedkeys(vim.keycode("fmod<Esc>"), "xt", false)
 
