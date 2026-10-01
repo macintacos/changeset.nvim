@@ -1,11 +1,9 @@
 ---Puts the session's tree on the sidebar's buffer, through the pure `render`: lines, marks, header and row states.
----`draw` also records the row on each line in the session's `visible`; `band_for` builds a row's preview band.
+---The session's `view` decides what is on each line; `band_for` builds a row's preview band.
 
 local build = require("changeset.build")
 local icons = require("changeset.icons")
 local render = require("changeset.render")
-local state = require("changeset.state")
-local tree = require("changeset.tree")
 local view = require("changeset.view")
 local window = require("changeset.window")
 
@@ -17,13 +15,6 @@ local M = {}
 local ns = vim.api.nvim_create_namespace("changeset")
 -- Separate from `ns` so the tracker can repaint row backgrounds without redrawing the tree.
 local rows_ns = vim.api.nvim_create_namespace("changeset.rows")
-
----The tree `build` keeps, with the sidebar's own fields on it.
----Read it again after anything that can replace the tree: `build.build()`, `vim.wait`, a later callback.
----@return changeset.Session?
-local function current()
-  return build.current() --[[@as changeset.Session?]]
-end
 
 ---@param row changeset.Row
 ---@return string glyph, string hl
@@ -40,7 +31,7 @@ end
 ---The row under the sidebar's cursor.
 ---@return changeset.Row?
 function M.row_at_cursor()
-  local session = current()
+  local session = build.current()
   if not session then
     return nil
   end
@@ -48,7 +39,7 @@ function M.row_at_cursor()
   if not win then
     return nil
   end
-  return session.visible[vim.api.nvim_win_get_cursor(win)[1]]
+  return session.view:row(vim.api.nvim_win_get_cursor(win)[1])
 end
 
 ---The preview band's contents for `row`.
@@ -71,12 +62,12 @@ end
 ---The sidebar as drawn, for `changeset.position`; errors when there is no session.
 ---@return changeset.position.View
 function M.view()
-  local session = current()
+  local session = build.current()
   assert(session, "changeset: no open session")
   local win = window.win()
   return {
     rows = session.rows,
-    visible = session.visible,
+    visible = session.view:visible(),
     cursor = win and vim.api.nvim_win_get_cursor(win)[1],
     focused = window.is_focused(),
   }
@@ -99,7 +90,7 @@ end
 
 ---Mark the rows `changeset.position` says are selected, where you are, and last opened.
 function M.paint()
-  local session = current()
+  local session = build.current()
   local buf, win = window.buf(), window.win()
   if not (session and buf and win) then
     return
@@ -136,7 +127,7 @@ end
 local function hidden_note_line(buf, anchor_line, note)
   if note then
     -- A virtual line rather than a row: the cursor cannot reach it, so it needs no
-    -- place in `visible` and no guard in everything that reads a row off a line.
+    -- place among the view's rows and no guard in everything that reads a row off a line.
     vim.api.nvim_buf_set_extmark(buf, ns, anchor_line, 0, {
       virt_lines = { { { "" } }, { { " " .. note, render.META_HL } } },
     })
@@ -146,7 +137,7 @@ end
 ---What the header says about the branch, as the tree stands.
 ---@return changeset.Summary
 local function summary()
-  local session = current()
+  local session = build.current()
   assert(session, "changeset: no open session")
   local added, removed, readable, pending = 0, 0, 0, 0
   for _, file in ipairs(session.files) do
@@ -185,7 +176,7 @@ end
 ---@param win integer
 ---@param width integer
 local function draw_header(buf, win, width)
-  local session = current()
+  local session = build.current()
   assert(session, "changeset: no open session")
   local header = summary()
   vim.wo[win].winbar = render.header(header, width)
@@ -199,39 +190,19 @@ local function draw_header(buf, win, width)
   M.reveal_header(win)
 end
 
----Draw the tree from the session's current view state, then its header and row states.
+---Draw the session's view of the tree, then its header and row states.
 ---@param kinds_key string|false? The key bound to the kind menu, which the hidden-kinds note names.
 function M.draw(kinds_key)
-  local session = current()
+  local session = build.current()
   local buf, win = window.buf(), window.win()
   if not (buf and win and vim.api.nvim_buf_is_valid(buf)) then
     return
   end
   assert(session, "changeset: no open session")
 
-  local previous_row = M.row_at_cursor()
-  local previous_line = vim.api.nvim_win_get_cursor(win)[1]
   local width = vim.api.nvim_win_get_width(win)
-
-  local shown = tree.compress(view.by_kind(view.filter(session.rows, session.query), session.hidden), function(id)
-    return state.is_chain_open(session.st, id)
-  end)
-
-  -- `render.lines` walks the tree for its guides, so it is the one place that
-  -- decides which rows are on screen; each line carries its row back, which is
-  -- how a cursor line maps to a row without re-deriving that walk here.
-  local lines = render.lines(shown, {
-    icon = icon_for,
-    collapsed = function(id)
-      return state.is_collapsed(session.st, id)
-    end,
-    width = width,
-    query = session.query,
-  })
-
-  session.visible = vim.tbl_map(function(line)
-    return line.row
-  end, lines)
+  local lines, lnum =
+    session.view:show(session.rows, { icon = icon_for, width = width, cursor = vim.api.nvim_win_get_cursor(win)[1] })
 
   local text = vim.tbl_map(function(line)
     return line.text
@@ -254,10 +225,10 @@ function M.draw(kinds_key)
 
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   apply_marks(buf, lines)
-  local hiding = view.hiding(view.kind_counts(session.rows), session.hidden)
+  local hiding = view.hiding(view.kind_counts(session.rows), session.view:hidden())
   hidden_note_line(buf, #text - 1, render.hidden_note(hiding, width - 1, kinds_key))
 
-  vim.api.nvim_win_set_cursor(win, { state._reanchor(session.visible, previous_row, previous_line), 0 })
+  vim.api.nvim_win_set_cursor(win, { lnum, 0 })
 
   draw_header(buf, win, width)
   M.paint()

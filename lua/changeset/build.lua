@@ -290,10 +290,11 @@ function M.build()
   return true
 end
 
----The tree the last `build()` made; nil before the first.
----@return changeset.Tree?
+---The tree the last build() made, with the fields BuildHooks.view supplied; nil before the first.
+---Read it again after anything that can replace the tree: `build()`, `vim.wait`, a later callback.
+---@return changeset.Session?
 function M.current()
-  return session
+  return session --[[@as changeset.Session?]]
 end
 
 ---Register what the sidebar supplies and does as the tree changes. Before the first

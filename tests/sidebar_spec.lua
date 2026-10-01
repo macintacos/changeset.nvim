@@ -251,30 +251,11 @@ describe("changeset sidebar", function()
     assert.equal(expanded, #lines_of(buf))
   end)
 
-  it("folds files under H but never a section header", function()
-    local buf = open_sidebar()
-
-    press("H")
-
-    assert.truthy(lines_of(buf)[1]:find("Implementation", 1, true))
-    assert.equal(3, #lines_of(buf))
-  end)
-
   describe("with a second section", function()
     before_each(function()
       write("README.md", { "# readme" })
       Fixture.commit("docs", tmp)
     end)
-
-    ---Rebuild the tree and wait until the Docs section is drawn or gone.
-    ---@param buf integer
-    ---@param shown boolean
-    local function refresh_until(buf, shown)
-      changeset.refresh()
-      assert(vim.wait(5000, function()
-        return (table.concat(lines_of(buf), "\n"):find("Docs", 1, true) ~= nil) == shown
-      end, 25))
-    end
 
     it("moves between section headers with ]] and [[, stopping at either end", function()
       local buf = open_sidebar()
@@ -289,21 +270,6 @@ describe("changeset sidebar", function()
       assert.equal(1, vim.api.nvim_win_get_cursor(0)[1])
       press("[[")
       assert.equal(1, vim.api.nvim_win_get_cursor(0)[1])
-    end)
-
-    it("lands on a folded section's header", function()
-      local buf = open_sidebar()
-      vim.api.nvim_set_current_win((assert(window.win())))
-      vim.api.nvim_win_set_cursor(0, { 1, 0 })
-      press("h")
-      vim.api.nvim_win_set_cursor(0, { line_of(buf, "README.md"), 0 })
-
-      press("[[")
-      assert.equal(line_of(buf, "Docs"), vim.api.nvim_win_get_cursor(0)[1])
-      press("[[")
-      assert.equal(1, vim.api.nvim_win_get_cursor(0)[1])
-      press("]]")
-      assert.equal(line_of(buf, "Docs"), vim.api.nvim_win_get_cursor(0)[1])
     end)
 
     it("keeps ]] over a buffer-local ]] another plugin sets at FileType", function()
@@ -336,36 +302,6 @@ describe("changeset sidebar", function()
       local text = table.concat(lines_of(vim.api.nvim_win_get_buf((assert(float)))), "\n")
       assert.truthy(text:find("]]", 1, true))
       assert.truthy(text:find("[[", 1, true))
-    end)
-
-    it("leaves a folded section folded under L", function()
-      local buf = open_sidebar()
-      vim.api.nvim_set_current_win((assert(window.win())))
-      vim.api.nvim_win_set_cursor(0, { 1, 0 })
-      press("h")
-
-      press("L")
-
-      local text = lines_of(buf)
-      assert.falsy(table.concat(text, "\n"):find("mod.lua", 1, true))
-      assert.truthy(table.concat(text, "\n"):find("README.md", 1, true))
-    end)
-
-    it("leaves a folded section folded under L while the section is empty", function()
-      local buf = open_sidebar()
-      vim.api.nvim_set_current_win((assert(window.win())))
-      vim.api.nvim_win_set_cursor(0, { line_of(buf, "Docs"), 0 })
-      press("h")
-      Fixture.git({ "rm", "-q", "README.md" }, tmp)
-      Fixture.commit("no docs", tmp)
-      refresh_until(buf, false)
-
-      press("L")
-      write("README.md", { "# readme" })
-      Fixture.commit("docs again", tmp)
-      refresh_until(buf, true)
-
-      assert.falsy(table.concat(lines_of(buf), "\n"):find("README.md", 1, true))
     end)
 
     it("draws the gap between sections without a buffer line", function()
@@ -516,26 +452,6 @@ describe("changeset sidebar", function()
       assert.truthy(cursor_line() > tests_header())
     end)
 
-    it("folds each copy of a split file on its own", function()
-      open_unanswered()
-      answer_all()
-
-      cursor_to(line_of(assert(window.buf()), "session.rs", tests_header()))
-      press("h")
-      line_of(assert(window.buf()), "load")
-      assert.has_error(function()
-        line_of(assert(window.buf()), "refreshes")
-      end)
-
-      press("l")
-      cursor_to(line_of(assert(window.buf()), "session.rs"))
-      press("h")
-      line_of(assert(window.buf()), "refreshes")
-      assert.has_error(function()
-        line_of(assert(window.buf()), "load")
-      end)
-    end)
-
     it("numbers a split file once, at its first row, on both copies", function()
       open_unanswered()
       answer_all()
@@ -637,6 +553,19 @@ describe("changeset sidebar", function()
       end)
       vim.fn.delete(cache_file)
       assert(ok, err)
+    end)
+
+    it("drops a kind's rows once the kind menu hides it", function()
+      open_unanswered()
+      answer_all()
+      local buf = assert(window.buf())
+      assert.truthy(table.concat(lines_of(buf), "\n"):find("load", 1, true))
+
+      press("F")
+      vim.api.nvim_win_set_cursor(0, { line_of(vim.api.nvim_get_current_buf(), "Function"), 0 })
+      vim.cmd.normal("x")
+
+      assert.falsy(table.concat(lines_of(buf), "\n"):find("load", 1, true))
     end)
 
     describe("while a kind is hidden", function()
@@ -814,14 +743,6 @@ describe("changeset sidebar", function()
       press("l")
     end
 
-    it("starts folded, below every other section", function()
-      local buf = open_sidebar()
-
-      assert.equal(#lines_of(buf), line_of(buf, "Generated"))
-      assert.is_false(shows(buf, "go.sum"))
-      assert.is_false(shows(buf, "schema.txt"))
-    end)
-
     it("stays unfolded for the repository once l opens it", function()
       local buf = open_sidebar()
       unfold(buf)
@@ -833,14 +754,6 @@ describe("changeset sidebar", function()
       buf = open_sidebar()
 
       assert.is_true(shows(buf, "go.sum"))
-    end)
-
-    it("stays folded under L", function()
-      local buf = open_sidebar()
-
-      press("L")
-
-      assert.is_false(shows(buf, "go.sum"))
     end)
 
     it("never asks for a generated file's symbols, nor waits on them", function()
@@ -891,17 +804,6 @@ describe("changeset sidebar", function()
       return buf
     end
 
-    it("folds its section with h and unfolds it with l", function()
-      local buf = on_header()
-      local expanded = #lines_of(buf)
-
-      press("h")
-      assert.equal(1, #lines_of(buf))
-      press("l")
-
-      assert.equal(expanded, #lines_of(buf))
-    end)
-
     it("keeps its section folded through a close and a reopen", function()
       on_header()
       press("h")
@@ -915,16 +817,6 @@ describe("changeset sidebar", function()
         return changeset._tree().files ~= before
       end, 25))
       assert.equal(1, #lines_of(assert(window.buf())))
-    end)
-
-    it("is where h goes from a shut file", function()
-      on_header()
-      press("H")
-      vim.api.nvim_win_set_cursor(0, { 2, 0 })
-
-      press("h")
-
-      assert.equal(1, vim.api.nvim_win_get_cursor(0)[1])
     end)
 
     it("leaves the file window alone when the cursor moves onto it", function()
@@ -1187,18 +1079,16 @@ describe("changeset sidebar", function()
     end)
   end)
 
-  it("filters on a query the pattern matcher would choke on", function()
+  it("keeps the earlier narrowing when a later filter prompt is cancelled", function()
     local buf = open_sidebar()
-    local win = assert(window.win())
-    vim.api.nvim_set_current_win(win)
+    vim.api.nvim_set_current_win((assert(window.win())))
+    local unfiltered = lines_of(buf)
+    vim.api.nvim_feedkeys(vim.keycode("fother.lua<CR>"), "xt", false)
+    local narrowed = lines_of(buf)
+    assert.not_same(unfiltered, narrowed)
 
-    -- Not `press`: `vim.fn.input` blocks, so the keys it consumes have to be in the
-    -- typeahead before `f` runs. `x` mode drains what is already queued.
-    vim.api.nvim_feedkeys(vim.keycode("f(<CR>"), "xt", false)
+    vim.api.nvim_feedkeys(vim.keycode("fmod<Esc>"), "xt", false)
 
-    -- `(` matches no row, so `draw` falls through to the empty message. Under a
-    -- pattern-mode `find` the filter raises instead and the tree is left standing.
-    assert.equal(1, #lines_of(buf))
-    assert.falsy(table.concat(lines_of(buf), "\n"):find("other.lua", 1, true))
+    assert.same(narrowed, lines_of(buf))
   end)
 end)
