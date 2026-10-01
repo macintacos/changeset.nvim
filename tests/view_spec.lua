@@ -293,6 +293,50 @@ describe("changeset.view", function()
       assert.same({ "Implementation", "mod.lua", "Store › load", "Other changes", "L30", "Tests" }, show(v, ROWS))
     end)
 
+    it("keeps a folded section folded under unfold_files across a rebuild that empties it", function()
+      -- 1 Implementation, 2 mod.lua, 3 Docs, 4 README.md.
+      local with_docs = tree.build({ Rows.file("mod.lua", { 5 }), Rows.file("README.md", { 1 }) }, {})
+      local v = fresh()
+      v:fold_files(with_docs)
+      show(v, with_docs)
+      v:step_out(3)
+      show(v, tree.build({ Rows.file("mod.lua", { 5 }) }, {}))
+
+      v:unfold_files()
+
+      local shown = show(v, with_docs)
+      assert.equal("Docs", shown[#shown])
+    end)
+
+    it("folds and unfolds a section from its header", function()
+      local v = fresh()
+      local expanded = show(v, ROWS)
+
+      assert.same({ nil, true }, { v:step_out(1) })
+      assert.same({ "Implementation", "Tests" }, vim.list_slice(show(v, ROWS), 1, 2))
+
+      assert.is_true(v:open(1))
+      assert.same(expanded, show(v, ROWS))
+    end)
+
+    it("folds each copy of a file split across sections on its own", function()
+      local rs = "src/session.rs"
+      -- 1 Implementation, 2 session.rs, 3 load, 4 Tests, 5 session.rs, 6 tests › refreshes.
+      local split = tree.build({ Rows.file(rs, { 1, 4 }) }, {
+        [rs] = {
+          Rows.sym("load", "Function", 0, 1, 1),
+          Rows.sym("tests", "Module", 0, 3, 6),
+          Rows.sym("refreshes", "Function", 1, 4, 5),
+        },
+      })
+      local v = fresh()
+      show(v, split)
+
+      v:step_out(5)
+
+      assert.same({ "Implementation", rs, "load", "Tests", rs }, show(v, split))
+    end)
+
     it("opens a shut chain's rows rather than unfolding the row", function()
       local v = fresh()
       show(v, ROWS)
@@ -349,6 +393,15 @@ describe("changeset.view", function()
       show(v, ROWS)
 
       assert.same({ nil, false }, { v:step_out(1) })
+    end)
+  end)
+
+  describe("View narrow", function()
+    it("matches a query as plain text, not a pattern", function()
+      local v = fresh()
+      v:narrow("(")
+
+      assert.same({}, show(v, ROWS))
     end)
   end)
 
@@ -515,6 +568,17 @@ describe("changeset.view", function()
       local rows = tree.build({ Rows.file("mod.lua", { 5 }), generated }, {})
 
       assert.same({ "Generated" }, vim.list_slice(show(view.for_root("/repo/generated-folded", {}), rows), 4))
+    end)
+
+    it("keeps Generated folded when every file unfolds", function()
+      local generated = Rows.file("gen.lua", { 1 })
+      generated.generated = true
+      local rows = tree.build({ Rows.file("mod.lua", { 5 }), generated }, {})
+      local v = view.for_root("/repo/generated-unfold-files", {})
+
+      v:unfold_files()
+
+      assert.same({ "Generated" }, vim.list_slice(show(v, rows), 4))
     end)
   end)
 end)
