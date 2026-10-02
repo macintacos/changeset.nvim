@@ -178,10 +178,6 @@ build.subscribe(function(event)
   end
 end)
 
--- The pipeline lives in `build`; these stay on `require("changeset")` for the plugin, `pick` and the specs.
-M.build = build.build
-M.refresh = build.refresh
-
 ---The sidebar's footer, which its statusline evaluates on every redraw.
 ---@return string
 function M.footer()
@@ -202,7 +198,7 @@ end
 ---@return { rows: changeset.Row[], root: string, ref: string }? tree
 ---@return string? err Why there is no tree yet.
 function M.rows()
-  if not M.build() then
+  if not build.build() then
     return nil, "no merge base with the default branch"
   end
   -- The first ask builds the tree too, and a picker cannot fill in behind it the way the sidebar does.
@@ -219,12 +215,6 @@ function M.rows()
     root = state.tree.root,
     ref = state.tree.ref,
   }
-end
-
----The tree, for specs.
----@return changeset.Tree?
-function M._tree()
-  return build.current()
 end
 
 ---Configure changeset. Optional; reaches the sidebar the next time it opens; PR Review Mode, once on, stays on.
@@ -245,7 +235,7 @@ function M.open()
     M.close()
   end
   local kept = build.current()
-  if not M.build() then
+  if not build.build() then
     return vim.notify("Changeset: no merge base with the default branch", vim.log.levels.WARN)
   end
   bound_keys = config.get().keymaps
@@ -376,7 +366,7 @@ function M.open()
   redraw()
   -- A kept tree misses what nothing announced, such as a file edited outside Neovim while it kept focus.
   if build.current() == kept then
-    M.refresh()
+    build.refresh()
   end
 end
 

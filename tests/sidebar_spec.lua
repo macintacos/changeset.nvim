@@ -3,6 +3,7 @@ require("mini.icons").setup()
 
 local changeset = require("changeset")
 changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
+local build = require("changeset.build")
 local render = require("changeset.render")
 local window = require("changeset.window")
 local Fixture = require("support.git")
@@ -209,7 +210,7 @@ describe("changeset sidebar", function()
     end
     local function refreshed()
       asked = nil
-      changeset.refresh()
+      build.refresh()
       assert(
         vim.wait(5000, function()
           return asked ~= nil
@@ -705,7 +706,7 @@ describe("changeset sidebar", function()
       local buf = open_from(3)
       asked = {}
 
-      changeset.refresh()
+      build.refresh()
       assert(
         vim.wait(5000, function()
           return #asked > 0
@@ -810,13 +811,13 @@ describe("changeset sidebar", function()
       on_header()
       press("h")
       changeset.close()
-      local before = assert(changeset._tree()).files
+      local before = assert(build.current()).files
 
       changeset.open()
 
       -- Not open_sidebar(): it waits for a second line, and the folded section is one.
       assert.is_true(vim.wait(10000, function()
-        return changeset._tree().files ~= before
+        return build.current().files ~= before
       end, 25))
       assert.equal(1, #lines_of(assert(window.buf())))
     end)

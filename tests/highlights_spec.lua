@@ -1,4 +1,5 @@
 local changeset = require("changeset")
+local build = require("changeset.build")
 changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
 local render = require("changeset.render")
 local window = require("changeset.window")
@@ -153,7 +154,7 @@ describe("changeset row highlights", function()
 
     vim.fn.writefile(Fixture.numbered(10, { [2] = true }), "mod.lua")
     vim.cmd("silent! checktime")
-    changeset.refresh()
+    build.refresh()
     vim.wait(5000, function()
       return not Sidebar.text():find("L8", 1, true)
     end, 25)
@@ -191,7 +192,7 @@ describe("changeset row highlights", function()
 
   it("keeps tracking where you are while the sidebar is closed", function()
     vim.cmd.edit("mod.lua")
-    assert.is_true(changeset.build())
+    assert.is_true(build.build())
 
     vim.cmd.edit("other.lua")
 

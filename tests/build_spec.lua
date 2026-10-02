@@ -1,4 +1,4 @@
-local changeset = require("changeset")
+local build = require("changeset.build")
 local resolve = require("changeset.resolve")
 local Fixture = require("support.git")
 local symbols = require("support.symbols")
@@ -7,7 +7,7 @@ require("support.gh") -- a fake gh on PATH: never the real one, never the networ
 ---Every announcement the tree makes, in order; emptied before each case.
 ---@type changeset.TreeEvent[]
 local events = {}
-require("changeset.build").subscribe(function(event)
+build.subscribe(function(event)
   events[#events + 1] = event
 end)
 
@@ -43,9 +43,9 @@ end
 
 ---Build the tree, waiting for its diff.
 local function build_and_collect()
-  assert.is_true(changeset.build())
+  assert.is_true(build.build())
   assert.is_true(vim.wait(10000, function()
-    return (changeset._tree() or {}).collected
+    return (build.current() or {}).collected
   end, 25))
 end
 
@@ -65,7 +65,6 @@ describe("changeset.build", function()
 
   after_each(function()
     resolve.start = real_start
-    changeset.close()
     vim.cmd("silent! %bwipeout!")
     vim.fn.chdir(previous_dir)
     vim.fn.delete(tmp, "rf")
@@ -73,12 +72,13 @@ describe("changeset.build", function()
 
   it("a refresh starts no merge-base, rev-parse or gh process", function()
     build_and_collect()
-    local before = assert(changeset._tree()).files
+    assert.is_nil(package.loaded["changeset"])
+    local before = assert(build.current()).files
 
     local argvs = recording(function()
-      changeset.refresh()
+      build.refresh()
       assert.is_true(vim.wait(10000, function()
-        return changeset._tree().files ~= before
+        return build.current().files ~= before
       end, 25))
     end)
 
@@ -126,7 +126,7 @@ describe("changeset.build", function()
         return runs(argv, "gh")
       end, argvs)
       assert.equal(1, #gh_asks)
-      assert.equal(Fixture.git({ "rev-parse", "trunk" }, tmp), changeset._tree().base)
+      assert.equal(Fixture.git({ "rev-parse", "trunk" }, tmp), build.current().base)
     end)
   end)
 
@@ -149,10 +149,10 @@ describe("changeset.build", function()
 
     ---Refresh, waiting for the new diff.
     local function refresh_and_collect()
-      local before = assert(changeset._tree()).files
-      changeset.refresh()
+      local before = assert(build.current()).files
+      build.refresh()
       assert.is_true(vim.wait(10000, function()
-        return changeset._tree().files ~= before
+        return build.current().files ~= before
       end, 25))
     end
 
@@ -174,7 +174,7 @@ describe("changeset.build", function()
       refresh_and_collect()
 
       assert.equal(1, asked)
-      assert.same(comment_lines, changeset._tree().comments["mod.lua"])
+      assert.same(comment_lines, build.current().comments["mod.lua"])
     end)
 
     it("does not cache the comment lines read from a silent file's buffer holding unwritten edits", function()
@@ -185,7 +185,7 @@ describe("changeset.build", function()
       refresh_and_collect()
 
       assert.equal(1, asked)
-      assert.is_nil(changeset._tree().comments["mod.lua"])
+      assert.is_nil(build.current().comments["mod.lua"])
     end)
 
     it("asks again about a silent file once a symbol-listing server attaches to it", function()
@@ -242,7 +242,7 @@ describe("changeset.build", function()
     end)
 
     it("announces the diff, then a file's symbols as they arrive", function()
-      changeset.build()
+      build.build()
       wait_for_asks(1)
       assert.same({ "diff" }, events)
 
@@ -252,9 +252,9 @@ describe("changeset.build", function()
     end)
 
     it("stays silent for an answer to a refresh that a newer one replaced", function()
-      changeset.build()
+      build.build()
       wait_for_asks(1)
-      changeset.refresh()
+      build.refresh()
       wait_for_asks(2)
       events = {}
 
@@ -275,12 +275,12 @@ describe("changeset.build", function()
 
     it("announces the PR and keeps the tree", function()
       build_and_collect()
-      local built = changeset._tree()
+      local built = build.current()
 
       assert.is_true(vim.wait(10000, function()
         return vim.list_contains(events, "pr")
       end, 25))
-      assert.equal(built, changeset._tree())
+      assert.equal(built, build.current())
     end)
   end)
 
@@ -300,7 +300,7 @@ describe("changeset.build", function()
     end)
 
     it("announces the failure", function()
-      changeset.build()
+      build.build()
 
       assert.same({ "failed" }, events)
     end)
