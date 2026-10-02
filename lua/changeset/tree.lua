@@ -586,9 +586,9 @@ end
 local function add_file(section_rows, file, symbols_by_path, lines)
   local key = sections.classify(file.path, file.generated)
   local section = section_rows[key]
-  local status = M.read_status(file, symbols_by_path)
-  if status ~= "done" then
-    return append(section, file_row(file, status ~= "reading", section), file)
+  local read_status = M.read_status(file, symbols_by_path)
+  if read_status ~= "done" then
+    return append(section, file_row(file, read_status ~= "reading", section), file)
   end
   local symbols = symbols_by_path[file.path]
   local comment_lines = key ~= "docs" and lines.comments and lines.comments[file.path] or nil

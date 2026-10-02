@@ -26,12 +26,12 @@ function M.current()
     return nil
   end
   if not (state and state.tree == tree) then
-    local file = prefs.path()
+    local prefs_file = prefs.path()
     state = {
       tree = tree,
-      file = file,
+      file = prefs_file,
       rows = {},
-      view = view.for_root(tree.root, prefs.resolve(prefs.load(file), tree.root, tree.branch)),
+      view = view.for_root(tree.root, prefs.resolve(prefs.load(prefs_file), tree.root, tree.branch)),
       position = position.new(),
     }
   end
