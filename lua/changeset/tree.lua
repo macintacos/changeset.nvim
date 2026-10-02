@@ -27,7 +27,7 @@ local SEP = " › "
 ---@field tip string?         On a `chain` row, the id of the deepest row it stands for.
 ---@field range { [1]: integer, [2]: integer }? Lines a symbol's body or an orphan hunk covers, inclusive.
 ---@field status string?      File rows only.
----@field resolved boolean?   File rows only: whether a server has answered for this file yet.
+---@field resolved boolean?   File rows only: whether this file's symbols are answered, or never read.
 ---@field files integer?      Section rows only: how many files the section holds, before any filter.
 ---@field icon string?        Section rows only: the directory name its section header's icon is looked up by.
 ---@field children changeset.Row[]
@@ -454,7 +454,7 @@ local function file_id(section_id, path)
 end
 
 ---@param file changeset.File
----@param resolved boolean Whether a server has answered for this file yet.
+---@param resolved boolean Whether this file's symbols are answered, or never read.
 ---@param section changeset.Row
 ---@return changeset.Row
 local function file_row(file, resolved, section)
@@ -562,19 +562,35 @@ local function shares(file, credited, shown)
   return out
 end
 
+---How far the tree has read a file's symbols; a deleted or Generated file is `skipped`, never read.
+---@alias changeset.ReadStatus "reading"|"done"|"skipped"
+
+---How far the tree has read `file`'s symbols.
+---@param file changeset.File
+---@param symbols_by_path table<string, changeset.Symbol[]>
+---@return changeset.ReadStatus
+function M.read_status(file, symbols_by_path)
+  if file.status == "deleted" or sections.classify(file.path, file.generated) == "generated" then
+    return "skipped"
+  end
+  return symbols_by_path[file.path] and "done" or "reading"
+end
+
 ---File `file` under its path's section, under Tests when its changes reach inline tests, and under Docs when
 ---some change only comments: each copy lists only its own symbols and "Other changes", and a copy with neither is
 ---left out. The copies' stats are `shares` of the file's.
 ---@param section_rows table<changeset.SectionKey, changeset.Row>
 ---@param file changeset.File
----@param symbols changeset.Symbol[]? nil while the file is still resolving.
+---@param symbols_by_path table<string, changeset.Symbol[]>
 ---@param lines changeset.tree.Lines
-local function add_file(section_rows, file, symbols, lines)
+local function add_file(section_rows, file, symbols_by_path, lines)
   local key = sections.classify(file.path, file.generated)
   local section = section_rows[key]
-  if not symbols or file.status == "deleted" or key == "generated" then
-    return append(section, file_row(file, symbols ~= nil, section), file)
+  local status = M.read_status(file, symbols_by_path)
+  if status ~= "done" then
+    return append(section, file_row(file, status ~= "reading", section), file)
   end
+  local symbols = symbols_by_path[file.path]
   local comment_lines = key ~= "docs" and lines.comments and lines.comments[file.path] or nil
   local credited = credit(
     file,
@@ -601,9 +617,10 @@ end
 ---shows under a Docs copy instead, a doc comment counting with the symbol below it. A copy is left out when it
 ---would be empty.
 ---
----A file absent from `symbols_by_path` is still resolving and gets no children; a file mapped to `{}`
----has no symbols, so all its hunks are orphans. A deleted or Generated file never gets children: a Generated
----file's hunks are not worth a row each.
+---A file absent from `symbols_by_path` is still reading and gets no children; a file mapped to `{}`
+---has no symbols, so all its hunks are orphans. A deleted or Generated file is never read and never gets
+---children: a Generated file's hunks are not worth a row each. A file row is `resolved` once its symbols are
+---answered, or when they are never read.
 ---@param files changeset.File[] Hunks ascending by line, as `git diff` emits them.
 ---@param symbols_by_path table<string, changeset.Symbol[]> Flat `symbols.flatten` output by file path.
 ---@param lines changeset.tree.Lines?
@@ -614,7 +631,7 @@ function M.build(files, symbols_by_path, lines)
     section_rows[section.key] = section_row(section)
   end
   for _, file in ipairs(files) do
-    add_file(section_rows, file, symbols_by_path[file.path], lines or {})
+    add_file(section_rows, file, symbols_by_path, lines or {})
   end
   return vim
     .iter(sections.ORDER)

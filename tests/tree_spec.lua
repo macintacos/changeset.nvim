@@ -124,6 +124,13 @@ describe("changeset.tree", function()
         assert.same({ "Generated" }, names(rows))
       end)
 
+      it("resolves a Generated file whose symbols are never filed, with no children", function()
+        local go_sum = tree.build({ file("go.sum", { hunk(1, 1) }) }, {})[1].children[1]
+
+        assert.is_true(go_sum.resolved)
+        assert.same({}, go_sum.children)
+      end)
+
       it("gives a resolved Generated file no children, where another file gets its orphans", function()
         local rows = tree.build(
           { file("lua/a.lua", { hunk(1, 1) }), file("go.sum", { hunk(1, 1) }) },
@@ -489,6 +496,29 @@ describe("changeset.tree", function()
 
         assert.not_equal(rows[1].id, rows[2].id)
       end)
+    end)
+  end)
+
+  describe("read_status", function()
+    local go_file = vim.tbl_extend("force", file("api.go", { hunk(1, 1) }), { generated = true })
+
+    it("skips a deleted file", function()
+      assert.equal("skipped", tree.read_status(file(PATH, { hunk(1, 0, 1) }, "deleted"), {}))
+    end)
+
+    it("skips a Generated file whether or not its symbols are filed", function()
+      assert.equal("skipped", tree.read_status(file("go.sum", { hunk(1, 1) }), {}))
+      assert.equal("skipped", tree.read_status(file("go.sum", { hunk(1, 1) }), { ["go.sum"] = {} }))
+      assert.equal("skipped", tree.read_status(go_file, {}))
+      assert.equal("skipped", tree.read_status(go_file, { ["api.go"] = {} }))
+    end)
+
+    it("is reading a readable file with no symbols filed", function()
+      assert.equal("reading", tree.read_status(file(PATH, { hunk(1, 1) }), {}))
+    end)
+
+    it("is done with a readable file filed as having no symbols", function()
+      assert.equal("done", tree.read_status(file(PATH, { hunk(1, 1) }), { [PATH] = {} }))
     end)
   end)
 

@@ -5,7 +5,7 @@ local Paths = require("changeset.paths")
 local cache = require("changeset.cache")
 local fork_point = require("changeset.fork_point")
 local resolve = require("changeset.resolve")
-local sections = require("changeset.sections")
+local tree = require("changeset.tree")
 
 -- `:wall` writes every buffer, and regaining focus reloads every file changed
 -- meanwhile. One rebuild per burst is enough, and a rebuild mid-keypress is what
@@ -29,7 +29,7 @@ local M = {}
 ---@field files changeset.File[]
 ---@field commits integer? Commits on the branch since `base`, once the diff has been read.
 ---@field collected boolean Whether the diff has been read yet.
----@field symbols table<string, changeset.CachedSymbol[]> Absent key means "still resolving".
+---@field symbols table<string, changeset.CachedSymbol[]> Absent key: still reading, or never read (`tree.read_status`).
 ---@field comments table<string, changeset.Comments> Absent key means none read or parsed for the file.
 ---@field cancel fun()?
 ---@field timer uv.uv_timer_t?
@@ -80,22 +80,6 @@ end
 local function unwritten(path)
   local buf = vim.fn.bufnr(path)
   return buf ~= -1 and vim.bo[buf].modified
-end
-
----The Generated files, each filed as answered with no symbols, and the rest, which a server is asked about.
----@param files changeset.File[]
----@return table<string, changeset.CachedSymbol[]> generated_symbols Each Generated path mapped to `{}`.
----@return changeset.File[] readable The other files, in order.
-local function split_generated(files)
-  local generated_symbols, readable = {}, {}
-  for _, file in ipairs(files) do
-    if sections.classify(file.path, file.generated) == "generated" then
-      generated_symbols[file.path] = {}
-    else
-      readable[#readable + 1] = file
-    end
-  end
-  return generated_symbols, readable
 end
 
 ---What resolving one file answered.
@@ -155,9 +139,9 @@ function M.refresh()
     session.files = files
     session.commits = commits
     session.collected = true
-    -- Generated files are never asked about; filed as answered with nothing, they
-    -- show no placeholder and count as read.
-    local generated_symbols, readable = split_generated(files)
+    local readable = vim.tbl_filter(function(file)
+      return tree.read_status(file, session.symbols) ~= "skipped"
+    end, files)
 
     -- Stamped before the request rather than after: a file edited while its
     -- symbols are being read then fails this check next time, instead of
@@ -169,7 +153,7 @@ function M.refresh()
       stamps[path] = cache.stamp(session.root .. "/" .. path, session.base)
       return stamps[path]
     end)
-    session.symbols = vim.tbl_extend("force", known, generated_symbols)
+    session.symbols = known
 
     -- Down to what this diff needs: the file caches the branch being read, not
     -- every file whose symbols have ever been asked for.

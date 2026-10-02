@@ -787,6 +787,8 @@ describe("changeset sidebar", function()
         assert.is_false(vim.tbl_contains(asked, "schema.txt"))
         assert.falsy((lines[line_of(buf, "go.sum") + 1] or ""):find("reading symbols", 1, true))
         assert.truthy(lines[line_of(buf, "mod.lua") + 1]:find("reading symbols", 1, true))
+        -- mod.lua, other.lua and .gitattributes stay held; go.sum and schema.txt count as read.
+        assert.truthy(totals(buf):find("reading symbols 2/5", 1, true))
       end)
       resolve.start = start
       assert(ok, err)

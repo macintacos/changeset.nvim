@@ -159,11 +159,9 @@ local function decided(path)
   if not session.collected then
     return false
   end
-  -- A deleted file's symbols are never read.
-  return session.symbols[path] ~= nil
-    or not vim.iter(session.files):any(function(file)
-      return file.path == path and file.status ~= "deleted"
-    end)
+  return not vim.iter(session.files):any(function(file)
+    return file.path == path and tree.read_status(file, session.symbols) == "reading"
+  end)
 end
 
 local function rebuild()
