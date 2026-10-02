@@ -1,7 +1,7 @@
 ---Where the user stands in the tree: you are here, the pick, the landing, and a restored position until it settles.
 ---It decides where the sidebar's cursor goes and which line wears each mark; the caller hands it the sidebar and acts.
 
-local tree = require("changeset.tree")
+local Rows = require("changeset.rows")
 
 local M = {}
 
@@ -86,7 +86,7 @@ end
 ---@return integer? lnum nil leaves the cursor where it is.
 function Position:land(view)
   local here = self.here
-  local row = here and tree.locate(view.rows, here.path, here.lnum)
+  local row = here and Rows.locate(view.rows, here.path, here.lnum)
   local lnum = row and nearest(view.visible, row.id)
   self.landing = { id = id_at(view.visible, lnum or view.cursor) }
   return lnum
@@ -102,13 +102,13 @@ end
 function Position:settle(view, decided, lnum)
   local wanted = self.restoring
   if wanted and wanted.here and decided(wanted.here.path) then
-    if tree.locate(view.rows, wanted.here.path, wanted.here.lnum) then
+    if Rows.locate(view.rows, wanted.here.path, wanted.here.lnum) then
       self.here = wanted.here
     end
     self:release("here")
   end
   if wanted and wanted.row and decided(wanted.row.path) then
-    local restored = view.cursor and tree.find(view.rows, wanted.row.id) and nearest(view.visible, wanted.row.id)
+    local restored = view.cursor and Rows.find(view.rows, wanted.row.id) and nearest(view.visible, wanted.row.id)
     if restored then
       lnum = restored
       -- Else a pending landing's follow would pull the cursor back off it.
@@ -200,8 +200,8 @@ end
 ---@return changeset.position.Mark[]
 function Position:marks(view)
   local here, picked = self.here, self.picked
-  local here_row = here and tree.locate(view.rows, here.path, here.lnum)
-  local picked_row = picked and tree.relocate(view.rows, picked)
+  local here_row = here and Rows.locate(view.rows, here.path, here.lnum)
+  local picked_row = picked and Rows.relocate(view.rows, picked)
   local candidates = {
     { "selected", view.focused and id_at(view.visible, view.cursor) and view.cursor },
     { "here", here_row and nearest(view.visible, here_row.id) },

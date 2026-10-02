@@ -44,16 +44,16 @@ local SEP = " › "
 ---@alias changeset.LineText fun(path: string, lnum: integer): string?
 
 ---What `build` reads of a file's lines beyond its hunks.
----@class changeset.tree.Lines
+---@class changeset.rows.Lines
 ---@field text changeset.LineText? Captions orphan hunks; without it they are named by line range alone.
 ---@field comments table<string, changeset.Comments>? By file path; a file without an entry never gets a Docs copy.
 
 ---Which kinds of changed line a unit holds.
----@class changeset.tree.Flags
+---@class changeset.rows.Flags
 ---@field comment boolean?
 ---@field code boolean? A directive counts as code.
 
----@class changeset.Node : changeset.tree.Flags
+---@class changeset.Node : changeset.rows.Flags
 ---@field sym changeset.Symbol
 ---@field children changeset.Node[]
 ---@field changed boolean
@@ -107,7 +107,7 @@ local function widen(symbols, kinds)
 end
 
 ---Note line `lnum`'s kind on `flags`; a blank line is neither comment nor code.
----@param flags changeset.tree.Flags
+---@param flags changeset.rows.Flags
 ---@param kinds changeset.LineKinds? nil when the side could not be read, so every line is code.
 ---@param lnum integer
 local function mark(flags, kinds, lnum)
@@ -120,14 +120,14 @@ local function mark(flags, kinds, lnum)
 end
 
 ---Who owns a hunk's lines.
----@class changeset.tree.Owner
----@field at fun(lnum: integer): changeset.tree.Flags The unit owning a new line; called with ascending lines.
----@field removed changeset.tree.Flags The unit owning every removed line.
+---@class changeset.rows.Owner
+---@field at fun(lnum: integer): changeset.rows.Flags The unit owning a new line; called with ascending lines.
+---@field removed changeset.rows.Flags The unit owning every removed line.
 
 ---Mark each of `hunk`'s lines on the unit that owns it.
 ---@param hunk changeset.Hunk
 ---@param comment_lines changeset.Comments
----@param owner changeset.tree.Owner
+---@param owner changeset.rows.Owner
 local function judge(hunk, comment_lines, owner)
   for lnum = hunk.lnum, hunk.lnum + hunk.count - 1 do
     mark(owner.at(lnum), comment_lines.new, lnum)
@@ -137,7 +137,7 @@ local function judge(hunk, comment_lines, owner)
   end
 end
 
----@param flags changeset.tree.Flags
+---@param flags changeset.rows.Flags
 ---@return boolean
 local function is_docs(flags)
   return flags.comment == true and not flags.code
@@ -238,19 +238,19 @@ local function added_in_tests(nodes, hunk)
 end
 
 ---One of the copies a file can show as: its path section's, Tests' or Docs'.
----@alias changeset.tree.Copy "kept"|"tests"|"docs"
+---@alias changeset.rows.Copy "kept"|"tests"|"docs"
 
 ---`file`'s hunks credited to its symbols.
----@class changeset.tree.Credited
+---@class changeset.rows.Credited
 ---@field roots changeset.Node[]
----@field orphans table<changeset.tree.Copy, changeset.Hunk[]> Hunks that touch no symbol: under `docs` those whose changed lines hold a comment and no code, under `kept` the rest.
+---@field orphans table<changeset.rows.Copy, changeset.Hunk[]> Hunks that touch no symbol: under `docs` those whose changed lines hold a comment and no code, under `kept` the rest.
 ---@field test_stat changeset.diff.Stat Added lines inside a test subtree, and a hunk's removed lines when `attribute` hands them to a test.
 
 ---Credit `file`'s hunks to the symbol tree `roots`.
 ---@param file changeset.File
 ---@param roots changeset.Node[] From `nest`.
 ---@param comment_lines changeset.Comments?
----@return changeset.tree.Credited
+---@return changeset.rows.Credited
 local function credit(file, roots, comment_lines)
   local out = { roots = roots, orphans = { kept = {}, docs = {} }, test_stat = { added = 0, removed = 0 } }
   for _, hunk in ipairs(file.hunks) do
@@ -276,7 +276,7 @@ end
 
 ---The copy a changed node's own change puts it in.
 ---@param node changeset.Node
----@return changeset.tree.Copy
+---@return changeset.rows.Copy
 local function destination(node)
   return is_docs(node) and "docs" or node.test and "tests" or "kept"
 end
@@ -284,7 +284,7 @@ end
 ---Split credited `nodes` between the path section's copy, the Tests copy and the Docs copy. A node goes where its
 ---own change puts it, and bare to every other copy holding a descendant, so that descendant stays placed under it.
 ---@param nodes changeset.Node[]
----@return table<changeset.tree.Copy, changeset.Node[]>
+---@return table<changeset.rows.Copy, changeset.Node[]>
 local function split(nodes)
   local out = { kept = {}, tests = {}, docs = {} }
   for _, node in ipairs(nodes) do
@@ -520,13 +520,13 @@ local function append(section, row, stat)
 end
 
 ---What one copy of a file lists.
----@class changeset.tree.Part
+---@class changeset.rows.Part
 ---@field nodes changeset.Node[]
 ---@field orphans changeset.Hunk[]
 
 ---Hang `part`'s symbols under `row`, then its orphans under "Other changes".
 ---@param row changeset.Row A file row.
----@param part changeset.tree.Part
+---@param part changeset.rows.Part
 ---@param line_text changeset.LineText?
 ---@return changeset.Row row
 local function fill(row, part, line_text)
@@ -541,9 +541,9 @@ end
 ---its test lines less the Docs units inside them when the path's copy shows too, and whichever of those two
 ---shows takes the rest. A lone copy carries the whole stat.
 ---@param file changeset.File
----@param credited changeset.tree.Credited
----@param shown table<changeset.tree.Copy, true>
----@return table<changeset.tree.Copy, changeset.diff.Stat>
+---@param credited changeset.rows.Credited
+---@param shown table<changeset.rows.Copy, true>
+---@return table<changeset.rows.Copy, changeset.diff.Stat>
 local function shares(file, credited, shown)
   local copies = vim.tbl_keys(shown)
   if #copies <= 1 then
@@ -582,7 +582,7 @@ end
 ---@param section_rows table<changeset.SectionKey, changeset.Row>
 ---@param file changeset.File
 ---@param symbols_by_path table<string, changeset.Symbol[]>
----@param lines changeset.tree.Lines
+---@param lines changeset.rows.Lines
 local function add_file(section_rows, file, symbols_by_path, lines)
   local key = sections.classify(file.path, file.generated)
   local section = section_rows[key]
@@ -623,7 +623,7 @@ end
 ---answered, or when they are never read.
 ---@param files changeset.File[] Hunks ascending by line, as `git diff` emits them.
 ---@param symbols_by_path table<string, changeset.Symbol[]> Flat `symbols.flatten` output by file path.
----@param lines changeset.tree.Lines?
+---@param lines changeset.rows.Lines?
 ---@return changeset.Row[]
 function M.build(files, symbols_by_path, lines)
   local section_rows = {}

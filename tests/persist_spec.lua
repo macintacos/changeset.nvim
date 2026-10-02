@@ -1,6 +1,6 @@
 local changeset = require("changeset")
 local render = require("changeset.render")
-local tree = require("changeset.tree")
+local Rows = require("changeset.rows")
 local window = require("changeset.window")
 local Fixture = require("support.git")
 local Cursor = require("support.cursor")
@@ -16,7 +16,7 @@ end
 ---@param ... string Symbol names, outermost first.
 ---@return string
 local function row_id(path, ...)
-  return table.concat({ tree.section_id("implementation"), path, ... }, "\0")
+  return table.concat({ Rows.section_id("implementation"), path, ... }, "\0")
 end
 
 ---Restore as a session read does: a leftover sidebar window, the recorded global, then

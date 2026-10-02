@@ -1,30 +1,30 @@
 local position = require("changeset.position")
-local tree = require("changeset.tree")
-local Rows = require("support.rows")
+local Rows = require("changeset.rows")
+local Changes = require("support.changes")
 
-local FILES = { Rows.file("mod.lua", { 5, 15, 30 }), Rows.file("other.lua", { 3 }) }
+local FILES = { Changes.file("mod.lua", { 5, 15, 30 }), Changes.file("other.lua", { 3 }) }
 -- `Store` holds the changed `load`, `Storefront` beside it changed too, and line 30 is in no symbol.
 local SYMBOLS = {
-  Rows.sym("Store", "Class", 0, 1, 10),
-  Rows.sym("load", "Method", 1, 3, 8),
-  Rows.sym("Storefront", "Class", 0, 12, 20),
+  Changes.sym("Store", "Class", 0, 1, 10),
+  Changes.sym("load", "Method", 1, 3, 8),
+  Changes.sym("Storefront", "Class", 0, 12, 20),
 }
 
 -- Every row on screen:
 --  1 Implementation   4 load              7 L30                10 L3
 --  2 mod.lua          5 Storefront        8 other.lua
 --  3 Store            6 Other changes     9 Other changes
-local ROWS = tree.build(FILES, { ["mod.lua"] = SYMBOLS, ["other.lua"] = {} })
+local ROWS = Rows.build(FILES, { ["mod.lua"] = SYMBOLS, ["other.lua"] = {} })
 -- Before mod.lua's symbols are in: 1 Implementation, 2 mod.lua, 3 other.lua, 4 Other changes, 5 L3.
-local READING = tree.build(FILES, { ["other.lua"] = {} })
+local READING = Rows.build(FILES, { ["other.lua"] = {} })
 
 local RS = "src/session.rs"
 -- A file shown in two sections: 1 Implementation, 2 session.rs, 3 load, 4 Tests, 5 session.rs, 6 tests, 7 refreshes.
-local SPLIT = tree.build({ Rows.file(RS, { 1, 4 }) }, {
+local SPLIT = Rows.build({ Changes.file(RS, { 1, 4 }) }, {
   [RS] = {
-    Rows.sym("load", "Function", 0, 1, 1),
-    Rows.sym("tests", "Module", 0, 3, 6),
-    Rows.sym("refreshes", "Function", 1, 4, 5),
+    Changes.sym("load", "Function", 0, 1, 1),
+    Changes.sym("tests", "Module", 0, 3, 6),
+    Changes.sym("refreshes", "Function", 1, 4, 5),
   },
 })
 
@@ -69,7 +69,7 @@ end
 ---@param id string
 ---@return changeset.Row
 local function row(id)
-  return assert(tree.find(ROWS, id), id)
+  return assert(Rows.find(ROWS, id), id)
 end
 
 local function decided()
@@ -161,10 +161,10 @@ describe("changeset.position", function()
     end)
 
     it("marks a picked chain on the symbol it jumps to once the chain is opened out", function()
-      local compressed = tree.compress(ROWS, function()
+      local compressed = Rows.compress(ROWS, function()
         return false
       end)
-      local chain = assert(tree.find(compressed, STORE))
+      local chain = assert(Rows.find(compressed, STORE))
       local p = position.new()
 
       p:pick(chain)
@@ -185,7 +185,8 @@ describe("changeset.position", function()
       local p = position.new()
       p:pick(row(LOAD))
       -- `load` is gone, and `Store` itself changed: 1 Implementation, 2 mod.lua, 3 Store.
-      local rebuilt = tree.build(FILES, { ["mod.lua"] = { Rows.sym("Store", "Class", 0, 1, 10) }, ["other.lua"] = {} })
+      local rebuilt =
+        Rows.build(FILES, { ["mod.lua"] = { Changes.sym("Store", "Class", 0, 1, 10) }, ["other.lua"] = {} })
 
       assert.same({ { kind = "picked", lnum = 3 } }, p:marks(view(rebuilt)))
     end)

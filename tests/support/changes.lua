@@ -1,4 +1,4 @@
----Inputs for `tree.build`: changed files and the symbols read from them.
+---Inputs for `Rows.build`: changed files and the symbols read from them.
 
 local M = {}
 

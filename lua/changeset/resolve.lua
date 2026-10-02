@@ -2,7 +2,7 @@
 ---comments at the base and now.
 ---
 ---This is the I/O shell: it loads buffers, reads base blobs, waits for clients, and hands the
----flattened trees and comment lines back. Everything it learns goes to `changeset.tree`, which does
+---flattened trees and comment lines back. Everything it learns goes to `changeset.rows`, which does
 ---the thinking without touching the editor.
 
 local attributes = require("changeset.attributes")

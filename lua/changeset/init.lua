@@ -12,7 +12,7 @@ local config = require("changeset.config")
 local draw = require("changeset.draw")
 local render = require("changeset.render")
 local sidebar_state = require("changeset.sidebar_state")
-local tree = require("changeset.tree")
+local Rows = require("changeset.rows")
 local view = require("changeset.view")
 local window = require("changeset.window")
 
@@ -129,12 +129,12 @@ end
 ---@param lnum integer
 ---@return string?
 local function line_text(path, lnum)
-  local session = build.current()
+  local tree = build.current()
   if lnum < 1 then
     return nil
   end
-  assert(session, "changeset: no tree built yet")
-  local full = session.root .. "/" .. path
+  assert(tree, "changeset: no tree built yet")
+  local full = tree.root .. "/" .. path
   local buf = vim.fn.bufnr(full)
   if buf ~= -1 and vim.api.nvim_buf_is_loaded(buf) then
     return vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1]
@@ -148,13 +148,13 @@ end
 ---@param path string
 ---@return boolean
 local function decided(path)
-  local session = build.current()
-  assert(session, "changeset: no tree built yet")
-  if not session.collected then
+  local tree = build.current()
+  assert(tree, "changeset: no tree built yet")
+  if not tree.collected then
     return false
   end
-  return not vim.iter(session.files):any(function(file)
-    return file.path == path and tree.read_status(file, session.symbols) == "reading"
+  return not vim.iter(tree.files):any(function(file)
+    return file.path == path and Rows.read_status(file, tree.symbols) == "reading"
   end)
 end
 
@@ -163,7 +163,7 @@ local function rebuild()
   assert(state, "changeset: no tree built yet")
   -- Taken before the rows change: whether the cursor moved is judged by the row it was on.
   local before = (draw.row_at_cursor() or {}).id
-  state.rows = tree.build(state.tree.files, state.tree.symbols, { text = line_text, comments = state.tree.comments })
+  state.rows = Rows.build(state.tree.files, state.tree.symbols, { text = line_text, comments = state.tree.comments })
   redraw()
   apply(state.position:rebuilt(draw.view(), before, decided))
 end
@@ -204,15 +204,15 @@ function M.rows()
   end
   -- The first ask builds the tree too, and a picker cannot fill in behind it the way the sidebar does.
   vim.wait(DIFF_WAIT_MS, function()
-    local session = build.current()
-    return not session or session.collected
+    local tree = build.current()
+    return not tree or tree.collected
   end, 10)
   local state = sidebar_state.current()
   if not (state and state.tree.collected) then
     return nil, "still reading the diff"
   end
   return {
-    rows = view.by_kind(tree.files(state.rows), state.view:hidden()),
+    rows = view.by_kind(Rows.files(state.rows), state.view:hidden()),
     root = state.tree.root,
     ref = state.tree.ref,
   }

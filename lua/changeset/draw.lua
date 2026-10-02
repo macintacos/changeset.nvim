@@ -4,7 +4,7 @@
 local icons = require("changeset.icons")
 local render = require("changeset.render")
 local sidebar_state = require("changeset.sidebar_state")
-local tree = require("changeset.tree")
+local Rows = require("changeset.rows")
 local view = require("changeset.view")
 local window = require("changeset.window")
 
@@ -146,7 +146,7 @@ local function summary()
     -- A deleted file's symbols are never read.
     if file.status ~= "deleted" then
       readable = readable + 1
-      pending = pending + (tree.read_status(file, state.tree.symbols) == "reading" and 1 or 0)
+      pending = pending + (Rows.read_status(file, state.tree.symbols) == "reading" and 1 or 0)
     end
   end
   return {
