@@ -4,7 +4,7 @@ local Fixture = require("support.git")
 local Sidebar = require("support.sidebar")
 require("support.gh")
 
----@param tree changeset.Session?
+---@param tree changeset.Tree?
 ---@return string[]
 local function paths_of(tree)
   return vim.tbl_map(function(file)
@@ -273,6 +273,15 @@ describe("changeset tree", function()
       assert.is_true(vim.wait(10000, function()
         local tree = changeset._tree()
         return tree ~= nil and tree.ref == "parent" and vim.deep_equal({ "child.lua" }, paths_of(tree))
+      end, 25))
+    end)
+
+    it("redraws the open sidebar on the tree gh's answer builds", function()
+      changeset.open()
+
+      assert.is_true(vim.wait(10000, function()
+        local text = Sidebar.text()
+        return text:find("child.lua", 1, true) ~= nil and not text:find("parent.lua", 1, true)
       end, 25))
     end)
   end)

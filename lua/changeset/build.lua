@@ -1,4 +1,5 @@
----Builds the tree for the current buffer's repository, and keeps its diff and symbols fresh.
+---Builds the tree for the current buffer's repository, keeps its diff and symbols fresh, and announces each change
+---to its subscribers.
 
 local Git = require("changeset.git")
 local Paths = require("changeset.paths")
@@ -17,8 +18,7 @@ local SAVE_DEBOUNCE_MS = 1000
 
 local M = {}
 
----The tree as the pipeline keeps it. Only this module writes these fields; the sidebar keeps its own on the
----same table (`changeset.Session`).
+---The tree as the pipeline keeps it. Only this module writes these fields.
 ---@class changeset.Tree
 ---@field root string
 ---@field base string
@@ -35,10 +35,6 @@ local M = {}
 ---@field timer uv.uv_timer_t?
 ---@field request table? The refresh whose answers this session is still listening for.
 
----What the sidebar supplies to a new tree.
----@class changeset.BuildHooks
----@field view fun(root: string, branch: string): table The sidebar's own fields for a new tree. Asked for here, not added after `build()` returns: a PR target landing builds with no sidebar code on the stack.
-
 ---What happened to the tree: its `diff` read, one file's `symbols` read, only its `pr` number changed, or its
 ---diff `failed` to read.
 ---@alias changeset.TreeEvent "diff"|"symbols"|"pr"|"failed"
@@ -52,9 +48,6 @@ local memo
 
 ---@type uv.uv_timer_t?
 local save_timer
-
----@type changeset.BuildHooks
-local hooks
 
 ---@type table<fun(event: changeset.TreeEvent, tree: changeset.Tree), true>
 local subscribers = {}
@@ -232,8 +225,7 @@ function M.build()
     memo = { root = root, entries = cache.load(cache.path(root)) }
   end
 
-  local sidebar_fields = hooks.view(root, branch)
-  session = vim.tbl_extend("error", {
+  session = {
     root = root,
     base = base,
     ref = point.ref,
@@ -244,7 +236,7 @@ function M.build()
     collected = false,
     symbols = {},
     comments = {},
-  }, sidebar_fields)
+  }
   M.refresh()
   return true
 end
@@ -264,24 +256,16 @@ fork_point.subscribe(function(root, branch, point)
   M.build()
 end)
 
----The tree the last build() made, with the fields BuildHooks.view supplied; nil before the first.
----Read it again after anything that can replace the tree: `build()`, `vim.wait`, a later callback.
----@return changeset.Session?
+---The tree the last build() made; nil before the first.
+---@return changeset.Tree?
 function M.current()
-  return session --[[@as changeset.Session?]]
+  return session
 end
 
 ---Hear what happens to the tree. Subscribing `fn` again does nothing.
 ---@param fn fun(event: changeset.TreeEvent, tree: changeset.Tree)
 function M.subscribe(fn)
   subscribers[fn] = true
-end
-
----Register what the sidebar supplies to a new tree. Before the first
----`build()`: nothing here runs without them.
----@param sidebar changeset.BuildHooks
-function M.attach(sidebar)
-  hooks = sidebar
 end
 
 -- Fires: a language server attaching to any buffer. A file no server answered for

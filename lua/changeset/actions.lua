@@ -1,11 +1,12 @@
 ---What each sidebar key does, and the keymaps that bind them.
----The fold, step and filter keys ask the session's view, then move the cursor or redraw.
+---The fold, step and filter keys ask the sidebar's view, then move the cursor or redraw.
 
 local Paths = require("changeset.paths")
 local build = require("changeset.build")
 local draw = require("changeset.draw")
 local help = require("changeset.help")
 local icons = require("changeset.icons")
+local sidebar_state = require("changeset.sidebar_state")
 local view = require("changeset.view")
 local window = require("changeset.window")
 
@@ -34,7 +35,7 @@ end
 ---@param how "reuse"|"vsplit"|"split"|"tab"
 ---@param hooks changeset.ActionHooks
 local function commit(how, hooks)
-  local session = build.current()
+  local state = sidebar_state.current()
   local row = draw.row_at_cursor()
   if not row or row.kind == "section" then
     return
@@ -42,8 +43,8 @@ local function commit(how, hooks)
   if row.kind == "file" and row.status == "deleted" then
     return vim.notify(row.path .. " was deleted on this branch", vim.log.levels.INFO)
   end
-  assert(session, "changeset: no open session")
-  if window.commit(session.root .. "/" .. row.path, row.lnum or 1, how) then
+  assert(state, "changeset: no open session")
+  if window.commit(state.tree.root .. "/" .. row.path, row.lnum or 1, how) then
     hooks.pick(row)
   end
 end
@@ -51,11 +52,11 @@ end
 ---@param delta integer
 ---@param preview fun()
 local function step(delta, preview)
-  local session, lnum = build.current(), cursor()
-  if not (session and lnum) then
+  local state, lnum = sidebar_state.current(), cursor()
+  if not (state and lnum) then
     return
   end
-  move(session.view:step(lnum, delta))
+  move(state.view:step(lnum, delta))
   preview()
 end
 
@@ -112,12 +113,12 @@ function M.bind_step_keys(keys, preview)
 end
 
 ---Open the symbol-kind filter menu, redrawing as kinds are toggled.
----@param open_session changeset.Session
+---@param open_session changeset.SidebarState
 ---@param redraw fun() Redraw the tree.
 local function open_kind_menu(open_session, redraw)
   require("changeset.menu").open({
-    root = open_session.root,
-    branch = open_session.branch,
+    root = open_session.tree.root,
+    branch = open_session.tree.branch,
     file = open_session.file,
     counts = view.kind_counts(open_session.rows),
     hidden = open_session.view:hidden(),
@@ -133,7 +134,7 @@ local function open_kind_menu(open_session, redraw)
 end
 
 ---Narrow the tree from the command line, restoring the previous query on cancel.
----@param open_session changeset.Session
+---@param open_session changeset.SidebarState
 ---@param redraw fun() Redraw the tree.
 local function prompt_filter(open_session, redraw)
   local previous_query = open_session.view:query()
@@ -170,21 +171,21 @@ function M.set_keymaps(buf, keys, hooks)
   local function redraw()
     draw.draw(keys.filter_kinds)
   end
-  -- The window can outlive the session: a `build()` for another repository lets go
-  -- of the tree while a sidebar stands. Handing the session down rather than letting
+  -- The window can outlive the tree: a `build()` for another repository lets go
+  -- of it while a sidebar stands. Handing the sidebar's state down rather than letting
   -- handlers reach for it means the check that it exists is the same line that
   -- passes it on.
   ---@param lhs string|false
-  ---@param fn fun(open_session: changeset.Session, hooks: changeset.ActionHooks)
+  ---@param fn fun(open_session: changeset.SidebarState, hooks: changeset.ActionHooks)
   ---@param desc string
   local function map(lhs, fn, desc)
     if not lhs then
       return
     end
     set(lhs, function()
-      local session = build.current()
-      if session then
-        fn(session, hooks)
+      local state = sidebar_state.current()
+      if state then
+        fn(state, hooks)
       end
     end, desc)
   end

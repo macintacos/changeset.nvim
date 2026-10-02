@@ -1,9 +1,9 @@
----Puts the session's tree on the sidebar's buffer, through the pure `render`: lines, marks, header and row states.
----The session's `view` decides what is on each line; `band_for` builds a row's preview band.
+---Puts the tree on the sidebar's buffer, through the pure `render`: lines, marks, header and row states.
+---The sidebar's state's `view` decides what is on each line; `band_for` builds a row's preview band.
 
-local build = require("changeset.build")
 local icons = require("changeset.icons")
 local render = require("changeset.render")
+local sidebar_state = require("changeset.sidebar_state")
 local tree = require("changeset.tree")
 local view = require("changeset.view")
 local window = require("changeset.window")
@@ -32,15 +32,15 @@ end
 ---The row under the sidebar's cursor.
 ---@return changeset.Row?
 function M.row_at_cursor()
-  local session = build.current()
-  if not session then
+  local state = sidebar_state.current()
+  if not state then
     return nil
   end
   local win = window.win()
   if not win then
     return nil
   end
-  return session.view:row(vim.api.nvim_win_get_cursor(win)[1])
+  return state.view:row(vim.api.nvim_win_get_cursor(win)[1])
 end
 
 ---The preview band's contents for `row`.
@@ -60,15 +60,15 @@ function M.band_for(row, jump)
   }
 end
 
----The sidebar as drawn, for `changeset.position`; errors when there is no session.
+---The sidebar as drawn, for `changeset.position`; errors when there is no state.tree.
 ---@return changeset.position.View
 function M.view()
-  local session = build.current()
-  assert(session, "changeset: no open session")
+  local state = sidebar_state.current()
+  assert(state, "changeset: no open session")
   local win = window.win()
   return {
-    rows = session.rows,
-    visible = session.view:visible(),
+    rows = state.rows,
+    visible = state.view:visible(),
     cursor = win and vim.api.nvim_win_get_cursor(win)[1],
     focused = window.is_focused(),
   }
@@ -91,14 +91,14 @@ end
 
 ---Mark the rows `changeset.position` says are selected, where you are, and last opened.
 function M.paint()
-  local session = build.current()
+  local state = sidebar_state.current()
   local buf, win = window.buf(), window.win()
-  if not (session and buf and win) then
+  if not (state and buf and win) then
     return
   end
   vim.api.nvim_buf_clear_namespace(buf, rows_ns, 0, -1)
   local width = vim.api.nvim_win_get_width(win)
-  for _, mark in ipairs(session.position:marks(M.view())) do
+  for _, mark in ipairs(state.position:marks(M.view())) do
     mark_row(buf, mark.lnum, render.state_marks(mark.kind, width))
   end
 end
@@ -138,22 +138,22 @@ end
 ---What the header says about the branch, as the tree stands.
 ---@return changeset.Summary
 local function summary()
-  local session = build.current()
-  assert(session, "changeset: no open session")
+  local state = sidebar_state.current()
+  assert(state, "changeset: no open session")
   local added, removed, readable, pending = 0, 0, 0, 0
-  for _, file in ipairs(session.files) do
+  for _, file in ipairs(state.tree.files) do
     added, removed = added + (file.added or 0), removed + (file.removed or 0)
     -- A deleted file's symbols are never read.
     if file.status ~= "deleted" then
       readable = readable + 1
-      pending = pending + (tree.read_status(file, session.symbols) == "reading" and 1 or 0)
+      pending = pending + (tree.read_status(file, state.tree.symbols) == "reading" and 1 or 0)
     end
   end
   return {
-    ref = session.ref,
-    pr = session.pr,
-    files = #session.files,
-    commits = session.commits,
+    ref = state.tree.ref,
+    pr = state.tree.pr,
+    files = #state.tree.files,
+    commits = state.tree.commits,
     added = added,
     removed = removed,
     reading = pending > 0 and { done = readable - pending, total = readable } or nil,
@@ -177,12 +177,12 @@ end
 ---@param win integer
 ---@param width integer
 local function draw_header(buf, win, width)
-  local session = build.current()
-  assert(session, "changeset: no open session")
+  local state = sidebar_state.current()
+  assert(state, "changeset: no open session")
   local header = summary()
   vim.wo[win].winbar = render.header(header, width)
   -- Totals before the first diff would claim that nothing changed.
-  if session.collected then
+  if state.tree.collected then
     vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {
       virt_lines = { render.header_totals(header, width), { { "" } } },
       virt_lines_above = true,
@@ -191,29 +191,29 @@ local function draw_header(buf, win, width)
   M.reveal_header(win)
 end
 
----Draw the session's view of the tree, then its header and row states.
+---Draw the sidebar's view of the tree, then its header and row states.
 ---@param kinds_key string|false? The key bound to the kind menu, which the hidden-kinds note names.
 function M.draw(kinds_key)
-  local session = build.current()
+  local state = sidebar_state.current()
   local buf, win = window.buf(), window.win()
   if not (buf and win and vim.api.nvim_buf_is_valid(buf)) then
     return
   end
-  assert(session, "changeset: no open session")
+  assert(state, "changeset: no open session")
 
   local width = vim.api.nvim_win_get_width(win)
   local lines, lnum =
-    session.view:show(session.rows, { icon = icon_for, width = width, cursor = vim.api.nvim_win_get_cursor(win)[1] })
+    state.view:show(state.rows, { icon = icon_for, width = width, cursor = vim.api.nvim_win_get_cursor(win)[1] })
 
   local text = vim.tbl_map(function(line)
     return line.text
   end, lines)
-  if #text == 0 and session.collected then
+  if #text == 0 and state.tree.collected then
     text = {
       render.empty_message({
-        on_default_branch = session.branch == session.default_branch,
-        branch = session.branch,
-        ref = session.ref,
+        on_default_branch = state.tree.branch == state.tree.default_branch,
+        branch = state.tree.branch,
+        ref = state.tree.ref,
       }),
     }
   end
@@ -226,7 +226,7 @@ function M.draw(kinds_key)
 
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   apply_marks(buf, lines)
-  local hiding = view.hiding(view.kind_counts(session.rows), session.view:hidden())
+  local hiding = view.hiding(view.kind_counts(state.rows), state.view:hidden())
   hidden_note_line(buf, #text - 1, render.hidden_note(hiding, width - 1, kinds_key))
 
   vim.api.nvim_win_set_cursor(win, { lnum, 0 })
