@@ -168,15 +168,20 @@ local function rebuild()
   apply(state.position:rebuilt(draw.view(), before, decided))
 end
 
+---What the sidebar does as the tree changes.
+---@type table<changeset.TreeEvent, fun()>
+local on_tree_event = {
+  diff = rebuild,
+  symbols = rebuild,
+  pr = redraw,
+  failed = function()
+    assert(sidebar_state.current(), "changeset: no tree built yet").position:failed()
+  end,
+}
+
 -- Fires: the tree reading its diff or a file's symbols, its PR changing, or its diff failing to read.
 build.subscribe(function(event)
-  if event == "diff" or event == "symbols" then
-    rebuild()
-  elseif event == "pr" then
-    redraw()
-  else
-    assert(sidebar_state.current()).position:failed()
-  end
+  on_tree_event[event]()
 end)
 
 ---The sidebar's footer, which its statusline evaluates on every redraw.
@@ -210,6 +215,10 @@ function M.rows()
   local state = sidebar_state.current()
   if not (state and state.tree.collected) then
     return nil, "still reading the diff"
+  end
+  -- A tree whose diff landed before the sidebar loaded announced nothing the sidebar heard.
+  if #state.rows == 0 then
+    rebuild()
   end
   return {
     rows = view.by_kind(Rows.files(state.rows), state.view:hidden()),

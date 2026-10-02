@@ -280,6 +280,61 @@ describe("changeset tree", function()
     end)
   end)
 
+  describe("on a branch whose open PR targets the branch it forked from", function()
+    before_each(function()
+      Fixture.feature_one_file(tmp)
+      vim.cmd.edit("mod.lua")
+      vim.env.FAKE_GH_PR = '{"baseRefName":"trunk","number":7,"state":"OPEN"}'
+    end)
+
+    after_each(function()
+      vim.env.FAKE_GH_PR = nil
+    end)
+
+    it("names the PR in the open sidebar's header", function()
+      changeset.open()
+
+      assert.is_true(vim.wait(10000, function()
+        local win = window.win()
+        return win ~= nil and vim.wo[win].winbar:find("#7", 1, true) ~= nil
+      end, 25))
+    end)
+  end)
+
+  describe("when the diff cannot be read", function()
+    local collect, notify
+
+    before_each(function()
+      Fixture.feature_one_file(tmp)
+      vim.cmd.edit("mod.lua")
+      collect, notify = require("changeset.diff").collect, vim.notify
+    end)
+
+    after_each(function()
+      require("changeset.diff").collect, vim.notify = collect, notify
+    end)
+
+    it("drops a restored position waiting on it", function()
+      local sidebar_state = require("changeset.sidebar_state")
+      build.build()
+      assert.is_true(vim.wait(10000, function()
+        return assert(build.current()).collected
+      end, 25))
+      local position = assert(sidebar_state.current()).position
+      position:restore({ here = { path = "mod.lua", lnum = 5 } }, require("changeset.draw").view(), function()
+        return false
+      end)
+      require("changeset.diff").collect = function(_, _, callback)
+        callback(nil, "boom")
+      end
+      vim.notify = function() end
+
+      build.refresh()
+
+      assert.not_nil(position:saved(nil))
+    end)
+  end)
+
   describe("with nothing to diff against", function()
     local notify, notified
 
