@@ -123,4 +123,60 @@ describe("PR Review Mode", function()
     end, 20))
     assert.is_nil(revision(theirs[1]))
   end)
+
+  it("diffs a buffer opened from a second repository against that repository's merge base", function()
+    review.fixture(dir, "first", { "a.txt" })
+    local ours = edit({ dir .. "/a.txt" })
+    local base = review.merge_base(dir)
+    assert.is_true(await(ours, base, 5000))
+    other = review.repo()
+    review.fixture(other, "second", { "b.txt" })
+
+    local theirs = edit({ other .. "/b.txt" })
+
+    assert.is_true(await(theirs, review.merge_base(other), 5000))
+    assert.is_true(await(ours, base, 5000))
+  end)
+
+  it("keeps a branch switched off in one repository on in another with the same branch", function()
+    review.fixture(dir, "x", { "a.txt" })
+    local ours = edit({ dir .. "/a.txt" })
+    assert.is_true(await(ours, review.merge_base(dir), 5000))
+    require("changeset.review").toggle()
+    assert.is_true(await(ours, nil, 5000))
+    other = review.repo()
+    review.fixture(other, "x", { "b.txt" })
+
+    local theirs = edit({ other .. "/b.txt" })
+
+    assert.is_true(await(theirs, review.merge_base(other), 5000))
+  end)
+
+  it("switches off from a buffer of the repository the mode left without re-entering it", function()
+    other = review.repo()
+    review.fixture(other, "left", { "b.txt" })
+    local theirs = edit({ other .. "/b.txt" })
+    local their_base = review.merge_base(other)
+    assert.is_true(await(theirs, their_base, 5000))
+    review.fixture(dir, "followed", { "a.txt" })
+    assert.is_true(await(edit({ dir .. "/a.txt" }), review.merge_base(dir), 5000))
+    vim.api.nvim_set_current_buf(theirs[1])
+    assert.is_true(review.settle())
+    local moves = review.moves_to[their_base]
+    local notices, notify = {}, vim.notify
+    vim.notify = function(msg)
+      notices[#notices + 1] = msg
+    end
+
+    local ok, err = pcall(function()
+      require("changeset.review").toggle()
+      assert.is_true(await(theirs, nil, 5000))
+      assert.is_true(review.settle())
+    end)
+    vim.notify = notify
+
+    assert(ok, err)
+    assert.are.equal(moves, review.moves_to[their_base])
+    assert.are.same({ "PR Review Mode: off" }, notices)
+  end)
 end)

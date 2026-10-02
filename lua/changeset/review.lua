@@ -5,17 +5,17 @@
 ---updated, or the one `toggle()` ran in. A stacked branch whose PR gh has not
 ---named yet starts on the default-branch base and moves once the answer lands.
 ---Requiring it registers nothing; once `activate()` has run, it turns itself on
----for every branch but the default, `toggle()` turns it off, and each branch
----remembers that choice for the session.
+---for every branch but the default, `toggle()` turns it off, and each
+---repository's branch remembers that choice for the session.
 local Git = require("changeset.git")
 local fork_point = require("changeset.fork_point")
 
 local M = {}
 
----@type table<string, true> Branches the mode was switched off on.
+---@type table<string, true> Repository and branch pairs the mode was switched off on, keyed `root .. "\n" .. branch`.
 local dismissed = {}
 
----@type string? Branch the global base was last resolved for.
+---@type string? Branch the base was last resolved for.
 local applied
 
 ---@type string? Base every buffer should diff against; nil is the index.
@@ -39,7 +39,7 @@ local function is_on()
   return want ~= nil
 end
 
--- Reaches into gitsigns internals: its buffer cache, config.base, git_obj.revision
+-- Reaches into gitsigns internals: its buffer cache, git_obj.revision
 -- and repo.toplevel, and non-global change_base reading current_buf() before it
 -- yields.
 
@@ -86,7 +86,7 @@ local function reconcile()
   end
 end
 
----Point every owned buffer, and every buffer attached from now on, at `base`.
+---Point every owned buffer at `base`; `reconcile` moves ones attached later.
 ---@param base string?
 ---@param done fun(err: string?)? Called once every move has landed, with the first error.
 local function apply(base, done)
@@ -95,7 +95,6 @@ local function apply(base, done)
   if base then
     ours[base] = true
   end
-  require("gitsigns.config").config.base = base
   local left, first = 1, nil
   local function landed(err)
     first = first or err
@@ -180,6 +179,14 @@ local function enable(root, branch, report)
   end
 end
 
+---Whether the mode turns itself on for `branch` at `root`.
+---@param root string
+---@param branch string
+---@return boolean
+local function wanted(root, branch)
+  return not dismissed[root .. "\n" .. branch] and branch ~= Git.default_base(root)
+end
+
 ---Follow a change of repository or branch. Re-resolves the base even when the
 ---mode is already on, since the fork point belongs to the branch left behind.
 ---@param root string
@@ -189,12 +196,10 @@ local function sync(root, branch)
     return
   end
   toplevel, applied = root, branch
-  if dismissed[branch] or branch == Git.default_base(root) then
-    if is_on() then
-      apply(nil)
-    end
-  else
+  if wanted(root, branch) then
     enable(root, branch, false)
+  elseif is_on() then
+    apply(nil)
   end
 end
 
@@ -222,13 +227,18 @@ function M.toggle()
   if not root or not branch then
     return vim.notify("PR Review Mode: no buffer gitsigns tracks", vim.log.levels.WARN)
   end
-  sync(root, branch)
-  if is_on() then
+  local on = is_on()
+  if root ~= toplevel or branch ~= applied then
+    toplevel, applied = root, branch
+    on = wanted(root, branch)
+  end
+  if on then
+    -- Also drops the old repository's `want` and `waiting`, which would claim this one's buffers.
     apply(nil)
-    dismissed[branch] = true
+    dismissed[root .. "\n" .. branch] = true
     vim.notify("PR Review Mode: off")
   else
-    dismissed[branch] = nil
+    dismissed[root .. "\n" .. branch] = nil
     enable(root, branch, true)
   end
 end

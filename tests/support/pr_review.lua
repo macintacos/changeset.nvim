@@ -5,9 +5,8 @@ local support = require("support.git")
 
 vim.opt.rtp:prepend(require("support.deps").path("gitsigns.nvim"))
 
--- `changeset.review` state outlives each case. A fresh `review.repo()` per case isolates
--- it and `fork_point`'s cache, except `dismissed`, keyed by branch alone: each case opens
--- its first buffer on a branch other than the one the case before it ended on.
+-- `changeset.review` state outlives each case; a fresh `review.repo()` per case isolates
+-- it and `fork_point`'s cache, since both are keyed by repository.
 require("gitsigns").setup()
 require("changeset.review").activate()
 
@@ -143,9 +142,6 @@ function M.teardown(dir, cwd)
   -- Let every base change in flight land before its repo is deleted under it.
   assert(M.settle(), "a base change never landed")
   vim.cmd("silent! %bwipeout!")
-  -- The next fixture is another repo, where this one's merge base does not exist
-  -- and every attach against it would fail.
-  require("gitsigns").reset_base(true)
   vim.fn.chdir(cwd)
   vim.fn.delete(dir, "rf")
 end

@@ -134,8 +134,8 @@ describe("PR Review Mode", function()
 
     support.git({ "switch", "-q", "counted" }, dir)
     local base = review.merge_base(dir)
-    -- The first buffer reaching the base marks the switch; the rest attach while
-    -- the moves run, onto the base already.
+    -- The first buffer reaching the base marks the switch; the rest attach on the
+    -- index while the moves run, and move once each.
     assert.is_true(vim.wait(10000, function()
       return revision(bufs[1]) == base
     end, 1))
@@ -143,7 +143,7 @@ describe("PR Review Mode", function()
 
     assert.is_true(await(bufs, base, 10000))
     assert.is_true(settle())
-    assert.equal(12, review.moves - before)
+    assert.equal(18, review.moves - before)
   end)
 
   it("moves a buffer that lost its base once, across a burst of updates", function()
