@@ -5,12 +5,8 @@ local support = require("support.git")
 
 vim.opt.rtp:prepend(require("support.deps").path("gitsigns.nvim"))
 
--- `changeset.review` is required once, so its state outlives each case. `want`,
--- `toplevel`, `ours` and `moving` are tied to a fixture repo each teardown deletes,
--- so they own nothing in the next case; `dismissed` and the branch memo `applied`
--- persist, so each case opens its first buffer on a branch other than the one the
--- case before it ended on. A gh lookup still in flight is dropped by the next case's
--- first apply.
+-- `changeset.review` state outlives each case; a fresh `review.repo()` per case isolates
+-- it and `fork_point`'s cache, since both are keyed by repository.
 require("gitsigns").setup()
 require("changeset.review").activate()
 
@@ -24,12 +20,19 @@ local M = {}
 ---@type integer
 M.moves = 0
 
+---Base changes started so far toward each revision.
+---@type table<string, integer>
+M.moves_to = {}
+
 local in_flight = 0
 local Obj = require("gitsigns.git").Obj
 local change_revision = Obj.change_revision
-Obj.change_revision = function(...)
+Obj.change_revision = function(self, revision)
   in_flight, M.moves = in_flight + 1, M.moves + 1
-  local result = change_revision(...)
+  if revision then
+    M.moves_to[revision] = (M.moves_to[revision] or 0) + 1
+  end
+  local result = change_revision(self, revision)
   in_flight = in_flight - 1
   return result
 end
@@ -139,9 +142,6 @@ function M.teardown(dir, cwd)
   -- Let every base change in flight land before its repo is deleted under it.
   assert(M.settle(), "a base change never landed")
   vim.cmd("silent! %bwipeout!")
-  -- The next fixture is another repo, where this one's merge base does not exist
-  -- and every attach against it would fail.
-  require("gitsigns").reset_base(true)
   vim.fn.chdir(cwd)
   vim.fn.delete(dir, "rf")
 end

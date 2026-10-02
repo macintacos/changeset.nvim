@@ -90,6 +90,37 @@ describe("changeset.build", function()
     end, argvs))
   end)
 
+  describe("while gh is slow to answer", function()
+    before_each(function()
+      vim.env.FAKE_GH_DELAY = "1"
+    end)
+
+    after_each(function()
+      vim.env.FAKE_GH_DELAY = nil
+    end)
+
+    it("asks gh once when HEAD's fork point moves before it answers no PR", function()
+      local argvs = recording(function()
+        build_and_collect()
+        Fixture.git({ "checkout", "-q", "trunk" }, tmp)
+        Fixture.git({ "commit", "-q", "--allow-empty", "-m", "trunk work" }, tmp)
+        Fixture.git({ "checkout", "-q", "feature" }, tmp)
+        Fixture.git({ "rebase", "-q", "trunk" }, tmp)
+        build_and_collect()
+        -- Long enough for the first answer to land and anything it starts to ask gh again.
+        vim.wait(3000, function()
+          return false
+        end, 25)
+      end)
+
+      local gh_asks = vim.tbl_filter(function(argv)
+        return runs(argv, "gh")
+      end, argvs)
+      assert.equal(1, #gh_asks)
+      assert.equal(Fixture.git({ "rev-parse", "trunk" }, tmp), changeset._tree().base)
+    end)
+  end)
+
   describe("asking about symbols", function()
     local asked
 
