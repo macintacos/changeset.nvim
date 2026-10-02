@@ -435,8 +435,9 @@ its first diff opens blank rather than claiming nothing changed. Closing the sid
 go of the window only, and opening it again draws the tree it kept and refreshes its diff
 in the background. The tree is rebuilt for a different repository, fork point or branch,
 and a build that finds no fork point keeps the tree it had. The tree knows nothing of the
-sidebar: on its next look at a replaced tree, the sidebar starts a fresh View and position,
-keeping only the repository's folds.
+sidebar. The first time the sidebar reads a replaced tree, it starts a fresh View and
+Position: the repository's folds and opened chains carry over, and hidden kinds come back
+from what is saved for the new branch.
 
 Once built, the tree re-reads the diff whenever the files it diffs can have moved, whether
 or not the sidebar is showing: after a write, when a buffer is reloaded because its file

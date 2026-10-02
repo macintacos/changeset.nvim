@@ -17,8 +17,8 @@ local M = {}
 ---@type changeset.SidebarState?
 local state
 
----The sidebar's state for the current tree, made afresh once a build has replaced the tree: only folds carry
----over, kept per repository by `view.for_root`. Read it again after a wait or a later callback.
+---The sidebar's state for the current tree, made afresh once a build has replaced the tree: only folds and
+---opened chains carry over, kept per repository by `view.for_root`. Read it again after a wait or a later callback.
 ---@return changeset.SidebarState?
 function M.current()
   local tree = build.current()

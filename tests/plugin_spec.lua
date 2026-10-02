@@ -23,7 +23,7 @@ local function counter(calls, key)
 end
 
 -- The cases run in order: the first real `require("changeset.build")` is the last case's,
--- and once loaded it stays for the session.
+-- since its autocmds outlive it and the first case asserts there are none.
 describe("plugin/changeset.lua", function()
   local notify, notes
 

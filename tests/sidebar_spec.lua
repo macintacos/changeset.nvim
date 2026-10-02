@@ -750,7 +750,7 @@ describe("changeset sidebar", function()
       assert.is_true(shows(buf, "go.sum"))
 
       changeset.close()
-      -- A new branch builds a new session over the same fold state, which must not fold Generated again.
+      -- A new branch builds a new tree over the same fold state, which must not fold Generated again.
       Fixture.git({ "checkout", "-q", "-b", "other" }, tmp)
       buf = open_sidebar()
 

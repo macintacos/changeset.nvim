@@ -1,5 +1,5 @@
 ---Puts the tree on the sidebar's buffer, through the pure `render`: lines, marks, header and row states.
----The sidebar's state's `view` decides what is on each line; `band_for` builds a row's preview band.
+---The sidebar state's View decides what is on each line; `band_for` builds a row's preview band.
 
 local icons = require("changeset.icons")
 local render = require("changeset.render")
@@ -60,11 +60,11 @@ function M.band_for(row, jump)
   }
 end
 
----The sidebar as drawn, for `changeset.position`; errors when there is no state.tree.
+---The sidebar as drawn, for `changeset.position`; errors before the first build.
 ---@return changeset.position.View
 function M.view()
   local state = sidebar_state.current()
-  assert(state, "changeset: no open session")
+  assert(state, "changeset: no tree built yet")
   local win = window.win()
   return {
     rows = state.rows,
@@ -139,7 +139,7 @@ end
 ---@return changeset.Summary
 local function summary()
   local state = sidebar_state.current()
-  assert(state, "changeset: no open session")
+  assert(state, "changeset: no tree built yet")
   local added, removed, readable, pending = 0, 0, 0, 0
   for _, file in ipairs(state.tree.files) do
     added, removed = added + (file.added or 0), removed + (file.removed or 0)
@@ -178,7 +178,7 @@ end
 ---@param width integer
 local function draw_header(buf, win, width)
   local state = sidebar_state.current()
-  assert(state, "changeset: no open session")
+  assert(state, "changeset: no tree built yet")
   local header = summary()
   vim.wo[win].winbar = render.header(header, width)
   -- Totals before the first diff would claim that nothing changed.
@@ -199,7 +199,7 @@ function M.draw(kinds_key)
   if not (buf and win and vim.api.nvim_buf_is_valid(buf)) then
     return
   end
-  assert(state, "changeset: no open session")
+  assert(state, "changeset: no tree built yet")
 
   local width = vim.api.nvim_win_get_width(win)
   local lines, lnum =

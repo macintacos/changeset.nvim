@@ -1,5 +1,4 @@
----Builds the tree for the current buffer's repository, keeps its diff and symbols fresh, and announces each change
----to its subscribers.
+---Builds the tree for the current buffer's repository, keeps it fresh, and announces each change.
 
 local Git = require("changeset.git")
 local Paths = require("changeset.paths")
@@ -33,7 +32,7 @@ local M = {}
 ---@field comments table<string, changeset.Comments> Absent key means none read or parsed for the file.
 ---@field cancel fun()?
 ---@field timer uv.uv_timer_t?
----@field request table? The refresh whose answers this session is still listening for.
+---@field request table? The refresh whose answers this tree is still listening for.
 
 ---What happened to the tree: its `diff` read, one file's `symbols` read, only its `pr` number changed, or its
 ---diff `failed` to read.
@@ -55,7 +54,7 @@ local subscribers = {}
 ---@param event changeset.TreeEvent
 local function announce(event)
   for fn in pairs(subscribers) do
-    fn(event, assert(session, "changeset: no open session"))
+    fn(event, assert(session, "changeset: no tree built yet"))
   end
 end
 
@@ -127,7 +126,7 @@ function M.refresh()
   end
 
   -- Identity rather than a counter: an answer from a refresh that this one replaced
-  -- has to be dropped, and a session built later starts from a table of its own.
+  -- has to be dropped, and a tree built later starts from a table of its own.
   local request = {}
   session.request = request
 
@@ -153,7 +152,7 @@ function M.refresh()
     assert(memo, "changeset: symbol cache not loaded")
     local stamps = {}
     local known, unknown = cache.fresh(memo.entries, readable, function(path)
-      assert(session, "changeset: no open session")
+      assert(session, "changeset: no tree built yet")
       stamps[path] = cache.stamp(session.root .. "/" .. path, session.base)
       return stamps[path]
     end)

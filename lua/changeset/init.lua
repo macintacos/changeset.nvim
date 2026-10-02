@@ -1,9 +1,10 @@
 ---A read-only sidebar mapping what this branch changed, nested by symbol.
 ---
----See doc/agents/design.md for the design. This file is the public API and the window state
----machine: `build` keeps the tree, `sidebar_state` the sidebar's own table for it, `view` holds
----its folds and narrowing, `draw` puts it on the sidebar's buffer, `position` says where the
----user stands in it, and what each key does is `actions`. The thinking happens in the pure modules they call.
+---See doc/agents/design.md for the design. This file is the public API and the window
+---state machine: `build` keeps the tree, `sidebar_state` the sidebar's own table for it,
+---`view` holds its folds and narrowing, `draw` puts it on the sidebar's buffer, `position`
+---says where the user stands in it, and what each key does is `actions`. The thinking
+---happens in the pure modules they call.
 
 local actions = require("changeset.actions")
 local build = require("changeset.build")
@@ -48,13 +49,13 @@ local function preview_current()
   if not row then
     return
   end
-  assert(state, "changeset: no open session")
+  assert(state, "changeset: no tree built yet")
   if row.lnum and row.kind ~= "file" then
     window.preview(
       state.tree.root .. "/" .. row.path,
       row.lnum,
       draw.band_for(row, bound_keys.jump),
-      { row = row, session = state }
+      { row = row, state = state }
     )
   elseif row.kind == "file" and row.status == "deleted" then
     window.preview_notice("This file was deleted on this branch", draw.band_for(row, bound_keys.jump))
@@ -63,7 +64,7 @@ local function preview_current()
       state.tree.root .. "/" .. row.path,
       1,
       draw.band_for(row, bound_keys.jump),
-      { row = row, session = state }
+      { row = row, state = state }
     )
   end
 end
@@ -114,7 +115,7 @@ end
 ---@param row changeset.Row
 local function pick(row)
   local state = sidebar_state.current()
-  assert(state, "changeset: no open session")
+  assert(state, "changeset: no tree built yet")
   state.position:pick(row)
   draw.paint()
 end
@@ -132,7 +133,7 @@ local function line_text(path, lnum)
   if lnum < 1 then
     return nil
   end
-  assert(session, "changeset: no open session")
+  assert(session, "changeset: no tree built yet")
   local full = session.root .. "/" .. path
   local buf = vim.fn.bufnr(full)
   if buf ~= -1 and vim.api.nvim_buf_is_loaded(buf) then
@@ -148,7 +149,7 @@ end
 ---@return boolean
 local function decided(path)
   local session = build.current()
-  assert(session, "changeset: no open session")
+  assert(session, "changeset: no tree built yet")
   if not session.collected then
     return false
   end
@@ -159,7 +160,7 @@ end
 
 local function rebuild()
   local state = sidebar_state.current()
-  assert(state, "changeset: no open session")
+  assert(state, "changeset: no tree built yet")
   -- Taken before the rows change: whether the cursor moved is judged by the row it was on.
   local before = (draw.row_at_cursor() or {}).id
   state.rows = tree.build(state.tree.files, state.tree.symbols, { text = line_text, comments = state.tree.comments })
@@ -344,8 +345,9 @@ function M.open()
     desc = "changeset: open a previewed file once the cursor enters its window",
     callback = function()
       local claimed = window.claim()
-      -- A build for another repository, base or branch replaces the session under a preview.
-      if claimed and claimed.session == sidebar_state.current() then
+      -- A build for another repository, base or branch replaces the tree, and so the
+      -- sidebar's state, under a preview.
+      if claimed and claimed.state == sidebar_state.current() then
         pick(claimed.row)
       end
     end,
@@ -395,7 +397,7 @@ function M.restore()
     return
   end
   local state = sidebar_state.current()
-  assert(state, "changeset: no open session")
+  assert(state, "changeset: no tree built yet")
   local ok, recorded = pcall(vim.json.decode, vim.g[POSITION_GLOBAL])
   apply(state.position:restore(ok and recorded or nil, draw.view(), decided))
 end

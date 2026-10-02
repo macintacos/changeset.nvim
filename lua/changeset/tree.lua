@@ -1,4 +1,4 @@
----Builds the row tree.
+---Builds the row tree, and says how far a file's symbols have been read.
 
 local comments = require("changeset.comments")
 local sections = require("changeset.sections")
@@ -565,7 +565,7 @@ end
 ---How far the tree has read a file's symbols; a deleted or Generated file is `skipped`, never read.
 ---@alias changeset.ReadStatus "reading"|"done"|"skipped"
 
----How far the tree has read `file`'s symbols.
+---`file`'s read status, given the symbols filed so far.
 ---@param file changeset.File
 ---@param symbols_by_path table<string, changeset.Symbol[]>
 ---@return changeset.ReadStatus
@@ -617,7 +617,7 @@ end
 ---shows under a Docs copy instead, a doc comment counting with the symbol below it. A copy is left out when it
 ---would be empty.
 ---
----A file absent from `symbols_by_path` is still reading and gets no children; a file mapped to `{}`
+---A readable file absent from `symbols_by_path` is still reading and gets no children; a file mapped to `{}`
 ---has no symbols, so all its hunks are orphans. A deleted or Generated file is never read and never gets
 ---children: a Generated file's hunks are not worth a row each. A file row is `resolved` once its symbols are
 ---answered, or when they are never read.
