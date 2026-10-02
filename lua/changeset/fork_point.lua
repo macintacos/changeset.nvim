@@ -32,13 +32,14 @@ local subscribers = {}
 ---@param pr changeset.fork_point.PrTarget?
 ---@return changeset.ForkPoint?
 local function measure(root, pr)
-  local base, default_branch, ref = Git.merge_base(root)
+  local default_branch = Git.default_base(root)
+  local base, ref = Git.merge_base(root, default_branch)
   if not base then
     return
   end
   local point = { base = base, ref = ref, against = default_branch, default_branch = default_branch }
   if pr then
-    local stacked, _, stacked_ref = Git.merge_base(root, pr.target)
+    local stacked, stacked_ref = Git.merge_base(root, pr.target)
     if stacked then
       point.base, point.ref, point.against, point.pr = stacked, stacked_ref, pr.target, pr.number
     else

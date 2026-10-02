@@ -36,12 +36,10 @@ end
 
 ---Resolve the commit where HEAD forked from `branch`.
 ---@param cwd string? Repository to measure; Neovim's own directory when absent.
----@param branch string? Branch to measure against; the default branch when absent.
+---@param branch string Branch to measure against.
 ---@return string? sha nil outside a repo, when `branch` doesn't exist, or when the two share no ancestor.
----@return string? branch The branch the fork point was taken against.
 ---@return string? ref The ref whose history holds the fork point, origin's preferred when both do.
 function M.merge_base(cwd, branch)
-  branch = branch or M.default_base(cwd)
   local refs = vim.tbl_filter(function(ref)
     return #M.lines({ "git", "rev-parse", "--verify", "--quiet", ref }, cwd) > 0
   end, { "origin/" .. branch, branch })
@@ -55,7 +53,7 @@ function M.merge_base(cwd, branch)
   end
   for _, ref in ipairs(refs) do
     if M.lines({ "git", "merge-base", sha, ref }, cwd)[1] == sha then
-      return sha, branch, ref
+      return sha, ref
     end
   end
 end
