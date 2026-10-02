@@ -138,18 +138,10 @@ describe("fork_point", function()
 
   it("answers the default base when gh is not installed", function()
     local root, default_base = repo()
-    local bin, path = vim.fn.tempname(), vim.env.PATH
-    vim.fn.mkdir(bin, "p")
-    vim.uv.fs_symlink(vim.fn.exepath("git"), bin .. "/git")
-    vim.env.PATH = bin
 
-    local ok, err = pcall(fork_point.get, root, "feature")
-    local answered = await_heard(root, 1)
-    vim.env.PATH = path
-    vim.fn.delete(bin, "rf")
+    require("support.gh").without(fork_point.get, root, "feature")
 
-    assert(ok, err)
-    assert.is_true(answered)
+    assert.is_true(await_heard(root, 1))
     assert.equal(default_base, heard_in(root)[1].point.base)
   end)
 

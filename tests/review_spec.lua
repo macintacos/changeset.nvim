@@ -129,16 +129,10 @@ describe("PR Review Mode", function()
     assert.is_true(await(bufs, base, 5000))
     toggle()
     assert.is_true(await(bufs, nil, 5000))
-    local bin, path = vim.fn.tempname(), vim.env.PATH
-    vim.fn.mkdir(bin, "p")
-    vim.uv.fs_symlink(vim.fn.exepath("git"), bin .. "/git")
-    vim.env.PATH = bin
 
-    local ok, err = pcall(toggle)
+    local ok, err = pcall(require("support.gh").without, toggle)
 
     local on = on_notices(5000)
-    vim.env.PATH = path
-    vim.fn.delete(bin, "rf")
     assert(ok, err)
     assert.equal(1, #on)
     assert.is_true(await(bufs, base, 5000))
