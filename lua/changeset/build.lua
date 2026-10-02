@@ -91,7 +91,7 @@ local function unwritten(path)
   return buf ~= -1 and vim.bo[buf].modified
 end
 
----What resolving one file answered.
+---What reading one file's symbols answered.
 ---@class changeset.build.Answer
 ---@field items changeset.Symbol[]? nil when no server answered.
 ---@field comments changeset.Comments?
@@ -181,9 +181,9 @@ function M.refresh()
       -- the request, so the answer still describes the file it was read from.
       file_answer(root, path, { items = items, comments = comment_lines }, stamps[path])
       if tree and work.request == request then
-        -- A server that answers nothing is "resolved with no symbols", which is what
+        -- A server that answers nothing is "read, with no symbols", which is what
         -- turns every hunk in an unsupported file into an orphan row. Leaving the key
-        -- absent would instead read as "still resolving", forever.
+        -- absent would instead read as "still reading", forever.
         tree.symbols[path] = items or {}
         tree.comments[path] = comment_lines
         announce("symbols")
