@@ -1,11 +1,12 @@
 ---What each sidebar key does, and the keymaps that bind them.
----The fold, step and filter keys ask the session's view, then move the cursor or redraw.
+---The fold, step and filter keys ask the sidebar's view, then move the cursor or redraw.
 
 local Paths = require("changeset.paths")
 local build = require("changeset.build")
 local draw = require("changeset.draw")
 local help = require("changeset.help")
 local icons = require("changeset.icons")
+local sidebar_state = require("changeset.sidebar_state")
 local view = require("changeset.view")
 local window = require("changeset.window")
 
@@ -34,7 +35,7 @@ end
 ---@param how "reuse"|"vsplit"|"split"|"tab"
 ---@param hooks changeset.ActionHooks
 local function commit(how, hooks)
-  local session = build.current()
+  local state = sidebar_state.current()
   local row = draw.row_at_cursor()
   if not row or row.kind == "section" then
     return
@@ -42,8 +43,8 @@ local function commit(how, hooks)
   if row.kind == "file" and row.status == "deleted" then
     return vim.notify(row.path .. " was deleted on this branch", vim.log.levels.INFO)
   end
-  assert(session, "changeset: no open session")
-  if window.commit(session.root .. "/" .. row.path, row.lnum or 1, how) then
+  assert(state, "changeset: no tree built yet")
+  if window.commit(state.tree.root .. "/" .. row.path, row.lnum or 1, how) then
     hooks.pick(row)
   end
 end
@@ -51,11 +52,11 @@ end
 ---@param delta integer
 ---@param preview fun()
 local function step(delta, preview)
-  local session, lnum = build.current(), cursor()
-  if not (session and lnum) then
+  local state, lnum = sidebar_state.current(), cursor()
+  if not (state and lnum) then
     return
   end
-  move(session.view:step(lnum, delta))
+  move(state.view:step(lnum, delta))
   preview()
 end
 
@@ -112,31 +113,31 @@ function M.bind_step_keys(keys, preview)
 end
 
 ---Open the symbol-kind filter menu, redrawing as kinds are toggled.
----@param open_session changeset.Session
+---@param state changeset.SidebarState
 ---@param redraw fun() Redraw the tree.
-local function open_kind_menu(open_session, redraw)
+local function open_kind_menu(state, redraw)
   require("changeset.menu").open({
-    root = open_session.root,
-    branch = open_session.branch,
-    file = open_session.file,
-    counts = view.kind_counts(open_session.rows),
-    hidden = open_session.view:hidden(),
+    root = state.tree.root,
+    branch = state.tree.branch,
+    file = state.file,
+    counts = view.kind_counts(state.rows),
+    hidden = state.view:hidden(),
     icon = function(symbol_kind)
       return icons.get("lsp", symbol_kind)
     end,
     sidebar = assert(window.win(), "changeset: sidebar is closed"),
     on_change = function(hidden)
-      open_session.view:hide(hidden)
+      state.view:hide(hidden)
       redraw()
     end,
   })
 end
 
 ---Narrow the tree from the command line, restoring the previous query on cancel.
----@param open_session changeset.Session
+---@param state changeset.SidebarState
 ---@param redraw fun() Redraw the tree.
-local function prompt_filter(open_session, redraw)
-  local previous_query = open_session.view:query()
+local function prompt_filter(state, redraw)
+  local previous_query = state.view:query()
   local group = vim.api.nvim_create_augroup("changeset.filter", { clear = true })
   -- input() edits on the command line, so every keystroke is a CmdlineChanged
   -- — which is what lets the tree narrow as it is typed rather than at <CR>.
@@ -144,7 +145,7 @@ local function prompt_filter(open_session, redraw)
     group = group,
     desc = "changeset: filter the tree on each keystroke of the filter prompt",
     callback = function()
-      open_session.view:narrow(vim.fn.getcmdline())
+      state.view:narrow(vim.fn.getcmdline())
       redraw()
       vim.cmd("redraw")
     end,
@@ -157,7 +158,7 @@ local function prompt_filter(open_session, redraw)
   })
   vim.api.nvim_del_augroup_by_id(group)
 
-  open_session.view:narrow((ok and typed ~= CANCELLED) and typed or previous_query)
+  state.view:narrow((ok and typed ~= CANCELLED) and typed or previous_query)
   redraw()
 end
 
@@ -170,21 +171,20 @@ function M.set_keymaps(buf, keys, hooks)
   local function redraw()
     draw.draw(keys.filter_kinds)
   end
-  -- The window can outlive the session: a `build()` for another repository lets go
-  -- of the tree while a sidebar stands. Handing the session down rather than letting
-  -- handlers reach for it means the check that it exists is the same line that
-  -- passes it on.
+  -- A build() for another repository replaces the tree while a sidebar stands, so each
+  -- handler takes the state current when its key is pressed, never one captured when it
+  -- was bound.
   ---@param lhs string|false
-  ---@param fn fun(open_session: changeset.Session, hooks: changeset.ActionHooks)
+  ---@param fn fun(state: changeset.SidebarState, hooks: changeset.ActionHooks)
   ---@param desc string
   local function map(lhs, fn, desc)
     if not lhs then
       return
     end
     set(lhs, function()
-      local session = build.current()
-      if session then
-        fn(session, hooks)
+      local state = sidebar_state.current()
+      if state then
+        fn(state, hooks)
       end
     end, desc)
   end
@@ -208,42 +208,42 @@ function M.set_keymaps(buf, keys, hooks)
     commit("tab", hooks)
   end, "Go to this change in a new tab")
   map(keys.close, hooks.close, "Close the tree")
-  map(keys.expand, function(open_session)
+  map(keys.expand, function(state)
     local lnum = cursor()
-    if lnum and open_session.view:open(lnum) then
+    if lnum and state.view:open(lnum) then
       redraw()
     end
   end, "Expand")
-  map(keys.collapse, function(open_session)
+  map(keys.collapse, function(state)
     local lnum = cursor()
     if not lnum then
       return
     end
-    local parent_lnum, shut = open_session.view:step_out(lnum)
+    local parent_lnum, shut = state.view:step_out(lnum)
     if parent_lnum then
       move(parent_lnum)
     elseif shut then
       redraw()
     end
   end, "Collapse, or step out to the parent")
-  map(keys.collapse_all, function(open_session)
-    open_session.view:fold_files(open_session.rows)
+  map(keys.collapse_all, function(state)
+    state.view:fold_files(state.rows)
     redraw()
   end, "Collapse every file")
-  map(keys.expand_all, function(open_session)
-    open_session.view:unfold_files()
+  map(keys.expand_all, function(state)
+    state.view:unfold_files()
     redraw()
   end, "Expand every file")
-  map(keys.next_section, function(open_session)
+  map(keys.next_section, function(state)
     local lnum = cursor()
     if lnum then
-      move(open_session.view:step_section(lnum, 1))
+      move(state.view:step_section(lnum, 1))
     end
   end, "Next section")
-  map(keys.prev_section, function(open_session)
+  map(keys.prev_section, function(state)
     local lnum = cursor()
     if lnum then
-      move(open_session.view:step_section(lnum, -1))
+      move(state.view:step_section(lnum, -1))
     end
   end, "Previous section")
   map(keys.refresh, build.refresh, "Rebuild the tree")
@@ -262,11 +262,11 @@ function M.set_keymaps(buf, keys, hooks)
       end, step_bindings)
     )
   end, "Show these keymaps")
-  map(keys.filter_kinds, function(open_session)
-    open_kind_menu(open_session, redraw)
+  map(keys.filter_kinds, function(state)
+    open_kind_menu(state, redraw)
   end, "Filter by symbol kind")
-  map(keys.filter, function(open_session)
-    prompt_filter(open_session, redraw)
+  map(keys.filter, function(state)
+    prompt_filter(state, redraw)
   end, "Filter the tree")
 end
 

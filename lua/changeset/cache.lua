@@ -9,7 +9,7 @@ local jsonfile = require("changeset.jsonfile")
 
 local M = {}
 
----@class changeset.CachedSymbol Only what `changeset.tree` reads from a symbol.
+---@class changeset.CachedSymbol Only what `changeset.rows` reads from a symbol.
 ---@field name string
 ---@field kind string
 ---@field depth integer

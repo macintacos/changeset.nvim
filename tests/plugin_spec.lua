@@ -22,8 +22,8 @@ local function counter(calls, key)
   end
 end
 
--- The cases run in order: the first real `require("changeset")` is the last case's,
--- and once loaded its autocmds stay for the session.
+-- The cases run in order: the first real `require("changeset.build")` is the last case's,
+-- since its autocmds outlive it and the first case asserts there are none.
 describe("plugin/changeset.lua", function()
   local notify, notes
 
@@ -90,13 +90,15 @@ describe("plugin/changeset.lua", function()
 
   it("routes each subcommand to the module, bare :Changeset to toggle", function()
     local calls = {}
-    package.loaded.changeset = { toggle = counter(calls, "toggle"), refresh = counter(calls, "refresh") }
+    package.loaded.changeset = { toggle = counter(calls, "toggle") }
+    package.loaded["changeset.build"] = { refresh = counter(calls, "refresh") }
 
     vim.cmd("Changeset")
     vim.cmd("Changeset toggle ")
     vim.cmd("Changeset refresh")
 
     package.loaded.changeset = nil
+    package.loaded["changeset.build"] = nil
     assert.same({ toggle = 2, refresh = 1 }, calls)
   end)
 
@@ -112,11 +114,11 @@ describe("plugin/changeset.lua", function()
 
   it("runs the command after a | once the subcommand ran", function()
     local calls = {}
-    package.loaded.changeset = { refresh = counter(calls, "refresh") }
+    package.loaded["changeset.build"] = { refresh = counter(calls, "refresh") }
 
     vim.cmd("Changeset refresh | let g:changeset_after = 1")
 
-    package.loaded.changeset = nil
+    package.loaded["changeset.build"] = nil
     assert.equal(1, calls.refresh)
     assert.equal(1, vim.g.changeset_after)
   end)
@@ -165,10 +167,10 @@ describe("plugin/changeset.lua", function()
   end)
 
   it("loads the module on first use", function()
-    package.loaded.changeset = nil
+    package.loaded["changeset.build"] = nil
 
     vim.cmd("Changeset refresh")
 
-    assert.truthy(package.loaded.changeset)
+    assert.truthy(package.loaded["changeset.build"])
   end)
 end)

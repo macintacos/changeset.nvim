@@ -41,8 +41,8 @@ and change.
 **View**:
 What the sidebar shows of the tree: its folds, opened chains, narrowing and hidden kinds,
 and the row on each line. The snapshot `changeset.position` reads is a picture of it, not
-the View. `BuildHooks.view` is the hook that supplies a new tree's sidebar fields, the View
-among them.
+the View. `changeset.sidebar_state` makes a fresh View for each new tree, sharing the
+repository's folds and opened chains.
 _Avoid_: view state, display state
 
 **Open**:

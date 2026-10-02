@@ -12,7 +12,7 @@ local subcommands = {
     require("changeset").toggle()
   end,
   refresh = function()
-    require("changeset").refresh()
+    require("changeset.build").refresh()
   end,
   review = function()
     if not require("changeset.config").get().pr_review.enabled then

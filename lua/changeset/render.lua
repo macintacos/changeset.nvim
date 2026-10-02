@@ -429,8 +429,8 @@ local function append_file(out, file, opts)
   end
   -- A file with nothing under it is either waiting on a server or genuinely has
   -- nothing to show — a 100% rename, a binary change. Only the first gets the
-  -- placeholder, so `resolved` is what decides it, not an empty child list.
-  if not file.resolved and file.status ~= "deleted" then
+  -- placeholder, so the read status decides it, not an empty child list.
+  if file.read == "reading" then
     out[#out + 1] = placeholder_line(file)
   else
     append_children(out, file, "", opts)

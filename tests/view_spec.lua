@@ -1,5 +1,5 @@
-local Rows = require("support.rows")
-local tree = require("changeset.tree")
+local Changes = require("support.changes")
+local Rows = require("changeset.rows")
 local view = require("changeset.view")
 
 ---@param id string
@@ -253,19 +253,19 @@ describe("changeset.view", function()
 
   -- 1 Implementation, 2 mod.lua, 3 Store › load, 4 Other changes, 5 L30,
   -- 6 Tests, 7 mod_spec.lua, 8 Other changes, 9 L2.
-  local ROWS = tree.build({ Rows.file("mod.lua", { 5, 30 }), Rows.file("mod_spec.lua", { 2 }) }, {
-    ["mod.lua"] = { Rows.sym("Store", "Class", 0, 1, 10), Rows.sym("load", "Method", 1, 3, 8) },
+  local ROWS = Rows.build({ Changes.file("mod.lua", { 5, 30 }), Changes.file("mod_spec.lua", { 2 }) }, {
+    ["mod.lua"] = { Changes.sym("Store", "Class", 0, 1, 10), Changes.sym("load", "Method", 1, 3, 8) },
     ["mod_spec.lua"] = {},
   })
   local FILES_ONLY = { "Implementation", "mod.lua", "Tests", "mod_spec.lua" }
   local RS = "src/session.rs"
   local RS_SYMBOLS = {
-    Rows.sym("load", "Function", 0, 1, 1),
-    Rows.sym("tests", "Module", 0, 3, 6),
-    Rows.sym("refreshes", "Function", 1, 4, 5),
+    Changes.sym("load", "Function", 0, 1, 1),
+    Changes.sym("tests", "Module", 0, 3, 6),
+    Changes.sym("refreshes", "Function", 1, 4, 5),
   }
   -- 1 Implementation, 2 session.rs, 3 load, 4 Tests, 5 session.rs, 6 tests › refreshes.
-  local SPLIT = tree.build({ Rows.file(RS, { 1, 4 }) }, { [RS] = RS_SYMBOLS })
+  local SPLIT = Rows.build({ Changes.file(RS, { 1, 4 }) }, { [RS] = RS_SYMBOLS })
 
   describe("View folds", function()
     it("shows a row's children until something folds it", function()
@@ -303,12 +303,12 @@ describe("changeset.view", function()
 
     it("keeps a folded section folded under unfold_files across a rebuild that empties it", function()
       -- 1 Implementation, 2 mod.lua, 3 Docs, 4 README.md.
-      local with_docs = tree.build({ Rows.file("mod.lua", { 5 }), Rows.file("README.md", { 1 }) }, {})
+      local with_docs = Rows.build({ Changes.file("mod.lua", { 5 }), Changes.file("README.md", { 1 }) }, {})
       local v = fresh()
       v:fold_files(with_docs)
       show(v, with_docs)
       v:step_out(3)
-      show(v, tree.build({ Rows.file("mod.lua", { 5 }) }, {}))
+      show(v, Rows.build({ Changes.file("mod.lua", { 5 }) }, {}))
 
       v:unfold_files()
 
@@ -424,10 +424,10 @@ describe("changeset.view", function()
 
   describe("View show", function()
     -- 1 Tests, 2 session.rs, 3 tests › refreshes.
-    local TESTS_ONLY = tree.build({ Rows.file(RS, { 4 }) }, { [RS] = RS_SYMBOLS })
+    local TESTS_ONLY = Rows.build({ Changes.file(RS, { 4 }) }, { [RS] = RS_SYMBOLS })
     -- 1 Implementation, 2 mod.lua, 3 Store › load, 4 Tests, 5 mod_spec.lua, 6 Other changes, 7 L2.
-    local NO_L30 = tree.build({ Rows.file("mod.lua", { 5 }), Rows.file("mod_spec.lua", { 2 }) }, {
-      ["mod.lua"] = { Rows.sym("Store", "Class", 0, 1, 10), Rows.sym("load", "Method", 1, 3, 8) },
+    local NO_L30 = Rows.build({ Changes.file("mod.lua", { 5 }), Changes.file("mod_spec.lua", { 2 }) }, {
+      ["mod.lua"] = { Changes.sym("Store", "Class", 0, 1, 10), Changes.sym("load", "Method", 1, 3, 8) },
       ["mod_spec.lua"] = {},
     })
 
@@ -460,8 +460,8 @@ describe("changeset.view", function()
       local v = fresh()
       show(v, SPLIT)
       -- 1 Implementation, 2 a.lua, 3 Other changes, 4 L1, 5 Tests, 6 session.rs, 7 tests › refreshes.
-      local moved = tree.build(
-        { Rows.file("a.lua", { 1 }), Rows.file(RS, { 4 }) },
+      local moved = Rows.build(
+        { Changes.file("a.lua", { 1 }), Changes.file(RS, { 4 }) },
         { ["a.lua"] = {}, [RS] = RS_SYMBOLS }
       )
 
@@ -478,7 +478,7 @@ describe("changeset.view", function()
     it("holds the line for a gone reading-symbols placeholder, which is a file-kind row below depth 1", function()
       local v = fresh()
       -- 1 Implementation, 2 session.rs, 3 the placeholder.
-      show(v, tree.build({ Rows.file(RS, { 4 }) }, {}))
+      show(v, Rows.build({ Changes.file(RS, { 4 }) }, {}))
 
       assert.equal(3, select(2, show(v, TESTS_ONLY, 3)))
     end)
@@ -520,8 +520,8 @@ describe("changeset.view", function()
 
   describe("View step_section", function()
     -- 1 Implementation, 2 mod.lua, 3 Tests (folded), 4 Docs, 5 README.md.
-    local THREE_SECTIONS = tree.build(
-      { Rows.file("mod.lua", { 5 }), Rows.file("mod_spec.lua", { 2 }), Rows.file("README.md", { 1 }) },
+    local THREE_SECTIONS = Rows.build(
+      { Changes.file("mod.lua", { 5 }), Changes.file("mod_spec.lua", { 2 }), Changes.file("README.md", { 1 }) },
       {}
     )
     local v = fresh()
@@ -572,17 +572,17 @@ describe("changeset.view", function()
     end)
 
     it("starts a new root with Generated folded", function()
-      local generated = Rows.file("gen.lua", { 1 })
-      generated.generated = true
-      local rows = tree.build({ Rows.file("mod.lua", { 5 }), generated }, {})
+      local generated = Changes.file("gen.lua", { 1 })
+      generated.section = "generated"
+      local rows = Rows.build({ Changes.file("mod.lua", { 5 }), generated }, {})
 
       assert.same({ "Generated" }, vim.list_slice(show(view.for_root("/repo/generated-folded", {}), rows), 4))
     end)
 
     it("keeps Generated folded when every file unfolds", function()
-      local generated = Rows.file("gen.lua", { 1 })
-      generated.generated = true
-      local rows = tree.build({ Rows.file("mod.lua", { 5 }), generated }, {})
+      local generated = Changes.file("gen.lua", { 1 })
+      generated.section = "generated"
+      local rows = Rows.build({ Changes.file("mod.lua", { 5 }), generated }, {})
       local v = view.for_root("/repo/generated-unfold-files", {})
 
       v:unfold_files()

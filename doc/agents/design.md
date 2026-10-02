@@ -416,11 +416,11 @@ moment that window takes focus or a buffer.
 
 The two sentences wrap at the sidebar's edge, which no row does: a row is trimmed to fit.
 
-What an empty subtree means is carried by the row, not inferred from it. A file row is
-`resolved` once a server has answered for it, and only an unresolved row gets the
-placeholder. That keeps three cases apart which all render childless: still waiting, a
-`deleted` file, and a file with genuinely nothing to show inside it — a 100% rename, a
-binary change.
+What an empty subtree means is carried by the row, not inferred from it. A file row
+carries its read status — `reading`, `done`, or `skipped` for a deleted or Generated file
+— and only a `reading` row gets the placeholder. That keeps three cases apart which all
+render childless: still waiting, a skipped file, and a file with genuinely nothing to show
+inside it — a 100% rename, a binary change.
 
 ## What it remembers
 
@@ -434,7 +434,10 @@ which it has no way to fill in behind. The sidebar opens at once: a tree still w
 its first diff opens blank rather than claiming nothing changed. Closing the sidebar lets
 go of the window only, and opening it again draws the tree it kept and refreshes its diff
 in the background. The tree is rebuilt for a different repository, fork point or branch,
-and a build that finds no fork point keeps the tree it had.
+and a build that finds no fork point keeps the tree it had. The tree knows nothing of the
+sidebar. The first time the sidebar reads a replaced tree, it starts a fresh View and
+Position: the repository's folds and opened chains carry over, and hidden kinds come back
+from what is saved for the new branch.
 
 Once built, the tree re-reads the diff whenever the files it diffs can have moved, whether
 or not the sidebar is showing: after a write, when a buffer is reloaded because its file

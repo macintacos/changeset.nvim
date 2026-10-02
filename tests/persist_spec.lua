@@ -1,6 +1,6 @@
 local changeset = require("changeset")
 local render = require("changeset.render")
-local tree = require("changeset.tree")
+local Rows = require("changeset.rows")
 local window = require("changeset.window")
 local Fixture = require("support.git")
 local Cursor = require("support.cursor")
@@ -8,7 +8,8 @@ local Sidebar = require("support.sidebar")
 
 local function focus_terminal()
   vim.cmd("new")
-  vim.cmd.terminal()
+  -- No process: wiping a :terminal before its shell execs can SIGHUP this nvim.
+  vim.api.nvim_open_term(0, {})
 end
 
 ---The id of the Implementation row for `path`, or for the symbol chain under it.
@@ -16,7 +17,7 @@ end
 ---@param ... string Symbol names, outermost first.
 ---@return string
 local function row_id(path, ...)
-  return table.concat({ tree.section_id("implementation"), path, ... }, "\0")
+  return table.concat({ Rows.section_id("implementation"), path, ... }, "\0")
 end
 
 ---Restore as a session read does: a leftover sidebar window, the recorded global, then

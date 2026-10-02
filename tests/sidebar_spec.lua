@@ -3,6 +3,7 @@ require("mini.icons").setup()
 
 local changeset = require("changeset")
 changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
+local build = require("changeset.build")
 local render = require("changeset.render")
 local window = require("changeset.window")
 local Fixture = require("support.git")
@@ -209,7 +210,7 @@ describe("changeset sidebar", function()
     end
     local function refreshed()
       asked = nil
-      changeset.refresh()
+      build.refresh()
       assert(
         vim.wait(5000, function()
           return asked ~= nil
@@ -705,7 +706,7 @@ describe("changeset sidebar", function()
       local buf = open_from(3)
       asked = {}
 
-      changeset.refresh()
+      build.refresh()
       assert(
         vim.wait(5000, function()
           return #asked > 0
@@ -749,7 +750,7 @@ describe("changeset sidebar", function()
       assert.is_true(shows(buf, "go.sum"))
 
       changeset.close()
-      -- A new branch builds a new session over the same fold state, which must not fold Generated again.
+      -- A new branch builds a new tree over the same fold state, which must not fold Generated again.
       Fixture.git({ "checkout", "-q", "-b", "other" }, tmp)
       buf = open_sidebar()
 
@@ -787,6 +788,8 @@ describe("changeset sidebar", function()
         assert.is_false(vim.tbl_contains(asked, "schema.txt"))
         assert.falsy((lines[line_of(buf, "go.sum") + 1] or ""):find("reading symbols", 1, true))
         assert.truthy(lines[line_of(buf, "mod.lua") + 1]:find("reading symbols", 1, true))
+        -- mod.lua, other.lua and .gitattributes stay held; go.sum and schema.txt count as read.
+        assert.truthy(totals(buf):find("reading symbols 2/5", 1, true))
       end)
       resolve.start = start
       assert(ok, err)
@@ -808,13 +811,13 @@ describe("changeset sidebar", function()
       on_header()
       press("h")
       changeset.close()
-      local before = assert(changeset._tree()).files
+      local before = assert(build.current()).files
 
       changeset.open()
 
       -- Not open_sidebar(): it waits for a second line, and the folded section is one.
       assert.is_true(vim.wait(10000, function()
-        return changeset._tree().files ~= before
+        return build.current().files ~= before
       end, 25))
       assert.equal(1, #lines_of(assert(window.buf())))
     end)

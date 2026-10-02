@@ -2,7 +2,7 @@
 ---hidden kinds, and the row on each line, with the moves that read and change them.
 
 local render = require("changeset.render")
-local tree = require("changeset.tree")
+local Rows = require("changeset.rows")
 
 ---@class changeset.view.Folds
 ---@field collapsed table<string, true> Rows whose children are hidden.
@@ -176,7 +176,7 @@ end
 function M.for_root(root, hidden)
   if not folds_by_root[root] then
     -- Only on creation, so an unfold is kept.
-    folds_by_root[root] = { collapsed = { [tree.section_id("generated")] = true }, chains = {} }
+    folds_by_root[root] = { collapsed = { [Rows.section_id("generated")] = true }, chains = {} }
   end
   return M.new(folds_by_root[root], hidden)
 end
@@ -215,7 +215,7 @@ end
 ---@return integer lnum Where the cursor goes: the row it sat on, wherever that is now.
 function View:show(rows, layout)
   local previous_row = self.shown[layout.cursor]
-  local compressed = tree.compress(M.by_kind(M.filter(rows, self.narrowed), self.kinds_hidden), function(id)
+  local compressed = Rows.compress(M.by_kind(M.filter(rows, self.narrowed), self.kinds_hidden), function(id)
     return self.folds.chains[id] == true
   end)
   -- `render.lines` walks the tree for its guides, so it is the one place that
@@ -292,9 +292,9 @@ function View:step_out(lnum)
 end
 
 ---Fold every file row in `rows`.
----@param rows changeset.Row[] Section rows from `tree.build`.
+---@param rows changeset.Row[] Section rows from `Rows.build`.
 function View:fold_files(rows)
-  for _, row in ipairs(tree.files(rows)) do
+  for _, row in ipairs(Rows.files(rows)) do
     self.folds.collapsed[row.id] = true
   end
 end
@@ -302,7 +302,7 @@ end
 ---Unfold every file and symbol row. Each section keeps its fold, even one empty for now, and opened chains stay open.
 function View:unfold_files()
   local kept = {}
-  for _, id in ipairs(tree.section_ids()) do
+  for _, id in ipairs(Rows.section_ids()) do
     kept[id] = self.folds.collapsed[id]
   end
   self.folds.collapsed = kept
