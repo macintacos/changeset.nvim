@@ -1,7 +1,15 @@
 local changeset = require("changeset")
 local resolve = require("changeset.resolve")
 local Fixture = require("support.git")
+local symbols = require("support.symbols")
 require("support.gh") -- a fake gh on PATH: never the real one, never the network
+
+---Every announcement the tree makes, in order; emptied before each case.
+---@type changeset.TreeEvent[]
+local events = {}
+require("changeset.build").subscribe(function(event)
+  events[#events + 1] = event
+end)
 
 ---Runs `fn`, keeping the argv of every process started through `vim.system` or `vim.fn.systemlist`.
 ---A wait belongs inside `fn`: `check-attr` starts from a scheduled callback, after `build()` returns.
@@ -49,6 +57,7 @@ describe("changeset.build", function()
     tmp, previous_dir = Fixture.enter_tempdir()
     Fixture.feature_one_file(tmp)
     vim.cmd.edit("mod.lua")
+    events = {}
     resolve.start = function()
       return function() end
     end
@@ -211,6 +220,89 @@ describe("changeset.build", function()
       assert(vim.lsp.get_client_by_id(assert(client))):stop(true)
 
       assert.is_true(reasked)
+    end)
+  end)
+
+  describe("announcing", function()
+    local source
+
+    ---@param count integer
+    local function wait_for_asks(count)
+      assert.is_true(vim.wait(10000, function()
+        return #source.asks == count
+      end, 25))
+    end
+
+    before_each(function()
+      source = symbols.install()
+    end)
+
+    after_each(function()
+      source.restore()
+    end)
+
+    it("announces the diff, then a file's symbols as they arrive", function()
+      changeset.build()
+      wait_for_asks(1)
+      assert.same({ "diff" }, events)
+
+      source.asks[1].answer("mod.lua", {})
+
+      assert.same({ "diff", "symbols" }, events)
+    end)
+
+    it("stays silent for an answer to a refresh that a newer one replaced", function()
+      changeset.build()
+      wait_for_asks(1)
+      changeset.refresh()
+      wait_for_asks(2)
+      events = {}
+
+      source.asks[1].answer("mod.lua", {})
+
+      assert.same({}, events)
+    end)
+  end)
+
+  describe("once gh names a PR onto the branch already compared against", function()
+    before_each(function()
+      vim.env.FAKE_GH_PR = '{"baseRefName":"trunk","number":7,"state":"OPEN"}'
+    end)
+
+    after_each(function()
+      vim.env.FAKE_GH_PR = nil
+    end)
+
+    it("announces the PR and keeps the tree", function()
+      build_and_collect()
+      local built = changeset._tree()
+
+      assert.is_true(vim.wait(10000, function()
+        return vim.list_contains(events, "pr")
+      end, 25))
+      assert.equal(built, changeset._tree())
+    end)
+  end)
+
+  describe("when the diff cannot be read", function()
+    local diff = require("changeset.diff")
+    local real_collect, real_notify = diff.collect, vim.notify
+
+    before_each(function()
+      diff.collect = function(_, _, on_done)
+        on_done(nil, "boom")
+      end
+      vim.notify = function() end
+    end)
+
+    after_each(function()
+      diff.collect, vim.notify = real_collect, real_notify
+    end)
+
+    it("announces the failure", function()
+      changeset.build()
+
+      assert.same({ "failed" }, events)
     end)
   end)
 end)

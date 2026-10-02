@@ -35,12 +35,13 @@ local M = {}
 ---@field timer uv.uv_timer_t?
 ---@field request table? The refresh whose answers this session is still listening for.
 
----What the sidebar supplies to a new tree, and does as the tree changes.
+---What the sidebar supplies to a new tree.
 ---@class changeset.BuildHooks
 ---@field view fun(root: string, branch: string): table The sidebar's own fields for a new tree. Asked for here, not added after `build()` returns: a PR target landing builds with no sidebar code on the stack.
----@field rebuild fun() The tree's files or symbols changed.
----@field redraw fun() Only what the header shows changed; the rows stand.
----@field failed fun() The diff could not be read.
+
+---What happened to the tree: its `diff` read, one file's `symbols` read, only its `pr` number changed, or its
+---diff `failed` to read.
+---@alias changeset.TreeEvent "diff"|"symbols"|"pr"|"failed"
 
 ---@type changeset.Tree?
 local session
@@ -54,6 +55,16 @@ local save_timer
 
 ---@type changeset.BuildHooks
 local hooks
+
+---@type table<fun(event: changeset.TreeEvent, tree: changeset.Tree), true>
+local subscribers = {}
+
+---@param event changeset.TreeEvent
+local function announce(event)
+  for fn in pairs(subscribers) do
+    fn(event, assert(session, "changeset: no open session"))
+  end
+end
 
 ---Stop a deferred callback for good. `vim.defer_fn` closes its handle from inside the
 ---callback, so a timer replaced before it fires leaves one open.
@@ -133,7 +144,7 @@ function M.refresh()
       return
     end
     if not files then
-      hooks.failed()
+      announce("failed")
       return vim.notify("Changeset: " .. (err or "git failed"), vim.log.levels.ERROR)
     end
     session.files = files
@@ -164,7 +175,7 @@ function M.refresh()
       memo.entries[path] = entries[path]
       session.comments[path] = entries[path].comments
     end
-    hooks.rebuild()
+    announce("diff")
 
     local root = session.root
     session.cancel = resolve.start({ root = root, base = session.base }, unknown, function(path, items, comment_lines)
@@ -177,7 +188,7 @@ function M.refresh()
         -- absent would instead read as "still resolving", forever.
         session.symbols[path] = items or {}
         session.comments[path] = comment_lines
-        hooks.rebuild()
+        announce("symbols")
       end
     end)
   end)
@@ -209,7 +220,10 @@ function M.build()
   end
   local base = point.base
   if session and session.root == root and session.base == base and session.branch == branch then
-    session.pr = point.pr
+    if session.pr ~= point.pr then
+      session.pr = point.pr
+      announce("pr")
+    end
     return true
   end
   drop()
@@ -247,13 +261,7 @@ fork_point.subscribe(function(root, branch, point)
   if session.base == point.base and session.pr == point.pr then
     return
   end
-  local kept = session
   M.build()
-  -- A PR onto the branch already compared against leaves the tree standing,
-  -- and only the header has news.
-  if session == kept then
-    hooks.redraw()
-  end
 end)
 
 ---The tree the last build() made, with the fields BuildHooks.view supplied; nil before the first.
@@ -263,7 +271,13 @@ function M.current()
   return session --[[@as changeset.Session?]]
 end
 
----Register what the sidebar supplies and does as the tree changes. Before the first
+---Hear what happens to the tree. Subscribing `fn` again does nothing.
+---@param fn fun(event: changeset.TreeEvent, tree: changeset.Tree)
+function M.subscribe(fn)
+  subscribers[fn] = true
+end
+
+---Register what the sidebar supplies to a new tree. Before the first
 ---`build()`: nothing here runs without them.
 ---@param sidebar changeset.BuildHooks
 function M.attach(sidebar)

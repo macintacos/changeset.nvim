@@ -184,12 +184,18 @@ build.attach({
       position = position.new(),
     }
   end,
-  rebuild = rebuild,
-  redraw = redraw,
-  failed = function()
-    assert(build.current(), "changeset: no open session").position:failed()
-  end,
 })
+
+-- Fires: the tree reading its diff or a file's symbols, its PR changing, or its diff failing to read.
+build.subscribe(function(event, session)
+  if event == "diff" or event == "symbols" then
+    rebuild()
+  elseif event == "pr" then
+    redraw()
+  else
+    session --[[@as changeset.Session]].position:failed()
+  end
+end)
 
 -- The pipeline lives in `build`; these stay on `require("changeset")` for the plugin, `pick` and the specs.
 M.build = build.build
