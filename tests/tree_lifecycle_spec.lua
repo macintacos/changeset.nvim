@@ -260,7 +260,7 @@ describe("changeset tree", function()
       vim.fn.writefile({ "return 2" }, "child.lua")
       Fixture.commit("child change", tmp)
       vim.cmd.edit("child.lua")
-      vim.env.FAKE_GH_PR = '{"baseRefName":"parent","state":"OPEN"}'
+      vim.env.FAKE_GH_PR = '{"baseRefName":"parent","number":1,"state":"OPEN"}'
     end)
 
     after_each(function()

@@ -256,7 +256,10 @@ fork_point.subscribe(function(root, branch, point)
   if not (session and session.root == root and session.branch == branch and Paths.root(0) == root) then
     return
   end
-  -- Rebuilding on an answer of no PR would ask gh again.
+  -- An answer of no PR holds a default point no fresher than the tree's; rebuilding on it would ask gh again.
+  if not point.pr then
+    return
+  end
   if session.base == point.base and session.pr == point.pr then
     return
   end
