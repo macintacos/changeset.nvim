@@ -8,7 +8,8 @@ local Sidebar = require("support.sidebar")
 
 local function focus_terminal()
   vim.cmd("new")
-  vim.cmd.terminal()
+  -- No process: wiping a :terminal before its shell execs can SIGHUP this nvim.
+  vim.api.nvim_open_term(0, {})
 end
 
 ---The id of the Implementation row for `path`, or for the symbol chain under it.
