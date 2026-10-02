@@ -13,26 +13,6 @@ local function deferred()
 end
 
 describe("changeset.resolve", function()
-  describe("_resolvable", function()
-    it("keeps files in the order they are displayed, so the tree fills top-down", function()
-      local files = {
-        { path = "api.ts", status = "modified" },
-        { path = "auth.ts", status = "added" },
-      }
-
-      assert.same({ "api.ts", "auth.ts" }, resolve._resolvable(files))
-    end)
-
-    it("skips a deleted file, which has no content left to read symbols from", function()
-      local files = {
-        { path = "gone.ts", status = "deleted" },
-        { path = "auth.ts", status = "modified" },
-      }
-
-      assert.same({ "auth.ts" }, resolve._resolvable(files))
-    end)
-  end)
-
   describe("_walk", function()
     ---@return string[]
     local function ten_files()
@@ -42,6 +22,19 @@ describe("changeset.resolve", function()
       end
       return queue
     end
+
+    it("starts files in the order given, so the tree fills top-down", function()
+      local run, pending = deferred()
+
+      resolve._walk({ "api.ts", "auth.ts" }, run, function() end)
+
+      assert.same(
+        { "api.ts", "auth.ts" },
+        vim.tbl_map(function(call)
+          return call.path
+        end, pending)
+      )
+    end)
 
     it("reads a few files at a time, starting one more as each finishes", function()
       local run, pending = deferred()
@@ -267,7 +260,7 @@ describe("changeset.resolve", function()
       local answer, done
       resolve.start(
         { root = root, base = "HEAD" },
-        { { path = path, status = "added", added = 1, removed = 0, hunks = {} } },
+        { { path = path, status = "added", section = "implementation", added = 1, removed = 0, hunks = {} } },
         function(_, items)
           answer, done = items, true
         end
@@ -312,7 +305,7 @@ describe("changeset.resolve", function()
       Fixture.commit("base", root)
       vim.fn.writefile({ "# Title", "<!-- note -->" }, root .. "/README.md")
       local report
-      local file = { path = "README.md", status = "modified", added = 1, removed = 0, hunks = {} }
+      local file = { path = "README.md", status = "modified", section = "docs", added = 1, removed = 0, hunks = {} }
 
       resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items, found)
         report = { items = items, comments = found }

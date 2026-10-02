@@ -10,7 +10,6 @@ local buffers = require("changeset.buffers")
 local comments = require("changeset.comments")
 local diff = require("changeset.diff")
 local kinds = require("changeset.kinds")
-local sections = require("changeset.sections")
 local symbols = require("changeset.symbols")
 
 -- Resolving every changed file at once would open forty buffers and fire forty
@@ -23,19 +22,6 @@ local CONCURRENCY = 4
 local ATTACH_TIMEOUT_MS = 2000
 
 local M = {}
-
----Paths worth asking a server about, in display order.
----@param files changeset.File[]
----@return string[]
-function M._resolvable(files)
-  local out = {}
-  for _, file in ipairs(files) do
-    if file.status ~= "deleted" then
-      out[#out + 1] = file.path
-    end
-  end
-  return out
-end
 
 ---Whether a server enabled through `vim.lsp.enable` may yet attach to `bufnr`. One
 ---started by hand is missed, but the sidebar asks again once it attaches.
@@ -123,7 +109,7 @@ local function resolve_one(repo, file, on_done)
     return on_done(nil)
   end
   -- A Docs file lists whole, so its comment lines would be read for nothing.
-  local is_docs_file = sections.classify(path, file.generated) == "docs"
+  local is_docs_file = file.section == "docs"
   local function read(on_text)
     if is_docs_file then
       return on_text(nil)
@@ -202,7 +188,7 @@ end
 ---Resolve every changed file's symbols and comment lines, reporting each as it lands. Each item carries `test`
 ---when its syntax marks it an inline test.
 ---@param repo changeset.resolve.Repo
----@param files changeset.File[]
+---@param files changeset.File[] Only files whose symbols are read (`Rows.skips`), in display order.
 ---@param on_file fun(path: string, items: changeset.Symbol[]?, comments: changeset.Comments?)
 ---@return fun() cancel
 function M.start(repo, files, on_file)
@@ -210,9 +196,15 @@ function M.start(repo, files, on_file)
   for _, file in ipairs(files) do
     file_by_path[file.path] = file
   end
-  return M._walk(M._resolvable(files), function(path, done)
-    resolve_one(repo, file_by_path[path], done)
-  end, on_file)
+  return M._walk(
+    vim.tbl_map(function(file)
+      return file.path
+    end, files),
+    function(path, done)
+      resolve_one(repo, file_by_path[path], done)
+    end,
+    on_file
+  )
 end
 
 return M

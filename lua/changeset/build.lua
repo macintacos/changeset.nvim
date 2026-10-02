@@ -149,7 +149,7 @@ function M.refresh()
     tree.commits = commits
     tree.collected = true
     local readable = vim.tbl_filter(function(file)
-      return Rows.read_status(file, tree.symbols) ~= "skipped"
+      return not Rows.skips(file)
     end, files)
 
     -- Stamped before the request rather than after: a file edited while its

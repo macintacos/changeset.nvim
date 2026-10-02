@@ -13,7 +13,7 @@ local function file(overrides)
     added = 12,
     removed = 3,
     ancestor = false,
-    resolved = true,
+    read = "done",
     children = {},
   }, overrides or {})
 end
@@ -430,20 +430,20 @@ describe("changeset.render", function()
 
     describe("symbols still resolving", function()
       it("adds a placeholder child under a file whose children have not arrived", function()
-        local lines = file_lines({ file({ resolved = false }) }, opts())
+        local lines = file_lines({ file({ read = "reading" }) }, opts())
 
         assert.same({ " ▎ F a.lua (src)", "   └─⋯ reading symbols" }, texts(lines))
         assert.equal(render.META_HL, mark_over(lines[2], "⋯ reading symbols").hl)
       end)
 
-      it("shows only the file row once a file is resolved but nothing inside it changed", function()
-        local lines = file_lines({ file({ resolved = true }) }, opts())
+      it("shows only the file row once a file is read but nothing inside it changed", function()
+        local lines = file_lines({ file({ read = "done" }) }, opts())
 
         assert.same({ " ▎ F a.lua (src)" }, texts(lines))
       end)
 
       it("nests the placeholder under the file as a row of its own", function()
-        local lines = file_lines({ file({ resolved = false }) }, opts())
+        local lines = file_lines({ file({ read = "reading" }) }, opts())
 
         assert.not_equal(lines[1].row.id, lines[2].row.id)
         assert.equal(lines[1].row.depth + 1, lines[2].row.depth)
@@ -498,7 +498,7 @@ describe("changeset.render", function()
       end)
 
       it("hides the placeholder of a collapsed file still resolving", function()
-        local lines = file_lines({ file({ resolved = false }) }, opts({ collapsed = collapsed_ids("src/a.lua") }))
+        local lines = file_lines({ file({ read = "reading" }) }, opts({ collapsed = collapsed_ids("src/a.lua") }))
 
         assert.same({ " ▎ F a.lua (src)" }, texts(lines))
       end)

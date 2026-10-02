@@ -39,7 +39,14 @@ local function file(path, hunks, status)
     added = added + h.added
     removed = removed + h.removed
   end
-  return { path = path, status = status or "modified", added = added, removed = removed, hunks = hunks }
+  return {
+    path = path,
+    status = status or "modified",
+    section = require("changeset.sections").classify(path),
+    added = added,
+    removed = removed,
+    hunks = hunks,
+  }
 end
 
 ---@param rows changeset.Row[]
@@ -69,16 +76,16 @@ local FILE_ID = "#implementation\0" .. PATH
 
 describe("changeset.rows", function()
   describe("build", function()
-    it("marks a file resolved once its symbols have arrived", function()
+    it("marks a file done once its symbols have arrived", function()
       local rows = Rows.files(Rows.build({ file(PATH, { hunk(3, 1) }) }, { [PATH] = {} }))
 
-      assert.is_true(rows[1].resolved)
+      assert.equal("done", rows[1].read)
     end)
 
-    it("leaves a file unresolved while its symbols are still outstanding", function()
+    it("leaves a file reading while its symbols are still outstanding", function()
       local rows = Rows.files(Rows.build({ file(PATH, { hunk(3, 1) }) }, {}))
 
-      assert.is_false(rows[1].resolved)
+      assert.equal("reading", rows[1].read)
     end)
   end)
 
@@ -119,19 +126,22 @@ describe("changeset.rows", function()
       end)
 
       it("files a file the diff edge marked generated under Generated", function()
-        local rows = Rows.build({ vim.tbl_extend("force", file("api.go", { hunk(1, 1) }), { generated = true }) }, {})
+        local rows = Rows.build(
+          { vim.tbl_extend("force", file("api.go", { hunk(1, 1) }), { section = "generated" }) },
+          {}
+        )
 
         assert.same({ "Generated" }, names(rows))
       end)
 
-      it("resolves a Generated file whose symbols are never filed, with no children", function()
+      it("skips a Generated file whose symbols are never filed, with no children", function()
         local go_sum = Rows.build({ file("go.sum", { hunk(1, 1) }) }, {})[1].children[1]
 
-        assert.is_true(go_sum.resolved)
+        assert.equal("skipped", go_sum.read)
         assert.same({}, go_sum.children)
       end)
 
-      it("gives a resolved Generated file no children, where another file gets its orphans", function()
+      it("gives a Generated file no children, where another file gets its orphans", function()
         local rows = Rows.build(
           { file("lua/a.lua", { hunk(1, 1) }), file("go.sum", { hunk(1, 1) }) },
           { ["lua/a.lua"] = {}, ["go.sum"] = {} }
@@ -139,7 +149,7 @@ describe("changeset.rows", function()
         local go_sum = rows[2].children[1]
 
         assert.same({ "Other changes" }, names(rows[1].children[1].children))
-        assert.is_true(go_sum.resolved)
+        assert.equal("skipped", go_sum.read)
         assert.same({}, go_sum.children)
       end)
 
@@ -171,7 +181,7 @@ describe("changeset.rows", function()
         assert.is_false(row.ancestor)
       end)
 
-      it("gives a file whose symbols have not resolved no children, not even an orphan group", function()
+      it("gives a file whose symbols are still reading no children, not even an orphan group", function()
         local rows = Rows.files(Rows.build({ file(PATH, { hunk(5, 2) }) }, {}))
 
         assert.equal(1, #rows)
@@ -400,7 +410,7 @@ describe("changeset.rows", function()
         assert.same({ "SessionStore" }, names(build_store({ hunk(1, 5) })))
       end)
 
-      it("gives a file with resolved but no symbols only its orphan group", function()
+      it("gives a file read as having no symbols only its orphan group", function()
         local rows = Rows.files(Rows.build({ file("Makefile", { hunk(2, 2) }) }, { ["Makefile"] = {} }))
 
         assert.same({ "Other changes" }, names(rows[1].children))
@@ -499,8 +509,22 @@ describe("changeset.rows", function()
     end)
   end)
 
+  describe("skips", function()
+    it("skips a deleted file", function()
+      assert.is_true(Rows.skips(file(PATH, { hunk(1, 0, 1) }, "deleted")))
+    end)
+
+    it("skips a Generated file", function()
+      assert.is_true(Rows.skips(vim.tbl_extend("force", file(PATH, { hunk(1, 1) }), { section = "generated" })))
+    end)
+
+    it("reads any other file", function()
+      assert.is_false(Rows.skips(file(PATH, { hunk(1, 1) })))
+    end)
+  end)
+
   describe("read_status", function()
-    local generated_go_file = vim.tbl_extend("force", file("api.go", { hunk(1, 1) }), { generated = true })
+    local generated_go_file = vim.tbl_extend("force", file("api.go", { hunk(1, 1) }), { section = "generated" })
 
     it("skips a deleted file", function()
       assert.equal("skipped", Rows.read_status(file(PATH, { hunk(1, 0, 1) }, "deleted"), {}))

@@ -416,11 +416,11 @@ moment that window takes focus or a buffer.
 
 The two sentences wrap at the sidebar's edge, which no row does: a row is trimmed to fit.
 
-What an empty subtree means is carried by the row, not inferred from it. A file row is
-`resolved` once a server has answered for it, and only an unresolved row gets the
-placeholder. That keeps three cases apart which all render childless: still waiting, a
-`deleted` file, and a file with genuinely nothing to show inside it — a 100% rename, a
-binary change.
+What an empty subtree means is carried by the row, not inferred from it. A file row
+carries its read status — `reading`, `done`, or `skipped` for a deleted or Generated file
+— and only a `reading` row gets the placeholder. That keeps three cases apart which all
+render childless: still waiting, a skipped file, and a file with genuinely nothing to show
+inside it — a 100% rename, a binary change.
 
 ## What it remembers
 

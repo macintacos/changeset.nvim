@@ -27,7 +27,7 @@ local SEP = " › "
 ---@field tip string?         On a `chain` row, the id of the deepest row it stands for.
 ---@field range { [1]: integer, [2]: integer }? Lines a symbol's body or an orphan hunk covers, inclusive.
 ---@field status string?      File rows only.
----@field resolved boolean?   File rows only: whether this file's symbols are answered, or never read.
+---@field read changeset.ReadStatus? File rows only: how far this file's symbols have been read.
 ---@field files integer?      Section rows only: how many files the section holds, before any filter.
 ---@field icon string?        Section rows only: the directory name its section header's icon is looked up by.
 ---@field children changeset.Row[]
@@ -454,14 +454,14 @@ local function file_id(section_id, path)
 end
 
 ---@param file changeset.File
----@param resolved boolean Whether this file's symbols are answered, or never read.
+---@param read changeset.ReadStatus
 ---@param section changeset.Row
 ---@return changeset.Row
-local function file_row(file, resolved, section)
+local function file_row(file, read, section)
   local deleted = file.status == "deleted"
   return {
     id = file_id(section.id, file.path),
-    resolved = resolved,
+    read = read,
     kind = "file",
     depth = section.depth + 1,
     name = file.path,
@@ -565,12 +565,19 @@ end
 ---How far the tree has read a file's symbols; a deleted or Generated file is `skipped`, never read.
 ---@alias changeset.ReadStatus "reading"|"done"|"skipped"
 
+---Whether the tree never reads `file`'s symbols: it was deleted, or it is Generated.
+---@param file changeset.File
+---@return boolean
+function M.skips(file)
+  return file.status == "deleted" or file.section == "generated"
+end
+
 ---`file`'s read status, given the symbols filed so far.
 ---@param file changeset.File
 ---@param symbols_by_path table<string, changeset.Symbol[]>
 ---@return changeset.ReadStatus
 function M.read_status(file, symbols_by_path)
-  if file.status == "deleted" or sections.classify(file.path, file.generated) == "generated" then
+  if M.skips(file) then
     return "skipped"
   end
   return symbols_by_path[file.path] and "done" or "reading"
@@ -584,11 +591,11 @@ end
 ---@param symbols_by_path table<string, changeset.Symbol[]>
 ---@param lines changeset.rows.Lines
 local function add_file(section_rows, file, symbols_by_path, lines)
-  local key = sections.classify(file.path, file.generated)
+  local key = file.section
   local section = section_rows[key]
   local read_status = M.read_status(file, symbols_by_path)
   if read_status ~= "done" then
-    return append(section, file_row(file, read_status ~= "reading", section), file)
+    return append(section, file_row(file, read_status, section), file)
   end
   local symbols = symbols_by_path[file.path]
   local comment_lines = key ~= "docs" and lines.comments and lines.comments[file.path] or nil
@@ -601,7 +608,7 @@ local function add_file(section_rows, file, symbols_by_path, lines)
   local rows, shown = {}, {}
   for copy, nodes in pairs(split(credited.roots)) do
     local part = { nodes = nodes, orphans = credited.orphans[copy] or {} }
-    rows[copy] = fill(file_row(file, true, section_for[copy]), part, lines.text)
+    rows[copy] = fill(file_row(file, "done", section_for[copy]), part, lines.text)
     shown[copy] = #rows[copy].children > 0 or nil
   end
   for copy, stat in pairs(shares(file, credited, shown)) do
@@ -619,8 +626,7 @@ end
 ---
 ---A readable file absent from `symbols_by_path` is still reading and gets no children; a file mapped to `{}`
 ---has no symbols, so all its hunks are orphans. A deleted or Generated file is never read and never gets
----children: a Generated file's hunks are not worth a row each. A file row is `resolved` once its symbols are
----answered, or when they are never read.
+---children: a Generated file's hunks are not worth a row each. A file row carries its `read_status`.
 ---@param files changeset.File[] Hunks ascending by line, as `git diff` emits them.
 ---@param symbols_by_path table<string, changeset.Symbol[]> Flat `symbols.flatten` output by file path.
 ---@param lines changeset.rows.Lines?

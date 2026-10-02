@@ -573,7 +573,7 @@ describe("changeset.view", function()
 
     it("starts a new root with Generated folded", function()
       local generated = Changes.file("gen.lua", { 1 })
-      generated.generated = true
+      generated.section = "generated"
       local rows = Rows.build({ Changes.file("mod.lua", { 5 }), generated }, {})
 
       assert.same({ "Generated" }, vim.list_slice(show(view.for_root("/repo/generated-folded", {}), rows), 4))
@@ -581,7 +581,7 @@ describe("changeset.view", function()
 
     it("keeps Generated folded when every file unfolds", function()
       local generated = Changes.file("gen.lua", { 1 })
-      generated.generated = true
+      generated.section = "generated"
       local rows = Rows.build({ Changes.file("mod.lua", { 5 }), generated }, {})
       local v = view.for_root("/repo/generated-unfold-files", {})
 

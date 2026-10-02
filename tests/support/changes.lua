@@ -28,7 +28,14 @@ function M.file(path, lines)
   local hunks = vim.tbl_map(function(lnum)
     return { lnum = lnum, count = 1, added = 1, removed = 0 }
   end, lines)
-  return { path = path, status = "modified", added = #lines, removed = 0, hunks = hunks }
+  return {
+    path = path,
+    status = "modified",
+    section = require("changeset.sections").classify(path),
+    added = #lines,
+    removed = 0,
+    hunks = hunks,
+  }
 end
 
 return M
