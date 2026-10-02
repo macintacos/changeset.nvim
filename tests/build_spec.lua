@@ -51,20 +51,18 @@ end
 
 describe("changeset.build", function()
   local tmp, previous_dir
-  local real_start = resolve.start
+  local source
 
   before_each(function()
     tmp, previous_dir = Fixture.enter_tempdir()
     Fixture.feature_one_file(tmp)
     vim.cmd.edit("mod.lua")
     events = {}
-    resolve.start = function()
-      return function() end
-    end
+    source = symbols.install()
   end)
 
   after_each(function()
-    resolve.start = real_start
+    source.restore()
     vim.cmd("silent! %bwipeout!")
     vim.fn.chdir(previous_dir)
     vim.fn.delete(tmp, "rf")
@@ -224,22 +222,12 @@ describe("changeset.build", function()
   end)
 
   describe("announcing", function()
-    local source
-
     ---@param count integer
     local function wait_for_asks(count)
       assert.is_true(vim.wait(10000, function()
         return #source.asks == count
       end, 25))
     end
-
-    before_each(function()
-      source = symbols.install()
-    end)
-
-    after_each(function()
-      source.restore()
-    end)
 
     it("announces the diff, then a file's symbols as they arrive", function()
       build.build()

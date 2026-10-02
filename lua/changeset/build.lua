@@ -30,9 +30,6 @@ local M = {}
 ---@field collected boolean Whether the diff has been read yet.
 ---@field symbols table<string, changeset.CachedSymbol[]> Absent key: still reading, or never read (`Rows.read_status`).
 ---@field comments table<string, changeset.Comments> Absent key means none read or parsed for the file.
----@field cancel fun()?
----@field timer uv.uv_timer_t?
----@field request table? The refresh whose answers this tree is still listening for.
 
 ---What happened to the tree: its `diff` read, one file's `symbols` read, only its `pr` number changed, or its
 ---diff `failed` to read.
@@ -41,6 +38,15 @@ local M = {}
 ---@type changeset.Tree?
 local tree
 
+---What the current tree's pipeline is still doing; replaced with the tree.
+---@class changeset.build.Work
+---@field cancel fun()? Stops the symbol reads still running.
+---@field timer uv.uv_timer_t? The debounced refresh waiting to run.
+---@field request table? The refresh whose answers are still wanted.
+
+---@type changeset.build.Work
+local work = {}
+
 ---Symbols read for the repo at `root`, carried between builds and to disk.
 ---@type { root: string, entries: table<string, changeset.CacheEntry> }?
 local memo
@@ -48,13 +54,13 @@ local memo
 ---@type uv.uv_timer_t?
 local save_timer
 
----@type table<fun(event: changeset.TreeEvent, tree: changeset.Tree), true>
+---@type table<fun(event: changeset.TreeEvent), true>
 local subscribers = {}
 
 ---@param event changeset.TreeEvent
 local function announce(event)
   for fn in pairs(subscribers) do
-    fn(event, assert(tree, "changeset: no tree built yet"))
+    fn(event)
   end
 end
 
@@ -120,19 +126,19 @@ function M.refresh()
   if not tree then
     return
   end
-  if tree.cancel then
-    tree.cancel()
-    tree.cancel = nil
+  if work.cancel then
+    work.cancel()
+    work.cancel = nil
   end
 
   -- Identity rather than a counter: an answer from a refresh that this one replaced
   -- has to be dropped, and a tree built later starts from a table of its own.
   local request = {}
-  tree.request = request
+  work.request = request
 
   local diff = require("changeset.diff")
   diff.collect(tree.base, tree.root, function(files, err, commits)
-    if not tree or tree.request ~= request then
+    if not tree or work.request ~= request then
       return
     end
     if not files then
@@ -170,11 +176,11 @@ function M.refresh()
     announce("diff")
 
     local root = tree.root
-    tree.cancel = resolve.start({ root = root, base = tree.base }, unknown, function(path, items, comment_lines)
+    work.cancel = resolve.start({ root = root, base = tree.base }, unknown, function(path, items, comment_lines)
       -- Filed even once a newer refresh has replaced this one: the stamp predates
       -- the request, so the answer still describes the file it was read from.
       file_answer(root, path, { items = items, comments = comment_lines }, stamps[path])
-      if tree and tree.request == request then
+      if tree and work.request == request then
         -- A server that answers nothing is "resolved with no symbols", which is what
         -- turns every hunk in an unsupported file into an orphan row. Leaving the key
         -- absent would instead read as "still resolving", forever.
@@ -188,12 +194,11 @@ end
 
 ---Let go of the tree, stopping whatever it was still gathering.
 local function drop()
-  if tree then
-    if tree.cancel then
-      tree.cancel()
-    end
-    stop(tree.timer)
+  if work.cancel then
+    work.cancel()
   end
+  stop(work.timer)
+  work = {}
   tree = nil
 end
 
@@ -262,7 +267,7 @@ function M.current()
 end
 
 ---Hear what happens to the tree. Subscribing `fn` again does nothing.
----@param fn fun(event: changeset.TreeEvent, tree: changeset.Tree)
+---@param fn fun(event: changeset.TreeEvent)
 function M.subscribe(fn)
   subscribers[fn] = true
 end
@@ -291,8 +296,8 @@ local function refresh_soon()
   if not tree then
     return
   end
-  stop(tree.timer)
-  tree.timer = vim.defer_fn(function()
+  stop(work.timer)
+  work.timer = vim.defer_fn(function()
     if tree then
       M.refresh()
     end

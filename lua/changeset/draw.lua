@@ -3,8 +3,8 @@
 
 local icons = require("changeset.icons")
 local render = require("changeset.render")
-local sidebar_state = require("changeset.sidebar_state")
 local Rows = require("changeset.rows")
+local sidebar_state = require("changeset.sidebar_state")
 local view = require("changeset.view")
 local window = require("changeset.window")
 
