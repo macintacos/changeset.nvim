@@ -278,6 +278,24 @@ describe("changeset.resolve", function()
       return by_name
     end
 
+    it("reports a file as unanswered when its buffer is wiped while its base is read", function()
+      Fixture.init_repo("trunk", root)
+      Fixture.commit("base", root)
+      vim.fn.writefile({ "return { 1 }" }, root .. "/mod.lua")
+      local report
+      local file = { path = "mod.lua", status = "modified", added = 1, removed = 1, hunks = {} }
+
+      resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items)
+        report = { items = items }
+      end)
+      vim.cmd("silent! %bwipeout!")
+
+      assert.is_true(vim.wait(5000, function()
+        return report ~= nil
+      end, 25))
+      assert.is_nil(report.items)
+    end)
+
     it("reads a file's comment lines at its base and now when no server covers it", function()
       Fixture.init_repo("trunk", root)
       vim.fn.writefile({ "x = 1", "# old note" }, root .. "/conf.toml")

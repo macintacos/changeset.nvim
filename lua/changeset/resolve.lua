@@ -38,6 +38,9 @@ end
 ---@param on_client fun(ok: boolean)
 local function await_client(bufnr, on_client)
   local method = "textDocument/documentSymbol"
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return on_client(false)
+  end
   if #vim.lsp.get_clients({ bufnr = bufnr, method = method }) > 0 then
     return on_client(true)
   end
