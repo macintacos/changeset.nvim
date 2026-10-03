@@ -1,4 +1,4 @@
----Runs git and gh: the branch changeset diffs against, its open PR, and every other gh call.
+---The git and gh queries changeset makes: the branch it diffs against, that branch's open PR, and the gh runner every GitHub call goes through.
 local M = {}
 
 ---Run a git command and return its stdout lines, or an empty table if it failed.
@@ -58,7 +58,8 @@ function M.merge_base(cwd, branch)
   end
 end
 
----Run gh without a shell; hand `cb` its decoded JSON stdout, or why it failed.
+---Run gh without a shell; hand `cb` its decoded JSON stdout, or why it failed. A non-zero exit,
+---output that isn't JSON, or a GraphQL `errors` body even on exit 0 is a failure.
 ---@param args string[] Arguments after `gh`.
 ---@param opts { cwd: string?, timeout: integer }
 ---@param cb fun(err: string?, out: any) Called on the main loop.
@@ -104,14 +105,14 @@ end
 ---@field number integer
 ---@field owner string Owner of the repository the PR was opened against, a fork's upstream included.
 ---@field name string That repository's name.
----@field head string Head commit.
----@field author string Login of whoever opened it.
+---@field host string Host the PR lives on, from its url.
+---@field head string SHA of the PR's head commit when gh answered (`headRefOid`).
+---@field author string? Login of whoever opened it.
 
 ---Ask gh for the open PR of the branch checked out at `cwd`.
 ---@param cwd string? Repository to ask about; Neovim's own directory when absent.
----@param cb fun(err: string?, pr: changeset.Pr?)
+---@param cb fun(err: string?, pr: changeset.Pr?) `err` when the branch has no open PR (none, closed or merged), when the url names no repository, or when gh fails or times out.
 function M.pr(cwd, cb)
-  -- ponytail: github.com only; pass --hostname from the PR url's host when GHE matters
   M.gh(
     { "pr", "view", "--json", "author,baseRefName,headRefOid,number,state,url" },
     { cwd = cwd, timeout = 5000 },
@@ -122,9 +123,9 @@ function M.pr(cwd, cb)
       if pr.state ~= "OPEN" then
         return cb(("PR #%s is %s"):format(pr.number, pr.state))
       end
-      local owner, name
+      local host, owner, name
       if type(pr.url) == "string" then
-        owner, name = pr.url:match("^https?://[^/]+/([^/]+)/([^/]+)/pull/%d+$")
+        host, owner, name = pr.url:match("^https?://([^/]+)/([^/]+)/([^/]+)/pull/%d+$")
       end
       if not owner then
         return cb(("PR #%s has no repository url: %s"):format(pr.number, tostring(pr.url)))
@@ -134,6 +135,7 @@ function M.pr(cwd, cb)
         number = pr.number,
         owner = owner,
         name = name,
+        host = host,
         head = pr.headRefOid,
         author = pr.author and pr.author.login,
       })

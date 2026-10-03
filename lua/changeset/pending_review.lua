@@ -3,6 +3,7 @@ local Git = require("changeset.git")
 
 local M = {}
 
+-- ponytail: mutations go to gh's default host; a GHE user also logged in to github.com needs --hostname threaded through them
 -- ponytail: a timed-out mutation may still land on GitHub; the next find shows what did
 local TIMEOUT = 30000
 
@@ -10,7 +11,7 @@ local TIMEOUT = 30000
 
 ---@class changeset.pending_review.Pr : changeset.Pr
 ---@field id string Node ID.
----@field viewer_did_author boolean
+---@field viewer_did_author boolean Whether the viewer opened the PR, so GitHub refuses `REQUEST_CHANGES` and `APPROVE`.
 
 ---@class changeset.PendingReview
 ---@field id string Node ID.
@@ -19,7 +20,7 @@ local TIMEOUT = 30000
 ---@class changeset.ReviewComment
 ---@field id string Node ID (`PRRC_…`), never the thread's.
 ---@field path string
----@field line integer? nil once outdated, or on a file-level review comment.
+---@field line integer? nil once outdated, or on a file-level review comment; the record can't tell the two apart.
 ---@field start_line integer? First line of a range.
 ---@field body string
 
@@ -27,6 +28,7 @@ local TIMEOUT = 30000
 ---@field pr changeset.pending_review.Pr
 ---@field review changeset.PendingReview? nil when the viewer has none.
 
+-- Keep in sync with doc/agents/github-reviews.md § Calls: the fixtures under tests/fixtures/github-reviews/ are these queries' recorded answers.
 local FIND = [[query($owner: String!, $name: String!, $number: Int!) {
   viewer { login }
   repository(owner: $owner, name: $name) {
@@ -66,12 +68,13 @@ local SUBMIT = [[mutation($review: ID!, $event: PullRequestReviewEvent!, $body: 
   submitPullRequestReview(input: {pullRequestReviewId: $review, event: $event, body: $body}) { pullRequestReview { id state body } }
 }]]
 
----Run a GraphQL call; `vars` are `-f`/`-F` pairs in order.
+---Run a GraphQL call; `vars` are `-f`/`-F` pairs in order, after any other `flags`.
 ---@param vars string[]
 ---@param query string
 ---@param cb fun(err: string?, out: any)
-local function graphql(vars, query, cb)
-  local args = vim.list_extend({ "api", "graphql" }, vars)
+---@param flags string[]?
+local function graphql(vars, query, cb, flags)
+  local args = vim.list_extend(vim.list_extend({ "api", "graphql" }, flags or {}), vars)
   vim.list_extend(args, { "-f", "query=" .. query })
   Git.gh(args, { timeout = TIMEOUT }, cb)
 end
@@ -93,6 +96,19 @@ local function comments(pages)
   return out
 end
 
+---List every review comment of the pending review with node ID `review_id`.
+---@param host string
+---@param review_id string
+---@param cb fun(err: string?, comments: changeset.ReviewComment[]?)
+local function list_comments(host, review_id, cb)
+  graphql({ "-f", "review=" .. review_id }, LIST, function(err, pages)
+    if err then
+      return cb(err)
+    end
+    cb(nil, comments(pages))
+  end, { "--hostname", host, "--paginate", "--slurp" })
+end
+
 ---Find the viewer's pending review on the open PR of the branch checked out at `cwd`.
 ---@param cwd string?
 ---@param cb fun(err: string?, found: changeset.pending_review.Found?)
@@ -101,33 +117,32 @@ function M.find(cwd, cb)
     if err then
       return cb(err)
     end
-    ---@cast pr changeset.pending_review.Pr
+    ---@cast pr -nil
     local vars = { "-f", "owner=" .. pr.owner, "-f", "name=" .. pr.name, "-F", "number=" .. pr.number }
     graphql(vars, FIND, function(find_err, out)
       if find_err then
         return cb(find_err)
       end
       local node = out.data.repository.pullRequest
-      pr.id, pr.viewer_did_author = node.id, node.viewerDidAuthor
+      ---@type changeset.pending_review.Found
+      local found = { pr = vim.tbl_extend("force", pr, { id = node.id, viewer_did_author = node.viewerDidAuthor }) }
       local review = node.reviews.nodes[1]
       if not review then
-        return cb(nil, { pr = pr })
+        return cb(nil, found)
       end
-      Git.gh(
-        { "api", "graphql", "--paginate", "--slurp", "-f", "review=" .. review.id, "-f", "query=" .. LIST },
-        { timeout = TIMEOUT },
-        function(list_err, pages)
-          if list_err then
-            return cb(list_err)
-          end
-          cb(nil, { pr = pr, review = { id = review.id, comments = comments(pages) } })
+      list_comments(pr.host, review.id, function(list_err, list)
+        if list_err then
+          return cb(list_err)
         end
-      )
-    end)
+        found.review = { id = review.id, comments = list }
+        cb(nil, found)
+      end)
+    end, { "--hostname", pr.host })
   end)
 end
 
----Start a pending review on the PR with node ID `pr_id`.
+---Start a pending review on the PR with node ID `pr_id`. Call only when `find` found none:
+---GitHub allows one pending review per viewer per PR.
 ---@param pr_id string
 ---@param cb fun(err: string?, review: changeset.PendingReview?)
 function M.start(pr_id, cb)
@@ -139,7 +154,8 @@ function M.start(pr_id, cb)
   end)
 end
 
----Add a review comment on `comment.line`, or on `comment.start_line` to `comment.line`.
+---Add a review comment on `new.line`, or on `new.start_line` to `new.line`, in the line numbers
+---of the PR's head. GitHub refuses a line outside every hunk of the PR's diff.
 ---@param review_id string
 ---@param new { path: string, line: integer, start_line: integer?, body: string }
 ---@param cb fun(err: string?, comment: changeset.ReviewComment?)

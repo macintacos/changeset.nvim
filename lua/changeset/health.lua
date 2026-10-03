@@ -51,7 +51,7 @@ local function probe()
   local has_gh = vim.fn.executable("gh") == 1
   local gh_auth = nil ---@type boolean?
   if has_gh then
-    -- --active: without it, any broken account on any host fails the check though calls would work.
+    -- --active: checks only the active account on each host, so a broken inactive one doesn't fail it.
     gh_auth = vim.system({ "gh", "auth", "status", "--active" }, { text = true, timeout = 5000 }):wait().code == 0
   end
   return {

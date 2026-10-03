@@ -150,7 +150,15 @@ describe("changeset.git", function()
       local err, pr = ask()
 
       assert.is_nil(err)
-      assert.same({ target = "trunk", number = 7, owner = "owner", name = "repo", head = "abc", author = "dev" }, pr)
+      assert.same({
+        target = "trunk",
+        number = 7,
+        owner = "owner",
+        name = "repo",
+        host = "github.com",
+        head = "abc",
+        author = "dev",
+      }, pr)
       assert.same({ { "pr", "view", "--json", "author,baseRefName,headRefOid,number,state,url" } }, gh.calls())
     end)
 

@@ -80,8 +80,9 @@ The listing can also select `subjectType`, which returns `LINE` or `FILE`
 ## Resolving the pull request
 
 Resolve the pull request from the checkout with
-`gh pr view --json author,baseRefName,headRefOid,number,state,url`. Take the owner and name
-from `url`, and take owner, name, and number from that answer for every later call.
+`gh pr view --json author,baseRefName,headRefOid,number,state,url`. Take every later call's
+host, owner and name from `url`, and its number from `number`. Pass the host to `gh api`
+as `--hostname`, since `gh api` never infers it from the checkout.
 
 `url` names the base repository from a fork's checkout too. Measured on `cli/cli` pull
 request 14474, whose head branch lives on a fork (`isCrossRepository: true`): after

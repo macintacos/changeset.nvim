@@ -1,12 +1,12 @@
 ---A fake `gh` on PATH, so no spec asks GitHub. Every call sleeps $FAKE_GH_DELAY seconds
----and records its arguments. Call n then answers with the nth answer queued since the last
----reset, or else prints $FAKE_GH_PR, failing as if there were no PR when that is empty.
+---and records its arguments. It then answers with the oldest queued answer, removing it,
+---or else prints $FAKE_GH_PR, failing as if there were no PR when that is empty.
 ---Requiring it is what installs it; PATH is never restored, since each spec runs in its own
 ---nvim. `without` hides it, for a case where gh is not installed.
 local bin = vim.fn.tempname()
 local state = vim.fn.tempname()
 vim.fn.mkdir(bin, "p")
--- ponytail: concurrent gh calls can race the call counter; specs drive one call at a time
+-- ponytail: concurrent gh calls can race the counters; specs drive one call at a time
 vim.fn.writefile({
   "#!/bin/sh",
   'sleep "${FAKE_GH_DELAY:-0}"',
@@ -17,11 +17,14 @@ vim.fn.writefile({
   'mkdir -p "$d/calls/$n"',
   "i=0",
   'for arg in "$@"; do i=$((i + 1)); printf "%s" "$arg" > "$d/calls/$n/$i"; done',
-  'a="$d/answers/$n"',
-  'if [ -d "$a" ]; then',
+  'a=$(ls "$d/answers" 2>/dev/null | sort -n | head -n 1)',
+  'if [ -n "$a" ]; then',
+  '  a="$d/answers/$a"',
   '  cat "$a/stdout"',
   '  cat "$a/stderr" >&2',
-  '  exit "$(cat "$a/code")"',
+  '  code=$(cat "$a/code")',
+  '  rm -r "$a"',
+  '  exit "$code"',
   "fi",
   '[ -n "$FAKE_GH_PR" ] || exit 1',
   'printf "%s" "$FAKE_GH_PR"',
@@ -33,7 +36,7 @@ local M = {}
 
 local queued = 0
 
----Queue the answer for the next call that has none.
+---Queue the answer for the next call that has none: answers go out oldest first.
 ---@param answer { stdout: string?, stderr: string?, code: integer? }
 function M.answer(answer)
   queued = queued + 1

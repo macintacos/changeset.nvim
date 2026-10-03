@@ -1,4 +1,4 @@
-require("support.gh")
+require("support.gh") -- a fake gh on PATH, so probe's `gh auth status` never reaches GitHub
 
 describe("changeset.health", function()
   local health = require("changeset.health")

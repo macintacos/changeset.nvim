@@ -74,6 +74,32 @@ describe("pending_review", function()
       assert.is_true(vim.list_contains(calls[3], "review=" .. REVIEW))
     end)
 
+    it("asks the PR's own host", function()
+      gh.answer({ stdout = gh.pr_view({ url = "https://ghe.example.com/owner/repo/pull/3" }) })
+      gh.fixture("find-pending-review")
+      gh.fixture("review-comments-paginate-slurp")
+
+      run("find", nil)
+
+      for _, call in ipairs({ unpack(gh.calls(), 2, 3) }) do
+        local at = assert(vim.iter(ipairs(call)):find(function(_, a)
+          return a == "--hostname"
+        end))
+        assert.equal("ghe.example.com", call[at + 1])
+      end
+    end)
+
+    it("serves queued answers to the calls after them", function()
+      run("delete", REVIEW)
+      gh.answer({ stdout = gh.pr_view({ url = SANDBOX }) })
+      gh.fixture("find-pending-review-empty")
+
+      local err, found = run("find", nil)
+
+      assert.is_nil(err)
+      assert.equal("PR_kwDOU6Rmbc8AAAABGcSBYA", found.pr.id)
+    end)
+
     it("returns no review when the viewer has none", function()
       gh.answer({ stdout = gh.pr_view({ url = SANDBOX }) })
       gh.fixture("find-pending-review-empty")
