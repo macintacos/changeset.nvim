@@ -271,3 +271,59 @@ it returned its one review comment. The run then deleted it with `deletePullRequ
 | `REQUEST_CHANGES`, no body | `tests/fixtures/github-reviews/find-after-submit-request-changes-no-body.json` | `tests/fixtures/github-reviews/review-comments-after-submit-request-changes-no-body.json` | `tests/fixtures/github-reviews/delete-after-submit-request-changes-no-body.json` |
 | `REQUEST_CHANGES`, body | `tests/fixtures/github-reviews/find-after-submit-request-changes-with-body.json` | `tests/fixtures/github-reviews/review-comments-after-submit-request-changes-with-body.json` | `tests/fixtures/github-reviews/delete-after-submit-request-changes-with-body.json` |
 | `APPROVE` | `tests/fixtures/github-reviews/find-after-submit-approve.json` | `tests/fixtures/github-reviews/review-comments-after-submit-approve.json` | `tests/fixtures/github-reviews/delete-after-submit-approve.json` |
+
+## When the PR's head moves
+
+A pending review stays pinned to the commit it was created on, and its review comments
+follow their lines into the new head where GitHub can still find them. A review comment
+whose line moved but kept its text keeps `outdated: false`, gets the new line number in
+`line`, and moves its `commit` to the new head. A review comment whose line was edited or
+deleted goes `outdated: true` with `line: null`, and keeps the old commit; only
+`originalLine` still says where it was. Submitting changes none of this. A review comment
+added after the move resolves `line` against the new head's diff, even though the pending
+review's own `commit` stays the old one. So read a review comment's position from `line`
+and `commit`, treat `line: null` as outdated, and send new review comments in new-head line
+numbers.
+
+The run used pull request 2 in the sandbox,
+<https://github.com/macintacos/changeset-nvim-review-sandbox/pull/2>, which merged
+`head-moves` into `main` and is now closed. Its first commit, `78ed3ec`, changed lines 10,
+20, and 30 of `alpha.txt` to `alpha NN changed`, giving hunks `@@ -7,7 +7,7 @@`,
+`@@ -17,7 +17,7 @@`, and `@@ -27,7 +27,7 @@`. `addPullRequestReview` created the pending
+review on `78ed3ec` (`tests/fixtures/github-reviews/head-moves-add-pending-review.json`),
+and one review comment went on each changed line
+(`tests/fixtures/github-reviews/head-moves-add-thread-10.json`,
+`tests/fixtures/github-reviews/head-moves-add-thread-20.json`,
+`tests/fixtures/github-reviews/head-moves-add-thread-30.json`,
+`tests/fixtures/github-reviews/head-moves-comments-before.json`).
+
+A second commit, `9822b1d`, pushed as a fast-forward, inserted two lines at the top of
+`alpha.txt`, so `alpha 10 changed` moved to line 12, edited `alpha 20 changed` to
+`alpha 20 changed again`, and deleted `alpha 30 changed`. Listing the pending review's
+comments again gave:
+
+| Review comment on | `line` | `originalLine` | `outdated` | `commit` | `originalCommit` |
+| --- | --- | --- | --- | --- | --- |
+| `alpha 10 changed`, moved | 12 | 10 | false | `9822b1d` | `78ed3ec` |
+| `alpha 20 changed`, edited | null | 20 | true | `78ed3ec` | `78ed3ec` |
+| `alpha 30 changed`, deleted | null | 30 | true | `78ed3ec` | `78ed3ec` |
+
+Every `diffHunk` stayed the one from `78ed3ec`
+(`tests/fixtures/github-reviews/head-moves-comments-after-push.json`). The find query
+still returned the pending review with `commit` `78ed3ec`, while `headRefOid` was
+`9822b1d` (`tests/fixtures/github-reviews/head-moves-find-after-push.json`).
+
+A review comment then added at line 12 was accepted
+(`tests/fixtures/github-reviews/head-moves-add-thread-after-push.json`). Listed, it had
+`line` and `originalLine` 12, `commit` and `originalCommit` `9822b1d`, and the `diffHunk`
+`@@ -7,7 +9,7 @@`, a header from the new head's diff
+(`tests/fixtures/github-reviews/head-moves-comments-after-add.json`). Line 12 lies in the
+first hunk of both diffs, so acceptance alone could not tell them apart; the header does.
+
+Submitting as `COMMENT` with a body succeeded
+(`tests/fixtures/github-reviews/head-moves-submit.json`). The four review comments listed
+afterwards with the same `line`, `originalLine`, `outdated`, and commits as before
+(`tests/fixtures/github-reviews/head-moves-comments-after-submit.json`).
+
+§ Calls gives the calls; the listing ran with `--paginate --slurp`, so each listing fixture
+is an array of pages.
