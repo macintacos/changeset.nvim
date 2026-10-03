@@ -10,6 +10,7 @@ local actions = require("changeset.actions")
 local build = require("changeset.build")
 local config = require("changeset.config")
 local draw = require("changeset.draw")
+local pending_state = require("changeset.pending_state")
 local render = require("changeset.render")
 local Rows = require("changeset.rows")
 local sidebar_state = require("changeset.sidebar_state")
@@ -183,6 +184,9 @@ local on_tree_event = {
 build.subscribe(function(event)
   on_tree_event[event]()
 end)
+
+-- Fires: GitHub's answer on the PR's pending review being kept, so the header's circle follows it.
+pending_state.subscribe(redraw)
 
 ---The sidebar's footer, which its statusline evaluates on every redraw.
 ---@return string

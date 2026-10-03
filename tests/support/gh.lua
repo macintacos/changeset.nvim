@@ -1,6 +1,6 @@
 ---A fake `gh` on PATH, so no spec asks GitHub. Every call sleeps $FAKE_GH_DELAY seconds
----and records its arguments. It then answers with the oldest queued answer, removing it,
----or else prints $FAKE_GH_PR, failing as if there were no PR when that is empty.
+---and records its arguments. A `gh pr …` call prints $FAKE_GH_PR when that is set; any
+---other call answers with the oldest queued answer, removing it, or else fails.
 ---Requiring it is what installs it; PATH is never restored, since each spec runs in its own
 ---nvim. `without` hides it, for a case where gh is not installed.
 local bin = vim.fn.tempname()
@@ -17,6 +17,7 @@ vim.fn.writefile({
   'mkdir -p "$state/calls/$n"',
   "i=0",
   'for arg in "$@"; do i=$((i + 1)); printf "%s" "$arg" > "$state/calls/$n/$i"; done',
+  'if [ "$1" = pr ] && [ -n "$FAKE_GH_PR" ]; then printf "%s" "$FAKE_GH_PR"; exit 0; fi',
   'answer=$(ls "$state/answers" 2>/dev/null | sort -n | head -n 1)',
   'if [ -n "$answer" ]; then',
   '  answer="$state/answers/$answer"',
@@ -26,8 +27,7 @@ vim.fn.writefile({
   '  rm -r "$answer"',
   '  exit "$code"',
   "fi",
-  '[ -n "$FAKE_GH_PR" ] || exit 1',
-  'printf "%s" "$FAKE_GH_PR"',
+  "exit 1",
 }, bin .. "/gh")
 vim.fn.setfperm(bin .. "/gh", "rwxr-xr-x")
 vim.env.PATH = bin .. ":" .. vim.env.PATH

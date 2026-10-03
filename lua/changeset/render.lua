@@ -30,6 +30,7 @@ local symbols = require("changeset.symbols")
 ---@class changeset.Summary
 ---@field ref string        What the branch is compared against, e.g. "origin/trunk".
 ---@field pr integer?       Number of the branch's open PR, when it merges into `ref`.
+---@field pending_review boolean? Whether you have a pending review on `pr`; nil until GitHub answers.
 ---@field files integer
 ---@field commits integer?  Commits on the branch since it forked from `ref`.
 ---@field added integer
@@ -98,6 +99,14 @@ M.HEADER_DIM_HL = "ChangesetHeaderDim"
 ---Group for the ref the tree is compared against. Created by `define_highlights`.
 ---@type string
 M.HEADER_REF_HL = "ChangesetHeaderRef"
+
+---Group for the circle beside the PR while you have a pending review on it. Created by `define_highlights`.
+---@type string
+M.HEADER_PENDING_HL = "ChangesetHeaderPending"
+
+---Group for the circle beside the PR while you have none. Created by `define_highlights`.
+---@type string
+M.HEADER_NOT_PENDING_HL = "ChangesetHeaderNotPending"
 
 ---Group for the badge naming the sidebar in its footer. Created by `define_highlights`.
 ---@type string
@@ -572,14 +581,16 @@ end
 ---A ref too long for the width loses its tail, not its head: a stacked branch is
 ---told apart by the start of its name. The statusline's own `%<` would cut the
 ---other way.
----@param summary { ref: string, pr: integer? }
+---@param summary { ref: string, pr: integer?, pending_review: boolean? }
 ---@param width integer Cells the winbar spans.
 ---@return string
 function M.header(summary, width)
   local pr = summary.pr and ("%s #%d"):format(PR_ICON, summary.pr)
+  local circle = pr and summary.pending_review ~= nil
   local room = width
     - vim.fn.strdisplaywidth((" %s "):format(BRANCH_ICON))
     - (pr and vim.fn.strdisplaywidth(pr) + 2 or 0)
+    - (circle and vim.fn.strdisplaywidth("●") + 1 or 0)
   local ref = clip_right(summary.ref, room)
   local remote = ref:match("^origin/") or ""
   return table.concat({
@@ -587,6 +598,7 @@ function M.header(summary, width)
     ("%%#%s#%s"):format(M.HEADER_DIM_HL, remote),
     ("%%#%s#%s"):format(M.HEADER_REF_HL, escaped(ref:sub(#remote + 1))),
     ("%%#%s#%%="):format(M.HEADER_HL),
+    circle and ("%%#%s#● "):format(summary.pending_review and M.HEADER_PENDING_HL or M.HEADER_NOT_PENDING_HL) or "",
     pr and ("%%#%s#%s "):format(M.HEADER_DIM_HL, pr) or "",
   })
 end
@@ -811,6 +823,10 @@ function M.define_highlights()
   set_default(M.HEADER_DIM_HL, { fg = comment.fg, bg = chrome })
   local normal = vim.api.nvim_get_hl(0, { name = "Normal", link = false })
   set_default(M.HEADER_REF_HL, { fg = normal.fg, bg = chrome, bold = true })
+  -- The config has no "all is well" green, and GitSignsAdd already means added lines on this strip.
+  local ok = vim.api.nvim_get_hl(0, { name = "DiagnosticOk", link = false }).fg
+  set_default(M.HEADER_PENDING_HL, { fg = ok, bg = chrome })
+  set_default(M.HEADER_NOT_PENDING_HL, { link = M.HEADER_DIM_HL })
   set_default(M.BADGE_HL, { fg = directory, reverse = true, bold = true })
   local statusline = vim.api.nvim_get_hl(0, { name = "StatusLine", link = false })
   set_default(M.FOOTER_HL, { fg = comment.fg, bg = statusline.bg })

@@ -172,6 +172,12 @@ delete it. You have at most one per PR. Both commands below work with the sideba
 - `:Changeset pr abandon` asks y/n, then deletes the pending review and every review
   comment in it.
 
+With the sidebar open, a circle beside the PR number in its header shows whether you have
+a pending review on that PR: gray with none, green with one, including one started on
+github.com. It follows restarts and branch switches. It is checked when the sidebar's tree
+lands on a new branch or PR, when Neovim regains focus, and after each `:Changeset pr`. It
+is absent with no open PR, without `gh` signed in, and until GitHub first answers.
+
 ## Picker
 
 With mini.pick set up, `require("changeset.pick").pick()` searches the same changes as the
@@ -243,6 +249,8 @@ The sidebar derives each group's default from your colorscheme, and derives it a
 | `ChangesetHeaderIcon` | The branch glyph on the header | `Directory`'s colour on the header |
 | `ChangesetHeaderDim` | The remote, nouns and PR on the header | `Comment`'s colour on the header |
 | `ChangesetHeaderRef` | The ref the tree is compared against | `Normal`'s colour on the header, bold |
+| `ChangesetHeaderPending` | The circle beside the PR while you have a pending review on it | `DiagnosticOk`'s colour on the header |
+| `ChangesetHeaderNotPending` | The circle while you have none | links to `ChangesetHeaderDim` |
 | `ChangesetBadge` | The badge in the footer | `Directory`'s colour, reversed, bold |
 | `ChangesetFooter` | The footer's text | `Comment`'s colour on `StatusLine` |
 | `ChangesetFooterKey` | Keys and the filter in the footer | `StatusLine`, bold |
