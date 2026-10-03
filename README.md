@@ -195,19 +195,20 @@ With the sidebar open, a circle beside the PR number in its header shows whether
 a pending review on that PR: gray with none, green with one, including one started on
 github.com, drawn in `ChangesetHeaderNotPending` and `ChangesetHeaderPending` (see
 [Highlight groups](#highlight-groups)). It is checked when the sidebar's tree lands on a
-new branch or PR, when Neovim regains focus, and after `:Changeset pr start` and
-`pr abandon`. It is absent whenever the PR number is (no open PR, `gh` missing or signed
-out) and until GitHub first answers.
+new branch or PR, when Neovim regains focus, and after `:Changeset pr start`, `pr abandon`
+and `pr delete`, and after a review comment is saved. It is absent whenever the PR number
+is (no open PR, `gh` missing or signed out) and until GitHub first answers.
 
 Each review comment in your pending review, including ones added on github.com, is marked
 in its file's buffer: the line numbers it covers turn green, and its first line ends with
 a green circle and the first line of its body, drawn in `ChangesetReviewComment` and
-`ChangesetReviewCommentBody`. The marks appear once the sidebar or the picker has built the
-tree for the repository, and stay with the sidebar closed. Outdated and file-level review
-comments have no line, so they aren't drawn. The marks update with the circle: when the
-branch or its PR changes, including a branch switch made outside the sidebar, when Neovim
-regains focus, and after each `:Changeset pr`. A file you open later is marked from the
-last answer, without asking GitHub again.
+`ChangesetReviewCommentBody`. The marks appear once the sidebar or the picker has built
+the tree for the repository, and stay with the sidebar closed. Outdated and file-level
+review comments have no line, so they aren't drawn. The marks update with the circle: when
+the branch or its PR changes, including a branch switch made outside the sidebar, when
+Neovim regains focus, and after `:Changeset pr start`, `pr abandon` and `pr delete`, and
+after a review comment is saved. A file you open later is marked from the last answer,
+without asking GitHub again.
 
 ## Picker
 

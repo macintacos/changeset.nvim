@@ -477,6 +477,7 @@ describe("changeset.pr", function()
       assert.equal("pending review on #412", opened[1].footer)
       assert.same({ "<C-CR>", "<C-s>" }, opened[1].keys)
       assert.same({}, added)
+      assert.same({}, fetched)
 
       local results = {}
       opened[1].save("body", function(err)
@@ -486,7 +487,7 @@ describe("changeset.pr", function()
       assert.same({ { id = "PRR_1", new = { path = "a.lua", line = 4, body = "body" } } }, added)
       assert.same({ vim.log.levels.INFO }, levels())
       assert.same({ {} }, results)
-      assert.same({}, fetched)
+      assert.same({ "/tree/root" }, fetched)
     end)
 
     it("opens under the last line of a range and saves a review comment on the range", function()

@@ -168,6 +168,7 @@ function M.comment(first, last)
           say(vim.log.levels.ERROR, "can't save the review comment: %s", err)
         else
           say(vim.log.levels.INFO, "added a review comment to the pending review on #%d", number)
+          pending_state.fetch(tree.root)
         end
         done(err)
       end)

@@ -382,9 +382,9 @@ added lines on this strip. The circle sits before the number so the number keeps
 column when the circle arrives. It is absent whenever the number is, and until GitHub
 first answers. A later failed ask keeps the last answer, because blanking it would read as
 "the pending review is gone". It is fetched when the tree lands on a new branch or PR,
-when Neovim regains focus, and after `:Changeset pr start` and `pr abandon`, never on
-writes, since every write would ask GitHub. An answer for a PR that is no longer the
-tree's is dropped.
+when Neovim regains focus, and after `:Changeset pr start`, `pr abandon` and `pr delete`,
+and after a review comment is saved, never on writes, since every write would ask GitHub.
+An answer for a PR that is no longer the tree's is dropped.
 
 The second row counts what the branch holds, the numbers lit and their nouns dimmed: files
 on the left, commits at the right beside the line totals, which end in the column the
