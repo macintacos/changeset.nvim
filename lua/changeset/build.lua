@@ -298,7 +298,14 @@ local function refresh_soon()
   end
   stop(work.timer)
   work.timer = vim.defer_fn(function()
-    if tree then
+    if not tree then
+      return
+    end
+    local branch = Git.lines({ "git", "rev-parse", "--abbrev-ref", "HEAD" }, tree.root)[1]
+    -- build() measures the cursor's repository, so rebuild only while it is still this one.
+    if branch and branch ~= tree.branch and Paths.root(0) == tree.root then
+      M.build()
+    else
       M.refresh()
     end
   end, REFRESH_DEBOUNCE_MS)

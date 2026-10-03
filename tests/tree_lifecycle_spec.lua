@@ -126,6 +126,29 @@ describe("changeset tree", function()
       assert.equal("feature2", build.current().branch)
     end)
 
+    it("rebuilds the tree when gitsigns sees HEAD land on another branch", function()
+      build.build()
+      local tree = build.current()
+
+      Fixture.git({ "checkout", "-q", "-b", "feature2" }, tmp)
+      vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate" })
+
+      assert.is_true(vim.wait(2000, function()
+        return build.current().branch == "feature2"
+      end, 25))
+      assert.not_equal(tree, build.current())
+    end)
+
+    it("refreshes the tree when gitsigns sees HEAD stay on its branch", function()
+      build.build()
+      local tree = build.current()
+
+      vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate" })
+      vim.wait(400)
+
+      assert.equal(tree, build.current())
+    end)
+
     it("rebuilds the tree once the fork point moves", function()
       build.build()
       local tree = assert(build.current())

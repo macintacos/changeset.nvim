@@ -455,7 +455,9 @@ or not the sidebar is showing: after a write, when a buffer is reloaded because 
 changed outside Neovim, when Neovim regains focus, and when gitsigns sees HEAD move. Its
 per-buffer `GitSignsUpdate` is not one of them. It fires on every attach and every hunk
 change while typing, none of which moves a diff git reads from disk, and the symbol walk's
-own buffer loads would fire it too, restarting the walk they came from.
+own buffer loads would fire it too, restarting the walk they came from. A HEAD gitsigns sees
+land on another branch rebuilds the tree for that branch instead, so the header, its
+circle and the review comment marks follow a switch made outside the sidebar.
 
 Asking a language server about every changed file is what makes a cold build slow: 28
 files took about nine seconds in the config the plugin was extracted from, and the tree
