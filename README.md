@@ -267,7 +267,8 @@ glyph one colour. The status rail beside each file uses gitsigns' `GitSignsAdd`,
 does without, and the options in force.
 
 It loads plugins the way the sidebar does, so it may load one your plugin manager
-deferred. It installs nothing, starts no language server and makes no network request.
+deferred. It installs nothing and starts no language server. Its one network request is
+`gh auth status --active`, to report whether `gh` is authenticated.
 
 ## Where state is stored
 

@@ -22,6 +22,7 @@ local M = {}
 ---@field nvim_012 boolean
 ---@field git boolean
 ---@field gh boolean
+---@field gh_auth boolean? nil when `gh` isn't found
 ---@field icons "mini.icons"|"nvim-web-devicons"|false|nil
 ---@field which_key boolean
 ---@field mini_pick false|"installed"|"set up"
@@ -47,11 +48,18 @@ end
 ---@return changeset.health.Facts
 local function probe()
   local mini_pick = loads("mini.pick") and (MiniPick and "set up" or "installed")
+  local has_gh = vim.fn.executable("gh") == 1
+  local gh_auth = nil ---@type boolean?
+  if has_gh then
+    -- --active: without it, any broken account on any host fails the check though calls would work.
+    gh_auth = vim.system({ "gh", "auth", "status", "--active" }, { text = true, timeout = 5000 }):wait().code == 0
+  end
   return {
     version = (tostring(vim.version()):gsub("%+.*", "")),
     nvim_012 = vim.fn.has("nvim-0.12") == 1,
     git = vim.fn.executable("git") == 1,
-    gh = vim.fn.executable("gh") == 1,
+    gh = has_gh,
+    gh_auth = gh_auth,
     icons = icons.source(),
     which_key = loads("which-key"),
     mini_pick = mini_pick,
@@ -83,11 +91,18 @@ local function git(facts)
 end
 
 ---@param facts changeset.health.Facts
+---@return changeset.health.Finding[]
 local function gh(facts)
-  if facts.gh then
-    return finding("ok", "`gh` found")
+  if not facts.gh then
+    return { finding("warn", "`gh` not found: PR target branch detection is off") }
   end
-  return finding("warn", "`gh` not found: PR target branch detection is off")
+  if facts.gh_auth then
+    return { finding("ok", "`gh` found"), finding("ok", "`gh` is authenticated") }
+  end
+  return {
+    finding("ok", "`gh` found"),
+    finding("warn", "`gh` is not authenticated, or GitHub is unreachable: run `gh auth status` to see why"),
+  }
 end
 
 ---@param facts changeset.health.Facts
@@ -164,14 +179,16 @@ function M._report(facts)
     { name = "Requirements", findings = { neovim(facts), git(facts) } },
     {
       name = "Optional integrations",
-      findings = vim.list_extend({
-        gh(facts),
-        icon_provider(facts),
-        which_key(facts),
-        mini_pick(facts),
-        gitsigns(facts),
-        symbols(facts),
-      }, parsers(facts)),
+      findings = vim.list_extend(
+        vim.list_extend(gh(facts), {
+          icon_provider(facts),
+          which_key(facts),
+          mini_pick(facts),
+          gitsigns(facts),
+          symbols(facts),
+        }),
+        parsers(facts)
+      ),
     },
     { name = "Configuration", findings = { finding("info", vim.inspect(facts.options)) } },
   }

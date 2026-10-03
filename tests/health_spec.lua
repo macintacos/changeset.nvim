@@ -1,3 +1,5 @@
+require("support.gh")
+
 describe("changeset.health", function()
   local health = require("changeset.health")
   local config = require("changeset.config")
@@ -8,6 +10,7 @@ describe("changeset.health", function()
     nvim_012 = true,
     git = true,
     gh = true,
+    gh_auth = true,
     icons = "mini.icons",
     which_key = true,
     mini_pick = "set up",
@@ -88,6 +91,16 @@ describe("changeset.health", function()
   it("reports gh, and warns without it", function()
     assert.equal("ok", level({}, "`gh` found"))
     assert.equal("warn", level({ gh = false }, "`gh` not found"))
+  end)
+
+  it("reports whether gh is authenticated, only when gh is found", function()
+    assert.equal("ok", level({}, "`gh` is authenticated"))
+    assert.equal(
+      "warn",
+      level({ gh_auth = false }, "`gh` is not authenticated, or GitHub is unreachable: run `gh auth status` to see why")
+    )
+    assert.is_nil(level({ gh = false, gh_auth = true }, "`gh` is authenticated"))
+    assert.is_nil(level({ gh = false, gh_auth = false }, "`gh` is not authenticated"))
   end)
 
   it("reports the icon provider, and warns without one", function()
@@ -178,7 +191,7 @@ describe("changeset.health", function()
     assert.equal("`textDocument/documentSymbol` from lua_ls", symbols_call[2])
   end)
 
-  it("calls no process or server API itself", function()
+  it("calls no process but `gh auth status`, and no server API", function()
     local targets = {
       { "vim.system", vim, "system" },
       { "vim.fn.system", vim.fn, "system" },
@@ -189,8 +202,13 @@ describe("changeset.health", function()
     local calls, originals = {}, {}
     for i, target in ipairs(targets) do
       originals[i] = target[2][target[3]]
-      target[2][target[3]] = function()
-        table.insert(calls, target[1])
+      target[2][target[3]] = function(argv)
+        table.insert(calls, { target[1], argv })
+        return {
+          wait = function()
+            return { code = 0 }
+          end,
+        }
       end
     end
     local ok, err = pcall(checked)
@@ -198,7 +216,7 @@ describe("changeset.health", function()
       target[2][target[3]] = originals[i]
     end
     assert.is_true(ok, tostring(err))
-    assert.same({}, calls)
+    assert.same({ { "vim.system", { "gh", "auth", "status", "--active" } } }, calls)
   end)
 
   it("does not load the plugin's entry module", function()
