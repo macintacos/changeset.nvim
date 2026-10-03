@@ -73,7 +73,7 @@ function M.gh(args, opts, cb)
     return fail("`gh` not found")
   end
   local argv = vim.list_extend({ "gh" }, args)
-  local ok, err = pcall(
+  local started, err = pcall(
     vim.system,
     argv,
     { cwd = opts.cwd, text = true, timeout = opts.timeout },
@@ -95,7 +95,7 @@ function M.gh(args, opts, cb)
       end
     end)
   )
-  if not ok then
+  if not started then
     fail(tostring(err))
   end
 end

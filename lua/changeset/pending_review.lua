@@ -52,7 +52,7 @@ local START = [[mutation($pr: ID!) {
   addPullRequestReview(input: {pullRequestId: $pr}) { pullRequestReview { id fullDatabaseId state commit { oid } } }
 }]]
 
-local ADD = [[mutation($review: ID!, $path: String!, $line: Int!, $startLine: Int, $body: String!) {
+local ADD_COMMENT = [[mutation($review: ID!, $path: String!, $line: Int!, $startLine: Int, $body: String!) {
   addPullRequestReviewThread(input: {pullRequestReviewId: $review, path: $path, line: $line, side: RIGHT, startLine: $startLine, body: $body}) {
     thread { id isOutdated line startLine comments(first: 1) { nodes { id fullDatabaseId line startLine } } }
   }
@@ -61,7 +61,7 @@ local ADD = [[mutation($review: ID!, $path: String!, $line: Int!, $startLine: In
 local DELETE_COMMENT =
   [[mutation($id: ID!) { deletePullRequestReviewComment(input: {id: $id}) { pullRequestReview { id } } }]]
 
-local DELETE =
+local DELETE_REVIEW =
   [[mutation($review: ID!) { deletePullRequestReview(input: {pullRequestReviewId: $review}) { pullRequestReview { id state } } }]]
 
 local SUBMIT = [[mutation($review: ID!, $event: PullRequestReviewEvent!, $body: String) {
@@ -80,17 +80,17 @@ local function graphql(vars, query, cb, flags)
 end
 
 ---@return changeset.ReviewComment
-local function comment(node)
+local function review_comment(node)
   return { id = node.id, path = node.path, line = node.line, start_line = node.startLine, body = node.body }
 end
 
 ---@param pages table[] `--slurp`'s array of listing pages.
 ---@return changeset.ReviewComment[]
-local function comments(pages)
+local function review_comments(pages)
   local out = {}
   for _, page in ipairs(pages) do
     for _, node in ipairs(page.data.node.comments.nodes) do
-      table.insert(out, comment(node))
+      table.insert(out, review_comment(node))
     end
   end
   return out
@@ -105,7 +105,7 @@ local function list_comments(host, review_id, cb)
     if err then
       return cb(err)
     end
-    cb(nil, comments(pages))
+    cb(nil, review_comments(pages))
   end, { "--hostname", host, "--paginate", "--slurp" })
 end
 
@@ -123,10 +123,12 @@ function M.find(cwd, cb)
       if find_err then
         return cb(find_err)
       end
-      local node = out.data.repository.pullRequest
+      local pull_request = out.data.repository.pullRequest
       ---@type changeset.pending_review.Found
-      local found = { pr = vim.tbl_extend("force", pr, { id = node.id, viewer_did_author = node.viewerDidAuthor }) }
-      local review = node.reviews.nodes[1]
+      local found = {
+        pr = vim.tbl_extend("force", pr, { id = pull_request.id, viewer_did_author = pull_request.viewerDidAuthor }),
+      }
+      local review = pull_request.reviews.nodes[1]
       if not review then
         return cb(nil, found)
       end
@@ -165,7 +167,7 @@ function M.add_comment(review_id, new, cb)
     vim.list_extend(vars, { "-F", "startLine=" .. new.start_line })
   end
   vim.list_extend(vars, { "-f", "body=" .. new.body })
-  graphql(vars, ADD, function(err, out)
+  graphql(vars, ADD_COMMENT, function(err, out)
     if err then
       return cb(err)
     end
@@ -192,7 +194,7 @@ end
 ---@param review_id string
 ---@param cb fun(err: string?)
 function M.delete(review_id, cb)
-  graphql({ "-f", "review=" .. review_id }, DELETE, function(err)
+  graphql({ "-f", "review=" .. review_id }, DELETE_REVIEW, function(err)
     cb(err)
   end)
 end

@@ -14,7 +14,7 @@ local M = {}
 ---Each open PR, by `root .. "\n" .. branch`, kept for the session.
 ---An answer of no PR is not kept, so a PR opened since is found.
 ---@type table<string, changeset.Pr>
-local targets = {}
+local prs = {}
 
 ---The point measured when gh was asked, by the same key, while it is being asked.
 ---@type table<string, changeset.ForkPoint>
@@ -52,11 +52,11 @@ end
 ---@return boolean asking Whether gh is still being asked, so subscribers will hear its answer.
 function M.get(root, branch)
   local key = root .. "\n" .. branch
-  local point = measure(root, targets[key])
+  local point = measure(root, prs[key])
   if not point then
     return nil, false
   end
-  if targets[key] or asking[key] then
+  if prs[key] or asking[key] then
     return point, asking[key] ~= nil
   end
   asking[key] = point
@@ -64,9 +64,9 @@ function M.get(root, branch)
     local heard = asking[key]
     asking[key] = nil
     if pr then
-      targets[key] = pr
+      prs[key] = pr
       -- HEAD can have moved by the time gh answers; subscribers still need a point.
-      heard = measure(root, targets[key]) or heard
+      heard = measure(root, prs[key]) or heard
     end
     for fn in pairs(subscribers) do
       fn(root, branch, heard)
