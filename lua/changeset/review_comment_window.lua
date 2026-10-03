@@ -61,15 +61,15 @@ function M.open(opts)
     vim.cmd.stopinsert()
   end
 
-  local in_flight = false
+  local saving = false
   local function save()
     -- A double press must not add the review comment twice.
-    if in_flight then
+    if saving then
       return
     end
-    in_flight = true
+    saving = true
     opts.save(table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n"), function(err)
-      in_flight = false
+      saving = false
       if not err then
         close()
       end

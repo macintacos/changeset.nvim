@@ -147,11 +147,11 @@ function M.comment(first, last)
   if not (found and found.review) then
     return say(vim.log.levels.WARN, "start the review with `:Changeset pr start`")
   end
-  local matches = Git.matches_commit(tree.root, found.pr.head, path)
-  if matches == nil then
+  local matches_head = Git.matches_commit(tree.root, found.pr.head, path)
+  if matches_head == nil then
     return say(vim.log.levels.WARN, "the PR's head, %s, isn't in this clone; fetch it first", found.pr.head:sub(1, 7))
   end
-  local refusal = commentable.refusal(hunks(tree, path), { first, last }, matches and not vim.bo[buf].modified)
+  local refusal = commentable.refusal(hunks(tree, path), { first, last }, matches_head and not vim.bo[buf].modified)
   if refusal then
     return say(vim.log.levels.WARN, "can't add a review comment here: %s", refusal)
   end
