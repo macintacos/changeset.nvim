@@ -260,7 +260,11 @@ submit or delete it. You have at most one per PR. `pr start`, `pr abandon` and
     PR’s diff is read (you can close it again), the PR’s head commit fetched, and lines
     inside the PR’s diff in a saved file that matches that head. The keys in
     `review_comment.save`, `<C-CR>` or `<C-s>` by default, save it into the pending review
-    and close the window; `q` closes it without saving.
+    and close the window. `q`, `<S-Esc>` (where the terminal sends it) and `:q` close it
+    and keep its text as a draft on this machine; empty text keeps nothing. A save GitHub
+    rejects keeps the draft too. Running `pr comment` anywhere on a draft’s lines reopens
+    it on its own lines; saving it still needs a pending review. Drafts never reach
+    GitHub.
 - `:Changeset pr delete` deletes the review comment on the cursor’s line, without asking.
     When several take in that line, it deletes the narrowest; run it again for the next.
     When the line has none, it says so. In a modified buffer it asks you to save first:
@@ -490,6 +494,7 @@ WHERE STATE IS STORED                   *changeset.nvim-where-state-is-stored*
 - The symbol cache: one JSON file per repository under `stdpath("cache")/changeset/`. You
     can delete it; the next build is slow once.
 - Hidden symbol kinds: `stdpath("state")/changeset/filters.json`.
+- Review comment drafts: `stdpath("state")/changeset/drafts.json`.
 - Sessions: `:mksession` restores the sidebar when `'sessionoptions'` contains `blank`
     (the default), and its cursor row too when it also contains `globals`.
 - Folds: kept in memory per repository until Neovim exits.

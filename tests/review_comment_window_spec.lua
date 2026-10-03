@@ -22,7 +22,7 @@ local function press(buf, mode, lhs)
 end
 
 describe("review_comment_window", function()
-  local source, saves, answer
+  local source, saves, answer, kept
 
   ---@param overrides table?
   ---@return integer win
@@ -37,12 +37,15 @@ describe("review_comment_window", function()
         saves[#saves + 1] = body
         answer = done
       end,
+      keep = function(body)
+        kept[#kept + 1] = body
+      end,
     }, overrides or {}))
     return win, vim.api.nvim_win_get_buf(win)
   end
 
   before_each(function()
-    saves, answer = {}, nil
+    saves, answer, kept = {}, nil, {}
     vim.cmd.enew()
     vim.bo.buftype = "nofile"
     vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.split(("x\n"):rep(9) .. "x", "\n"))
@@ -220,5 +223,82 @@ describe("review_comment_window", function()
     assert.no_errors(function()
       answer(nil)
     end)
+  end)
+
+  it("keeps the text when q closes it", function()
+    local win, buf = open()
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "one", "two" })
+    press(buf, "n", "q")
+    assert.is_false(vim.api.nvim_win_is_valid(win))
+    assert.same({ "one\ntwo" }, kept)
+  end)
+
+  it("keeps the text when :q closes it", function()
+    local _, buf = open()
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "text" })
+    vim.cmd.quit()
+    assert.same({ "text" }, kept)
+  end)
+
+  it("keeps the text when closed from outside", function()
+    local win, buf = open()
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "text" })
+    vim.api.nvim_win_close(win, true)
+    assert.same({ "text" }, kept)
+  end)
+
+  for _, mode in ipairs({ "i", "n" }) do
+    it(("closes on <S-Esc> in %s mode, keeping the text"):format(mode), function()
+      local win, buf = open()
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "text" })
+      press(buf, mode, "<S-Esc>")
+      vim.wait(100, function()
+        return not vim.api.nvim_win_is_valid(win)
+      end)
+      assert.is_false(vim.api.nvim_win_is_valid(win))
+      assert.same({ "text" }, kept)
+    end)
+  end
+
+  it("keeps empty text too, leaving emptiness to the caller", function()
+    local _, buf = open()
+    press(buf, "n", "q")
+    assert.same({ "" }, kept)
+  end)
+
+  it("keeps nothing once a save is taken", function()
+    local _, buf = open()
+    press(buf, "i", "<C-s>")
+    answer(nil)
+    assert.same({}, kept)
+  end)
+
+  it("keeps nothing while a refused save leaves it open", function()
+    local _, buf = open()
+    press(buf, "i", "<C-s>")
+    answer("boom")
+    assert.same({}, kept)
+  end)
+
+  it("keeps the text when q closes it during a save", function()
+    local _, buf = open()
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "text" })
+    press(buf, "i", "<C-s>")
+    press(buf, "n", "q")
+    assert.same({ "text" }, kept)
+    assert.no_errors(function()
+      answer(nil)
+    end)
+  end)
+
+  it("opens with a body, the cursor at its end", function()
+    local win, buf = open({ body = "one\ntwo" })
+    assert.same({ "one", "two" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+    assert.equal(2, vim.api.nvim_win_get_cursor(win)[1])
+  end)
+
+  it("lists <S-Esc> under ?", function()
+    local _, buf = open()
+    assert.truthy(buffer_map(buf, "n", "<S-Esc>").desc)
   end)
 end)

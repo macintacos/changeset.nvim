@@ -334,10 +334,11 @@ set once the float is open, so a user's markdown `FileType` settings, such as `s
 reach it and win over the style.
 
 The border does the labelling, as the kind menu's does. The title names the line or lines,
-the footer where a save goes. Keys are not listed there: `?` answers that. `q` in normal
-mode closes without saving, since a review comment is written in insert mode and normal
-mode `q` is then a deliberate key. There is no `<Esc>` close, because a habitual `<Esc>`
-on the way to normal mode would throw the typed text away.
+the footer where a save goes. Keys are not listed there: `?` answers that. Every close but
+one after a save GitHub took keeps the text as a local draft, so typed text is never lost
+however the window goes: `q` in normal mode, `<S-Esc>` in either mode where the terminal
+sends it, `:q`, `<C-w>c`. One `WinClosed` hook catches them all. Plain `<Esc>` still only
+leaves insert mode, so a habitual `<Esc>` on the way to normal mode never closes it.
 
 ### Stats
 

@@ -350,6 +350,9 @@ describe("changeset.pr", function()
 
   describe("comment", function()
     local Git = require("changeset.git")
+    local drafts = require("changeset.drafts")
+    ---@type changeset.Pr
+    local held_pr
     local matches_commit, matches, buf
 
     before_each(function()
@@ -358,7 +361,14 @@ describe("changeset.pr", function()
         return matches
       end
       held = {
-        pr = { id = "PR_1", number = 412, head = "abcdef0123456789abcdef0123456789abcdef01" },
+        pr = {
+          id = "PR_1",
+          number = 412,
+          host = "github.com",
+          owner = "acme",
+          name = "widgets",
+          head = "abcdef0123456789abcdef0123456789abcdef01",
+        },
         review = { id = "PRR_1", comments = {} },
       }
       tree = {
@@ -370,6 +380,8 @@ describe("changeset.pr", function()
       buf = vim.api.nvim_create_buf(true, false)
       vim.api.nvim_buf_set_name(buf, "/tree/root/a.lua")
       vim.api.nvim_set_current_buf(buf)
+      held_pr = held.pr
+      os.remove(drafts.path())
     end)
 
     after_each(function()
@@ -519,6 +531,85 @@ describe("changeset.pr", function()
       require("changeset.config").setup({ review_comment = { save = { "<C-j>" } } })
       require("changeset.pr").comment(4, 4)
       assert.same({ "<C-j>" }, opened[1].keys)
+    end)
+
+    ---@param over table?
+    local function draft(over)
+      return vim.tbl_extend(
+        "force",
+        { path = "a.lua", line = 7, start_line = 5, head = held_pr.head, body = "draft" },
+        over or {}
+      )
+    end
+
+    it("keeps a closed window's text as a draft on its lines at the PR's head", function()
+      require("changeset.pr").comment(3, 5)
+      opened[1].keep("text")
+      assert.same({ draft({ start_line = 3, line = 5, body = "text" }) }, drafts.list(held_pr))
+    end)
+
+    it("keeps no draft of empty text", function()
+      require("changeset.pr").comment(4, 4)
+      opened[1].keep("")
+      assert.same({}, drafts.list(held_pr))
+    end)
+
+    it("keeps a draft without calling GitHub", function()
+      local client = package.loaded["changeset.pending_review"]
+      for name in pairs(client) do
+        client[name] = function()
+          error(name .. " called")
+        end
+      end
+      require("changeset.pr").comment(4, 4)
+      assert.no_errors(function()
+        opened[1].keep("text")
+      end)
+    end)
+
+    it("reopens a draft from any of its lines, on its own lines, even outside the diff", function()
+      tree.files[1].hunks = {}
+      drafts.keep(held_pr, draft())
+      require("changeset.pr").comment(6, 6)
+      assert.equal("draft", opened[1].body)
+      assert.equal(7, opened[1].line)
+      assert.equal("lines 5-7", opened[1].title)
+    end)
+
+    it("doesn't reopen a draft written at another head", function()
+      drafts.keep(held_pr, draft({ start_line = 4, line = 4, head = "0000000" }))
+      require("changeset.pr").comment(4, 4)
+      assert.is_nil(opened[1].body)
+      assert.equal("line 4", opened[1].title)
+    end)
+
+    it("keeps a rejected save's text as a draft and says so", function()
+      failure = "boom"
+      require("changeset.pr").comment(4, 4)
+      opened[1].save("text", function() end)
+      assert.same({ { path = "a.lua", line = 4, head = held_pr.head, body = "text" } }, drafts.list(held_pr))
+      assert.same({ vim.log.levels.ERROR }, levels())
+      assert.truthy(notes[1].msg:find("boom", 1, true))
+      assert.truthy(notes[1].msg:find("draft", 1, true))
+    end)
+
+    it("drops a reopened draft once its save is taken", function()
+      drafts.keep(held_pr, draft())
+      require("changeset.pr").comment(6, 6)
+      opened[1].save("draft", function() end)
+      assert.same({}, drafts.list(held_pr))
+    end)
+
+    it("drops a draft kept while its save was in flight, once the save is taken", function()
+      local answer
+      package.loaded["changeset.pending_review"].add_comment = function(_, _, cb)
+        answer = cb
+      end
+      require("changeset.pr").comment(4, 4)
+      opened[1].save("text", function() end)
+      opened[1].keep("text")
+      answer(nil)
+      assert.same({}, drafts.list(held_pr))
     end)
   end)
 end)

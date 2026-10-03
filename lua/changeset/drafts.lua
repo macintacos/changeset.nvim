@@ -7,7 +7,7 @@ local jsonfile = require("changeset.jsonfile")
 
 local M = {}
 
----@class changeset.Draft
+---@class changeset.Draft : changeset.Spanned
 ---@field path string
 ---@field line integer
 ---@field start_line integer?

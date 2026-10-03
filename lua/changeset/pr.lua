@@ -4,6 +4,7 @@ local Paths = require("changeset.paths")
 local build = require("changeset.build")
 local commentable = require("changeset.commentable")
 local config = require("changeset.config")
+local drafts = require("changeset.drafts")
 local pending_review = require("changeset.pending_review")
 local pending_state = require("changeset.pending_state")
 local review_comment_window = require("changeset.review_comment_window")
@@ -147,13 +148,24 @@ function M.comment(first, last)
   if not (found and found.review) then
     return say(vim.log.levels.WARN, "start the review with `:Changeset pr start`")
   end
-  local matches_head = Git.matches_commit(tree.root, found.pr.head, path)
-  if matches_head == nil then
-    return say(vim.log.levels.WARN, "the PR's head, %s, isn't in this clone; fetch it first", found.pr.head:sub(1, 7))
+  local draft = require("changeset.review_comments").at(drafts.list(found.pr), path, last)
+  if draft then
+    -- Its lines passed the gates below when it was written at this head; a save GitHub rejects keeps it.
+    first, last = draft.start_line or draft.line, draft.line
+  else
+    local matches_head = Git.matches_commit(tree.root, found.pr.head, path)
+    if matches_head == nil then
+      return say(vim.log.levels.WARN, "the PR's head, %s, isn't in this clone; fetch it first", found.pr.head:sub(1, 7))
+    end
+    local refusal = commentable.refusal(hunks(tree, path), { first, last }, matches_head and not vim.bo[buf].modified)
+    if refusal then
+      return say(vim.log.levels.WARN, "can't add a review comment here: %s", refusal)
+    end
   end
-  local refusal = commentable.refusal(hunks(tree, path), { first, last }, matches_head and not vim.bo[buf].modified)
-  if refusal then
-    return say(vim.log.levels.WARN, "can't add a review comment here: %s", refusal)
+  ---@param body string
+  ---@return changeset.Draft
+  local function draft_of(body)
+    return { path = path, line = last, start_line = first < last and first or nil, head = found.pr.head, body = body }
   end
   local review_id, number = found.review.id, found.pr.number
   review_comment_window.open({
@@ -161,12 +173,20 @@ function M.comment(first, last)
     title = first < last and ("lines %d-%d"):format(first, last) or ("line %d"):format(last),
     footer = ("pending review on #%d"):format(number),
     keys = config.get().review_comment.save,
+    body = draft and draft.body,
+    keep = function(body)
+      if not drafts.keep(found.pr, draft_of(body)) and vim.trim(body) ~= "" then
+        say(vim.log.levels.ERROR, "can't keep the draft in %s", drafts.path())
+      end
+    end,
     save = function(body, done)
       local new = { path = path, line = last, start_line = first < last and first or nil, body = body }
       pending_review.add_comment(review_id, new, function(err)
         if err then
-          say(vim.log.levels.ERROR, "can't save the review comment: %s", err)
+          drafts.keep(found.pr, draft_of(body))
+          say(vim.log.levels.ERROR, "can't save the review comment, so kept it as a draft: %s", err)
         else
+          drafts.drop(found.pr, draft_of(body))
           say(vim.log.levels.INFO, "added a review comment to the pending review on #%d", number)
           pending_state.fetch(tree.root)
         end

@@ -17,7 +17,7 @@ local TIMEOUT = 30000
 ---@field id string Node ID.
 ---@field comments changeset.ReviewComment[]
 
----@class changeset.ReviewComment
+---@class changeset.ReviewComment : changeset.Spanned
 ---@field id string Node ID (`PRRC_…`), never the thread's.
 ---@field path string
 ---@field line integer? nil once outdated, or on a file-level review comment; the record can't tell the two apart.

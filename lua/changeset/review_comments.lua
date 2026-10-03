@@ -9,8 +9,13 @@ local ns = vim.api.nvim_create_namespace("changeset.review_comments")
 
 -- ponytail: lines are the PR head's, so where the file on disk differs from the head (unpushed commits, saved uncommitted edits) marks and delete land off by the lines moved above; hide marks in such a file if that bites.
 -- ponytail: a LEFT-side review comment (on a deleted line) spans its number in the new file; skip LEFT once it is recorded.
+---@class changeset.Spanned
+---@field path string
+---@field line integer?
+---@field start_line integer?
+
 ---The lines `comment` spans in its file; nil when it has none: outdated or file-level.
----@param comment changeset.ReviewComment
+---@param comment changeset.Spanned
 ---@return integer? first
 ---@return integer? last
 local function span(comment)
@@ -19,11 +24,12 @@ local function span(comment)
   end
 end
 
----The narrowest review comment of `path` whose marks light line `lnum`; ties go to the first listed.
----@param comments changeset.ReviewComment[]
+---The narrowest review comment or draft of `path` whose marks light line `lnum`; ties go to the first listed.
+---@generic T : changeset.Spanned
+---@param comments T[]
 ---@param path string
 ---@param lnum integer
----@return changeset.ReviewComment?
+---@return T?
 function M.at(comments, path, lnum)
   local narrowest, narrowest_width
   for _, comment in ipairs(comments) do
