@@ -679,6 +679,37 @@ describe("changeset.render", function()
       assert.equal(render.HEADER_REF_HL, group_at(shown, "trunk"))
     end)
 
+    it("marks a pending review with a circle ahead of the PR, the PR keeping its edge", function()
+      render.define_highlights()
+      local shown = eval({ ref = "origin/trunk", pr = 412, pending_review = true }, 44, true)
+
+      assert.equal(render.HEADER_PENDING_HL, group_at(shown, "●"))
+      assert.truthy(shown.str:find("●.*#412"))
+      assert.equal(" #412 ", shown.str:sub(-6))
+    end)
+
+    it("draws the circle in the PR's own dim when there is no pending review", function()
+      render.define_highlights()
+      local shown = eval({ ref = "origin/trunk", pr = 412, pending_review = false }, 44, true)
+
+      assert.equal(render.HEADER_NOT_PENDING_HL, group_at(shown, "●"))
+    end)
+
+    it("draws no circle before GitHub has answered", function()
+      assert.falsy(eval({ ref = "origin/trunk", pr = 412 }).str:find("●", 1, true))
+    end)
+
+    it("draws no circle without a PR", function()
+      assert.falsy(eval({ ref = "origin/trunk", pending_review = true }).str:find("●", 1, true))
+    end)
+
+    it("clips a long ref to leave room for the circle", function()
+      local text = eval({ ref = LONG, pr = 412, pending_review = true }, 30).str
+
+      assert.equal(30, vim.fn.strdisplaywidth(text))
+      assert.truthy(text:find("●", 1, true))
+    end)
+
     it("reads a local ref whole, with nothing dimmed", function()
       render.define_highlights()
       local shown = eval({ ref = "jt/parent" }, 44, true)
@@ -938,6 +969,7 @@ describe("changeset.render", function()
       "StatusLine",
       "Statement",
       "Normal",
+      "DiagnosticOk",
     }
     local saved
 
@@ -1066,6 +1098,21 @@ describe("changeset.render", function()
       assert.same({ 0x336699, 0x654321 }, { group(render.HEADER_DIM_HL).fg, group(render.HEADER_DIM_HL).bg })
       assert.equal(0x654321, group(render.HEADER_REF_HL).bg)
       assert.is_true(group(render.HEADER_REF_HL).bold)
+    end)
+
+    it("paints the pending-review circle in the theme's OK green on the header's strip", function()
+      vim.api.nvim_set_hl(0, "TabLine", { bg = 0x654321 })
+      vim.api.nvim_set_hl(0, "DiagnosticOk", { fg = 0x22aa44 })
+
+      render.define_highlights()
+
+      assert.same({ 0x22aa44, 0x654321 }, { group(render.HEADER_PENDING_HL).fg, group(render.HEADER_PENDING_HL).bg })
+    end)
+
+    it("dims the circle like the PR when there is no pending review", function()
+      render.define_highlights()
+
+      assert.equal(render.HEADER_DIM_HL, vim.api.nvim_get_hl(0, { name = render.HEADER_NOT_PENDING_HL }).link)
     end)
 
     it("paints the footer on the statusline's own background", function()

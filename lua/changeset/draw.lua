@@ -2,6 +2,7 @@
 ---The sidebar state's View decides what is on each line; `band_for` builds a row's preview band.
 
 local icons = require("changeset.icons")
+local pending_state = require("changeset.pending_state")
 local render = require("changeset.render")
 local Rows = require("changeset.rows")
 local sidebar_state = require("changeset.sidebar_state")
@@ -149,9 +150,11 @@ local function summary()
       pending = pending + (Rows.read_status(file, state.tree.symbols) == "reading" and 1 or 0)
     end
   end
+  local found = state.tree.pr and pending_state.get(state.tree.root, state.tree.pr)
   return {
     ref = state.tree.ref,
     pr = state.tree.pr,
+    pending_review = found and found.review ~= nil,
     files = #state.tree.files,
     commits = state.tree.commits,
     added = added,

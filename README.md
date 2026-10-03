@@ -81,7 +81,7 @@ with them.
 ## Usage
 
 `:Changeset` opens the sidebar and focuses it, and running it again from the sidebar
-closes it. It takes one optional subcommand:
+closes it. It takes one optional subcommand, and `pr` takes a verb:
 
 - `:Changeset toggle`, the default: from any other window, opens or focuses the sidebar
   on the row for where your cursor is. From the sidebar, closes it and returns you to your
@@ -89,6 +89,8 @@ closes it. It takes one optional subcommand:
 - `:Changeset refresh` rebuilds the tree.
 - `:Changeset review` turns [PR Review Mode](#pr-review-mode) off, or back on, for the
   current branch. It raises an error unless `pr_review.enabled` is set.
+- `:Changeset pr start` starts a [pending review](#pr-reviews) on the branch's open PR.
+- `:Changeset pr abandon` deletes the branch's [pending review](#pr-reviews).
 
 `<Plug>(changeset-toggle)` does what `:Changeset toggle` does.
 
@@ -158,6 +160,25 @@ It turns itself on for every branch except the default. `:Changeset review` turn
 or back on, for the current branch until Neovim exits.
 
 It works without the sidebar, and the sidebar works without it.
+
+## PR reviews
+
+A pending review is where GitHub holds your review comments on a PR until you submit or
+delete it. You have at most one per PR. Both commands below work with the sidebar closed.
+
+- `:Changeset pr start` starts a pending review on the branch's open PR. It needs an open
+  PR and `gh` signed in. When a pending review is already under way, including one started
+  on github.com, it says so instead.
+- `:Changeset pr abandon` asks y/n, then deletes the pending review and every review
+  comment in it.
+
+With the sidebar open, a circle beside the PR number in its header shows whether you have
+a pending review on that PR: gray with none, green with one, including one started on
+github.com, drawn in `ChangesetHeaderNotPending` and `ChangesetHeaderPending` (see
+[Highlight groups](#highlight-groups)). It is checked when the sidebar's tree lands on a
+new branch or PR, when Neovim regains focus, and after each `:Changeset pr`. It is absent
+whenever the PR number is (no open PR, `gh` missing or signed out) and until GitHub first
+answers.
 
 ## Picker
 
@@ -230,6 +251,8 @@ The sidebar derives each group's default from your colorscheme, and derives it a
 | `ChangesetHeaderIcon` | The branch glyph on the header | `Directory`'s colour on the header |
 | `ChangesetHeaderDim` | The remote, nouns and PR on the header | `Comment`'s colour on the header |
 | `ChangesetHeaderRef` | The ref the tree is compared against | `Normal`'s colour on the header, bold |
+| `ChangesetHeaderPending` | The circle beside the PR while you have a pending review on it | `DiagnosticOk`'s colour on the header |
+| `ChangesetHeaderNotPending` | The circle while you have none | links to `ChangesetHeaderDim` |
 | `ChangesetBadge` | The badge in the footer | `Directory`'s colour, reversed, bold |
 | `ChangesetFooter` | The footer's text | `Comment`'s colour on `StatusLine` |
 | `ChangesetFooterKey` | Keys and the filter in the footer | `StatusLine`, bold |

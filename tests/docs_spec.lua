@@ -62,6 +62,9 @@ describe("doc/changeset.nvim.txt", function()
     assert.is_true(#plugs > 0)
     for _, sub in ipairs(subcommands) do
       assert.truthy(flat:find(":Changeset " .. sub, 1, true), sub)
+      for _, verb in ipairs(vim.fn.getcompletion("Changeset " .. sub .. " ", "cmdline")) do
+        assert.truthy(flat:find(":Changeset " .. sub .. " " .. verb, 1, true), sub .. " " .. verb)
+      end
     end
     for _, lhs in ipairs(plugs) do
       assert.truthy(flat:find(lhs, 1, true), lhs)

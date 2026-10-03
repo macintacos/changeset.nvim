@@ -20,10 +20,48 @@ local subcommands = {
     end
     require("changeset.review").toggle()
   end,
+  pr = {
+    start = function()
+      require("changeset.pr").start()
+    end,
+    abandon = function()
+      require("changeset.pr").abandon()
+    end,
+  },
 }
 
+---What `words` name in `subcommands`: a handler, a table of verbs, or nil.
+---@param words string[]
+---@return function|table|nil
+local function lookup(words)
+  local node = subcommands ---@type function|table|nil
+  for _, word in ipairs(words) do
+    if type(node) ~= "table" then
+      return nil
+    end
+    node = node[word]
+  end
+  return node
+end
+
+---The sorted names in a table of subcommands or verbs.
+---@param node table
+---@return string[]
+local function names(node)
+  local keys = vim.tbl_keys(node)
+  table.sort(keys)
+  return keys
+end
+
 vim.api.nvim_create_user_command("Changeset", function(opts)
-  local run = subcommands[opts.args == "" and "toggle" or opts.args]
+  local words = vim.split(opts.args, "%s+", { trimempty = true })
+  local run = lookup(#words == 0 and { "toggle" } or words)
+  if type(run) == "table" then
+    return vim.notify(
+      ("Changeset: :Changeset %s takes a verb: %s"):format(opts.args, table.concat(names(run), ", ")),
+      vim.log.levels.ERROR
+    )
+  end
   if not run then
     return vim.notify("Changeset: unknown subcommand " .. opts.args, vim.log.levels.ERROR)
   end
@@ -31,13 +69,24 @@ vim.api.nvim_create_user_command("Changeset", function(opts)
 end, {
   nargs = "?",
   bar = true,
-  desc = "Toggle the changeset sidebar, rebuild it, or toggle PR Review Mode",
-  complete = function(lead)
-    local names = vim.tbl_filter(function(name)
+  desc = "Toggle the changeset sidebar, rebuild it, toggle PR Review Mode, or start or abandon the PR's pending review",
+  complete = function(lead, line)
+    -- Parses the last `|` segment so a modifier or earlier command still completes; a range makes it raise.
+    local ok, cmd = pcall(vim.api.nvim_parse_cmd, line:match("[^|]*$"), {})
+    if not ok then
+      return {}
+    end
+    local words = vim.split(cmd.args[1] or "", "%s+", { trimempty = true })
+    if lead ~= "" then
+      table.remove(words)
+    end
+    local node = lookup(words)
+    if type(node) ~= "table" then
+      return {}
+    end
+    return vim.tbl_filter(function(name)
       return vim.startswith(name, lead)
-    end, vim.tbl_keys(subcommands))
-    table.sort(names)
-    return names
+    end, names(node))
   end,
 })
 
