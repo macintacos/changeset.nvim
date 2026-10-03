@@ -81,7 +81,7 @@ with them.
 ## Usage
 
 `:Changeset` opens the sidebar and focuses it, and running it again from the sidebar
-closes it. It takes one optional subcommand:
+closes it. It takes one optional subcommand, and `pr` takes a verb:
 
 - `:Changeset toggle`, the default: from any other window, opens or focuses the sidebar
   on the row for where your cursor is. From the sidebar, closes it and returns you to your
@@ -89,6 +89,8 @@ closes it. It takes one optional subcommand:
 - `:Changeset refresh` rebuilds the tree.
 - `:Changeset review` turns [PR Review Mode](#pr-review-mode) off, or back on, for the
   current branch. It raises an error unless `pr_review.enabled` is set.
+- `:Changeset pr start` starts a [pending review](#pr-reviews) on the branch's open PR.
+- `:Changeset pr abandon` deletes the branch's [pending review](#pr-reviews).
 
 `<Plug>(changeset-toggle)` does what `:Changeset toggle` does.
 
@@ -158,6 +160,17 @@ It turns itself on for every branch except the default. `:Changeset review` turn
 or back on, for the current branch until Neovim exits.
 
 It works without the sidebar, and the sidebar works without it.
+
+## PR reviews
+
+A pending review is where GitHub holds your review comments on a PR until you submit or
+delete it. You have at most one per PR. Both commands below work with the sidebar closed.
+
+- `:Changeset pr start` starts a pending review on the branch's open PR. It needs an open
+  PR and `gh` signed in. When a pending review is already under way, including one started
+  on github.com, it says so instead.
+- `:Changeset pr abandon` asks y/n, then deletes the pending review and every review
+  comment in it.
 
 ## Picker
 
