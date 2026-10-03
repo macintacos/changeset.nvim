@@ -1,17 +1,23 @@
----Each PR's pending review as GitHub last answered, per repository and PR: fetched when the tree
----lands on a new branch or PR, when Neovim regains focus, and after each `:Changeset pr` verb.
+---Each PR's pending review as GitHub last answered, per repository and PR.
 local build = require("changeset.build")
 local pending_review = require("changeset.pending_review")
 
 local M = {}
 
----GitHub's last answer for each PR, by `root .. "\n" .. number`. A failed ask leaves it as it was.
+---GitHub's last answer for each PR, by `key`. A failed ask leaves it as it was.
 ---@type table<string, changeset.pending_review.Found>
-local found = {}
+local answers = {}
 
----The latest ask; an answer to any other is not kept, so an older reply can't overwrite a newer one.
----@type table?
-local latest
+---Each repository's latest ask; an answer to any other is not kept, so an older reply can't overwrite a newer one.
+---@type table<string, table>
+local latest = {}
+
+---@param root string
+---@param number integer
+---@return string
+local function key(root, number)
+  return root .. "\n" .. number
+end
 
 ---"root\nbranch\npr" of the tree when last heard, so a rebuild of the same one fetches nothing.
 ---@type string?
@@ -25,7 +31,7 @@ local subscribers = {}
 ---@param number integer
 ---@return changeset.pending_review.Found? found nil until GitHub has answered for that PR.
 function M.get(root, number)
-  return found[root .. "\n" .. number]
+  return answers[key(root, number)]
 end
 
 ---Asks GitHub for `root`'s PR and its pending review, keeping the answer while the tree is still on that PR.
@@ -33,11 +39,11 @@ end
 ---@param cb fun(err: string?, found: changeset.pending_review.Found?)? Called with the raw answer, kept or not.
 function M.fetch(root, cb)
   local ask = {}
-  latest = ask
+  latest[root] = ask
   pending_review.find(root, function(err, answer)
     local tree = build.current()
-    if answer and latest == ask and tree and tree.root == root and tree.pr == answer.pr.number then
-      found[root .. "\n" .. answer.pr.number] = answer
+    if answer and latest[root] == ask and tree and tree.root == root and tree.pr == answer.pr.number then
+      answers[key(root, answer.pr.number)] = answer
       for fn in pairs(subscribers) do
         fn()
       end
@@ -68,7 +74,7 @@ build.subscribe(function()
 end)
 
 vim.api.nvim_create_autocmd("FocusGained", {
-  group = vim.api.nvim_create_augroup("changeset.pending", { clear = true }),
+  group = vim.api.nvim_create_augroup("changeset.pending_state", { clear = true }),
   desc = "changeset: ask GitHub again for the PR's pending review, which may have changed on github.com",
   callback = function()
     local tree = build.current()

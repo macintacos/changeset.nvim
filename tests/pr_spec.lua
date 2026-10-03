@@ -1,12 +1,13 @@
 local Fixture = require("support.git")
 
-local STUBBED = { "changeset.pending_state", "changeset.pending_review", "changeset.build", "changeset.pr" }
+local STUBBED =
+  { "changeset.pending_state", "changeset.pending_review", "changeset.build", "changeset.pr", "changeset.window" }
 
 describe("changeset.pr", function()
-  local notify, confirm, notes, prompts, fetched, started, deleted
+  local notify, input, notes, prompts, fetched, started, deleted
   ---@type { err: string?, found: table? }[] What each fetch answers, in order; the last repeats.
   local answers
-  ---@type integer What `vim.fn.confirm` answers.
+  ---@type string What `vim.fn.input` answers.
   local choice
   ---@type string? What the client's `start` or `delete` fails with.
   local failure
@@ -16,14 +17,14 @@ describe("changeset.pr", function()
 
   before_each(function()
     notes, prompts, fetched, started, deleted = {}, {}, {}, {}, {}
-    answers, choice, failure = {}, 2, nil
+    answers, choice, failure = {}, "", nil
     tree = { root = "/tree/root", pr = 412 }
-    notify, confirm = vim.notify, vim.fn.confirm
+    notify, input = vim.notify, vim.fn.input
     vim.notify = function(msg, level)
       table.insert(notes, { msg = msg, level = level })
     end
-    vim.fn.confirm = function(msg)
-      table.insert(prompts, msg)
+    vim.fn.input = function(opts)
+      table.insert(prompts, opts.prompt)
       return choice
     end
     package.loaded["changeset.pending_state"] = {
@@ -54,7 +55,7 @@ describe("changeset.pr", function()
   end)
 
   after_each(function()
-    vim.notify, vim.fn.confirm = notify, confirm
+    vim.notify, vim.fn.input = notify, input
     for _, name in ipairs(STUBBED) do
       package.loaded[name] = nil
     end
@@ -122,8 +123,8 @@ describe("changeset.pr", function()
       assert.same({}, deleted)
     end)
 
-    for _, answer in ipairs({ 2, 0 }) do
-      it("changes nothing when confirm answers " .. answer, function()
+    for _, answer in ipairs({ "n", "", "nope y" }) do
+      it(("changes nothing when the answer is %q"):format(answer), function()
         answers, choice = { { found = { pr = pr, review = review } } }, answer
 
         require("changeset.pr").abandon()
@@ -134,8 +135,18 @@ describe("changeset.pr", function()
       end)
     end
 
+    for _, answer in ipairs({ "y", " YES " }) do
+      it(("deletes the review when the answer is %q"):format(answer), function()
+        answers, choice = { { found = { pr = pr, review = review } } }, answer
+
+        require("changeset.pr").abandon()
+
+        assert.same({ "R_1" }, deleted)
+      end)
+    end
+
     it("deletes the review once confirmed, naming the PR and its review comments", function()
-      answers, choice = { { found = { pr = pr, review = review } } }, 1
+      answers, choice = { { found = { pr = pr, review = review } } }, "y"
 
       require("changeset.pr").abandon()
 
@@ -147,7 +158,7 @@ describe("changeset.pr", function()
     end)
 
     it("reports a failed delete and still fetches again", function()
-      answers, choice, failure = { { found = { pr = pr, review = review } } }, 1, "network down"
+      answers, choice, failure = { { found = { pr = pr, review = review } } }, "y", "network down"
 
       require("changeset.pr").abandon()
 
@@ -160,13 +171,14 @@ describe("changeset.pr", function()
   describe("the repository", function()
     it("is the tree's from the sidebar", function()
       answers = { { err = "x" } }
-      local buf = vim.api.nvim_create_buf(false, true)
-      vim.api.nvim_set_current_buf(buf)
-      vim.bo[buf].filetype = "changeset"
+      package.loaded["changeset.window"] = {
+        is_focused = function()
+          return true
+        end,
+      }
 
       require("changeset.pr").start()
 
-      vim.api.nvim_buf_delete(buf, { force = true })
       assert.same({ "/tree/root" }, fetched)
     end)
 

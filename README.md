@@ -174,9 +174,11 @@ delete it. You have at most one per PR. Both commands below work with the sideba
 
 With the sidebar open, a circle beside the PR number in its header shows whether you have
 a pending review on that PR: gray with none, green with one, including one started on
-github.com. It follows restarts and branch switches. It is checked when the sidebar's tree
-lands on a new branch or PR, when Neovim regains focus, and after each `:Changeset pr`. It
-is absent with no open PR, without `gh` signed in, and until GitHub first answers.
+github.com, drawn in `ChangesetHeaderNotPending` and `ChangesetHeaderPending` (see
+[Highlight groups](#highlight-groups)). It is checked when the sidebar's tree lands on a
+new branch or PR, when Neovim regains focus, and after each `:Changeset pr`. It is absent
+whenever the PR number is (no open PR, `gh` missing or signed out) and until GitHub first
+answers.
 
 ## Picker
 

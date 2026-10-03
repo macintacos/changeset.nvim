@@ -103,6 +103,14 @@ describe("pending_state", function()
     assert.are.equal(latest, pending_state.get(root, 1))
   end)
 
+  it("keeps an answer while another repository's ask is in flight", function()
+    pending_state.fetch(root)
+    pending_state.fetch(root .. "-other")
+    local found = answer(1)
+    asks[1].cb(nil, found)
+    assert.are.equal(found, pending_state.get(root, 1))
+  end)
+
   it("hands fetch's callback the answer even when it is dropped", function()
     local got
     pending_state.fetch(root, function(err, found)

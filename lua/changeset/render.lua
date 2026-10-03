@@ -205,6 +205,7 @@ local MARGIN = " "
 -- The branch and diff glyphs are the ones mini.statusline already draws.
 local BRANCH_ICON = ""
 local PR_ICON = ""
+local PENDING_ICON = "●"
 local FILES_ICON = ""
 local COMMIT_ICON = ""
 local FILTER_ICON = "󰈲"
@@ -576,7 +577,8 @@ function M.hidden_note(kinds, width, key)
 end
 
 ---The header's first row, for the sidebar's winbar: the ref the tree is compared
----against, and the branch's PR at the right edge.
+---against, and the branch's PR at the right edge, led by its pending-review circle once
+---GitHub has answered.
 ---
 ---A ref too long for the width loses its tail, not its head: a stacked branch is
 ---told apart by the start of its name. The statusline's own `%<` would cut the
@@ -586,11 +588,13 @@ end
 ---@return string
 function M.header(summary, width)
   local pr = summary.pr and ("%s #%d"):format(PR_ICON, summary.pr)
-  local circle = pr and summary.pending_review ~= nil
+  local circle_hl = pr
+    and summary.pending_review ~= nil
+    and (summary.pending_review and M.HEADER_PENDING_HL or M.HEADER_NOT_PENDING_HL)
   local room = width
     - vim.fn.strdisplaywidth((" %s "):format(BRANCH_ICON))
     - (pr and vim.fn.strdisplaywidth(pr) + 2 or 0)
-    - (circle and vim.fn.strdisplaywidth("●") + 1 or 0)
+    - (circle_hl and vim.fn.strdisplaywidth(PENDING_ICON) + 1 or 0)
   local ref = clip_right(summary.ref, room)
   local remote = ref:match("^origin/") or ""
   return table.concat({
@@ -598,7 +602,7 @@ function M.header(summary, width)
     ("%%#%s#%s"):format(M.HEADER_DIM_HL, remote),
     ("%%#%s#%s"):format(M.HEADER_REF_HL, escaped(ref:sub(#remote + 1))),
     ("%%#%s#%%="):format(M.HEADER_HL),
-    circle and ("%%#%s#● "):format(summary.pending_review and M.HEADER_PENDING_HL or M.HEADER_NOT_PENDING_HL) or "",
+    circle_hl and ("%%#%s#%s "):format(circle_hl, PENDING_ICON) or "",
     pr and ("%%#%s#%s "):format(M.HEADER_DIM_HL, pr) or "",
   })
 end

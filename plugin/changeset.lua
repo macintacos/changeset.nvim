@@ -71,8 +71,12 @@ end, {
   bar = true,
   desc = "Toggle the changeset sidebar, rebuild it, toggle PR Review Mode, or start or abandon the PR's pending review",
   complete = function(lead, line)
-    -- Parsed rather than split on the line's first word, so a modifier (`:silent Changeset pr `) completes too.
-    local words = vim.split(vim.api.nvim_parse_cmd(line, {}).args[1] or "", "%s+", { trimempty = true })
+    -- Parses the last `|` segment so a modifier or earlier command still completes; a range makes it raise.
+    local ok, cmd = pcall(vim.api.nvim_parse_cmd, line:match("[^|]*$"), {})
+    if not ok then
+      return {}
+    end
+    local words = vim.split(cmd.args[1] or "", "%s+", { trimempty = true })
     if lead ~= "" then
       table.remove(words)
     end

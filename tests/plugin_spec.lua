@@ -171,6 +171,8 @@ describe("plugin/changeset.lua", function()
     assert.same({ "start" }, vim.fn.getcompletion("Changeset pr s", "cmdline"))
     assert.same({ "start" }, vim.fn.getcompletion("silent Changeset pr s", "cmdline"))
     assert.same({}, vim.fn.getcompletion("Changeset toggle ", "cmdline"))
+    assert.same({ "abandon", "start" }, vim.fn.getcompletion("redraw | Changeset pr ", "cmdline"))
+    assert.same({}, vim.fn.getcompletion("'<,'>Changeset ", "cmdline"))
   end)
 
   it("routes each pr verb to the pr module", function()

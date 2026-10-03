@@ -34,6 +34,7 @@ later `setup()` call reaches it.
 
 ## Documenting a name
 
-`tests/docs_spec.lua` fails until every option, `:Changeset` subcommand and each subcommand's
-verbs (`:Changeset pr start`), `<Plug>` map and highlight group appears in the vimdoc. The highlight groups are the `Changeset*` names in
-`lua/changeset/render.lua`. Add each new name to the README, then run `mise run docs`.
+`tests/docs_spec.lua` fails until every option, `:Changeset` subcommand and verb
+(`:Changeset pr start`), `<Plug>` map and highlight group appears in the vimdoc. The
+highlight groups are the `Changeset*` names in `lua/changeset/render.lua`. Add each new
+name to the README, then run `mise run docs`.

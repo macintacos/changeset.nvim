@@ -1,9 +1,12 @@
+local build = require("changeset.build")
 local changeset = require("changeset")
 local render = require("changeset.render")
 local window = require("changeset.window")
 local Fixture = require("support.git")
 local gh = require("support.gh")
 
+-- A file of its own: a find still in flight from an earlier case would take the answers a
+-- later one queues.
 describe("changeset header circle", function()
   local tmp, previous_dir
 
@@ -54,6 +57,7 @@ describe("changeset header circle", function()
   end
 
   it("follows the PR's pending review as GitHub answers, and keeps it when an ask fails", function()
+    -- Slow enough to see the header with its PR but no circle yet.
     vim.env.FAKE_GH_DELAY = "0.3"
     gh.fixture("find-pending-review-empty")
     changeset.open()
@@ -74,16 +78,24 @@ describe("changeset header circle", function()
       return circle_group() == render.HEADER_PENDING_HL
     end, 25))
 
+    local asked = #gh.calls()
     vim.api.nvim_exec_autocmds("FocusGained", {})
-    assert.is_false(vim.wait(500, function()
-      return circle_group() ~= render.HEADER_PENDING_HL
+    assert.is_true(vim.wait(10000, function()
+      return #gh.calls() >= asked + 2
     end, 25))
+    vim.wait(100)
+    assert.are.equal(render.HEADER_PENDING_HL, circle_group())
 
+    local rebuilt = false
+    build.subscribe(function()
+      rebuilt = true
+    end)
     local before = #gh.calls()
     vim.fn.writefile({ "return 3" }, "child.lua")
     vim.api.nvim_exec_autocmds("BufWritePost", { pattern = vim.fn.fnamemodify("child.lua", ":p") })
-    assert.is_false(vim.wait(500, function()
-      return #gh.calls() > before
+    assert.is_true(vim.wait(10000, function()
+      return rebuilt
     end, 25))
+    assert.are.equal(before, #gh.calls())
   end)
 end)
