@@ -188,6 +188,9 @@ end)
 -- Fires: GitHub's answer on the PR's pending review being kept, so the header's circle follows it.
 pending_state.subscribe(redraw)
 
+-- Loaded here because every tree is built through this module, so the marks exist whenever a tree can.
+require("changeset.review_comments")
+
 ---The sidebar's footer, which its statusline evaluates on every redraw.
 ---@return string
 function M.footer()

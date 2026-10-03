@@ -180,6 +180,15 @@ new branch or PR, when Neovim regains focus, and after each `:Changeset pr`. It 
 whenever the PR number is (no open PR, `gh` missing or signed out) and until GitHub first
 answers.
 
+Each review comment in your pending review, including ones added on github.com, is marked
+in its file's buffer: the line numbers it covers turn green, and its first line ends with
+a green circle and the first line of its body, drawn in `ChangesetReviewComment` and
+`ChangesetReviewCommentBody`. The marks appear once the sidebar has opened on the
+repository, and stay with it closed. Outdated and file-level review comments have no line,
+so they aren't drawn. The marks update with the circle: when the branch or its PR changes,
+when Neovim regains focus, and after each `:Changeset pr`. A file you open later is marked
+from the last answer, without asking GitHub again.
+
 ## Picker
 
 With mini.pick set up, `require("changeset.pick").pick()` searches the same changes as the
@@ -253,6 +262,8 @@ The sidebar derives each group's default from your colorscheme, and derives it a
 | `ChangesetHeaderRef` | The ref the tree is compared against | `Normal`'s colour on the header, bold |
 | `ChangesetHeaderPending` | The circle beside the PR while you have a pending review on it | `DiagnosticOk`'s colour on the header |
 | `ChangesetHeaderNotPending` | The circle while you have none | links to `ChangesetHeaderDim` |
+| `ChangesetReviewComment` | A review comment's circle and the line numbers it covers in its file | `DiagnosticOk`'s colour, bold |
+| `ChangesetReviewCommentBody` | A review comment's body after its circle | links to `ChangesetMeta` |
 | `ChangesetBadge` | The badge in the footer | `Directory`'s colour, reversed, bold |
 | `ChangesetFooter` | The footer's text | `Comment`'s colour on `StatusLine` |
 | `ChangesetFooterKey` | Keys and the filter in the footer | `StatusLine`, bold |

@@ -363,6 +363,27 @@ view unless asked, so the sidebar scrolls them back in whenever it returns to it
 scroll away with the tree like any row would. Until the first diff is in the row is absent,
 rather than claiming that nothing changed.
 
+### Review comments in their files
+
+```text
+ 12 ▎ local function find(root)        ● cache this per root?
+  8   if not ok then                   ● say which ref failed
+  9     return nil
+ 10   end                              ● ok here ● and simplify
+```
+
+Each review comment of the pending review is marked in its file's buffer by two things.
+Its line numbers, every line of a range, turn `ChangesetReviewComment`: the header circle's
+`DiagnosticOk` green, bold. The number column is the one margin gitsigns leaves alone, so
+the mark sits beside the `▎` without competing for its cell, and lighting every number of a
+range shows how far the cursor can be and still reach that review comment. At the end of
+its first line sits the header's `●` in the same green, followed by the body's first line in
+`ChangesetReviewCommentBody`, `Comment` and italic: the § Three levels "not content" idiom,
+since the body is not the file's text. Two review comments on one line show as two circles,
+each with its own body, in the order GitHub lists them; their ranges' number colours merge.
+The marks are drawn from the header circle's answer, so they appear, update and disappear
+when it does, and for the same tree.
+
 ### Footer
 
 ```text

@@ -104,6 +104,14 @@ M.HEADER_REF_HL = "ChangesetHeaderRef"
 ---@type string
 M.HEADER_PENDING_HL = "ChangesetHeaderPending"
 
+---Group for a review comment's circle and the line numbers it covers in its file. Created by `define_highlights`.
+---@type string
+M.REVIEW_COMMENT_HL = "ChangesetReviewComment"
+
+---Group for a review comment's body at the end of its first line. Created by `define_highlights`.
+---@type string
+M.REVIEW_COMMENT_BODY_HL = "ChangesetReviewCommentBody"
+
 ---Group for the circle beside the PR while you have none. Created by `define_highlights`.
 ---@type string
 M.HEADER_NOT_PENDING_HL = "ChangesetHeaderNotPending"
@@ -831,6 +839,8 @@ function M.define_highlights()
   local ok = vim.api.nvim_get_hl(0, { name = "DiagnosticOk", link = false }).fg
   set_default(M.HEADER_PENDING_HL, { fg = ok, bg = chrome })
   set_default(M.HEADER_NOT_PENDING_HL, { link = M.HEADER_DIM_HL })
+  set_default(M.REVIEW_COMMENT_HL, { fg = ok, bold = true })
+  set_default(M.REVIEW_COMMENT_BODY_HL, { link = M.META_HL })
   set_default(M.BADGE_HL, { fg = directory, reverse = true, bold = true })
   local statusline = vim.api.nvim_get_hl(0, { name = "StatusLine", link = false })
   set_default(M.FOOTER_HL, { fg = comment.fg, bg = statusline.bg })
