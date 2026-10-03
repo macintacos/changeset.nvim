@@ -1,0 +1,1 @@
+{"data":{"submitPullRequestReview":null},"errors":[{"type":"UNPROCESSABLE","path":["submitPullRequestReview"],"locations":[{"line":2,"column":3}],"message":"Could not comment for pull request review. You need to leave a comment indicating the requested changes."}]}

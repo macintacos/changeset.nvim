@@ -3,4 +3,6 @@ enew = "enew" # :enew
 noet = "noet" # vim modeline: noexpandtab
 
 [files]
-extend-exclude = ["tests/fixtures/**"]
+extend-exclude = [
+  "tests/fixtures/**",
+] # recorded gh responses: base64 cursors and node IDs
