@@ -22,9 +22,12 @@ describe("changeset.pr", function()
   local failure
   local tree
 
-  local pr = { id = "PR_1", number = 412 }
+  local drafts = require("changeset.drafts")
+  local HEAD = "abcdef0123456789abcdef0123456789abcdef01"
+  local pr = { id = "PR_1", number = 412, host = "github.com", owner = "acme", name = "widgets", head = HEAD }
 
   before_each(function()
+    os.remove(drafts.path())
     notes, prompts, fetched, started, deleted, deleted_comments, added, opened = {}, {}, {}, {}, {}, {}, {}, {}
     held = nil
     answers, choice, failure = {}, "", nil
@@ -194,6 +197,46 @@ describe("changeset.pr", function()
       assert.truthy(notes[1].msg:find("network down", 1, true))
       assert.equal(2, #fetched)
     end)
+
+    describe("with drafts", function()
+      local other = vim.tbl_extend("force", pr, { number = 413 })
+      local old = vim.tbl_extend("force", pr, { head = "0000000" })
+
+      before_each(function()
+        drafts.keep(pr, { path = "a.lua", line = 1, head = pr.head, body = "now" })
+        drafts.keep(old, { path = "a.lua", line = 2, head = old.head, body = "then" })
+        drafts.keep(other, { path = "a.lua", line = 3, head = other.head, body = "elsewhere" })
+        answers = { { found = { pr = pr, review = review } } }
+      end)
+
+      local function counts()
+        return { #drafts.list(pr), #drafts.list(old), #drafts.list(other) }
+      end
+
+      it("drops this PR's drafts at every head once the review is deleted", function()
+        choice = "y"
+
+        require("changeset.pr").abandon()
+
+        assert.same({ 0, 0, 1 }, counts())
+      end)
+
+      it("keeps them when the delete fails", function()
+        choice, failure = "y", "network down"
+
+        require("changeset.pr").abandon()
+
+        assert.same({ 1, 1, 1 }, counts())
+      end)
+
+      it("keeps them when the answer is no", function()
+        choice = "n"
+
+        require("changeset.pr").abandon()
+
+        assert.same({ 1, 1, 1 }, counts())
+      end)
+    end)
   end)
 
   describe("delete", function()
@@ -316,6 +359,62 @@ describe("changeset.pr", function()
       assert.truthy(notes[1].msg:find("boom", 1, true))
       assert.equal(2, #fetched)
     end)
+
+    describe("a draft", function()
+      local function keep(over)
+        drafts.keep(
+          pr,
+          vim.tbl_extend(
+            "force",
+            { path = "alpha.txt", start_line = 8, line = 10, head = HEAD, body = "d" },
+            over or {}
+          )
+        )
+      end
+
+      it("is deleted from a line inside it, without asking GitHub to delete or refetch", function()
+        keep()
+
+        delete_on(9, {})
+
+        assert.same({}, drafts.list(pr))
+        assert.same({ vim.log.levels.INFO }, levels())
+        assert.truthy(notes[1].msg:find("deleted the draft on line 9", 1, true))
+        assert.same({}, deleted_comments)
+        assert.equal(1, #fetched)
+      end)
+
+      it("goes before a review comment on the same line", function()
+        keep()
+        local comments = { { id = "C_1", path = "alpha.txt", line = 9, body = "x" } }
+
+        delete_on(9, comments)
+        assert.same({}, deleted_comments)
+        delete_on(9, comments)
+
+        assert.same({ "C_1" }, deleted_comments)
+      end)
+
+      it("is deleted with no pending review", function()
+        keep()
+        answers = { { found = { pr = pr } } }
+        vim.api.nvim_win_set_cursor(0, { 9, 0 })
+
+        require("changeset.pr").delete()
+
+        assert.same({}, drafts.list(pr))
+      end)
+
+      it("written at another head is left alone", function()
+        local old = vim.tbl_extend("force", pr, { head = "0000000" })
+        keep({ head = old.head })
+
+        delete_on(9, {})
+
+        assert.equal(1, #drafts.list(old))
+        assert.truthy(notes[1].msg:find("no review comment on line 9", 1, true))
+      end)
+    end)
   end)
 
   describe("the repository", function()
@@ -350,7 +449,6 @@ describe("changeset.pr", function()
 
   describe("comment", function()
     local Git = require("changeset.git")
-    local drafts = require("changeset.drafts")
     ---@type changeset.Pr
     local held_pr
     local matches_commit, matches, buf

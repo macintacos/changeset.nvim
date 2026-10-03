@@ -68,7 +68,7 @@ function M.start()
   end)
 end
 
----Asks, then deletes the pending review on the branch's open PR and every review comment in it.
+---Asks, then deletes the pending review on the branch's open PR, every review comment in it, and the PR's drafts.
 function M.abandon()
   on_pr("abandon", function(found, done)
     local number, review = found.pr.number, found.review
@@ -82,12 +82,15 @@ function M.abandon()
       return
     end
     pending_review.delete(review.id, function(err)
+      if not err then
+        drafts.drop_all(found.pr)
+      end
       done(err, "abandoned")
     end)
   end)
 end
 
----Deletes the review comment on the cursor's line from the pending review on the branch's open PR.
+---Deletes the draft on the cursor's line, else the review comment there in the pending review on the branch's open PR.
 function M.delete()
   -- Extmarks move with edits while review comment lines don't, so a modified buffer could delete the wrong one.
   if vim.bo.modified then
@@ -96,6 +99,11 @@ function M.delete()
   local path = vim.fs.relpath(root(), vim.fs.normalize(vim.api.nvim_buf_get_name(0)))
   local lnum = vim.api.nvim_win_get_cursor(0)[1]
   on_pr("delete a review comment from", function(found, done)
+    local draft = path and require("changeset.review_comments").at(drafts.list(found.pr), path, lnum)
+    if draft then
+      drafts.drop(found.pr, draft)
+      return say(vim.log.levels.INFO, "deleted the draft on line %d", lnum)
+    end
     if not found.review then
       return say(vim.log.levels.INFO, "no pending review on #%d", found.pr.number)
     end

@@ -252,8 +252,8 @@ submit or delete it. You have at most one per PR. `pr start`, `pr abandon` and
 - `:Changeset pr start` starts a pending review on the branch’s open PR. It needs an open
     PR and `gh` signed in. When a pending review is already under way, including one started
     on github.com, it says so instead.
-- `:Changeset pr abandon` asks y/n, then deletes the pending review and every review
-    comment in it.
+- `:Changeset pr abandon` asks y/n, then deletes the pending review, every review comment
+    in it, and the PR’s drafts. A failed delete keeps the drafts.
 - `:Changeset pr comment` opens a markdown window under the cursor’s line; from visual
     mode, `:'<,'>Changeset pr comment` opens it under the selection and comments on the
     selected lines. It needs a pending review, a sidebar opened on the repository so the
@@ -265,8 +265,8 @@ submit or delete it. You have at most one per PR. `pr start`, `pr abandon` and
     rejects keeps the draft too. Running `pr comment` anywhere on a draft’s lines reopens
     it on its own lines; saving it still needs a pending review. Drafts never reach
     GitHub.
-- `:Changeset pr delete` deletes the review comment on the cursor’s line, without asking.
-    When several take in that line, it deletes the narrowest; run it again for the next.
+- `:Changeset pr delete` deletes the draft on the cursor’s line, even without a pending
+    review, else the review comment there, without asking. When several take in that line, it deletes the narrowest; run it again for the next.
     When the line has none, it says so. In a modified buffer it asks you to save first:
     marks move with unsaved edits, while delete goes by line number.
 
