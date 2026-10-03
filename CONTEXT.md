@@ -91,6 +91,6 @@ A comment in a pending review, on one line or a range of lines of a file in the 
 _Avoid_: bare "comment", which is a source-code comment (`changeset.comments`)
 
 **Draft**:
-A review comment's text kept on this machine when its window closed without a save GitHub
-took. It never reaches GitHub.
+A review comment's text kept on this machine when GitHub refuses its save, or when its
+window goes without a save GitHub took. It never reaches GitHub.
 _Avoid_: draft review, which is the pending review

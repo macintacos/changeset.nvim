@@ -384,6 +384,17 @@ describe("changeset.pr", function()
         assert.equal(1, #fetched)
       end)
 
+      it("is reported when the record can't be written", function()
+        keep()
+        vim.fn.setfperm(vim.fs.dirname(drafts.path()), "r-xr-xr-x")
+
+        delete_on(9, {})
+        vim.fn.setfperm(vim.fs.dirname(drafts.path()), "rwxr-xr-x")
+
+        assert.same({ vim.log.levels.ERROR }, levels())
+        assert.truthy(notes[1].msg:find("can't delete the draft in " .. drafts.path(), 1, true))
+      end)
+
       it("goes before a review comment on the same line", function()
         keep()
         local comments = { { id = "C_1", path = "alpha.txt", line = 9, body = "x" } }
@@ -675,7 +686,7 @@ describe("changeset.pr", function()
     end)
 
     it("doesn't reopen a draft written at another head", function()
-      drafts.keep(held_pr, draft({ start_line = 4, line = 4, head = "0000000" }))
+      drafts.keep(held_pr, draft({ start_line = nil, line = 4, head = "0000000" }))
       require("changeset.pr").comment(4, 4)
       assert.is_nil(opened[1].body)
       assert.equal("line 4", opened[1].title)
@@ -689,6 +700,17 @@ describe("changeset.pr", function()
       assert.same({ vim.log.levels.ERROR }, levels())
       assert.truthy(notes[1].msg:find("boom", 1, true))
       assert.truthy(notes[1].msg:find("draft", 1, true))
+    end)
+
+    it("says a rejected save's text wasn't kept when the record can't be written", function()
+      failure = "boom"
+      vim.fn.mkdir(vim.fs.dirname(drafts.path()), "p")
+      vim.fn.setfperm(vim.fs.dirname(drafts.path()), "r-xr-xr-x")
+      require("changeset.pr").comment(4, 4)
+      opened[1].save("text", function() end)
+      vim.fn.setfperm(vim.fs.dirname(drafts.path()), "rwxr-xr-x")
+      assert.same({ vim.log.levels.ERROR }, levels())
+      assert.truthy(notes[1].msg:find("nor keep it in " .. drafts.path(), 1, true))
     end)
 
     it("drops a reopened draft once its save is taken", function()

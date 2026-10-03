@@ -14,7 +14,7 @@ local MIN_WIDTH = 20
 ---@field footer string Names where a save goes, e.g. "pending review on #412".
 ---@field keys string[] Keys that save, in insert and normal mode.
 ---@field save fun(body: string, done: fun(err: string?)) Called with the buffer's lines joined by "\n"; the window closes once `done` gets no error.
----@field keep fun(body: string) Called with the buffer's lines joined by "\n", empty included, on any close but one after a taken save.
+---@field keep fun(body: string) Called with the buffer's lines joined by "\n", empty included, whenever the buffer goes (a close, an :e in the float, quitting) except after a taken save.
 ---@field body string? The text it opens with.
 
 ---Open the window under `opts.line` of the current window, focused, in insert mode.
@@ -71,9 +71,9 @@ function M.open(opts)
   end
 
   local saved = false
-  -- Fires: this float closing, by any key or command; read now, as bufhidden=wipe wipes the buffer next.
-  vim.api.nvim_create_autocmd("WinClosed", {
-    pattern = tostring(win),
+  -- Fires: the float's buffer going any way (a close, :q, :e in the float, quitting); read now, as it is wiped next.
+  vim.api.nvim_create_autocmd("BufUnload", {
+    buffer = buf,
     once = true,
     callback = function()
       if not saved then

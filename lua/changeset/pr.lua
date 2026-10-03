@@ -1,4 +1,4 @@
----`:Changeset pr`'s verbs: start and abandon the pending review on the branch's open PR, add a review comment to it, and delete one of its review comments.
+---`:Changeset pr`'s verbs: start and abandon the pending review on the branch's open PR, add a review comment to it or reopen a draft, and delete a draft or one of its review comments.
 local Git = require("changeset.git")
 local Paths = require("changeset.paths")
 local build = require("changeset.build")
@@ -101,7 +101,10 @@ function M.delete()
   on_pr("delete a review comment from", function(found, done)
     local draft = path and require("changeset.review_comments").at(drafts.list(found.pr), path, lnum)
     if draft then
-      drafts.drop(found.pr, draft)
+      -- GitHub holds nothing to refetch; the drafts subscription redraws the mark.
+      if not drafts.drop(found.pr, draft) then
+        return say(vim.log.levels.ERROR, "can't delete the draft in %s", drafts.path())
+      end
       return say(vim.log.levels.INFO, "deleted the draft on line %d", lnum)
     end
     if not found.review then
@@ -133,6 +136,7 @@ end
 
 ---Opens the review comment window under line `last` of the current buffer, for lines `first` to `last`,
 ---unless the pending review can't take a review comment there. Opening asks GitHub nothing.
+---A draft on line `last` reopens instead, on its own lines and unchecked.
 ---@param first integer
 ---@param last integer
 function M.comment(first, last)
@@ -183,7 +187,7 @@ function M.comment(first, last)
     keys = config.get().review_comment.save,
     body = draft and draft.body,
     keep = function(body)
-      if not drafts.keep(found.pr, draft_of(body)) and vim.trim(body) ~= "" then
+      if not drafts.keep(found.pr, draft_of(body)) then
         say(vim.log.levels.ERROR, "can't keep the draft in %s", drafts.path())
       end
     end,
@@ -191,9 +195,14 @@ function M.comment(first, last)
       local new = { path = path, line = last, start_line = first < last and first or nil, body = body }
       pending_review.add_comment(review_id, new, function(err)
         if err then
-          drafts.keep(found.pr, draft_of(body))
-          say(vim.log.levels.ERROR, "can't save the review comment, so kept it as a draft: %s", err)
+          -- Now rather than on close: the window stays open, and may never close.
+          if drafts.keep(found.pr, draft_of(body)) then
+            say(vim.log.levels.ERROR, "can't save the review comment, so kept it as a draft: %s", err)
+          else
+            say(vim.log.levels.ERROR, "can't save the review comment, nor keep it in %s: %s", drafts.path(), err)
+          end
         else
+          -- A reopened draft, or one a close kept while this save was in flight.
           drafts.drop(found.pr, draft_of(body))
           say(vim.log.levels.INFO, "added a review comment to the pending review on #%d", number)
           pending_state.fetch(tree.root)

@@ -14,6 +14,7 @@ local ns = vim.api.nvim_create_namespace("changeset.review_comments")
 ---@field path string
 ---@field line integer?
 ---@field start_line integer?
+---@field body string
 
 ---The lines `comment` spans in its file; nil when it has none: outdated or file-level.
 ---@param comment changeset.Spanned
@@ -49,7 +50,7 @@ function M.at(comments, path, lnum)
 end
 
 ---@param buf integer
----@param spanned changeset.Spanned|{ body: string }
+---@param spanned changeset.Spanned
 ---@param glyph string
 ---@param hl string
 local function mark(buf, spanned, glyph, hl)
@@ -64,28 +65,47 @@ local function mark(buf, spanned, glyph, hl)
   })
 end
 
----@param buf integer
-local function draw(buf)
-  vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+---@class changeset.review_comments.Marks
+---@field root string
+---@field comments changeset.ReviewComment[]
+---@field drafts changeset.Draft[]
+
+---What a redraw marks, read once for every buffer it draws.
+---@return changeset.review_comments.Marks?
+local function marks()
   local tree = build.current()
   local found = tree and tree.pr and pending_state.get(tree.root, tree.pr)
+  if tree and found then
+    return {
+      root = tree.root,
+      comments = found.review and found.review.comments or {},
+      drafts = drafts.list(found.pr),
+    }
+  end
+end
+
+---@param buf integer
+---@param from changeset.review_comments.Marks?
+local function draw(buf, from)
+  vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   local name = vim.api.nvim_buf_get_name(buf)
-  if not (tree and found) or name == "" then
+  if not from or name == "" then
     return
   end
-  local path = vim.fs.relpath(tree.root, vim.fs.normalize(name))
+  local path = vim.fs.relpath(from.root, vim.fs.normalize(name))
   local line_count = vim.api.nvim_buf_line_count(buf)
   ---@param spanned changeset.Spanned
+  ---@return boolean
   local function fits(spanned)
     local first, last = span(spanned)
-    return path and spanned.path == path and first and last <= line_count
+    return path ~= nil and spanned.path == path and first ~= nil and last <= line_count
   end
-  for _, comment in ipairs(found.review and found.review.comments or {}) do
+  for _, comment in ipairs(from.comments) do
     if fits(comment) then
       mark(buf, comment, "● ", render.REVIEW_COMMENT_HL)
     end
   end
-  for _, draft in ipairs(drafts.list(found.pr)) do
+  for _, draft in ipairs(from.drafts) do
     if fits(draft) then
       mark(buf, draft, "○ ", render.REVIEW_DRAFT_HL)
     end
@@ -93,9 +113,10 @@ local function draw(buf)
 end
 
 local function draw_loaded()
+  local from = marks()
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_loaded(buf) then
-      draw(buf)
+      draw(buf, from)
     end
   end
 end
@@ -115,9 +136,9 @@ build.subscribe(draw_loaded)
 -- Fires: a file read into a buffer, which starts with none of the marks.
 vim.api.nvim_create_autocmd("BufReadPost", {
   group = vim.api.nvim_create_augroup("changeset.review_comments", { clear = true }),
-  desc = "changeset: mark the kept pending review's review comments in a file as it is read",
+  desc = "changeset: mark the kept pending review's review comments and the PR's drafts in a file as it is read",
   callback = function(args)
-    draw(args.buf)
+    draw(args.buf, marks())
   end,
 })
 

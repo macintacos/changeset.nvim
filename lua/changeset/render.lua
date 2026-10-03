@@ -845,6 +845,7 @@ function M.define_highlights()
   set_default(M.HEADER_NOT_PENDING_HL, { link = M.HEADER_DIM_HL })
   set_default(M.REVIEW_COMMENT_HL, { fg = ok, bold = true })
   set_default(M.REVIEW_COMMENT_BODY_HL, { link = M.META_HL })
+  -- Blue, as yellow already means "on loan" and a draft is the saved green's hollow twin.
   local info = vim.api.nvim_get_hl(0, { name = "DiagnosticInfo", link = false }).fg
   set_default(M.REVIEW_DRAFT_HL, { fg = info or comment.fg, bold = true })
   set_default(M.BADGE_HL, { fg = directory, reverse = true, bold = true })

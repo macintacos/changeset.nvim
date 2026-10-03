@@ -1,4 +1,4 @@
----Review comments closed without saving, kept on disk per PR and never sent to GitHub.
+---Review comment text kept on this machine whenever a save GitHub took didn't close its window; never sent to GitHub.
 ---
 ---Every mutation re-reads the file and rewrites only its own PR's list, so two
 ---Neovims writing drafts don't drop each other's.
@@ -40,6 +40,16 @@ local function valid(entry)
     and type(entry.body) == "string"
     and type(entry.line) == "number"
     and entry.line % 1 == 0
+    and entry.line >= 1
+    and (
+      entry.start_line == nil
+      or (
+        type(entry.start_line) == "number"
+        and entry.start_line % 1 == 0
+        and entry.start_line >= 1
+        and entry.start_line < entry.line
+      )
+    )
 end
 
 ---@param a changeset.Draft
@@ -49,13 +59,6 @@ local function same_key(a, b)
   return a.path == b.path and a.line == b.line and a.start_line == b.start_line and a.head == b.head
 end
 
----@return table data
-local function read()
-  local data = jsonfile.read(M.path())
-  -- A top-level array can't take a PR's key without losing it on encode.
-  return vim.islist(data) and {} or data
-end
-
 ---@param pr changeset.Pr
 ---@param data table
 ---@return changeset.Draft[]
@@ -63,7 +66,7 @@ local function entries(pr, data)
   return vim.tbl_filter(valid, type(data[key(pr)]) == "table" and data[key(pr)] or {})
 end
 
----Writes the PR's list back, removing its key when the list is empty.
+---Writes the PR's list back, removing its key when the list is empty, and tells the subscribers once it lands.
 ---@param pr changeset.Pr
 ---@param data table
 ---@param list changeset.Draft[]
@@ -87,15 +90,15 @@ end
 function M.list(pr)
   return vim.tbl_filter(function(entry)
     return entry.head == pr.head
-  end, entries(pr, read()))
+  end, entries(pr, jsonfile.read(M.path())))
 end
 
 ---Replaces the draft at `draft`'s path, range and head; a blank body drops it instead.
 ---@param pr changeset.Pr
 ---@param draft changeset.Draft
----@return boolean written false also when a blank body found nothing to drop.
+---@return boolean written false only when the record had to change and the write failed.
 function M.keep(pr, draft)
-  local data = read()
+  local data = jsonfile.read(M.path())
   local before = entries(pr, data)
   local list = vim.tbl_filter(function(entry)
     return not same_key(entry, draft)
@@ -103,7 +106,7 @@ function M.keep(pr, draft)
   if vim.trim(draft.body) ~= "" then
     table.insert(list, draft)
   elseif #list == #before then
-    return false
+    return true
   end
   return write(pr, data, list)
 end
@@ -111,17 +114,20 @@ end
 ---Removes the draft at `draft`'s path, range and head, writing only if one went.
 ---@param pr changeset.Pr
 ---@param draft changeset.Draft
+---@return boolean written
 function M.drop(pr, draft)
-  M.keep(pr, vim.tbl_extend("force", draft, { body = "" }))
+  return M.keep(pr, vim.tbl_extend("force", draft, { body = "" }))
 end
 
 ---Removes every draft of the PR, at every head.
 ---@param pr changeset.Pr
+---@return boolean written
 function M.drop_all(pr)
-  local data = read()
-  if data[key(pr)] ~= nil then
-    write(pr, data, {})
+  local data = jsonfile.read(M.path())
+  if data[key(pr)] == nil then
+    return true
   end
+  return write(pr, data, {})
 end
 
 ---Calls `fn` after each write. Subscribing again does nothing.

@@ -90,10 +90,12 @@ closes it. It takes one optional subcommand, and `pr` takes a verb:
 - `:Changeset review` turns [PR Review Mode](#pr-review-mode) off, or back on, for the
   current branch. It raises an error unless `pr_review.enabled` is set.
 - `:Changeset pr start` starts a [pending review](#pr-reviews) on the branch's open PR.
-- `:Changeset pr abandon` deletes the branch's [pending review](#pr-reviews).
-- `:Changeset pr comment` writes a review comment into the [pending review](#pr-reviews).
-- `:Changeset pr delete` deletes the review comment on the cursor's line from the branch's
-  [pending review](#pr-reviews).
+- `:Changeset pr abandon` deletes the branch's [pending review](#pr-reviews) and the PR's
+  drafts.
+- `:Changeset pr comment` writes a review comment into the [pending review](#pr-reviews),
+  or reopens the draft on the cursor's line.
+- `:Changeset pr delete` deletes the draft on the cursor's line, else the review comment
+  there in the branch's [pending review](#pr-reviews).
 
 `<Plug>(changeset-toggle)` does what `:Changeset toggle` does.
 
@@ -136,7 +138,7 @@ save keys with `review_comment.save`, in [Options](#options).
 | `<CR>` / `r` / `b` | kind menu | remember this set everywhere / for this repository / for this branch, then close |
 | `q` / `<Esc>` | kind menu | close, putting the tree back to the saved set |
 | `<C-CR>` / `<C-s>` | review comment window | save into the pending review and close; when GitHub refuses, the window and its text stay |
-| `q` | review comment window | close without saving |
+| `q` / `<S-Esc>` | review comment window | close, keeping the text as a local draft |
 | `?` | review comment window | list its keys |
 | `f` | sidebar | filter as you type, keeping ancestors so matches stay in place and highlighting every match until you clear the filter; `<Esc>` cancels and keeps the previous filter |
 | `R` | sidebar | rebuild now |
@@ -186,14 +188,15 @@ the sidebar closed.
   inside the PR's diff in a saved file that matches that head. The keys in
   `review_comment.save`, `<C-CR>` or `<C-s>` by default, save it into the pending review
   and close the window. `q`, `<S-Esc>` (where the terminal sends it) and `:q` close it
-  and keep its text as a draft on this machine; empty text keeps nothing. A save GitHub
-  rejects keeps the draft too. Running `pr comment` anywhere on a draft's lines reopens
-  it on its own lines; saving it still needs a pending review. Drafts never reach
-  GitHub.
-- `:Changeset pr delete` deletes the draft on the cursor's line, even without a pending
-  review, else the review comment there, without asking. When several take in that line, it deletes the narrowest; run it again for the next.
-  When the line has none, it says so. In a modified buffer it asks you to save first:
-  marks move with unsaved edits, while delete goes by line number.
+  and keep its text as a draft on this machine, as does quitting Neovim with it open;
+  empty text keeps nothing. A save GitHub rejects keeps the draft too. Running
+  `pr comment` anywhere on a draft's lines reopens it on its own lines; like a new one, it
+  needs a pending review to save into. Drafts never reach GitHub.
+- `:Changeset pr delete` deletes the draft on the cursor's line, else the review comment
+  there, without asking; a draft needs no pending review. When several take in that line,
+  it deletes the narrowest; run it again for the next. When the line has none, it says so.
+  In a modified buffer it asks you to save first: marks move with unsaved edits, while
+  delete goes by line number.
 
 With the sidebar open, a circle beside the PR number in its header shows whether you have
 a pending review on that PR: gray with none, green with one, including one started on

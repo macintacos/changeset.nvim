@@ -56,7 +56,7 @@ describe("changeset.drafts", function()
   end)
 
   it("writes nothing for a blank body with no draft to drop", function()
-    assert.is_false(drafts.keep(PR, draft({ body = "" })))
+    assert.is_true(drafts.keep(PR, draft({ body = "" })))
 
     assert.is_nil(io.open(drafts.path(), "r"))
   end)
@@ -103,7 +103,19 @@ describe("changeset.drafts", function()
     assert.same({ draft() }, require("changeset.drafts").list(PR))
   end)
 
-  for _, junk in ipairs({ "[1,2]", '{"x":"y"}', '{"github.com/acme/widgets#412":[{"path":"a","line":1,"body":"b"}]}' }) do
+  local function entry(fields)
+    return '{"github.com/acme/widgets#412":[{"path":"a","head":"aaa","body":"b",' .. fields .. "}]}"
+  end
+  for _, junk in ipairs({
+    "[1,2]",
+    '{"x":"y"}',
+    '{"github.com/acme/widgets#412":[{"path":"a","line":1,"body":"b"}]}',
+    entry('"line":3,"start_line":null'),
+    entry('"line":3,"start_line":"1"'),
+    entry('"line":0'),
+    entry('"line":3,"start_line":3'),
+    entry('"line":3,"start_line":4'),
+  }) do
     it("lists nothing from a file holding " .. junk .. ", and keeps afterwards", function()
       vim.fn.mkdir(vim.fs.dirname(drafts.path()), "p")
       vim.fn.writefile({ junk }, drafts.path())
