@@ -1,4 +1,4 @@
----`:Changeset pr`'s verbs: start and abandon the pending review on the branch's open PR, add a review comment to it or reopen a draft, and delete a draft or one of its review comments.
+---`:Changeset pr`'s verbs: start, submit and abandon the pending review on the branch's open PR, add a review comment to it or reopen a draft, and delete a draft or one of its review comments.
 local Git = require("changeset.git")
 local Paths = require("changeset.paths")
 local build = require("changeset.build")
@@ -8,6 +8,8 @@ local drafts = require("changeset.drafts")
 local pending_review = require("changeset.pending_review")
 local pending_state = require("changeset.pending_state")
 local review_comment_window = require("changeset.review_comment_window")
+local submit_window = require("changeset.submit_window")
+local submittable = require("changeset.submittable")
 local window = require("changeset.window")
 
 local M = {}
@@ -36,7 +38,8 @@ local function say(level, text, ...)
 end
 
 ---Finds the branch's PR and pending review and hands them to `act`, which mutates and calls
----`done`; `done` reports and refetches, so the header always follows a mutation.
+---`done`; `done` reports and refetches, so the header always follows a mutation. `done` may run
+---once per attempt, or not at all.
 ---@param verb string Reads between "can't" and "a pending review": "start", "abandon", "delete a review comment from".
 ---@param act fun(found: changeset.pending_review.Found, done: fun(err: string?, did: string))
 local function on_pr(verb, act)
@@ -87,6 +90,34 @@ function M.abandon()
       end
       done(err, "abandoned")
     end)
+  end)
+end
+
+---Previews the pending review on the branch's open PR, then submits it with the event and body chosen there.
+function M.submit()
+  on_pr("submit", function(found, done)
+    local review = found.review
+    if not review then
+      return say(vim.log.levels.INFO, "no pending review on #%d", found.pr.number)
+    end
+    submit_window.open({
+      number = found.pr.number,
+      events = submittable.events(found.pr.viewer_did_author),
+      comments = review.comments,
+      drafts = drafts.list(found.pr),
+      keys = config.get().review_comment.save,
+      submit = function(submission, settled)
+        local reason = submittable.refusal(submission, #review.comments)
+        if reason then
+          say(vim.log.levels.WARN, "can't submit the pending review: %s", reason)
+          return settled(reason)
+        end
+        pending_review.submit(review.id, submission, function(err)
+          settled(err)
+          done(err, "submitted")
+        end)
+      end,
+    })
   end)
 end
 
@@ -182,7 +213,9 @@ function M.comment(first, last)
   local review_id, number = found.review.id, found.pr.number
   review_comment_window.open({
     line = last,
-    title = first < last and ("lines %d-%d"):format(first, last) or ("line %d"):format(last),
+    title = "Review comment · " .. (first < last and ("lines %d-%d"):format(first, last) or ("line %d"):format(last)),
+    save_desc = "Save into the pending review",
+    close_desc = "Close, keeping the text as a draft",
     footer = ("pending review on #%d"):format(number),
     keys = config.get().review_comment.save,
     body = draft and draft.body,

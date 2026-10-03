@@ -218,6 +218,7 @@ local MARGIN = " "
 local BRANCH_ICON = ""
 local PR_ICON = ""
 local PENDING_ICON = "●"
+local DRAFT_ICON = "○"
 local FILES_ICON = ""
 local COMMIT_ICON = ""
 local FILTER_ICON = "󰈲"
@@ -558,6 +559,111 @@ function M.kind_lines(rows, opts)
     out[i] = line
   end
   return out
+end
+
+---@class changeset.SubmitInfo
+---@field events changeset.pending_review.Event[] The events offered; one draws no event row.
+---@field event changeset.pending_review.Event The chosen one.
+---@field body string?
+---@field comments changeset.ReviewComment[]
+---@field drafts changeset.Draft[]
+
+local EVENT_LABEL = { COMMENT = "Comment", APPROVE = "Approve", REQUEST_CHANGES = "Request changes" }
+
+---@param spanned { line: integer?, start_line: integer? }
+---@return string
+local function span(spanned)
+  if spanned.start_line and spanned.start_line ~= spanned.line then
+    return ("%d-%d"):format(spanned.start_line, spanned.line)
+  end
+  return tostring(spanned.line)
+end
+
+---Where a review comment sits: its line or range, else why it has none.
+---@param comment changeset.ReviewComment
+---@return string where
+---@return string? note
+local function comment_place(comment)
+  if comment.outdated then
+    local was = comment.original_line
+      and span({ line = comment.original_line, start_line = comment.original_start_line })
+    return comment.path, was and "outdated, was " .. was or "outdated"
+  end
+  if not comment.line then
+    return comment.path, "file"
+  end
+  return comment.path .. ":" .. span(comment)
+end
+
+---@param info changeset.SubmitInfo
+---@return changeset.Line
+local function event_line(info)
+  local chunks = { { " " } }
+  for i, event in ipairs(info.events) do
+    chunks[#chunks + 1] = { " " .. EVENT_LABEL[event] .. " ", event == info.event and M.SELECTED_HL or nil }
+    chunks[#chunks + 1] = { i < #info.events and " " or "" }
+  end
+  return compose(nil, chunks)
+end
+
+---@param body string?
+---@return changeset.Line
+local function body_line(body)
+  if not body or not body:find("%S") then
+    return compose(nil, { { " " }, { "No body. b to write one.", M.META_HL } })
+  end
+  local first, rest = body:match("^([^\n]*)\n?(.*)$")
+  return compose(nil, { { " " .. first .. (rest:find("%S") and " …" or "") } })
+end
+
+---The submit preview: the event row, the body row, what is sent, and the drafts that are not.
+---@param info changeset.SubmitInfo
+---@return changeset.Line[] lines
+---@return integer body_row The 1-based row the body is drawn on.
+function M.submit_lines(info)
+  local out = {}
+  if #info.events > 1 then
+    vim.list_extend(out, { event_line(info), compose(nil, {}) })
+  end
+  out[#out + 1] = body_line(info.body)
+  local body_row = #out
+  out[#out + 1] = compose(nil, {})
+
+  local places, width = {}, 0
+  for i, comment in ipairs(info.comments) do
+    local where, note = comment_place(comment)
+    places[i] = { where, note }
+    width = math.max(width, vim.fn.strdisplaywidth(where .. (note and "  " .. note or "")))
+  end
+  for i, comment in ipairs(info.comments) do
+    local where, note = places[i][1], places[i][2]
+    local shown = where .. (note and "  " .. note or "")
+    out[#out + 1] = compose(nil, {
+      { " " },
+      { PENDING_ICON, M.REVIEW_COMMENT_HL },
+      { " " .. where },
+      { note and "  " or "" },
+      { note or "", note and M.META_HL or nil },
+      { (" "):rep(width - vim.fn.strdisplaywidth(shown) + 2) },
+      { (comment.body:match("^[^\r\n]*")), M.REVIEW_COMMENT_BODY_HL },
+    })
+  end
+  if #info.comments == 0 then
+    out[#out + 1] = compose(nil, { { " " }, { "No review comments. Only the body is sent.", M.META_HL } })
+  end
+
+  if #info.drafts > 0 then
+    out[#out + 1] = compose(nil, {})
+  end
+  for _, draft in ipairs(info.drafts) do
+    out[#out + 1] = compose(nil, {
+      { " " },
+      { DRAFT_ICON, M.REVIEW_DRAFT_HL },
+      { " " .. draft.path .. ":" .. span(draft) .. "  " },
+      { "draft, not included", M.META_HL },
+    })
+  end
+  return out, body_row
 end
 
 ---Hidden kind names as prose: pluralised, lowercased, joined for a sentence.

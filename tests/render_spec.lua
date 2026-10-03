@@ -1308,4 +1308,86 @@ describe("changeset.render", function()
       assert.truthy(vim.endswith(assert(render.hidden_note({ "Variable" }, 44, false)), "variables."))
     end)
   end)
+
+  describe("submit_lines", function()
+    ---@param overrides table?
+    local function lines(overrides)
+      return render.submit_lines(vim.tbl_extend("force", {
+        events = { "COMMENT" },
+        event = "COMMENT",
+        comments = {},
+        drafts = {},
+      }, overrides or {}))
+    end
+
+    local function find(out, needle)
+      return vim.iter(out):find(function(line)
+        return line.text:find(needle, 1, true) ~= nil
+      end)
+    end
+
+    local function comment(fields)
+      return vim.tbl_extend("force", { id = "c", path = "a.lua", outdated = false, body = "note" }, fields)
+    end
+
+    it("shows each comment's path with its line or range", function()
+      local out = lines({
+        comments = { comment({ line = 42 }), comment({ path = "b.lua", start_line = 50, line = 55 }) },
+      })
+      assert.truthy(find(out, "● a.lua:42"))
+      assert.truthy(find(out, "● b.lua:50-55"))
+    end)
+
+    it("marks an outdated comment with the line it was made on", function()
+      local out = lines({ comments = { comment({ outdated = true, original_line = 12 }) } })
+      assert.truthy(find(out, "a.lua  outdated, was 12"))
+    end)
+
+    it("marks an outdated comment without an original line as plain outdated", function()
+      local line = find(lines({ comments = { comment({ outdated = true }) } }), "a.lua")
+      assert.truthy(line.text:find("a.lua  outdated  ", 1, true))
+      assert.is_nil(line.text:find("was", 1, true))
+    end)
+
+    it("marks a file-level comment", function()
+      assert.truthy(find(lines({ comments = { comment({}) } }), "a.lua  file"))
+    end)
+
+    it("shows only a CRLF body's first line, without its carriage return", function()
+      local line = find(lines({ comments = { comment({ line = 4, body = "first\r\nsecond" }) } }), "a.lua")
+      assert.are.equal("first", line.text:match("(%S+)$"))
+    end)
+
+    it("says when the review has no comments", function()
+      assert.truthy(find(lines(), "No review comments"))
+    end)
+
+    it("names each draft as not included", function()
+      local out = lines({ drafts = { { path = "v.lua", line = 7, head = "h", body = "x" } } })
+      assert.truthy(find(out, "○ v.lua:7  draft, not included"))
+    end)
+
+    it("draws no event row for one event, the body row first", function()
+      local out, body_row = lines()
+      assert.is_nil(find(out, "Comment"))
+      assert.equal(1, body_row)
+      assert.truthy(out[1].text:find("No body", 1, true))
+    end)
+
+    it("draws three events, lighting the chosen one", function()
+      local out, body_row = lines({ events = { "COMMENT", "APPROVE", "REQUEST_CHANGES" }, event = "APPROVE" })
+      assert.equal("  Comment   Approve   Request changes ", out[1].text)
+      assert.equal(3, body_row)
+      local lit = vim.tbl_filter(function(mark)
+        return mark.hl == render.SELECTED_HL
+      end, out[1].marks)
+      assert.equal(1, #lit)
+      assert.equal(" Approve ", out[1].text:sub(lit[1].col + 1, lit[1].end_col))
+    end)
+
+    it("shows the body's first line", function()
+      local out, body_row = lines({ body = "looks good\nmore" })
+      assert.equal(" looks good …", out[body_row].text)
+    end)
+  end)
 end)
