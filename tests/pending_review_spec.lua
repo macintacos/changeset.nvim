@@ -60,6 +60,9 @@ describe("pending_review", function()
         line = 10,
         start_line = 8,
         body = "Range over changed and unchanged lines, inside one hunk",
+        outdated = false,
+        original_line = 10,
+        original_start_line = 8,
       }, found.review.comments[3])
       assert.is_nil(found.review.comments[1].start_line)
       assert.is_nil(found.review.comments[6].line)
@@ -133,6 +136,20 @@ describe("pending_review", function()
       assert.is_nil(found.review.comments[2].line)
       assert.is_nil(found.review.comments[3].line)
     end)
+
+    it("marks outdated review comments and keeps their original line", function()
+      gh.answer({ stdout = gh.pr_view({ url = SANDBOX }) })
+      gh.fixture("head-moves-find-after-push")
+      gh.fixture("head-moves-comments-after-push")
+
+      local _, found = run("find", nil)
+
+      assert.is_false(found.review.comments[1].outdated)
+      assert.is_true(found.review.comments[2].outdated)
+      assert.equal(20, found.review.comments[2].original_line)
+      assert.is_true(found.review.comments[3].outdated)
+      assert.equal(30, found.review.comments[3].original_line)
+    end)
   end)
 
   describe("start", function()
@@ -162,6 +179,7 @@ describe("pending_review", function()
       assert.is_nil(err)
       assert.equal("PRRC_kwDOU6Rmbc74w1gA", comment.id)
       assert.equal(31, comment.line)
+      assert.is_false(comment.outdated)
       assert.is_nil(comment.start_line)
       assert.is_false(has_prefix(gh.calls()[1], "startLine="))
     end)

@@ -20,8 +20,11 @@ local TIMEOUT = 30000
 ---@class changeset.ReviewComment : changeset.Spanned
 ---@field id string Node ID (`PRRC_…`), never the thread's.
 ---@field path string
----@field line integer? nil once outdated, or on a file-level review comment; the record can't tell the two apart.
+---@field line integer? nil once outdated, or on a file-level review comment.
 ---@field start_line integer? First line of a range.
+---@field outdated boolean
+---@field original_line integer? The line in the commit the review comment was made on.
+---@field original_start_line integer?
 ---@field body string
 
 ---@class changeset.pending_review.Found
@@ -81,7 +84,16 @@ end
 
 ---@return changeset.ReviewComment
 local function review_comment(node)
-  return { id = node.id, path = node.path, line = node.line, start_line = node.startLine, body = node.body }
+  return {
+    id = node.id,
+    path = node.path,
+    line = node.line,
+    start_line = node.startLine,
+    body = node.body,
+    outdated = node.outdated,
+    original_line = node.originalLine,
+    original_start_line = node.originalStartLine,
+  }
 end
 
 ---@param pages table[] `--slurp`'s array of listing pages.
@@ -177,7 +189,14 @@ function M.add_comment(review_id, new, cb)
       return cb(("GitHub refused a review comment on %s at line %s"):format(new.path, lines))
     end
     local node = thread.comments.nodes[1]
-    cb(nil, { id = node.id, path = new.path, line = node.line, start_line = node.startLine, body = new.body })
+    cb(nil, {
+      id = node.id,
+      path = new.path,
+      line = node.line,
+      start_line = node.startLine,
+      body = new.body,
+      outdated = false,
+    })
   end)
 end
 
