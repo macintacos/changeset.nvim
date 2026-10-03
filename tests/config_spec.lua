@@ -12,6 +12,12 @@ describe("changeset.config", function()
     assert.equal(100, config.get().layout.min_file_width)
   end)
 
+  it("replaces the review comment save keys rather than merging them", function()
+    assert.same({ "<C-CR>", "<C-s>" }, config.get().review_comment.save)
+    config.setup({ review_comment = { save = { "<C-j>" } } })
+    assert.same({ "<C-j>" }, config.get().review_comment.save)
+  end)
+
   it("rejects a bad value, naming the option, and keeps the options in force", function()
     config.setup({ layout = { min_file_width = 100 } })
     for _, case in ipairs({
@@ -20,6 +26,10 @@ describe("changeset.config", function()
       { { layout = { min_file_width = "80" } }, "layout.min_file_width" },
       { { pr_review = { enabled = "yes" } }, "pr_review.enabled" },
       { { keymaps = false }, "keymaps" },
+      { { review_comment = false }, "review_comment" },
+      { { review_comment = { save = "<C-s>" } }, "review_comment.save" },
+      { { review_comment = { save = {} } }, "review_comment.save" },
+      { { review_comment = { save = { "" } } }, "review_comment.save" },
     }) do
       local ok, err = pcall(config.setup, case[1])
       assert.is_false(ok)

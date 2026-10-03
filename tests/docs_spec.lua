@@ -19,7 +19,7 @@ local function leaves(tbl, prefix, out)
   out = out or {}
   for key, value in pairs(tbl) do
     local path = prefix and prefix .. "." .. key or key
-    if type(value) == "table" then
+    if type(value) == "table" and not vim.islist(value) then
       leaves(value, path, out)
     else
       out[#out + 1] = path

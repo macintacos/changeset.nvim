@@ -133,6 +133,9 @@ binds. Rename a sidebar key with its `keymaps` option in [Options](#options).
 | `x` | kind menu | hide or show the kind under the cursor, redrawing the tree at once |
 | `<CR>` / `r` / `b` | kind menu | remember this set everywhere / for this repository / for this branch, then close |
 | `q` / `<Esc>` | kind menu | close, putting the tree back to the saved set |
+| `<C-CR>` / `<C-s>` | review comment window | save into the pending review and close; when GitHub refuses, the window and its text stay |
+| `q` | review comment window | close without saving |
+| `?` | review comment window | list its keys |
 | `f` | sidebar | filter as you type, keeping ancestors so matches stay in place and highlighting every match until you clear the filter; `<Esc>` cancels and keeps the previous filter |
 | `R` | sidebar | rebuild now |
 | `y` | sidebar | copy the row's `path:line` to the clipboard; nothing on a section header |
@@ -244,6 +247,7 @@ Any `keymaps` entry can be `false` to leave that key unbound.
 | `keymaps.prev` | `false` | Previous row, from any window |
 | `layout.min_file_width` | `80` | Narrowest the files get beside the sidebar before it moves below them |
 | `pr_review.enabled` | `false` | PR Review Mode on every branch but the default |
+| `review_comment.save` | `{ "<C-CR>", "<C-s>" }` | Keys that save a review comment, in insert and normal mode |
 
 The step keys, `keymaps.next` and `keymaps.prev`, are off by default. Once set, they work
 from any window, but only while the sidebar is open. Whatever they replaced comes back

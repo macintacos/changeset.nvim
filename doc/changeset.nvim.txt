@@ -180,6 +180,18 @@ option in |changeset.nvim-options|.
 
   q / <Esc>   kind menu   close, putting the tree back to the saved set
 
+  <C-CR> /    review      save into the pending review and close; when
+  <C-s>       comment     GitHub refuses, the window and its text stay
+              window
+
+  q           review      close without saving
+              comment
+              window
+
+  ?           review      list its keys
+              comment
+              window
+
   f           sidebar     filter as you type, keeping ancestors so
                           matches stay in place and highlighting every
                           match until you clear the filter; <Esc> cancels
@@ -288,53 +300,56 @@ Pass options to `require("changeset").setup()` as nested tables:
 
 Any `keymaps` entry can be `false` to leave that key unbound.
 
-  -------------------------------------------------------------------------
-  Option                  Default   Description
-  ----------------------- --------- ---------------------------------------
-  keymaps.jump            <CR>      Go to this change
+  ---------------------------------------------------------------------------------------
+  Option                  Default                 Description
+  ----------------------- ----------------------- ---------------------------------------
+  keymaps.jump            <CR>                    Go to this change
 
-  keymaps.jump_close      <S-CR>    Go to this change and close the sidebar
+  keymaps.jump_close      <S-CR>                  Go to this change and close the sidebar
 
-  keymaps.jump_vsplit     /         Go to this change in a vertical split
+  keymaps.jump_vsplit     /                       Go to this change in a vertical split
 
-  keymaps.jump_split      -         Go to this change in a split
+  keymaps.jump_split      -                       Go to this change in a split
 
-  keymaps.jump_tab        <C-t>     Go to this change in a new tab
+  keymaps.jump_tab        <C-t>                   Go to this change in a new tab
 
-  keymaps.close           q         Close the sidebar
+  keymaps.close           q                       Close the sidebar
 
-  keymaps.expand          l         Expand
+  keymaps.expand          l                       Expand
 
-  keymaps.collapse        h         Collapse, or step out to the parent
+  keymaps.collapse        h                       Collapse, or step out to the parent
 
-  keymaps.collapse_all    H         Collapse every file
+  keymaps.collapse_all    H                       Collapse every file
 
-  keymaps.expand_all      L         Expand every file
+  keymaps.expand_all      L                       Expand every file
 
-  keymaps.next_section    ]]        Next section header
+  keymaps.next_section    ]]                      Next section header
 
-  keymaps.prev_section    [[        Previous section header
+  keymaps.prev_section    [[                      Previous section header
 
-  keymaps.refresh         R         Rebuild the tree
+  keymaps.refresh         R                       Rebuild the tree
 
-  keymaps.yank            y         Copy path:line
+  keymaps.yank            y                       Copy path:line
 
-  keymaps.help            ?         List the sidebar’s keys
+  keymaps.help            ?                       List the sidebar’s keys
 
-  keymaps.filter_kinds    F         Open the symbol-kind menu
+  keymaps.filter_kinds    F                       Open the symbol-kind menu
 
-  keymaps.filter          f         Filter the tree
+  keymaps.filter          f                       Filter the tree
 
-  keymaps.next            false     Next row, from any window
+  keymaps.next            false                   Next row, from any window
 
-  keymaps.prev            false     Previous row, from any window
+  keymaps.prev            false                   Previous row, from any window
 
-  layout.min_file_width   80        Narrowest the files get beside the
-                                    sidebar before it moves below them
+  layout.min_file_width   80                      Narrowest the files get beside the
+                                                  sidebar before it moves below them
 
-  pr_review.enabled       false     PR Review Mode on every branch but the
-                                    default
-  -------------------------------------------------------------------------
+  pr_review.enabled       false                   PR Review Mode on every branch but the
+                                                  default
+
+  review_comment.save     { "<C-CR>", "<C-s>" }   Keys that save a review comment, in
+                                                  insert and normal mode
+  ---------------------------------------------------------------------------------------
 The step keys, `keymaps.next` and `keymaps.prev`, are off by default. Once set,
 they work from any window, but only while the sidebar is open. Whatever they
 replaced comes back when it closes.

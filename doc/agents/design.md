@@ -289,6 +289,39 @@ on disk it reads `unsaved changes` instead, because `q` throws that drift away a
 footer naming a scope would read as though it were safe. Keys are not listed there: `?`
 answers that, the same way it does in the sidebar.
 
+### The review comment window opens under the line it is about
+
+A review comment is written in a float anchored to the buffer line it is about, or the
+last line of a range, so the line being discussed stays visible directly above it, and
+the lines after it are covered while it is open:
+
+```text
+local function greet(name)
+╭ Review comment · line 3 ───────────────────────────────────────────────╮
+│**bold** and a list:                                                    │
+│- item                                                                  │
+│                                                                        │
+│                                                                        │
+│                                                                        │
+│                                                                        │
+╰ pending review on #412 ────────────────────────────────────────────────╯
+```
+
+It is attached to the window (`relative = "win"`, `bufpos`) rather than placed in editor
+cells, so it opens under that line wherever the line is on screen. Its width is the
+source window's less the border, capped at 72 columns: a review comment is prose, and
+prose reads at a short measure. Six rows are room for a paragraph without hiding the
+code around it; a longer comment scrolls. The buffer is `markdown`, so what GitHub will
+render is highlighted as it is typed, and it wraps at word boundaries. `style =
+"minimal"` drops the number column and sign column, which describe a file this buffer is
+not.
+
+The border does the labelling, as the kind menu's does. The title names the line or
+lines, the footer where a save goes. Keys are not listed there: `?` answers that. `q` in
+normal mode closes without saving, since a comment is written in insert mode and normal
+mode `q` is then a deliberate key. There is no `<Esc>` close, because a habitual `<Esc>`
+on the way to normal mode would throw the typed text away.
+
 ### A hidden kind is admitted under the tree
 
 ```text
@@ -518,6 +551,12 @@ repository's deliberate choice is none of that save's business.
 
 ## Behaviour that is easy to get wrong
 
+- **A refused review comment keeps the window and its text.** Only a save GitHub accepted
+  closes it, so a refusal can be fixed and saved again rather than retyped.
+- **A saved review comment leaves insert mode before the window closes.** The save keys
+  are pressed while typing and the answer comes later; closing without `stopinsert` would
+  leave the user in insert mode in their own file, where the next keys edit their code.
+- **`<C-s>` saves alongside `<C-CR>`** because many terminals never send `<C-CR>`.
 - **A file cached before its parser was installed keeps just the name rules** until it
   next changes: its entry was read without the syntax layer, and its stamp still matches.
   Its comment lines are missing too, so its comment-only changes stay out of Docs. A moved
