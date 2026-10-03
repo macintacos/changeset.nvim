@@ -91,6 +91,7 @@ closes it. It takes one optional subcommand, and `pr` takes a verb:
   current branch. It raises an error unless `pr_review.enabled` is set.
 - `:Changeset pr start` starts a [pending review](#pr-reviews) on the branch's open PR.
 - `:Changeset pr abandon` deletes the branch's [pending review](#pr-reviews).
+- `:Changeset pr comment` writes a review comment into the [pending review](#pr-reviews).
 - `:Changeset pr delete` deletes the review comment on the cursor's line from the branch's
   [pending review](#pr-reviews).
 
@@ -115,7 +116,8 @@ Moving through the tree previews each change in the window you were last in, wit
 across the top of that window. `<CR>`, or a split or tab key, opens the change there.
 
 The table lists the default keys, plus `]h` / `[h`, which the [Usage](#usage) example
-binds. Rename a sidebar key with its `keymaps` option in [Options](#options).
+binds. Rename a sidebar key with its `keymaps` option, and the review comment window's
+save keys with `review_comment.save`, in [Options](#options).
 
 <!-- The separator rows' dash counts set the vimdoc's column widths; keep their ratios. -->
 
@@ -133,6 +135,9 @@ binds. Rename a sidebar key with its `keymaps` option in [Options](#options).
 | `x` | kind menu | hide or show the kind under the cursor, redrawing the tree at once |
 | `<CR>` / `r` / `b` | kind menu | remember this set everywhere / for this repository / for this branch, then close |
 | `q` / `<Esc>` | kind menu | close, putting the tree back to the saved set |
+| `<C-CR>` / `<C-s>` | review comment window | save into the pending review and close; when GitHub refuses, the window and its text stay |
+| `q` | review comment window | close without saving |
+| `?` | review comment window | list its keys |
 | `f` | sidebar | filter as you type, keeping ancestors so matches stay in place and highlighting every match until you clear the filter; `<Esc>` cancels and keeps the previous filter |
 | `R` | sidebar | rebuild now |
 | `y` | sidebar | copy the row's `path:line` to the clipboard; nothing on a section header |
@@ -166,14 +171,21 @@ It works without the sidebar, and the sidebar works without it.
 ## PR reviews
 
 A pending review is where GitHub holds your review comments on a PR until you submit or
-delete it. You have at most one per PR. All three commands below work with the sidebar
-closed.
+delete it. You have at most one per PR. `pr start`, `pr abandon` and `pr delete` work with
+the sidebar closed.
 
 - `:Changeset pr start` starts a pending review on the branch's open PR. It needs an open
   PR and `gh` signed in. When a pending review is already under way, including one started
   on github.com, it says so instead.
 - `:Changeset pr abandon` asks y/n, then deletes the pending review and every review
   comment in it.
+- `:Changeset pr comment` opens a markdown window under the cursor's line; from visual
+  mode, `:'<,'>Changeset pr comment` opens it under the selection and comments on the
+  selected lines. It needs a pending review, a sidebar opened on the repository so the
+  PR's diff is read (you can close it again), the PR's head commit fetched, and lines
+  inside the PR's diff in a saved file that matches that head. The keys in
+  `review_comment.save`, `<C-CR>` or `<C-s>` by default, save it into the pending review
+  and close the window; `q` closes it without saving.
 - `:Changeset pr delete` deletes the review comment on the cursor's line, without asking.
   When several take in that line, it deletes the narrowest; run it again for the next.
   When the line has none, it says so. In a modified buffer it asks you to save first:
@@ -183,19 +195,20 @@ With the sidebar open, a circle beside the PR number in its header shows whether
 a pending review on that PR: gray with none, green with one, including one started on
 github.com, drawn in `ChangesetHeaderNotPending` and `ChangesetHeaderPending` (see
 [Highlight groups](#highlight-groups)). It is checked when the sidebar's tree lands on a
-new branch or PR, when Neovim regains focus, and after each `:Changeset pr`. It is absent
-whenever the PR number is (no open PR, `gh` missing or signed out) and until GitHub first
-answers.
+new branch or PR, when Neovim regains focus, and after `:Changeset pr start`, `pr abandon`
+and `pr delete`, and after a review comment is saved. It is absent whenever the PR number
+is (no open PR, `gh` missing or signed out) and until GitHub first answers.
 
 Each review comment in your pending review, including ones added on github.com, is marked
 in its file's buffer: the line numbers it covers turn green, and its first line ends with
 a green circle and the first line of its body, drawn in `ChangesetReviewComment` and
-`ChangesetReviewCommentBody`. The marks appear once the sidebar or the picker has built the
-tree for the repository, and stay with the sidebar closed. Outdated and file-level review
-comments have no line, so they aren't drawn. The marks update with the circle: when the
-branch or its PR changes, including a branch switch made outside the sidebar, when Neovim
-regains focus, and after each `:Changeset pr`. A file you open later is marked from the
-last answer, without asking GitHub again.
+`ChangesetReviewCommentBody`. The marks appear once the sidebar or the picker has built
+the tree for the repository, and stay with the sidebar closed. Outdated and file-level
+review comments have no line, so they aren't drawn. The marks update with the circle: when
+the branch or its PR changes, including a branch switch made outside the sidebar, when
+Neovim regains focus, and after `:Changeset pr start`, `pr abandon` and `pr delete`, and
+after a review comment is saved. A file you open later is marked from the last answer,
+without asking GitHub again.
 
 ## Picker
 
@@ -244,6 +257,7 @@ Any `keymaps` entry can be `false` to leave that key unbound.
 | `keymaps.prev` | `false` | Previous row, from any window |
 | `layout.min_file_width` | `80` | Narrowest the files get beside the sidebar before it moves below them |
 | `pr_review.enabled` | `false` | PR Review Mode on every branch but the default |
+| `review_comment.save` | `<C-CR>`, `<C-s>` | List of keys that save a review comment, in insert and normal mode |
 
 The step keys, `keymaps.next` and `keymaps.prev`, are off by default. Once set, they work
 from any window, but only while the sidebar is open. Whatever they replaced comes back

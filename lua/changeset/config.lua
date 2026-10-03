@@ -6,6 +6,7 @@ local M = {}
 ---@field keymaps? changeset.Config.Keymaps The sidebar's keys, and the step keys it binds globally while open; each a key or `false` to leave it unbound.
 ---@field layout? changeset.Config.Layout
 ---@field pr_review? changeset.Config.PrReview
+---@field review_comment? changeset.Config.ReviewComment
 
 ---@class changeset.Config.Keymaps
 ---@field jump? string|false Go to this change. Default `<CR>`.
@@ -34,11 +35,15 @@ local M = {}
 ---@class changeset.Config.PrReview
 ---@field enabled? boolean Turn PR Review Mode on for every branch but the default. Only a restart turns it off again. Default false.
 
+---@class changeset.Config.ReviewComment
+---@field save? string[] Keys that save a review comment into the pending review, in insert and normal mode. Default { "<C-CR>", "<C-s>" }.
+
 ---The options in force: every top-level field set.
 ---@class changeset.Options : changeset.Config
 ---@field keymaps changeset.Config.Keymaps
 ---@field layout changeset.Config.Layout
 ---@field pr_review changeset.Config.PrReview
+---@field review_comment changeset.Config.ReviewComment
 
 ---@type changeset.Options
 local DEFAULTS = {
@@ -65,6 +70,7 @@ local DEFAULTS = {
   },
   layout = { min_file_width = 80 },
   pr_review = { enabled = false },
+  review_comment = { save = { "<C-CR>", "<C-s>" } },
 }
 
 local current = vim.deepcopy(DEFAULTS)
@@ -74,6 +80,7 @@ local function validate(options)
   vim.validate("keymaps", options.keymaps, "table")
   vim.validate("layout", options.layout, "table")
   vim.validate("pr_review", options.pr_review, "table")
+  vim.validate("review_comment", options.review_comment, "table")
   for action, lhs in pairs(options.keymaps) do
     vim.validate("keymaps." .. action, lhs, function(v)
       return v == false or (type(v) == "string" and v ~= "")
@@ -81,6 +88,14 @@ local function validate(options)
   end
   vim.validate("layout.min_file_width", options.layout.min_file_width, "number")
   vim.validate("pr_review.enabled", options.pr_review.enabled, "boolean")
+  vim.validate("review_comment.save", options.review_comment.save, function(v)
+    -- `vim.islist({})` is true, and an empty list would leave no way to save.
+    return vim.islist(v)
+      and #v > 0
+      and vim.iter(v):all(function(lhs)
+        return type(lhs) == "string" and lhs ~= ""
+      end)
+  end, "non-empty list of non-empty strings")
 end
 
 ---Lay `opts` over the defaults, not over the last call's. On a bad value, raise an error naming the option and keep what was in force.

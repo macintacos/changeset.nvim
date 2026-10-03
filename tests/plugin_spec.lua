@@ -167,12 +167,12 @@ describe("plugin/changeset.lua", function()
   end)
 
   it("completes pr's verbs that match the argument", function()
-    assert.same({ "abandon", "delete", "start" }, vim.fn.getcompletion("Changeset pr ", "cmdline"))
+    assert.same({ "abandon", "comment", "delete", "start" }, vim.fn.getcompletion("Changeset pr ", "cmdline"))
     assert.same({ "start" }, vim.fn.getcompletion("Changeset pr s", "cmdline"))
     assert.same({ "start" }, vim.fn.getcompletion("silent Changeset pr s", "cmdline"))
     assert.same({}, vim.fn.getcompletion("Changeset toggle ", "cmdline"))
-    assert.same({ "abandon", "delete", "start" }, vim.fn.getcompletion("redraw | Changeset pr ", "cmdline"))
-    assert.same({}, vim.fn.getcompletion("'<,'>Changeset ", "cmdline"))
+    assert.same({ "abandon", "comment", "delete", "start" }, vim.fn.getcompletion("redraw | Changeset pr ", "cmdline"))
+    assert.same({ "pr", "refresh", "review", "toggle" }, vim.fn.getcompletion("1,2Changeset ", "cmdline"))
   end)
 
   it("routes each pr verb to the pr module", function()
@@ -188,6 +188,31 @@ describe("plugin/changeset.lua", function()
     package.loaded["changeset.pr"] = nil
     assert.same({ start = 2, abandon = 1, delete = 1 }, calls)
     assert.equal(1, vim.g.changeset_pr_after)
+  end)
+
+  it("routes pr comment the lines it is given", function()
+    local ranges, calls = {}, {}
+    package.loaded["changeset.pr"] = {
+      comment = function(first, last)
+        table.insert(ranges, { first, last })
+      end,
+      start = counter(calls, "start"),
+    }
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_set_current_buf(buf)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(("x"):rep(10, "\n"), "\n"))
+    vim.api.nvim_win_set_cursor(0, { 3, 0 })
+
+    vim.cmd("Changeset pr comment")
+    vim.cmd("2,4Changeset pr comment")
+    vim.cmd("normal! 2GVj\27")
+    vim.cmd("'<,'>Changeset pr comment")
+    vim.cmd("1Changeset pr start")
+
+    vim.api.nvim_buf_delete(buf, { force = true })
+    package.loaded["changeset.pr"] = nil
+    assert.same({ { 3, 3 }, { 2, 4 }, { 2, 3 } }, ranges)
+    assert.same({ start = 1 }, calls)
   end)
 
   it("reports an unknown pr verb as an unknown subcommand", function()

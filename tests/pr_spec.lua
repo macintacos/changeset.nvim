@@ -7,22 +7,26 @@ local STUBBED = {
   "changeset.pr",
   "changeset.window",
   "changeset.review_comments",
+  "changeset.review_comment_window",
 }
 
 describe("changeset.pr", function()
-  local notify, input, notes, prompts, fetched, started, deleted, deleted_comments
+  local notify, input, notes, prompts, fetched, started, deleted, deleted_comments, added, opened
+  ---@type table? What `pending_state.get` answers.
+  local held
   ---@type { err: string?, found: table? }[] What each fetch answers, in order; the last repeats.
   local answers
   ---@type string What `vim.fn.input` answers.
   local choice
-  ---@type string? What the client's `start` or `delete` fails with.
+  ---@type string? What the client's `start`, `delete` or `add_comment` fails with.
   local failure
   local tree
 
   local pr = { id = "PR_1", number = 412 }
 
   before_each(function()
-    notes, prompts, fetched, started, deleted, deleted_comments = {}, {}, {}, {}, {}, {}
+    notes, prompts, fetched, started, deleted, deleted_comments, added, opened = {}, {}, {}, {}, {}, {}, {}, {}
+    held = nil
     answers, choice, failure = {}, "", nil
     tree = { root = "/tree/root", pr = 412 }
     notify, input = vim.notify, vim.fn.input
@@ -34,7 +38,6 @@ describe("changeset.pr", function()
       return choice
     end
     package.loaded["changeset.pending_state"] = {
-      get = function() end,
       subscribe = function() end,
       fetch = function(root, cb)
         table.insert(fetched, root)
@@ -42,6 +45,9 @@ describe("changeset.pr", function()
         if cb then
           cb(answer.err, answer.found)
         end
+      end,
+      get = function()
+        return held
       end,
     }
     package.loaded["changeset.pending_review"] = {
@@ -56,6 +62,15 @@ describe("changeset.pr", function()
       delete_comment = function(id, cb)
         table.insert(deleted_comments, id)
         cb(failure)
+      end,
+      add_comment = function(id, new, cb)
+        table.insert(added, { id = id, new = new })
+        cb(failure)
+      end,
+    }
+    package.loaded["changeset.review_comment_window"] = {
+      open = function(opts)
+        table.insert(opened, opts)
       end,
     }
     package.loaded["changeset.build"] = {
@@ -330,6 +345,180 @@ describe("changeset.pr", function()
       vim.cmd("bwipeout!")
       vim.fn.delete(dir, "rf")
       assert.same({ dir }, fetched)
+    end)
+  end)
+
+  describe("comment", function()
+    local Git = require("changeset.git")
+    local matches_commit, matches, buf
+
+    before_each(function()
+      matches_commit, matches = Git.matches_commit, true
+      Git.matches_commit = function()
+        return matches
+      end
+      held = {
+        pr = { id = "PR_1", number = 412, head = "abcdef0123456789abcdef0123456789abcdef01" },
+        review = { id = "PRR_1", comments = {} },
+      }
+      tree = {
+        root = "/tree/root",
+        pr = 412,
+        collected = true,
+        files = { { path = "a.lua", hunks = { { lnum = 3, count = 3, added = 3, removed = 0, old_lnum = 2 } } } },
+      }
+      buf = vim.api.nvim_create_buf(true, false)
+      vim.api.nvim_buf_set_name(buf, "/tree/root/a.lua")
+      vim.api.nvim_set_current_buf(buf)
+    end)
+
+    after_each(function()
+      Git.matches_commit = matches_commit
+      vim.api.nvim_buf_delete(buf, { force = true })
+      require("changeset.config").setup()
+    end)
+
+    ---Asserts one warning containing `text`, and that nothing was opened, fetched or added.
+    local function refused(text)
+      assert.same({ vim.log.levels.WARN }, levels())
+      assert.truthy(notes[1].msg:find(text, 1, true), notes[1].msg)
+      assert.same({}, opened)
+      assert.same({}, fetched)
+      assert.same({}, added)
+    end
+
+    it("refuses without a tree, naming the sidebar", function()
+      tree = nil
+      require("changeset.pr").comment(4, 4)
+      refused("sidebar")
+    end)
+
+    it("refuses a buffer outside the tree's repository, naming it", function()
+      vim.api.nvim_buf_set_name(buf, "/elsewhere/a.lua")
+      require("changeset.pr").comment(4, 4)
+      refused("/tree/root")
+    end)
+
+    it("refuses a buffer that isn't a file, naming the repository", function()
+      tree.root = vim.uv.cwd()
+      vim.api.nvim_buf_set_name(buf, "changeset://1")
+      vim.bo[buf].buftype = "nofile"
+      require("changeset.pr").comment(4, 4)
+      refused(tree.root)
+    end)
+
+    it("refuses an unnamed buffer, naming the repository", function()
+      tree.root = vim.uv.cwd()
+      vim.api.nvim_set_current_buf(vim.api.nvim_create_buf(true, false))
+      require("changeset.pr").comment(4, 4)
+      refused(tree.root)
+    end)
+
+    it("refuses while the diff is still being read", function()
+      tree.collected = false
+      require("changeset.pr").comment(4, 4)
+      refused("still reading the diff")
+    end)
+
+    it("refuses a diff not measured against an open PR", function()
+      tree.pr = nil
+      require("changeset.pr").comment(4, 4)
+      refused("isn't measured against an open PR")
+    end)
+
+    it("asks for a review to be started when GitHub hasn't answered", function()
+      held = nil
+      require("changeset.pr").comment(4, 4)
+      refused("start the review with `:Changeset pr start`")
+    end)
+
+    it("asks for a review to be started when there is none", function()
+      held.review = nil
+      require("changeset.pr").comment(4, 4)
+      refused("start the review with `:Changeset pr start`")
+    end)
+
+    it("names the PR's head when the clone lacks it", function()
+      matches = nil
+      require("changeset.pr").comment(4, 4)
+      refused("abcdef0")
+    end)
+
+    it("refuses a line outside the PR's diff", function()
+      require("changeset.pr").comment(9, 9)
+      refused("outside the PR's diff")
+    end)
+
+    it("refuses every line of a deleted file", function()
+      tree.files[1].status = "deleted"
+      tree.files[1].hunks = { { lnum = 0, count = 0, added = 0, removed = 3, old_lnum = 1 } }
+      require("changeset.pr").comment(1, 1)
+      refused("outside the PR's diff")
+    end)
+
+    it("refuses a file that differs from the PR's head", function()
+      matches = false
+      require("changeset.pr").comment(4, 4)
+      refused("differs from the PR's head")
+    end)
+
+    it("refuses a buffer with unsaved edits", function()
+      vim.bo[buf].modified = true
+      require("changeset.pr").comment(4, 4)
+      refused("differs from the PR's head")
+    end)
+
+    it("opens under the line and saves a review comment on it", function()
+      require("changeset.pr").comment(4, 4)
+
+      assert.equal(1, #opened)
+      assert.equal(4, opened[1].line)
+      assert.equal("line 4", opened[1].title)
+      assert.equal("pending review on #412", opened[1].footer)
+      assert.same({ "<C-CR>", "<C-s>" }, opened[1].keys)
+      assert.same({}, added)
+      assert.same({}, fetched)
+
+      local results = {}
+      opened[1].save("body", function(err)
+        table.insert(results, { err = err })
+      end)
+
+      assert.same({ { id = "PRR_1", new = { path = "a.lua", line = 4, body = "body" } } }, added)
+      assert.same({ vim.log.levels.INFO }, levels())
+      assert.same({ {} }, results)
+      assert.same({ "/tree/root" }, fetched)
+    end)
+
+    it("opens under the last line of a range and saves a review comment on the range", function()
+      require("changeset.pr").comment(3, 5)
+
+      assert.equal(5, opened[1].line)
+      assert.equal("lines 3-5", opened[1].title)
+      opened[1].save("body", function() end)
+      assert.equal(3, added[1].new.start_line)
+      assert.equal(5, added[1].new.line)
+    end)
+
+    it("reports a failed save and hands the error to the window", function()
+      failure = "boom"
+      require("changeset.pr").comment(4, 4)
+
+      local results = {}
+      opened[1].save("body", function(err)
+        table.insert(results, err)
+      end)
+
+      assert.same({ vim.log.levels.ERROR }, levels())
+      assert.truthy(notes[1].msg:find("boom", 1, true))
+      assert.same({ "boom" }, results)
+      assert.same({}, fetched)
+    end)
+
+    it("saves with the keys review_comment.save names", function()
+      require("changeset.config").setup({ review_comment = { save = { "<C-j>" } } })
+      require("changeset.pr").comment(4, 4)
+      assert.same({ "<C-j>" }, opened[1].keys)
     end)
   end)
 end)

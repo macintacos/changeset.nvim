@@ -1,8 +1,12 @@
----`:Changeset pr`'s verbs: start and abandon the pending review on the branch's open PR, and delete one of its review comments.
+---`:Changeset pr`'s verbs: start and abandon the pending review on the branch's open PR, add a review comment to it, and delete one of its review comments.
+local Git = require("changeset.git")
 local Paths = require("changeset.paths")
 local build = require("changeset.build")
+local commentable = require("changeset.commentable")
+local config = require("changeset.config")
 local pending_review = require("changeset.pending_review")
 local pending_state = require("changeset.pending_state")
+local review_comment_window = require("changeset.review_comment_window")
 local window = require("changeset.window")
 
 local M = {}
@@ -102,6 +106,74 @@ function M.delete()
       done(err, "deleted a review comment from")
     end)
   end)
+end
+
+---The hunks the tree holds for `path`; none for a deleted file, whose one hunk at line 0 would read as
+---taking review comments on lines 1-3.
+---@param tree changeset.Tree
+---@param path string
+---@return changeset.Hunk[]
+local function hunks(tree, path)
+  for _, file in ipairs(tree.files) do
+    if file.path == path and file.status ~= "deleted" then
+      return file.hunks
+    end
+  end
+  return {}
+end
+
+---Opens the review comment window under line `last` of the current buffer, for lines `first` to `last`,
+---unless the pending review can't take a review comment there. Opening asks GitHub nothing.
+---@param first integer
+---@param last integer
+function M.comment(first, last)
+  local buf, tree = vim.api.nvim_get_current_buf(), build.current()
+  if not tree then
+    return say(vim.log.levels.WARN, "open the sidebar on this file's repository first, so the PR's diff is read")
+  end
+  local name = vim.api.nvim_buf_get_name(buf)
+  -- relpath prefixes the cwd to a relative name, so a non-file buffer would pass from inside the repo.
+  local path = vim.bo[buf].buftype == "" and name ~= "" and vim.fs.relpath(tree.root, vim.fs.normalize(name))
+  if not path then
+    return say(vim.log.levels.WARN, "run `:Changeset pr comment` from a file in %s", tree.root)
+  end
+  if not tree.collected then
+    return say(vim.log.levels.WARN, "still reading the diff; try again in a moment")
+  end
+  if not tree.pr then
+    return say(vim.log.levels.WARN, "the diff isn't measured against an open PR, so there's no review to add to")
+  end
+  local found = pending_state.get(tree.root, tree.pr)
+  if not (found and found.review) then
+    return say(vim.log.levels.WARN, "start the review with `:Changeset pr start`")
+  end
+  local matches_head = Git.matches_commit(tree.root, found.pr.head, path)
+  if matches_head == nil then
+    return say(vim.log.levels.WARN, "the PR's head, %s, isn't in this clone; fetch it first", found.pr.head:sub(1, 7))
+  end
+  local refusal = commentable.refusal(hunks(tree, path), { first, last }, matches_head and not vim.bo[buf].modified)
+  if refusal then
+    return say(vim.log.levels.WARN, "can't add a review comment here: %s", refusal)
+  end
+  local review_id, number = found.review.id, found.pr.number
+  review_comment_window.open({
+    line = last,
+    title = first < last and ("lines %d-%d"):format(first, last) or ("line %d"):format(last),
+    footer = ("pending review on #%d"):format(number),
+    keys = config.get().review_comment.save,
+    save = function(body, done)
+      local new = { path = path, line = last, start_line = first < last and first or nil, body = body }
+      pending_review.add_comment(review_id, new, function(err)
+        if err then
+          say(vim.log.levels.ERROR, "can't save the review comment: %s", err)
+        else
+          say(vim.log.levels.INFO, "added a review comment to the pending review on #%d", number)
+          pending_state.fetch(tree.root)
+        end
+        done(err)
+      end)
+    end,
+  })
 end
 
 return M

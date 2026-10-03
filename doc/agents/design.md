@@ -304,6 +304,41 @@ hunting for a symbol that is there; past the width it counts them instead, since
 list answers nothing. Only kinds the tree actually has are named — a set carried in from
 another branch can hide things this one never had.
 
+### The review comment window opens under the line it is about
+
+A review comment is written in a float anchored to the buffer line it is about, or the
+last line of a range, so the line being discussed stays visible directly above it, and
+the lines after it are covered while it is open:
+
+```text
+local function greet(name)
+╭ Review comment · line 3 ───────────────────────────────────────────────╮
+│**bold** and a list:                                                    │
+│- item                                                                  │
+│                                                                        │
+│                                                                        │
+│                                                                        │
+│                                                                        │
+╰ pending review on #412 ────────────────────────────────────────────────╯
+```
+
+It is attached to the window (`relative = "win"`, `bufpos`) rather than placed in editor
+cells, so it opens under that line wherever the line is on screen. Its width is the room
+right of the source window's gutter, less the border, between 20 and 72 columns: a review
+comment is prose, and prose reads at a short measure, while 20 keeps a cramped split
+usable. Six rows are room for a paragraph without hiding the code around it; a longer
+review comment scrolls. The buffer is `markdown`, so what GitHub will render is
+highlighted as it is typed, and it wraps at word boundaries. `style = "minimal"` drops the
+number column and sign column, which describe a file this buffer is not. The filetype is
+set once the float is open, so a user's markdown `FileType` settings, such as `spell`,
+reach it and win over the style.
+
+The border does the labelling, as the kind menu's does. The title names the line or lines,
+the footer where a save goes. Keys are not listed there: `?` answers that. `q` in normal
+mode closes without saving, since a review comment is written in insert mode and normal
+mode `q` is then a deliberate key. There is no `<Esc>` close, because a habitual `<Esc>`
+on the way to normal mode would throw the typed text away.
+
 ### Stats
 
 Right-aligned virtual text, `+N` in `GitSignsAdd`, `-N` in `GitSignsDelete`. Numbers, not
@@ -340,15 +375,16 @@ by how their names start, which is why the cut is made here rather than by the s
 while the tree is measured against the branch that PR merges into.
 
 A circle leads the PR to say whether you have a pending review on it: gray, the PR's own
-dim, with none, and green with one. `●` is the config's own current-item mark. The green is
-`DiagnosticOk`'s, a deliberate divergence from § Visual system's vocabulary rule: the config
-has no "all is well" green, and `GitSignsAdd`, the green it does use, already means added
-lines on this strip. The circle sits before the number so the number keeps its column when
-the circle arrives. It is absent whenever the number is, and until GitHub first answers. A
-later failed ask keeps the last answer, because blanking it would read as "the pending
-review is gone". It is fetched when the tree lands on a new branch or PR, when Neovim
-regains focus, and after each `:Changeset pr`, never on writes, since every write would ask
-GitHub. An answer for a PR that is no longer the tree's is dropped.
+dim, with none, and green with one. `●` is the config's own current-item mark. The green
+is `DiagnosticOk`'s, a deliberate divergence from § Visual system's vocabulary rule: the
+config has no "all is well" green, and `GitSignsAdd`, the green it does use, already means
+added lines on this strip. The circle sits before the number so the number keeps its
+column when the circle arrives. It is absent whenever the number is, and until GitHub
+first answers. A later failed ask keeps the last answer, because blanking it would read as
+"the pending review is gone". It is fetched when the tree lands on a new branch or PR,
+when Neovim regains focus, and after `:Changeset pr start`, `pr abandon` and `pr delete`,
+and after a review comment is saved, never on writes, since every write would ask GitHub.
+An answer for a PR that is no longer the tree's is dropped.
 
 The second row counts what the branch holds, the numbers lit and their nouns dimmed: files
 on the left, commits at the right beside the line totals, which end in the column the
@@ -518,6 +554,18 @@ repository's deliberate choice is none of that save's business.
 
 ## Behaviour that is easy to get wrong
 
+- **A refused review comment keeps the window and its text.** Only a save GitHub accepted
+  closes it, so a refusal can be fixed and saved again rather than retyped.
+- **A saved review comment leaves insert mode before the window closes.** The save keys
+  are pressed while typing and the answer comes later. `stopinsert` only takes effect on
+  the next loop iteration, so the window closes on the float's own `InsertLeave`; closing
+  sooner ends insert mode in the user's file, nudging its cursor left and firing its
+  `InsertLeave`.
+- **Opening the review comment window asks GitHub nothing.** It reads the PR's head and
+  pending review from GitHub's last answer, so right after a push made inside Neovim it can
+  refuse the file as differing from the head until `:Changeset pr start` or regaining focus
+  refetches.
+- **`<C-s>` saves alongside `<C-CR>`** because many terminals never send `<C-CR>`.
 - **A file cached before its parser was installed keeps just the name rules** until it
   next changes: its entry was read without the syntax layer, and its stamp still matches.
   Its comment lines are missing too, so its comment-only changes stay out of Docs. A moved

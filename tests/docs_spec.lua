@@ -10,7 +10,7 @@ local function mentions(name)
   return flat:find("%f[%w_.]" .. vim.pesc(name) .. "%f[^%w_]") ~= nil
 end
 
----Every leaf of `tbl` as a dotted path.
+---Every leaf of `tbl` as a dotted path; a list is one leaf, since a list-valued option is documented by its name.
 ---@param tbl table
 ---@param prefix string?
 ---@param out string[]?
@@ -19,7 +19,7 @@ local function leaves(tbl, prefix, out)
   out = out or {}
   for key, value in pairs(tbl) do
     local path = prefix and prefix .. "." .. key or key
-    if type(value) == "table" then
+    if type(value) == "table" and not vim.islist(value) then
       leaves(value, path, out)
     else
       out[#out + 1] = path

@@ -109,6 +109,7 @@ sidebar closes it. It takes one optional subcommand, and `pr` takes a verb:
     current branch. It raises an error unless `pr_review.enabled` is set.
 - `:Changeset pr start` starts a pending review |changeset.nvim-pr-reviews| on the branch’s open PR.
 - `:Changeset pr abandon` deletes the branch’s pending review |changeset.nvim-pr-reviews|.
+- `:Changeset pr comment` writes a review comment into the pending review |changeset.nvim-pr-reviews|.
 - `:Changeset pr delete` deletes the review comment on the cursor’s line from the branch’s
     pending review |changeset.nvim-pr-reviews|.
 
@@ -137,7 +138,8 @@ the change there.
 
 The table lists the default keys, plus `]h` / `[h`, which the
 |changeset.nvim-usage| example binds. Rename a sidebar key with its `keymaps`
-option in |changeset.nvim-options|.
+option, and the review comment window’s save keys with `review_comment.save`,
+in |changeset.nvim-options|.
 
   -----------------------------------------------------------------------
   Key         Where       Does
@@ -179,6 +181,18 @@ option in |changeset.nvim-options|.
   b                       repository / for this branch, then close
 
   q / <Esc>   kind menu   close, putting the tree back to the saved set
+
+  <C-CR> /    review      save into the pending review and close; when
+  <C-s>       comment     GitHub refuses, the window and its text stay
+              window
+
+  q           review      close without saving
+              comment
+              window
+
+  ?           review      list its keys
+              comment
+              window
 
   f           sidebar     filter as you type, keeping ancestors so
                           matches stay in place and highlighting every
@@ -232,14 +246,21 @@ It works without the sidebar, and the sidebar works without it.
 PR REVIEWS                                         *changeset.nvim-pr-reviews*
 
 A pending review is where GitHub holds your review comments on a PR until you
-submit or delete it. You have at most one per PR. All three commands below work
-with the sidebar closed.
+submit or delete it. You have at most one per PR. `pr start`, `pr abandon` and
+`pr delete` work with the sidebar closed.
 
 - `:Changeset pr start` starts a pending review on the branch’s open PR. It needs an open
     PR and `gh` signed in. When a pending review is already under way, including one started
     on github.com, it says so instead.
 - `:Changeset pr abandon` asks y/n, then deletes the pending review and every review
     comment in it.
+- `:Changeset pr comment` opens a markdown window under the cursor’s line; from visual
+    mode, `:'<,'>Changeset pr comment` opens it under the selection and comments on the
+    selected lines. It needs a pending review, a sidebar opened on the repository so the
+    PR’s diff is read (you can close it again), the PR’s head commit fetched, and lines
+    inside the PR’s diff in a saved file that matches that head. The keys in
+    `review_comment.save`, `<C-CR>` or `<C-s>` by default, save it into the pending review
+    and close the window; `q` closes it without saving.
 - `:Changeset pr delete` deletes the review comment on the cursor’s line, without asking.
     When several take in that line, it deletes the narrowest; run it again for the next.
     When the line has none, it says so. In a modified buffer it asks you to save first:
@@ -250,8 +271,9 @@ whether you have a pending review on that PR: gray with none, green with one,
 including one started on github.com, drawn in `ChangesetHeaderNotPending` and
 `ChangesetHeaderPending` (see |changeset.nvim-highlight-groups|). It is checked
 when the sidebar’s tree lands on a new branch or PR, when Neovim regains
-focus, and after each `:Changeset pr`. It is absent whenever the PR number is
-(no open PR, `gh` missing or signed out) and until GitHub first answers.
+focus, and after `:Changeset pr start`, `pr abandon` and `pr delete`, and after
+a review comment is saved. It is absent whenever the PR number is (no open PR,
+`gh` missing or signed out) and until GitHub first answers.
 
 Each review comment in your pending review, including ones added on github.com,
 is marked in its file’s buffer: the line numbers it covers turn green, and
@@ -261,8 +283,9 @@ once the sidebar or the picker has built the tree for the repository, and stay
 with the sidebar closed. Outdated and file-level review comments have no line,
 so they aren’t drawn. The marks update with the circle: when the branch or
 its PR changes, including a branch switch made outside the sidebar, when Neovim
-regains focus, and after each `:Changeset pr`. A file you open later is marked
-from the last answer, without asking GitHub again.
+regains focus, and after `:Changeset pr start`, `pr abandon` and `pr delete`,
+and after a review comment is saved. A file you open later is marked from the
+last answer, without asking GitHub again.
 
 
 PICKER                                                 *changeset.nvim-picker*
@@ -334,6 +357,9 @@ Any `keymaps` entry can be `false` to leave that key unbound.
 
   pr_review.enabled       false     PR Review Mode on every branch but the
                                     default
+
+  review_comment.save     <C-CR>,   List of keys that save a review
+                          <C-s>     comment, in insert and normal mode
   -------------------------------------------------------------------------
 The step keys, `keymaps.next` and `keymaps.prev`, are off by default. Once set,
 they work from any window, but only while the sidebar is open. Whatever they
