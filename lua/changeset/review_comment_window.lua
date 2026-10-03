@@ -6,8 +6,9 @@ local M = {}
 
 local MAX_WIDTH = 72
 local HEIGHT = 6
+local MIN_WIDTH = 20
 
----@class changeset.ReviewCommentWindow.Opts
+---@class changeset.ReviewCommentWindowOpts
 ---@field line integer The current window's buffer line it opens under, 1-based.
 ---@field title string Names the line or lines, e.g. "line 42", "lines 40-42".
 ---@field footer string Names where a save goes, e.g. "pending review on #412".
@@ -15,20 +16,21 @@ local HEIGHT = 6
 ---@field save fun(body: string, done: fun(err: string?)) Called with the buffer's lines joined by "\n"; the window closes once `done` gets no error.
 
 ---Open the window under `opts.line` of the current window, focused, in insert mode.
----@param opts changeset.ReviewCommentWindow.Opts
+---@param opts changeset.ReviewCommentWindowOpts
 ---@return integer win
 function M.open(opts)
   local source = vim.api.nvim_get_current_win()
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = "wipe"
-  vim.bo[buf].filetype = "markdown"
+  -- bufpos anchors at the first text column, so the gutter and the border both come out of
+  -- the window's width.
+  local room = vim.api.nvim_win_get_width(source) - vim.fn.getwininfo(source)[1].textoff - 2
 
   local win = vim.api.nvim_open_win(buf, true, {
     relative = "win",
     win = source,
     bufpos = { opts.line - 1, 0 },
-    -- Prose reads best at a short measure, and the border needs two more cells.
-    width = math.max(math.min(MAX_WIDTH, vim.api.nvim_win_get_width(source) - 2), 20),
+    width = math.max(math.min(MAX_WIDTH, room), MIN_WIDTH),
     height = HEIGHT,
     style = "minimal",
     border = "rounded",
@@ -37,20 +39,26 @@ function M.open(opts)
     footer = " " .. opts.footer .. " ",
     footer_pos = "left",
   })
+  -- Set once the float is current, so the user's FileType settings land on it.
+  vim.bo[buf].filetype = "markdown"
   vim.wo[win].wrap = true
   vim.wo[win].linebreak = true
 
-  local function close()
-    if vim.api.nvim_get_current_win() == win then
-      -- Otherwise insert mode carries over to the user's file and the next keys edit it.
-      vim.cmd.stopinsert()
-    end
+  local function close_now()
     if vim.api.nvim_win_is_valid(win) then
       vim.api.nvim_win_close(win, true)
     end
-    if vim.api.nvim_buf_is_valid(buf) then
-      pcall(vim.api.nvim_buf_delete, buf, { force = true })
+  end
+
+  local function close()
+    if vim.api.nvim_get_current_win() ~= win or not vim.api.nvim_get_mode().mode:find("^[iR]") then
+      return close_now()
     end
+    -- stopinsert only takes effect on the next loop iteration; closing before then leaves
+    -- insert in the user's file, moving its cursor and firing its InsertLeave.
+    -- Fires: insert mode ending in this float, after the stopinsert below.
+    vim.api.nvim_create_autocmd("InsertLeave", { buffer = buf, once = true, callback = vim.schedule_wrap(close_now) })
+    vim.cmd.stopinsert()
   end
 
   local in_flight = false

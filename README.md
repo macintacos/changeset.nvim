@@ -116,7 +116,8 @@ Moving through the tree previews each change in the window you were last in, wit
 across the top of that window. `<CR>`, or a split or tab key, opens the change there.
 
 The table lists the default keys, plus `]h` / `[h`, which the [Usage](#usage) example
-binds. Rename a sidebar key with its `keymaps` option in [Options](#options).
+binds. Rename a sidebar key with its `keymaps` option, and the review comment window's
+save keys with `review_comment.save`, in [Options](#options).
 
 <!-- The separator rows' dash counts set the vimdoc's column widths; keep their ratios. -->
 
@@ -194,9 +195,9 @@ With the sidebar open, a circle beside the PR number in its header shows whether
 a pending review on that PR: gray with none, green with one, including one started on
 github.com, drawn in `ChangesetHeaderNotPending` and `ChangesetHeaderPending` (see
 [Highlight groups](#highlight-groups)). It is checked when the sidebar's tree lands on a
-new branch or PR, when Neovim regains focus, and after each `:Changeset pr`. It is absent
-whenever the PR number is (no open PR, `gh` missing or signed out) and until GitHub first
-answers.
+new branch or PR, when Neovim regains focus, and after `:Changeset pr start` and
+`pr abandon`. It is absent whenever the PR number is (no open PR, `gh` missing or signed
+out) and until GitHub first answers.
 
 Each review comment in your pending review, including ones added on github.com, is marked
 in its file's buffer: the line numbers it covers turn green, and its first line ends with
@@ -255,7 +256,7 @@ Any `keymaps` entry can be `false` to leave that key unbound.
 | `keymaps.prev` | `false` | Previous row, from any window |
 | `layout.min_file_width` | `80` | Narrowest the files get beside the sidebar before it moves below them |
 | `pr_review.enabled` | `false` | PR Review Mode on every branch but the default |
-| `review_comment.save` | `{ "<C-CR>", "<C-s>" }` | Keys that save a review comment, in insert and normal mode |
+| `review_comment.save` | `<C-CR>`, `<C-s>` | List of keys that save a review comment, in insert and normal mode |
 
 The step keys, `keymaps.next` and `keymaps.prev`, are off by default. Once set, they work
 from any window, but only while the sidebar is open. Whatever they replaced comes back

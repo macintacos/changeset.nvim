@@ -1,4 +1,4 @@
----The git and gh queries changeset makes: the branch it diffs against, that branch's open PR, and the gh runner every GitHub call goes through.
+---The git and gh queries changeset makes: the branch it diffs against, that branch's open PR, whether a file on disk matches a commit, and the gh runner every GitHub call goes through.
 local M = {}
 
 ---Run a git command and return its stdout lines, or an empty table if it failed.
@@ -35,7 +35,7 @@ function M.default_base(cwd)
 end
 
 ---Whether the file at `path` on disk is the one commit `commit` holds; nil when the clone lacks `commit`.
----@param root string
+---@param root string The repository's top level; `path` is relative to it.
 ---@param commit string
 ---@param path string Repo-relative.
 ---@return boolean?

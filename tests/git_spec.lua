@@ -262,14 +262,9 @@ describe("changeset.git", function()
     end)
 
     it("checks the repository it is given rather than the one Neovim sits in", function()
-      local outside = vim.fn.tempname()
-      vim.fn.mkdir(outside, "p")
-      vim.fn.chdir(outside)
+      vim.fn.chdir(previous_dir)
 
-      local matches = Git.matches_commit(tmp, head, "a.lua")
-
-      vim.fn.delete(outside, "rf")
-      assert.is_true(matches)
+      assert.is_true(Git.matches_commit(tmp, head, "a.lua"))
     end)
   end)
 end)

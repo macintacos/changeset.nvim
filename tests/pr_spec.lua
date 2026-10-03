@@ -18,7 +18,7 @@ describe("changeset.pr", function()
   local answers
   ---@type string What `vim.fn.input` answers.
   local choice
-  ---@type string? What the client's `start` or `delete` fails with.
+  ---@type string? What the client's `start`, `delete` or `add_comment` fails with.
   local failure
   local tree
 
@@ -399,6 +399,21 @@ describe("changeset.pr", function()
       refused("/tree/root")
     end)
 
+    it("refuses a buffer that isn't a file, naming the repository", function()
+      tree.root = vim.uv.cwd()
+      vim.api.nvim_buf_set_name(buf, "changeset://1")
+      vim.bo[buf].buftype = "nofile"
+      require("changeset.pr").comment(4, 4)
+      refused(tree.root)
+    end)
+
+    it("refuses an unnamed buffer, naming the repository", function()
+      tree.root = vim.uv.cwd()
+      vim.api.nvim_set_current_buf(vim.api.nvim_create_buf(true, false))
+      require("changeset.pr").comment(4, 4)
+      refused(tree.root)
+    end)
+
     it("refuses while the diff is still being read", function()
       tree.collected = false
       require("changeset.pr").comment(4, 4)
@@ -458,6 +473,8 @@ describe("changeset.pr", function()
 
       assert.equal(1, #opened)
       assert.equal(4, opened[1].line)
+      assert.equal("line 4", opened[1].title)
+      assert.equal("pending review on #412", opened[1].footer)
       assert.same({ "<C-CR>", "<C-s>" }, opened[1].keys)
       assert.same({}, added)
 
@@ -476,6 +493,7 @@ describe("changeset.pr", function()
       require("changeset.pr").comment(3, 5)
 
       assert.equal(5, opened[1].line)
+      assert.equal("lines 3-5", opened[1].title)
       opened[1].save("body", function() end)
       assert.equal(3, added[1].new.start_line)
       assert.equal(5, added[1].new.line)

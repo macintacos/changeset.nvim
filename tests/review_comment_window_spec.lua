@@ -108,19 +108,81 @@ describe("review_comment_window", function()
     assert.same({ "one\n\ntwo" }, saves)
   end)
 
-  it("closes, wiping its buffer and leaving insert mode, once the save succeeds", function()
+  it("closes, wiping its buffer, once the save succeeds", function()
     local win, buf = open()
-    local stopinsert, stops = vim.cmd.stopinsert, 0
-    vim.cmd.stopinsert = function()
-      stops = stops + 1
-    end
     press(buf, "i", "<C-s>")
     answer(nil)
-    vim.cmd.stopinsert = stopinsert
 
     assert.is_false(vim.api.nvim_win_is_valid(win))
     assert.is_false(vim.api.nvim_buf_is_valid(buf))
-    assert.equal(1, stops)
+  end)
+
+  for mode, enter in pairs({ insert = "a", replace = "R" }) do
+    it(
+      ("saved from %s mode, returns to the user's file in normal mode with its cursor in place"):format(mode),
+      function()
+        vim.api.nvim_buf_set_lines(0, 1, 2, false, { "local value = 1" })
+        vim.api.nvim_win_set_cursor(source, { 2, 8 })
+        local leaves = {}
+        local group = vim.api.nvim_create_augroup("review_comment_window_spec", {})
+        vim.api.nvim_create_autocmd("InsertLeave", {
+          group = group,
+          callback = function(args)
+            leaves[#leaves + 1] = args.buf
+          end,
+        })
+        local source_buf = vim.api.nvim_get_current_buf()
+
+        local win, buf = open({
+          save = function(_, done)
+            vim.defer_fn(function()
+              done(nil)
+            end, 50)
+          end,
+        })
+        -- A close that leaves the mode behind would hold "!" forever; end it so the case fails.
+        vim.defer_fn(vim.cmd.stopinsert, 500)
+        -- startinsert waits for typeahead, so the keys enter the mode themselves; "!" then holds it
+        -- until something leaves it, here the answered save.
+        vim.api.nvim_feedkeys(enter .. "hello" .. vim.keycode("<C-s>"), "x!", false)
+        vim.wait(100, function()
+          return not vim.api.nvim_win_is_valid(win)
+        end)
+        vim.api.nvim_del_augroup_by_id(group)
+
+        assert.equal(source, vim.api.nvim_get_current_win())
+        assert.equal("n", vim.api.nvim_get_mode().mode)
+        assert.same({ 2, 8 }, vim.api.nvim_win_get_cursor(source))
+        assert.same({ buf }, leaves)
+        assert.is_false(vim.tbl_contains(leaves, source_buf))
+      end
+    )
+  end
+
+  it("fits right of the source window's gutter", function()
+    vim.cmd("vsplit")
+    vim.cmd("vertical resize 40")
+    vim.wo.number = true
+    vim.wo.signcolumn = "yes"
+    source = vim.api.nvim_get_current_win()
+
+    local win = open()
+    local left = vim.fn.screenpos(win, 1, 1).col
+    local width = vim.api.nvim_win_get_width(win)
+    local right_edge = vim.fn.win_screenpos(source)[2] + vim.fn.winwidth(source)
+    vim.api.nvim_win_close(win, true)
+    vim.cmd.close()
+
+    -- +1 for the right border.
+    assert.is_true(left + width + 1 <= right_edge)
+  end)
+
+  it("takes the user's markdown window settings", function()
+    local group = vim.api.nvim_create_augroup("review_comment_window_spec", {})
+    vim.api.nvim_create_autocmd("FileType", { group = group, pattern = "markdown", command = "setlocal spell" })
+    local win = open()
+    vim.api.nvim_del_augroup_by_id(group)
+    assert.is_true(vim.wo[win].spell)
   end)
 
   it("stays open with its text when the save is refused", function()

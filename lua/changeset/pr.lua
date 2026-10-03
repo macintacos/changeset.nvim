@@ -127,32 +127,33 @@ end
 ---@param first integer
 ---@param last integer
 function M.comment(first, last)
-  local WARN = vim.log.levels.WARN
   local buf, tree = vim.api.nvim_get_current_buf(), build.current()
   if not tree then
-    return say(WARN, "open the sidebar on this file's repository first, so the PR's diff is read")
+    return say(vim.log.levels.WARN, "open the sidebar on this file's repository first, so the PR's diff is read")
   end
-  local path = vim.fs.relpath(tree.root, vim.fs.normalize(vim.api.nvim_buf_get_name(buf)))
+  local name = vim.api.nvim_buf_get_name(buf)
+  -- relpath prefixes the cwd to a relative name, so a non-file buffer would pass from inside the repo.
+  local path = vim.bo[buf].buftype == "" and name ~= "" and vim.fs.relpath(tree.root, vim.fs.normalize(name))
   if not path then
-    return say(WARN, "run :Changeset pr comment from a file in %s", tree.root)
+    return say(vim.log.levels.WARN, "run `:Changeset pr comment` from a file in %s", tree.root)
   end
   if not tree.collected then
-    return say(WARN, "still reading the diff; try again in a moment")
+    return say(vim.log.levels.WARN, "still reading the diff; try again in a moment")
   end
   if not tree.pr then
-    return say(WARN, "the diff isn't measured against an open PR, so there's no review to add to")
+    return say(vim.log.levels.WARN, "the diff isn't measured against an open PR, so there's no review to add to")
   end
   local found = pending_state.get(tree.root, tree.pr)
   if not (found and found.review) then
-    return say(WARN, "start the review with `:Changeset pr start`")
+    return say(vim.log.levels.WARN, "start the review with `:Changeset pr start`")
   end
   local matches = Git.matches_commit(tree.root, found.pr.head, path)
   if matches == nil then
-    return say(WARN, "the PR's head, %s, isn't in this clone; fetch it first", found.pr.head:sub(1, 7))
+    return say(vim.log.levels.WARN, "the PR's head, %s, isn't in this clone; fetch it first", found.pr.head:sub(1, 7))
   end
   local refusal = commentable.refusal(hunks(tree, path), { first, last }, matches and not vim.bo[buf].modified)
   if refusal then
-    return say(WARN, "can't add a review comment here: %s", refusal)
+    return say(vim.log.levels.WARN, "can't add a review comment here: %s", refusal)
   end
   local review_id, number = found.review.id, found.pr.number
   review_comment_window.open({
