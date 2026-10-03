@@ -2,7 +2,7 @@ local build = require("changeset.build")
 local resolve = require("changeset.resolve")
 local Fixture = require("support.git")
 local symbols = require("support.symbols")
-require("support.gh") -- a fake gh on PATH: never the real one, never the network
+local gh = require("support.gh") -- a fake gh on PATH: never the real one, never the network
 
 ---Every announcement the tree makes, in order; emptied before each case.
 ---@type changeset.TreeEvent[]
@@ -254,7 +254,7 @@ describe("changeset.build", function()
 
   describe("once gh names a PR onto the branch already compared against", function()
     before_each(function()
-      vim.env.FAKE_GH_PR = '{"baseRefName":"trunk","number":7,"state":"OPEN"}'
+      vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "trunk", number = 7 })
     end)
 
     after_each(function()

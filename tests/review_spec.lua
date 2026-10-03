@@ -1,3 +1,4 @@
+local gh = require("support.gh")
 local support = require("support.git")
 local review = require("support.pr_review")
 local toggle = require("changeset.review").toggle
@@ -62,7 +63,7 @@ describe("PR Review Mode", function()
 
   it("announces the PR's target branch once when toggled on", function()
     stack("stacked-announced")
-    vim.env.FAKE_GH_PR = '{"baseRefName":"parent","state":"OPEN"}'
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent" })
     vim.fn.chdir(dir)
     local bufs = edit({ "a.txt" })
     assert.is_true(await(bufs, review.merge_base(dir, "parent"), 5000))
@@ -102,7 +103,7 @@ describe("PR Review Mode", function()
 
   it("falls back to the default-branch base, with a warning, when the PR target has no merge base", function()
     review.fixture(dir, "orphan-target", { "a.txt" })
-    vim.env.FAKE_GH_PR = '{"baseRefName":"gone","state":"OPEN"}'
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "gone" })
     vim.fn.chdir(dir)
     local bufs = edit({ "a.txt" })
     local base = review.merge_base(dir)
@@ -130,7 +131,7 @@ describe("PR Review Mode", function()
     toggle()
     assert.is_true(await(bufs, nil, 5000))
 
-    local ok, err = pcall(require("support.gh").without, toggle)
+    local ok, err = pcall(gh.without, toggle)
 
     local on = on_notices(5000)
     assert(ok, err)
@@ -159,7 +160,7 @@ describe("PR Review Mode", function()
 
   it("diffs a stacked branch against its PR's target branch", function()
     stack("stacked")
-    vim.env.FAKE_GH_PR = '{"baseRefName":"parent","state":"OPEN"}'
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent" })
     vim.fn.chdir(dir)
 
     local bufs = edit({ "a.txt" })
@@ -169,7 +170,7 @@ describe("PR Review Mode", function()
 
   it("drops a PR lookup that a toggle superseded", function()
     stack("stacked-toggled")
-    vim.env.FAKE_GH_PR = '{"baseRefName":"parent","state":"OPEN"}'
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent" })
     vim.env.FAKE_GH_DELAY = "1"
     vim.fn.chdir(dir)
 

@@ -11,13 +11,9 @@ local M = {}
 ---@field pr integer? The open PR's number, while `base` is measured against its target.
 ---@field skipped string? The open PR's target when HEAD shares no fork point with it, so `base` stayed on the default branch's.
 
----@class changeset.fork_point.PrTarget
----@field target string
----@field number integer
-
----Each open PR's target and number, by `root .. "\n" .. branch`, kept for the session.
+---Each open PR, by `root .. "\n" .. branch`, kept for the session.
 ---An answer of no PR is not kept, so a PR opened since is found.
----@type table<string, changeset.fork_point.PrTarget>
+---@type table<string, changeset.Pr>
 local targets = {}
 
 ---The point measured when gh was asked, by the same key, while it is being asked.
@@ -29,7 +25,7 @@ local subscribers = {}
 
 ---HEAD's fork point from `pr`'s target when the two share one, else from the default branch.
 ---@param root string
----@param pr changeset.fork_point.PrTarget?
+---@param pr changeset.Pr?
 ---@return changeset.ForkPoint?
 local function measure(root, pr)
   local default_branch = Git.default_base(root)
@@ -64,11 +60,11 @@ function M.get(root, branch)
     return point, asking[key] ~= nil
   end
   asking[key] = point
-  Git.pr_target(root, function(target, number)
+  Git.pr(root, function(_, pr)
     local heard = asking[key]
     asking[key] = nil
-    if target then
-      targets[key] = { target = target, number = number }
+    if pr then
+      targets[key] = pr
       -- HEAD can have moved by the time gh answers; subscribers still need a point.
       heard = measure(root, targets[key]) or heard
     end

@@ -1,4 +1,4 @@
-require("support.gh")
+local gh = require("support.gh")
 local fixture = require("support.git")
 local Git = require("changeset.git")
 local fork_point = require("changeset.fork_point")
@@ -51,20 +51,20 @@ local function stacked_repo()
 end
 
 describe("fork_point", function()
-  local real_pr_target, asks
+  local real_pr, asks
   local roots = {}
 
   before_each(function()
     asks = 0
-    real_pr_target = Git.pr_target
-    Git.pr_target = function(...)
+    real_pr = Git.pr
+    Git.pr = function(...)
       asks = asks + 1
-      return real_pr_target(...)
+      return real_pr(...)
     end
   end)
 
   after_each(function()
-    Git.pr_target = real_pr_target
+    Git.pr = real_pr
     vim.env.FAKE_GH_PR = nil
     vim.env.FAKE_GH_DELAY = nil
     for _, root in ipairs(roots) do
@@ -91,7 +91,7 @@ describe("fork_point", function()
   end)
 
   it("moves to the PR's target once gh answers, and keeps that answer", function()
-    vim.env.FAKE_GH_PR = '{"baseRefName":"parent","number":7,"state":"OPEN"}'
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
     local root, default_base, parent_base = repo()
 
     local first, asking = fork_point.get(root, "feature")
@@ -111,7 +111,7 @@ describe("fork_point", function()
   end)
 
   it("stays on the default base when the PR's target shares no fork point", function()
-    vim.env.FAKE_GH_PR = '{"baseRefName":"gone","number":7,"state":"OPEN"}'
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "gone", number = 7 })
     local root, default_base = repo()
 
     fork_point.get(root, "feature")
@@ -126,7 +126,7 @@ describe("fork_point", function()
   end)
 
   it("stays on the default base for a PR that is not open", function()
-    vim.env.FAKE_GH_PR = '{"baseRefName":"parent","number":7,"state":"MERGED"}'
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7, state = "MERGED" })
     local root, default_base = repo()
 
     fork_point.get(root, "feature")
@@ -139,7 +139,7 @@ describe("fork_point", function()
   it("answers the default base when gh is not installed", function()
     local root, default_base = repo()
 
-    require("support.gh").without(fork_point.get, root, "feature")
+    gh.without(fork_point.get, root, "feature")
 
     assert.is_true(await_heard(root, 1))
     assert.equal(default_base, heard_in(root)[1].point.base)
@@ -159,7 +159,7 @@ describe("fork_point", function()
   end)
 
   it("keeps separate answers for two repositories on the same branch", function()
-    vim.env.FAKE_GH_PR = '{"baseRefName":"parent","number":7,"state":"OPEN"}'
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
     local stacked, _, parent_base = repo()
     fork_point.get(stacked, "feature")
     assert.is_true(await_heard(stacked, 1))
