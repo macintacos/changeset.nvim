@@ -1,6 +1,6 @@
 local submit_window = require("changeset.submit_window")
 
-local THREE = { "COMMENT", "APPROVE", "REQUEST_CHANGES" }
+local ALL_EVENTS = { "COMMENT", "APPROVE", "REQUEST_CHANGES" }
 
 ---@return integer[]
 local function floats()
@@ -30,7 +30,7 @@ describe("submit_window", function()
   local function open(overrides)
     local win = submit_window.open(vim.tbl_extend("force", {
       number = 412,
-      events = THREE,
+      events = ALL_EVENTS,
       comments = { { id = "c", path = "a.lua", line = 4, outdated = false, body = "note" } },
       drafts = {},
       keys = { "<C-s>" },

@@ -15,7 +15,7 @@ local MAX_WIDTH = 96
 local SENDS = { COMMENT = "comment on #%d", APPROVE = "approve #%d", REQUEST_CHANGES = "request changes on #%d" }
 
 ---Keys that choose an event, offered only when more than one event is, and only for those.
-local CHOOSE = {
+local EVENT_KEYS = {
   { "c", "COMMENT", "Choose Comment" },
   { "a", "APPROVE", "Choose Approve" },
   { "r", "REQUEST_CHANGES", "Choose Request changes" },
@@ -65,9 +65,9 @@ function M.open(opts)
   local function fit(lines)
     return math.min(math.max(widest(lines), MIN_WIDTH), MAX_WIDTH, vim.o.columns - 4)
   end
-  local first = render.submit_lines(info())
-  local width = fit(first)
-  local height = math.min(#first, vim.o.lines - 6)
+  local first_lines = render.submit_lines(info())
+  local width = fit(first_lines)
+  local height = math.min(#first_lines, vim.o.lines - 6)
   local win = vim.api.nvim_open_win(buf, true, {
     relative = "editor",
     row = math.floor((vim.o.lines - height) / 2) - 1,
@@ -184,7 +184,7 @@ function M.open(opts)
   local map, own = help.mapper(buf)
   map("<CR>", submit, "Submit the review")
   if #opts.events > 1 then
-    for _, choice in ipairs(CHOOSE) do
+    for _, choice in ipairs(EVENT_KEYS) do
       if vim.tbl_contains(opts.events, choice[2]) then
         map(choice[1], function()
           event = choice[2]
