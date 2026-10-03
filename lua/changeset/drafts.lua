@@ -62,7 +62,7 @@ end
 ---@param pr changeset.Pr
 ---@param data table
 ---@return changeset.Draft[]
-local function entries(pr, data)
+local function valid_drafts(pr, data)
   return vim.tbl_filter(valid, type(data[key(pr)]) == "table" and data[key(pr)] or {})
 end
 
@@ -90,7 +90,7 @@ end
 function M.list(pr)
   return vim.tbl_filter(function(entry)
     return entry.head == pr.head
-  end, entries(pr, jsonfile.read(M.path())))
+  end, valid_drafts(pr, jsonfile.read(M.path())))
 end
 
 ---Replaces the draft at `draft`'s path, range and head; a blank body drops it instead.
@@ -99,7 +99,7 @@ end
 ---@return boolean written false only when the record had to change and the write failed.
 function M.keep(pr, draft)
   local data = jsonfile.read(M.path())
-  local before = entries(pr, data)
+  local before = valid_drafts(pr, data)
   local list = vim.tbl_filter(function(entry)
     return not same_key(entry, draft)
   end, before)

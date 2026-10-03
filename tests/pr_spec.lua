@@ -361,19 +361,19 @@ describe("changeset.pr", function()
     end)
 
     describe("a draft", function()
-      local function keep(over)
+      local function keep_draft(overrides)
         drafts.keep(
           pr,
           vim.tbl_extend(
             "force",
             { path = "alpha.txt", start_line = 8, line = 10, head = HEAD, body = "d" },
-            over or {}
+            overrides or {}
           )
         )
       end
 
       it("is deleted from a line inside it, without asking GitHub to delete or refetch", function()
-        keep()
+        keep_draft()
 
         delete_on(9, {})
 
@@ -385,7 +385,7 @@ describe("changeset.pr", function()
       end)
 
       it("is reported when the record can't be written", function()
-        keep()
+        keep_draft()
         vim.fn.setfperm(vim.fs.dirname(drafts.path()), "r-xr-xr-x")
 
         delete_on(9, {})
@@ -396,7 +396,7 @@ describe("changeset.pr", function()
       end)
 
       it("goes before a review comment on the same line", function()
-        keep()
+        keep_draft()
         local comments = { { id = "C_1", path = "alpha.txt", line = 9, body = "x" } }
 
         delete_on(9, comments)
@@ -407,7 +407,7 @@ describe("changeset.pr", function()
       end)
 
       it("is deleted with no pending review", function()
-        keep()
+        keep_draft()
         answers = { { found = { pr = pr } } }
         vim.api.nvim_win_set_cursor(0, { 9, 0 })
 
@@ -418,7 +418,7 @@ describe("changeset.pr", function()
 
       it("written at another head is left alone", function()
         local old = vim.tbl_extend("force", pr, { head = "0000000" })
-        keep({ head = old.head })
+        keep_draft({ head = old.head })
 
         delete_on(9, {})
 
@@ -642,12 +642,12 @@ describe("changeset.pr", function()
       assert.same({ "<C-j>" }, opened[1].keys)
     end)
 
-    ---@param over table?
-    local function draft(over)
+    ---@param overrides table?
+    local function draft(overrides)
       return vim.tbl_extend(
         "force",
         { path = "a.lua", line = 7, start_line = 5, head = held_pr.head, body = "draft" },
-        over or {}
+        overrides or {}
       )
     end
 

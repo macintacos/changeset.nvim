@@ -72,7 +72,7 @@ end
 
 ---What a redraw marks, read once for every buffer it draws.
 ---@return changeset.review_comments.Marks?
-local function marks()
+local function current_marks()
   local tree = build.current()
   local found = tree and tree.pr and pending_state.get(tree.root, tree.pr)
   if tree and found then
@@ -85,14 +85,14 @@ local function marks()
 end
 
 ---@param buf integer
----@param from changeset.review_comments.Marks?
-local function draw(buf, from)
+---@param marks changeset.review_comments.Marks?
+local function draw(buf, marks)
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   local name = vim.api.nvim_buf_get_name(buf)
-  if not from or name == "" then
+  if not marks or name == "" then
     return
   end
-  local path = vim.fs.relpath(from.root, vim.fs.normalize(name))
+  local path = vim.fs.relpath(marks.root, vim.fs.normalize(name))
   local line_count = vim.api.nvim_buf_line_count(buf)
   ---@param spanned changeset.Spanned
   ---@return boolean
@@ -100,12 +100,12 @@ local function draw(buf, from)
     local first, last = span(spanned)
     return path ~= nil and spanned.path == path and first ~= nil and last <= line_count
   end
-  for _, comment in ipairs(from.comments) do
+  for _, comment in ipairs(marks.comments) do
     if fits(comment) then
       mark(buf, comment, "● ", render.REVIEW_COMMENT_HL)
     end
   end
-  for _, draft in ipairs(from.drafts) do
+  for _, draft in ipairs(marks.drafts) do
     if fits(draft) then
       mark(buf, draft, "○ ", render.REVIEW_DRAFT_HL)
     end
@@ -113,10 +113,10 @@ local function draw(buf, from)
 end
 
 local function draw_loaded()
-  local from = marks()
+  local marks = current_marks()
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_loaded(buf) then
-      draw(buf, from)
+      draw(buf, marks)
     end
   end
 end
@@ -138,7 +138,7 @@ vim.api.nvim_create_autocmd("BufReadPost", {
   group = vim.api.nvim_create_augroup("changeset.review_comments", { clear = true }),
   desc = "changeset: mark the kept pending review's review comments and the PR's drafts in a file as it is read",
   callback = function(args)
-    draw(args.buf, marks())
+    draw(args.buf, current_marks())
   end,
 })
 

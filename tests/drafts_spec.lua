@@ -103,18 +103,18 @@ describe("changeset.drafts", function()
     assert.same({ draft() }, require("changeset.drafts").list(PR))
   end)
 
-  local function entry(fields)
+  local function record_with_draft(fields)
     return '{"github.com/acme/widgets#412":[{"path":"a","head":"aaa","body":"b",' .. fields .. "}]}"
   end
   for _, junk in ipairs({
     "[1,2]",
     '{"x":"y"}',
     '{"github.com/acme/widgets#412":[{"path":"a","line":1,"body":"b"}]}',
-    entry('"line":3,"start_line":null'),
-    entry('"line":3,"start_line":"1"'),
-    entry('"line":0'),
-    entry('"line":3,"start_line":3'),
-    entry('"line":3,"start_line":4'),
+    record_with_draft('"line":3,"start_line":null'),
+    record_with_draft('"line":3,"start_line":"1"'),
+    record_with_draft('"line":0'),
+    record_with_draft('"line":3,"start_line":3'),
+    record_with_draft('"line":3,"start_line":4'),
   }) do
     it("lists nothing from a file holding " .. junk .. ", and keeps afterwards", function()
       vim.fn.mkdir(vim.fs.dirname(drafts.path()), "p")
