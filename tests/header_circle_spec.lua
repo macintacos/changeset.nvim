@@ -43,17 +43,17 @@ describe("changeset header circle", function()
   ---@return string?
   local function circle_group()
     local shown = winbar()
-    local at = shown.str:find("●", 1, true)
-    if not at then
+    local circle_at = shown.str:find("●", 1, true)
+    if not circle_at then
       return nil
     end
-    local found
+    local group
     for _, mark in ipairs(shown.highlights) do
-      if mark.start <= at - 1 then
-        found = mark.group
+      if mark.start <= circle_at - 1 then
+        group = mark.group
       end
     end
-    return found
+    return group
   end
 
   it("follows the PR's pending review as GitHub answers, and keeps it when an ask fails", function()
@@ -78,10 +78,10 @@ describe("changeset header circle", function()
       return circle_group() == render.HEADER_PENDING_HL
     end, 25))
 
-    local asked = #gh.calls()
+    local calls_before_focus = #gh.calls()
     vim.api.nvim_exec_autocmds("FocusGained", {})
     assert.is_true(vim.wait(10000, function()
-      return #gh.calls() >= asked + 2
+      return #gh.calls() >= calls_before_focus + 2
     end, 25))
     vim.wait(100)
     assert.are.equal(render.HEADER_PENDING_HL, circle_group())
@@ -90,12 +90,12 @@ describe("changeset header circle", function()
     build.subscribe(function()
       rebuilt = true
     end)
-    local before = #gh.calls()
+    local calls_before_rebuild = #gh.calls()
     vim.fn.writefile({ "return 3" }, "child.lua")
     vim.api.nvim_exec_autocmds("BufWritePost", { pattern = vim.fn.fnamemodify("child.lua", ":p") })
     assert.is_true(vim.wait(10000, function()
       return rebuilt
     end, 25))
-    assert.are.equal(before, #gh.calls())
+    assert.are.equal(calls_before_rebuild, #gh.calls())
   end)
 end)

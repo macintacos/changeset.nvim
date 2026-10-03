@@ -27,9 +27,9 @@ local roots = 0
 
 describe("pending_state", function()
   local root
-  local heard = 0
+  local notified = 0
   pending_state.subscribe(function()
-    heard = heard + 1
+    notified = notified + 1
   end)
 
   before_each(function()
@@ -37,7 +37,7 @@ describe("pending_state", function()
     root = "/repo" .. roots
     tree = { root = root, branch = "a", pr = 1 }
     asks = {}
-    heard = 0
+    notified = 0
   end)
 
   it("knows nothing before GitHub answers", function()
@@ -49,7 +49,7 @@ describe("pending_state", function()
     local found = answer(1, "R1")
     asks[1].cb(nil, found)
     assert.are.equal(found, pending_state.get(root, 1))
-    assert.are.equal(1, heard)
+    assert.are.equal(1, notified)
   end)
 
   it("keeps an answer without a review for the tree's PR", function()
@@ -57,7 +57,7 @@ describe("pending_state", function()
     local found = answer(1)
     asks[1].cb(nil, found)
     assert.are.equal(found, pending_state.get(root, 1))
-    assert.are.equal(1, heard)
+    assert.are.equal(1, notified)
   end)
 
   it("keeps the last answer when an ask fails", function()
@@ -67,7 +67,7 @@ describe("pending_state", function()
     pending_state.fetch(root)
     asks[2].cb("boom")
     assert.are.equal(found, pending_state.get(root, 1))
-    assert.are.equal(1, heard)
+    assert.are.equal(1, notified)
   end)
 
   it("drops an answer for a PR the tree has left", function()
@@ -75,7 +75,7 @@ describe("pending_state", function()
     tree = { root = root, branch = "b", pr = 2 }
     asks[1].cb(nil, answer(1))
     assert.is_nil(pending_state.get(root, 1))
-    assert.are.equal(0, heard)
+    assert.are.equal(0, notified)
   end)
 
   it("drops an answer for a repository the tree has left", function()
@@ -83,7 +83,7 @@ describe("pending_state", function()
     tree = { root = root .. "-other", branch = "a", pr = 1 }
     asks[1].cb(nil, answer(1))
     assert.is_nil(pending_state.get(root, 1))
-    assert.are.equal(0, heard)
+    assert.are.equal(0, notified)
   end)
 
   it("drops an answer when there is no tree", function()
@@ -91,7 +91,7 @@ describe("pending_state", function()
     tree = nil
     asks[1].cb(nil, answer(1))
     assert.is_nil(pending_state.get(root, 1))
-    assert.are.equal(0, heard)
+    assert.are.equal(0, notified)
   end)
 
   it("keeps only the latest ask's answer", function()

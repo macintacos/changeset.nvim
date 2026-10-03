@@ -35,8 +35,8 @@ end
 ---@param verb string "start", "abandon": names the action in the warning and error.
 ---@param act fun(found: changeset.pending_review.Found, done: fun(err: string?, did: string))
 local function on_pr(verb, act)
-  local at = root()
-  pending_state.fetch(at, function(err, found)
+  local repository = root()
+  pending_state.fetch(repository, function(err, found)
     if not found then
       return say(vim.log.levels.WARN, "can't %s a pending review: %s", verb, err)
     end
@@ -46,7 +46,7 @@ local function on_pr(verb, act)
       else
         say(vim.log.levels.INFO, "%s the pending review on #%d", did, found.pr.number)
       end
-      pending_state.fetch(at)
+      pending_state.fetch(repository)
     end)
   end)
 end
@@ -72,8 +72,8 @@ function M.abandon()
     end
     local question = ("Abandon the pending review on #%d and its %s?"):format(number, review_comments(#review.comments))
     -- Needs <CR>, so keys typed while gh was answering cancel rather than confirm.
-    local answer = vim.trim(vim.fn.input({ prompt = question .. " [y/N] ", cancelreturn = "" })):lower()
-    if answer ~= "y" and answer ~= "yes" then
+    local reply = vim.trim(vim.fn.input({ prompt = question .. " [y/N] ", cancelreturn = "" })):lower()
+    if reply ~= "y" and reply ~= "yes" then
       return
     end
     pending_review.delete(review.id, function(err)
