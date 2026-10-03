@@ -3,7 +3,7 @@ local build = require("changeset.build")
 local window = require("changeset.window")
 local Fixture = require("support.git")
 local Sidebar = require("support.sidebar")
-require("support.gh")
+local gh = require("support.gh")
 
 ---@param tree changeset.Tree?
 ---@return string[]
@@ -254,7 +254,7 @@ describe("changeset tree", function()
       vim.fn.writefile({ "return 2" }, "child.lua")
       Fixture.commit("child change", tmp)
       vim.cmd.edit("child.lua")
-      vim.env.FAKE_GH_PR = '{"baseRefName":"parent","number":1,"state":"OPEN"}'
+      vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 1 })
     end)
 
     after_each(function()
@@ -284,7 +284,7 @@ describe("changeset tree", function()
     before_each(function()
       Fixture.feature_one_file(tmp)
       vim.cmd.edit("mod.lua")
-      vim.env.FAKE_GH_PR = '{"baseRefName":"trunk","number":7,"state":"OPEN"}'
+      vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "trunk", number = 7 })
     end)
 
     after_each(function()

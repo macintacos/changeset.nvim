@@ -1,5 +1,6 @@
 local Git = require("changeset.git")
 local Fixture = require("support.git")
+local gh = require("support.gh")
 
 describe("changeset.git", function()
   local tmp, previous_dir
@@ -113,6 +114,123 @@ describe("changeset.git", function()
     it("returns nil for a branch that does not exist", function()
       Fixture.init_repo("trunk", tmp)
       assert.is_nil(Git.merge_base(nil, "missing"))
+    end)
+  end)
+
+  describe("pr", function()
+    after_each(gh.reset)
+
+    ---Call `Git.pr` without letting it raise, and wait for its callback.
+    ---@param cwd string?
+    ---@return string? err
+    ---@return changeset.Pr? pr
+    local function ask(cwd)
+      local done, err, pr = false, nil, nil
+      assert.is_true(pcall(Git.pr, cwd, function(e, p)
+        done, err, pr = true, e, p
+      end))
+      assert.is_false(done)
+      assert.is_true(vim.wait(5000, function()
+        return done
+      end))
+      return err, pr
+    end
+
+    it("yields the open PR and the repository it was opened against", function()
+      gh.answer({
+        stdout = gh.pr_view({
+          baseRefName = "trunk",
+          number = 7,
+          url = "https://github.com/owner/repo/pull/7",
+          headRefOid = "abc",
+          author = { login = "dev" },
+        }),
+      })
+
+      local err, pr = ask()
+
+      assert.is_nil(err)
+      assert.same({
+        target = "trunk",
+        number = 7,
+        owner = "owner",
+        name = "repo",
+        host = "github.com",
+        head = "abc",
+        author = "dev",
+      }, pr)
+      assert.same({ { "pr", "view", "--json", "author,baseRefName,headRefOid,number,state,url" } }, gh.calls())
+    end)
+
+    it("names the upstream repository from a fork checkout", function()
+      gh.answer({
+        stdout = gh.pr_view({
+          baseRefName = "main",
+          url = "https://github.com/upstream/project/pull/1",
+          author = { login = "forker" },
+        }),
+      })
+
+      local _, pr = ask()
+
+      assert(pr)
+      assert.equal("upstream", pr.owner)
+      assert.equal("project", pr.name)
+      assert.equal("forker", pr.author)
+    end)
+
+    it("refuses a PR that isn't open", function()
+      gh.answer({ stdout = gh.pr_view({ baseRefName = "main", number = 9, state = "MERGED" }) })
+
+      local err, pr = ask()
+
+      assert.is_nil(pr)
+      assert.matches("#9", err)
+      assert.matches("MERGED", err)
+    end)
+
+    it("passes on gh's reason when the branch has no PR", function()
+      gh.answer({ code = 1, stderr = 'no pull requests found for branch "feature"\n' })
+
+      assert.equal('no pull requests found for branch "feature"', (ask()))
+    end)
+
+    it("passes on gh's reason when it isn't authenticated", function()
+      gh.answer({ code = 4, stderr = "To get started with GitHub CLI, please run:  gh auth login\n" })
+
+      assert.matches("gh auth login", ask())
+    end)
+
+    it("says so when gh isn't installed", function()
+      local err = gh.without(ask)
+
+      assert.matches("`gh` not found", err)
+    end)
+
+    it("refuses a url that names no repository", function()
+      gh.answer({
+        stdout = '{"baseRefName":"main","number":1,"state":"OPEN","headRefOid":"abc","author":{"login":"a"}}',
+      })
+      gh.answer({ stdout = gh.pr_view({ baseRefName = "main", url = "https://example.com/nope" }) })
+
+      assert.is_string((ask()))
+      assert.is_string((ask()))
+    end)
+
+    it("fails on output that isn't JSON", function()
+      gh.answer({ stdout = "not json" })
+
+      assert.is_string((ask()))
+    end)
+
+    it("fails on a GraphQL error even when gh exits 0", function()
+      gh.answer({ stdout = '{"data":null,"errors":[{"message":"boom"}]}' })
+
+      assert.matches("boom", ask())
+    end)
+
+    it("fails when the directory doesn't exist", function()
+      assert.is_string((ask(tmp .. "/missing")))
     end)
   end)
 end)

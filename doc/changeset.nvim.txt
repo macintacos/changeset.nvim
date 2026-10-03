@@ -399,8 +399,9 @@ HEALTH                                                 *changeset.nvim-health*
 the sidebar does without, and the options in force.
 
 It loads plugins the way the sidebar does, so it may load one your plugin
-manager deferred. It installs nothing, starts no language server and makes no
-network request.
+manager deferred. It installs nothing and starts no language server. Its one
+network request is `gh auth status --active`, to report whether `gh` is
+authenticated.
 
 
 WHERE STATE IS STORED                   *changeset.nvim-where-state-is-stored*

@@ -1,4 +1,4 @@
----The git and gh queries that pick the branch changeset diffs against.
+---The git and gh queries changeset makes: the branch it diffs against, that branch's open PR, and the gh runner every GitHub call goes through.
 local M = {}
 
 ---Run a git command and return its stdout lines, or an empty table if it failed.
@@ -58,23 +58,88 @@ function M.merge_base(cwd, branch)
   end
 end
 
----Ask gh which branch the current branch's open PR targets.
----@param cwd string? Repository to ask about; Neovim's own directory when absent.
----@param cb fun(target: string?, number: integer?) Both nil without an open PR, or when gh fails or times out.
-function M.pr_target(cwd, cb)
-  if vim.fn.executable("gh") == 0 then
-    return vim.schedule(function()
-      cb(nil)
+---Run gh without a shell; hand `cb` its decoded JSON stdout, or why it failed. A non-zero exit,
+---output that isn't JSON, or a GraphQL `errors` body even on exit 0 is a failure.
+---@param args string[] Arguments after `gh`.
+---@param opts { cwd: string?, timeout: integer }
+---@param cb fun(err: string?, out: any) Called on the main loop.
+function M.gh(args, opts, cb)
+  local function fail(err)
+    vim.schedule(function()
+      cb(err)
     end)
   end
-  vim.system(
-    { "gh", "pr", "view", "--json", "baseRefName,number,state" },
-    { cwd = cwd, text = true, timeout = 5000 },
+  if vim.fn.executable("gh") == 0 then
+    return fail("`gh` not found")
+  end
+  local argv = vim.list_extend({ "gh" }, args)
+  local started, err = pcall(
+    vim.system,
+    argv,
+    { cwd = opts.cwd, text = true, timeout = opts.timeout },
     vim.schedule_wrap(function(res)
-      local ok, pr = pcall(vim.json.decode, res.stdout or "")
-      local open = res.code == 0 and ok and type(pr) == "table" and pr.state == "OPEN"
-      cb(open and pr.baseRefName or nil, open and pr.number or nil)
+      local decoded, out = pcall(vim.json.decode, res.stdout or "", { luanil = { object = true, array = true } })
+      out = decoded and out or nil
+      local errors = type(out) == "table" and out.errors
+      if res.code ~= 0 or errors then
+        local stderr = vim.trim(res.stderr or "")
+        cb(
+          errors and errors[1] and errors[1].message
+            or (stderr ~= "" and stderr)
+            or ("gh exited with code %d"):format(res.code)
+        )
+      elseif not decoded then
+        cb("gh printed output that isn't JSON")
+      else
+        cb(nil, out)
+      end
     end)
+  )
+  if not started then
+    fail(tostring(err))
+  end
+end
+
+---@class changeset.Pr
+---@field target string Branch the PR merges into.
+---@field number integer
+---@field owner string Owner of the repository the PR was opened against, a fork's upstream included.
+---@field name string That repository's name.
+---@field host string Host the PR lives on, from its url.
+---@field head string SHA of the PR's head commit when gh answered (`headRefOid`).
+---@field author string? Login of whoever opened it.
+
+---Ask gh for the open PR of the branch checked out at `cwd`.
+---@param cwd string? Repository to ask about; Neovim's own directory when absent.
+---@param cb fun(err: string?, pr: changeset.Pr?) `err` when the branch has no open PR (none, closed or merged), when the url names no repository, or when gh fails or times out.
+function M.pr(cwd, cb)
+  M.gh(
+    { "pr", "view", "--json", "author,baseRefName,headRefOid,number,state,url" },
+    { cwd = cwd, timeout = 5000 },
+    function(err, pr)
+      if err then
+        return cb(err)
+      end
+      if pr.state ~= "OPEN" then
+        return cb(("PR #%s is %s"):format(pr.number, pr.state))
+      end
+      local host, owner, name
+      if type(pr.url) == "string" then
+        host, owner, name = pr.url:match("^https?://([^/]+)/([^/]+)/([^/]+)/pull/%d+$")
+      end
+      if not owner then
+        return cb(("PR #%s has no repository url: %s"):format(pr.number, tostring(pr.url)))
+      end
+      cb(nil, {
+        target = pr.baseRefName,
+        number = pr.number,
+        owner = owner,
+        name = name,
+        host = host,
+        head = pr.headRefOid,
+        author = pr.author and pr.author.login,
+      })
+    end
   )
 end
 

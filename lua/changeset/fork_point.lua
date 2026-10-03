@@ -11,14 +11,10 @@ local M = {}
 ---@field pr integer? The open PR's number, while `base` is measured against its target.
 ---@field skipped string? The open PR's target when HEAD shares no fork point with it, so `base` stayed on the default branch's.
 
----@class changeset.fork_point.PrTarget
----@field target string
----@field number integer
-
----Each open PR's target and number, by `root .. "\n" .. branch`, kept for the session.
+---Each open PR, by `root .. "\n" .. branch`, kept for the session.
 ---An answer of no PR is not kept, so a PR opened since is found.
----@type table<string, changeset.fork_point.PrTarget>
-local targets = {}
+---@type table<string, changeset.Pr>
+local prs = {}
 
 ---The point measured when gh was asked, by the same key, while it is being asked.
 ---@type table<string, changeset.ForkPoint>
@@ -29,7 +25,7 @@ local subscribers = {}
 
 ---HEAD's fork point from `pr`'s target when the two share one, else from the default branch.
 ---@param root string
----@param pr changeset.fork_point.PrTarget?
+---@param pr changeset.Pr?
 ---@return changeset.ForkPoint?
 local function measure(root, pr)
   local default_branch = Git.default_base(root)
@@ -56,21 +52,21 @@ end
 ---@return boolean asking Whether gh is still being asked, so subscribers will hear its answer.
 function M.get(root, branch)
   local key = root .. "\n" .. branch
-  local point = measure(root, targets[key])
+  local point = measure(root, prs[key])
   if not point then
     return nil, false
   end
-  if targets[key] or asking[key] then
+  if prs[key] or asking[key] then
     return point, asking[key] ~= nil
   end
   asking[key] = point
-  Git.pr_target(root, function(target, number)
+  Git.pr(root, function(_, pr)
     local heard = asking[key]
     asking[key] = nil
-    if target then
-      targets[key] = { target = target, number = number }
+    if pr then
+      prs[key] = pr
       -- HEAD can have moved by the time gh answers; subscribers still need a point.
-      heard = measure(root, targets[key]) or heard
+      heard = measure(root, prs[key]) or heard
     end
     for fn in pairs(subscribers) do
       fn(root, branch, heard)

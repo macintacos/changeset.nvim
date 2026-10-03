@@ -77,6 +77,17 @@ A file-level review comment lists with `line: null`, `outdated: false`, and `dif
 The listing can also select `subjectType`, which returns `LINE` or `FILE`
 (`tests/fixtures/github-reviews/submitted-review-comments.json`).
 
+## Resolving the pull request
+
+Resolve the pull request from the checkout with
+`gh pr view --json author,baseRefName,headRefOid,number,state,url`. Take every later call's
+host, owner and name from `url`, and its number from `number`. Pass the host to `gh api`
+as `--hostname`, since `gh api` never infers it from the checkout.
+
+`url` names the base repository from a fork's checkout too. Measured on `cli/cli` pull
+request 14474, whose head branch lives on a fork (`isCrossRepository: true`): after
+`gh pr checkout 14474` in a clone of `cli/cli`, `url` named `cli/cli`, not the fork.
+
 ## Calls
 
 Run the find query first, and create a pending review only when it returns none. GitHub
