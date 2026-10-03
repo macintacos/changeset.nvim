@@ -3,6 +3,7 @@
 local M = {}
 
 -- Keep in sync with doc/agents/github-reviews.md, "Lines a review comment accepts".
+-- GitHub shows three context lines each side; a pure deletion's lnum is the line before its gap.
 ---@param hunk changeset.Hunk
 ---@param lnum integer
 ---@return boolean
@@ -25,22 +26,20 @@ local function in_diff(hunks, lnum)
   return false
 end
 
----Whether GitHub takes a review comment on `range` of a file, and why not when it won't.
----@param hunks changeset.Hunk[] The file's hunks, the PR's base against its head, as `diff.lua` parses them.
+---Why a review comment can't go on `range` of a file; nil when it can.
+---@param hunks changeset.Hunk[] The file's hunks, the PR's base against its head.
 ---@param range { [1]: integer, [2]: integer } First and last new-side line, inclusive; equal for one line.
----@param matches_head boolean Whether the file on disk matches the PR's pushed head.
----@return boolean ok
----@return string? reason Why GitHub would refuse, when not ok.
-function M.check(hunks, range, matches_head)
+---@param matches_head boolean Whether the text `range` counts lines in, unsaved edits included, is the file at the PR's pushed head.
+---@return string? refusal
+function M.refusal(hunks, range, matches_head)
   if not matches_head then
-    return false, "the file differs from the PR's head: save, push, or pull first"
+    return "the file differs from the PR's head; save, push, or pull first"
   end
   for _, lnum in ipairs(range) do
     if not in_diff(hunks, lnum) then
-      return false, ("line %d is outside the PR's diff, so GitHub won't take a comment there"):format(lnum)
+      return ("line %d is outside the PR's diff, so GitHub won't take a comment there"):format(lnum)
     end
   end
-  return true
 end
 
 return M

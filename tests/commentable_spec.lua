@@ -17,21 +17,30 @@ local PR2 = {
   { lnum = 31, count = 0, added = 0, removed = 1, old_lnum = 30 },
 }
 
+---@param hunks changeset.Hunk[]
+---@param range { [1]: integer, [2]: integer }
 local function accepts(hunks, range)
-  local ok, reason = commentable.check(hunks, range, true)
-  assert.is_true(ok)
-  assert.is_nil(reason)
+  assert.is_nil(commentable.refusal(hunks, range, true))
 end
 
+---@param hunks changeset.Hunk[]
+---@param range { [1]: integer, [2]: integer }
+---@param pattern string
 local function refuses(hunks, range, pattern)
-  local ok, reason = commentable.check(hunks, range, true)
-  assert.is_false(ok)
-  assert.matches(pattern, reason)
+  assert.matches(pattern, commentable.refusal(hunks, range, true))
 end
 
-describe("changeset.commentable.check", function()
+describe("changeset.commentable.refusal", function()
   it("accepts an added line", function()
     accepts(ALPHA, { 31, 31 })
+  end)
+
+  it("accepts the first context line of a hunk", function()
+    accepts(ALPHA, { 7, 7 })
+  end)
+
+  it("refuses the line before a hunk's context", function()
+    refuses(ALPHA, { 6, 6 }, "line 6")
   end)
 
   it("accepts the last context line of a hunk", function()
@@ -83,8 +92,14 @@ describe("changeset.commentable.check", function()
   end)
 
   it("refuses a line inside a hunk when the file differs from the PR's head", function()
-    local ok, reason = commentable.check(ALPHA, { 31, 31 }, false)
-    assert.is_false(ok)
+    local reason = commentable.refusal(ALPHA, { 31, 31 }, false)
+    assert.matches("save", reason)
+    assert.matches("push", reason)
+    assert.matches("pull", reason)
+  end)
+
+  it("refuses a line outside every hunk as stale when the file differs from the PR's head", function()
+    local reason = commentable.refusal(ALPHA, { 14, 14 }, false)
     assert.matches("save", reason)
     assert.matches("push", reason)
     assert.matches("pull", reason)
