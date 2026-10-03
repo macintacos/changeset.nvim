@@ -4,7 +4,7 @@ local STUBBED =
   { "changeset.pending_state", "changeset.pending_review", "changeset.build", "changeset.pr", "changeset.window" }
 
 describe("changeset.pr", function()
-  local notify, input, notes, prompts, fetched, started, deleted
+  local notify, input, notes, prompts, fetched, started, deleted, deleted_comments
   ---@type { err: string?, found: table? }[] What each fetch answers, in order; the last repeats.
   local answers
   ---@type string What `vim.fn.input` answers.
@@ -16,7 +16,7 @@ describe("changeset.pr", function()
   local pr = { id = "PR_1", number = 412 }
 
   before_each(function()
-    notes, prompts, fetched, started, deleted = {}, {}, {}, {}, {}
+    notes, prompts, fetched, started, deleted, deleted_comments = {}, {}, {}, {}, {}, {}
     answers, choice, failure = {}, "", nil
     tree = { root = "/tree/root", pr = 412 }
     notify, input = vim.notify, vim.fn.input
@@ -43,6 +43,10 @@ describe("changeset.pr", function()
       end,
       delete = function(id, cb)
         table.insert(deleted, id)
+        cb(failure)
+      end,
+      delete_comment = function(id, cb)
+        table.insert(deleted_comments, id)
         cb(failure)
       end,
     }
@@ -164,6 +168,128 @@ describe("changeset.pr", function()
 
       assert.same({ vim.log.levels.ERROR }, levels())
       assert.truthy(notes[1].msg:find("network down", 1, true))
+      assert.equal(2, #fetched)
+    end)
+  end)
+
+  describe("delete", function()
+    local dir
+
+    before_each(function()
+      dir = vim.fn.tempname()
+      vim.fn.mkdir(dir, "p")
+      dir = vim.fs.normalize(assert(vim.uv.fs_realpath(dir)))
+      local lines = {}
+      for i = 1, 40 do
+        lines[i] = "line " .. i
+      end
+      vim.fn.writefile(lines, dir .. "/alpha.txt")
+      Fixture.init_repo("main", dir)
+      vim.cmd.edit(dir .. "/alpha.txt")
+    end)
+
+    after_each(function()
+      vim.cmd("bwipeout!")
+      vim.fn.delete(dir, "rf")
+    end)
+
+    ---@param lnum integer
+    ---@param comments table[]
+    local function delete_on(lnum, comments)
+      answers = { { found = { pr = pr, review = { id = "PRR_1", comments = comments } } } }
+      vim.api.nvim_win_set_cursor(0, { lnum, 0 })
+      require("changeset.pr").delete()
+    end
+
+    it("deletes the review comment on the cursor's line and fetches again", function()
+      delete_on(12, { { id = "C_1", path = "alpha.txt", line = 12, body = "x" } })
+
+      assert.same({ "C_1" }, deleted_comments)
+      assert.same({ vim.log.levels.INFO }, levels())
+      assert.truthy(notes[1].msg:find("#412", 1, true))
+      assert.equal(2, #fetched)
+    end)
+
+    it("deletes a range review comment from a line inside it", function()
+      delete_on(9, { { id = "C_R", path = "alpha.txt", start_line = 8, line = 10, body = "x" } })
+
+      assert.same({ "C_R" }, deleted_comments)
+    end)
+
+    describe("when review comments share a line", function()
+      local comments = {
+        { id = "C_RANGE", path = "alpha.txt", start_line = 10, line = 31, body = "x" },
+        { id = "C_ONE", path = "alpha.txt", line = 31, body = "x" },
+      }
+
+      it("deletes the narrowest", function()
+        delete_on(31, comments)
+
+        assert.same({ "C_ONE" }, deleted_comments)
+      end)
+
+      it("deletes the range from a line only it takes in", function()
+        delete_on(20, comments)
+
+        assert.same({ "C_RANGE" }, deleted_comments)
+      end)
+    end)
+
+    it("ignores another file's review comment on the same line", function()
+      delete_on(5, { { id = "C_B", path = "beta.txt", line = 5, body = "x" } })
+
+      assert.same({}, deleted_comments)
+      assert.same({ vim.log.levels.INFO }, levels())
+      assert.truthy(notes[1].msg:find("no review comment on line 5", 1, true))
+      assert.equal(1, #fetched)
+    end)
+
+    it("says when the line has no review comment", function()
+      delete_on(7, { { id = "C_1", path = "alpha.txt", line = 12, body = "x" } })
+
+      assert.same({}, deleted_comments)
+      assert.same({ vim.log.levels.INFO }, levels())
+      assert.truthy(notes[1].msg:find("no review comment on line 7", 1, true))
+      assert.equal(1, #fetched)
+    end)
+
+    it("asks to save a modified buffer first, without asking GitHub", function()
+      vim.api.nvim_buf_set_lines(0, 0, 1, false, { "edited" })
+
+      delete_on(12, { { id = "C_1", path = "alpha.txt", line = 12, body = "x" } })
+
+      assert.same({ vim.log.levels.WARN }, levels())
+      assert.same({}, fetched)
+      assert.same({}, deleted_comments)
+    end)
+
+    it("says when there is no pending review", function()
+      answers = { { found = { pr = pr } } }
+
+      require("changeset.pr").delete()
+
+      assert.same({ vim.log.levels.INFO }, levels())
+      assert.truthy(notes[1].msg:find("no pending review on #412", 1, true))
+      assert.same({}, deleted_comments)
+    end)
+
+    it("warns with gh's text when there is no PR", function()
+      answers = { { err = "no open PR" } }
+
+      require("changeset.pr").delete()
+
+      assert.same({ vim.log.levels.WARN }, levels())
+      assert.truthy(notes[1].msg:find("no open PR", 1, true))
+      assert.same({}, deleted_comments)
+    end)
+
+    it("reports a failed delete and still fetches again", function()
+      failure = "boom"
+
+      delete_on(12, { { id = "C_1", path = "alpha.txt", line = 12, body = "x" } })
+
+      assert.same({ vim.log.levels.ERROR }, levels())
+      assert.truthy(notes[1].msg:find("boom", 1, true))
       assert.equal(2, #fetched)
     end)
   end)

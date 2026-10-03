@@ -91,6 +91,8 @@ closes it. It takes one optional subcommand, and `pr` takes a verb:
   current branch. It raises an error unless `pr_review.enabled` is set.
 - `:Changeset pr start` starts a [pending review](#pr-reviews) on the branch's open PR.
 - `:Changeset pr abandon` deletes the branch's [pending review](#pr-reviews).
+- `:Changeset pr delete` deletes the review comment on the cursor's line from the branch's
+  [pending review](#pr-reviews).
 
 `<Plug>(changeset-toggle)` does what `:Changeset toggle` does.
 
@@ -164,13 +166,17 @@ It works without the sidebar, and the sidebar works without it.
 ## PR reviews
 
 A pending review is where GitHub holds your review comments on a PR until you submit or
-delete it. You have at most one per PR. Both commands below work with the sidebar closed.
+delete it. You have at most one per PR. All three commands below work with the sidebar closed.
 
 - `:Changeset pr start` starts a pending review on the branch's open PR. It needs an open
   PR and `gh` signed in. When a pending review is already under way, including one started
   on github.com, it says so instead.
 - `:Changeset pr abandon` asks y/n, then deletes the pending review and every review
   comment in it.
+- `:Changeset pr delete` deletes the review comment on the cursor's line, without asking.
+  When several take in that line, it deletes the narrowest; run it again for the next.
+  When the line has none, it says so. In a modified buffer it asks you to save first,
+  since review comments are placed by the file's saved lines.
 
 With the sidebar open, a circle beside the PR number in its header shows whether you have
 a pending review on that PR: gray with none, green with one, including one started on
