@@ -48,14 +48,13 @@ The sandbox has no pure deletion and no hunks close enough to merge, so only the
 To rebuild the sandbox, run these commands from a scratch directory:
 
 - `sed` must be GNU `sed`. On macOS, install Homebrew's `gnu-sed` and put its `gnubin`
-  directory first on `PATH`, because BSD
-  `sed -i` takes different arguments.
+  directory first on `PATH`, because BSD `sed -i` takes different arguments.
 - The repository must not exist yet, so that `gh repo create` succeeds and the pull
   request gets number 1.
 
 ```sh
 gh repo create macintacos/changeset-nvim-review-sandbox --private
-git init -q -b main EXC-1555-sandbox && cd EXC-1555-sandbox
+git init -q -b main review-sandbox && cd review-sandbox
 for i in $(seq -w 1 40); do echo "alpha $i"; done > alpha.txt
 for i in $(seq -w 1 20); do echo "beta $i"; done > beta.txt
 git add . && git commit -qm "Add alpha.txt and beta.txt"
@@ -85,8 +84,8 @@ works instead: pass `subjectType: FILE` with no `line`.
 
 To decide from `changeset.Hunk`, which carries no context, widen each hunk to GitHub's
 extent. Only one part of this mapping was measured on GitHub: that its hunks are git's
-`-U3` hunks, which the rows for lines 13 and 14 below and the hunk table in
-§ The sandbox show. The arithmetic itself is git's `-U3` arithmetic, from § The sandbox:
+`-U3` hunks, which the rows for lines 13 and 14 below and the hunk table in § The sandbox
+show. The arithmetic itself is git's `-U3` arithmetic, from § The sandbox:
 
 ```text
 count > 0  →  new-side extent lnum-3 .. lnum+count+2
@@ -94,11 +93,11 @@ count = 0  →  new-side extent lnum-2 .. lnum+3        (pure deletion, unverifi
 clamp every extent to 1 .. #lines; merge extents that overlap or abut
 ```
 
-Every row below ran against one pending review on pull request 1, with `side: RIGHT`
-and a body naming the case. A row counts as accepted only when the mutation returned a
-thread and the listed review comment kept the `line` and `startLine` asked for, which
-`tests/fixtures/github-reviews/pending-review-comments.json` shows for every accepted
-row. Before the matrix, the find query returned no pending review
+Every row below ran against one pending review on pull request 1, with `side: RIGHT` and a
+body naming the case. A row counts as accepted only when the mutation returned a thread
+and the listed review comment kept the `line` and `startLine` asked for, which
+`tests/fixtures/github-reviews/pending-review-comments.json` shows for every accepted row.
+Before the matrix, the find query returned no pending review
 (`tests/fixtures/github-reviews/find-pending-review-empty.json`), and
 `addPullRequestReview` created the pending review
 (`tests/fixtures/github-reviews/add-pending-review.json`).
@@ -116,9 +115,9 @@ row. Before the matrix, the find query returned no pending review
 | Added line in a second file | `beta.txt` | — | 16 | yes | yes | — | `tests/fixtures/github-reviews/add-thread-beta-added-line.json` |
 
 The mutation's `thread` reports `startLine` equal to `line` for a single-line review
-comment, but the review comment itself stores `startLine: null`. For the file-level
-review comment, `thread.line` reads 1 while the review comment's `line` is null. Read
-lines from the review comment, not the thread.
+comment, but the review comment itself stores `startLine: null`. For the file-level review
+comment, `thread.line` reads 1 while the review comment's `line` is null. Read lines from
+the review comment, not the thread.
 
 § Calls gives the calls that ran. Every accepted review comment kept its `line` and
 `startLine` once the pending review was submitted
@@ -153,11 +152,11 @@ GraphQL call that fails exits 1, prints its `{"errors":…}` body on stdout, and
 | Delete the REST-created pending review | GraphQL | node | `state: PENDING` | `tests/fixtures/github-reviews/delete-rest-created-review.json` |
 | Find a pending review started on github.com | GraphQL | node | hand check pending; the pull request body gives its steps | — |
 | Submit | GraphQL | node | § Submitting | `tests/fixtures/github-reviews/submit-comment-with-body.json` |
-| List a submitted review's comments | GraphQL | node | the lines asked for | `tests/fixtures/github-reviews/submitted-review-comments.json` |
+| List a submitted review's review comments | GraphQL | node | the lines asked for | `tests/fixtures/github-reviews/submitted-review-comments.json` |
 
-GitHub shows a pending review only to its author, so `states: PENDING` returns at most
-the viewer's own. One account can't show whether `states: PENDING` alone would exclude
-another user's pending review, so the find query relies on GitHub hiding them. Compare
+GitHub shows a pending review only to its author, so `states: PENDING` returns at most the
+viewer's own. One account can't show whether `states: PENDING` alone would exclude another
+user's pending review, so the find query relies on GitHub hiding them. Compare
 `author.login` with `viewer.login` to be safe.
 
 `gh api graphql --paginate --slurp` follows the `comments` cursor nested under `node` by
@@ -234,8 +233,8 @@ gh api repos/macintacos/changeset-nvim-review-sandbox/pulls/1/reviews
 ```
 
 To list one page at a time, drop `--paginate --slurp` and pass `-f endCursor=<endCursor>`
-for every page after the first. The REST create passes no `event`, which leaves the review
-pending.
+for every page after the first. With no `event`, the REST create makes a pending review and
+does not submit it.
 
 ## Submitting
 
@@ -263,7 +262,8 @@ Match a refusal on the `errors` array's `type: UNPROCESSABLE`, not on its messag
 The own-PR error hides whether `REQUEST_CHANGES` needs a body, so that rule is unmeasured.
 
 After each refused submit, the find query still returned the pending review, and listing
-it returned its one review comment. The run then deleted it with `deletePullRequestReview`:
+it returned its one review comment. The run then deleted it with
+`deletePullRequestReview`:
 
 | Refused case | Find after | Review comments after | Delete |
 | --- | --- | --- | --- |
@@ -274,21 +274,25 @@ it returned its one review comment. The run then deleted it with `deletePullRequ
 
 ## When the PR's head moves
 
-A pending review stays pinned to the commit it was created on, and its review comments
-follow their lines into the new head where GitHub can still find them. A review comment
-whose line moved but kept its text keeps `outdated: false`, gets the new line number in
-`line`, and moves its `commit` to the new head. A review comment whose line was edited or
-deleted goes `outdated: true` with `line: null`, and keeps the old commit; only
-`originalLine` still says where it was. Submitting changes none of this. A review comment
-added after the move resolves `line` against the new head's diff, even though the pending
-review's own `commit` stays the old one. So read a review comment's position from `line`
-and `commit`, treat `line: null` as outdated, and send new review comments in new-head line
-numbers.
+Read a review comment's position from its `line` and `commit`, treat `line: null` as
+outdated, and send new review comments in the new head's line numbers.
+
+When the head moves, the pending review keeps the commit it was created on, but its review
+comments follow their lines into the new head:
+
+- A review comment whose line moved with its text unchanged keeps `outdated: false`. Its
+  `line` becomes the new line number, and its `commit` becomes the new head.
+- A review comment whose line was edited or deleted goes `outdated: true` with
+  `line: null`, and keeps the old `commit`. Only `originalLine` still says where it was.
+- A review comment added after the move resolves `line` against the new head's diff, even
+  though the pending review's own `commit` stays the old one.
+
+Submitting the pending review changes none of this.
 
 The run used pull request 2 in the sandbox,
-<https://github.com/macintacos/changeset-nvim-review-sandbox/pull/2>, which merged
-`head-moves` into `main` and is now closed. Its first commit, `78ed3ec`, changed lines 10,
-20, and 30 of `alpha.txt` to `alpha NN changed`, giving hunks `@@ -7,7 +7,7 @@`,
+<https://github.com/macintacos/changeset-nvim-review-sandbox/pull/2>, which asked to
+merge `head-moves` into `main` and was closed without merging. Its first commit, `78ed3ec`,
+changed lines 10, 20, and 30 of `alpha.txt` to `alpha NN changed`, giving hunks `@@ -7,7 +7,7 @@`,
 `@@ -17,7 +17,7 @@`, and `@@ -27,7 +27,7 @@`. `addPullRequestReview` created the pending
 review on `78ed3ec` (`tests/fixtures/github-reviews/head-moves-add-pending-review.json`),
 and one review comment went on each changed line
@@ -300,7 +304,7 @@ and one review comment went on each changed line
 A second commit, `9822b1d`, pushed as a fast-forward, inserted two lines at the top of
 `alpha.txt`, so `alpha 10 changed` moved to line 12, edited `alpha 20 changed` to
 `alpha 20 changed again`, and deleted `alpha 30 changed`. Listing the pending review's
-comments again gave:
+review comments again gave:
 
 | Review comment on | `line` | `originalLine` | `outdated` | `commit` | `originalCommit` |
 | --- | --- | --- | --- | --- | --- |
@@ -317,13 +321,41 @@ A review comment then added at line 12 was accepted
 (`tests/fixtures/github-reviews/head-moves-add-thread-after-push.json`). Listed, it had
 `line` and `originalLine` 12, `commit` and `originalCommit` `9822b1d`, and the `diffHunk`
 `@@ -7,7 +9,7 @@`, a header from the new head's diff
-(`tests/fixtures/github-reviews/head-moves-comments-after-add.json`). Line 12 lies in the
-first hunk of both diffs, so acceptance alone could not tell them apart; the header does.
+(`tests/fixtures/github-reviews/head-moves-comments-after-add.json`). Line 12 lies inside
+a hunk of both diffs: `@@ -7,7 +7,7 @@` in `78ed3ec`'s, and `@@ -7,7 +9,7 @@` in the new
+head's, so acceptance alone could not tell them apart; the header does.
 
 Submitting as `COMMENT` with a body succeeded
 (`tests/fixtures/github-reviews/head-moves-submit.json`). The four review comments listed
 afterwards with the same `line`, `originalLine`, `outdated`, and commits as before
 (`tests/fixtures/github-reviews/head-moves-comments-after-submit.json`).
 
-§ Calls gives the calls; the listing ran with `--paginate --slurp`, so each listing fixture
-is an array of pages.
+§ Calls gives the calls.
+
+## Fixtures
+
+When a spec tests code that parses a `gh` response, load a fixture so the spec reads the
+bytes GitHub sent. The fixtures live in `tests/fixtures/github-reviews/`, one file per
+recorded call, named for its case. The sections above name the call behind each one:
+
+- `<name>.json` holds the call's raw stdout plus a final newline. For a failed GraphQL
+  call, that is the `{"errors":…}` body.
+- `<name>.stderr` sits beside it only when the call failed, and holds its stderr verbatim,
+  `gh: <message>`.
+
+Most fixtures hold one JSON object. These hold a JSON array instead:
+
+- The `--paginate --slurp` listings hold an array of pages, each page one GraphQL
+  response: `tests/fixtures/github-reviews/review-comments-paginate-slurp.json`,
+  `tests/fixtures/github-reviews/review-comments-after-delete.json`, and the four
+  `head-moves-comments-*.json` listings.
+- The REST listing, `tests/fixtures/github-reviews/rest-list-reviews.json`, holds an array
+  of reviews.
+
+Because `tests/minimal_init.lua` puts the repo root on `rtp`, a spec finds a fixture
+with `nvim_get_runtime_file` and decodes it:
+
+```lua
+local path = vim.api.nvim_get_runtime_file("tests/fixtures/github-reviews/find-pending-review.json", false)[1]
+local response = vim.json.decode(table.concat(vim.fn.readfile(path), "\n"))
+```
