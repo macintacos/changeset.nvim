@@ -202,6 +202,12 @@ local function drop()
   tree = nil
 end
 
+---@param root string?
+---@return string? branch "HEAD" when detached.
+local function head_branch(root)
+  return Git.lines({ "git", "rev-parse", "--abbrev-ref", "HEAD" }, root)[1]
+end
+
 ---Build the tree for the current buffer's repository, unless it is already built there.
 ---
 ---The buffer's repository, not Neovim's directory: with the two different, a base
@@ -210,7 +216,7 @@ end
 ---branch, which includes a buffer outside any repository.
 function M.build()
   local root = Paths.root(0)
-  local branch = Git.lines({ "git", "rev-parse", "--abbrev-ref", "HEAD" }, root)[1] or "HEAD"
+  local branch = head_branch(root) or "HEAD"
   local point = fork_point.get(root, branch)
   if not point then
     return false
@@ -301,10 +307,13 @@ local function refresh_soon()
     if not tree then
       return
     end
-    local branch = Git.lines({ "git", "rev-parse", "--abbrev-ref", "HEAD" }, tree.root)[1]
+    local branch = head_branch(tree.root)
     -- build() measures the cursor's repository, so rebuild only while it is still this one.
-    if branch and branch ~= tree.branch and Paths.root(0) == tree.root then
-      M.build()
+    -- A detached HEAD (a stopped rebase, a bisect) is not another branch.
+    if branch and branch ~= "HEAD" and branch ~= tree.branch and Paths.root(0) == tree.root then
+      if not M.build() then
+        M.refresh()
+      end
     else
       M.refresh()
     end

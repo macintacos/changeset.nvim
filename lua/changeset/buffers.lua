@@ -41,9 +41,12 @@ function M.load(path)
   -- callback: the read above then skips the `BufRead` chain that names a
   -- filetype, and a buffer without one gets no treesitter, no syntax, and no
   -- language server. Naming it here fires `FileType` itself, which is what all
-  -- three attach to.
+  -- three attach to; review comment marks get their `BufReadPost` the same way.
   if vim.bo[buf].filetype == "" then
     vim.bo[buf].filetype = vim.filetype.match({ buf = buf }) or vim.bo[buf].filetype
+  end
+  if vim.fn.exists("#changeset.review_comments#BufReadPost") == 1 then
+    vim.api.nvim_exec_autocmds("BufReadPost", { group = "changeset.review_comments", buffer = buf, modeline = false })
   end
   return buf
 end

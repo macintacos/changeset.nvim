@@ -104,6 +104,10 @@ M.HEADER_REF_HL = "ChangesetHeaderRef"
 ---@type string
 M.HEADER_PENDING_HL = "ChangesetHeaderPending"
 
+---Group for the circle beside the PR while you have none. Created by `define_highlights`.
+---@type string
+M.HEADER_NOT_PENDING_HL = "ChangesetHeaderNotPending"
+
 ---Group for a review comment's circle and the line numbers it covers in its file. Created by `define_highlights`.
 ---@type string
 M.REVIEW_COMMENT_HL = "ChangesetReviewComment"
@@ -111,10 +115,6 @@ M.REVIEW_COMMENT_HL = "ChangesetReviewComment"
 ---Group for a review comment's body at the end of its first line. Created by `define_highlights`.
 ---@type string
 M.REVIEW_COMMENT_BODY_HL = "ChangesetReviewCommentBody"
-
----Group for the circle beside the PR while you have none. Created by `define_highlights`.
----@type string
-M.HEADER_NOT_PENDING_HL = "ChangesetHeaderNotPending"
 
 ---Group for the badge naming the sidebar in its footer. Created by `define_highlights`.
 ---@type string

@@ -71,7 +71,7 @@ local function lines(count, name)
 end
 
 describe("review_comments", function()
-  local dir, alpha, beta
+  local dir, other, alpha, beta
 
   before_each(function()
     dir = vim.fn.tempname()
@@ -90,6 +90,10 @@ describe("review_comments", function()
   after_each(function()
     vim.cmd("silent! %bwipeout!")
     vim.fn.delete(dir, "rf")
+    if other then
+      vim.fn.delete(other, "rf")
+      other = nil
+    end
   end)
 
   it("marks open buffers once an answer is kept", function()
@@ -146,7 +150,7 @@ describe("review_comments", function()
   end)
 
   it("leaves buffers outside the root and unnamed buffers unmarked", function()
-    local other = vim.fn.tempname()
+    other = vim.fn.tempname()
     vim.fn.mkdir(other, "p")
     vim.fn.writefile(lines(20, "beta"), other .. "/beta.txt")
     vim.cmd.edit(other .. "/beta.txt")
@@ -157,7 +161,6 @@ describe("review_comments", function()
     on_answer()
     assert.are.same({}, rows(outside))
     assert.are.same({}, rows(scratch))
-    vim.fn.delete(other, "rf")
   end)
 
   it("colours the range's numbers and ends the line with the body", function()
@@ -166,5 +169,27 @@ describe("review_comments", function()
     local details = assert(marks(beta)[1][4])
     assert.are.equal(render.REVIEW_COMMENT_HL, details.number_hl_group)
     assert.are.same({ { "● ", render.REVIEW_COMMENT_HL }, { "b", render.REVIEW_COMMENT_BODY_HL } }, details.virt_text)
+  end)
+
+  it("ends the line with only the first line of a CRLF body", function()
+    found = full_answer()
+    found.review.comments[5].body = "first\r\nsecond"
+    on_answer()
+    assert.are.equal("first", marks(beta)[1][4].virt_text[2][1])
+  end)
+
+  it("marks a file the sidebar loads from a CursorMoved callback", function()
+    found = full_answer()
+    on_answer()
+    vim.cmd("%bwipeout!")
+    local buf
+    vim.api.nvim_create_autocmd("CursorMoved", {
+      once = true,
+      callback = function()
+        buf = require("changeset.buffers").load(dir .. "/beta.txt")
+      end,
+    })
+    vim.api.nvim_exec_autocmds("CursorMoved", {})
+    assert.are.same({ { 15, 15 } }, rows(assert(buf)))
   end)
 end)

@@ -1,7 +1,13 @@
 local Fixture = require("support.git")
 
-local STUBBED =
-  { "changeset.pending_state", "changeset.pending_review", "changeset.build", "changeset.pr", "changeset.window" }
+local STUBBED = {
+  "changeset.pending_state",
+  "changeset.pending_review",
+  "changeset.build",
+  "changeset.pr",
+  "changeset.window",
+  "changeset.review_comments",
+}
 
 describe("changeset.pr", function()
   local notify, input, notes, prompts, fetched, started, deleted, deleted_comments
@@ -28,6 +34,8 @@ describe("changeset.pr", function()
       return choice
     end
     package.loaded["changeset.pending_state"] = {
+      get = function() end,
+      subscribe = function() end,
       fetch = function(root, cb)
         table.insert(fetched, root)
         local answer = answers[math.min(#fetched, #answers)]
@@ -54,6 +62,7 @@ describe("changeset.pr", function()
       current = function()
         return tree
       end,
+      subscribe = function() end,
     }
     package.loaded["changeset.pr"] = nil
   end)
