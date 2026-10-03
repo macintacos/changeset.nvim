@@ -422,6 +422,13 @@ Two review comments on one line show as two circles, each with its own body, in 
 GitHub lists them; their ranges' number colours merge. The marks are drawn from the header
 circle's answer, so they appear, update and disappear when it does, and for the same tree.
 
+A draft is marked the same way, with `○` and its numbers in `ChangesetReviewDraft`, and its
+body in the same `ChangesetReviewCommentBody`. Hollow and `DiagnosticInfo` blue against the
+saved review comment's solid green says "only on this machine" at a glance, and blue
+because yellow already means "on loan". Drafts need the PR's identity and head from the
+header circle's answer, so they appear with it, but whether a pending review exists doesn't
+matter. A draft written against an older head isn't drawn, since its lines may have moved.
+
 ### Footer
 
 ```text

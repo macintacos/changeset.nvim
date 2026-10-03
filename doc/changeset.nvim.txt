@@ -291,6 +291,12 @@ regains focus, and after `:Changeset pr start`, `pr abandon` and `pr delete`,
 and after a review comment is saved. A file you open later is marked from the
 last answer, without asking GitHub again.
 
+Each draft of the PR is marked the same way with a hollow circle, drawn in
+`ChangesetReviewDraft`, whether or not a pending review exists. Its mark
+appears and goes as the draft is kept or deleted. A draft written against an
+older head of the PR isn’t drawn or reopened; it stays in the file until `pr
+abandon`, and drafts of closed or merged PRs stay too.
+
 
 PICKER                                                 *changeset.nvim-picker*
 
@@ -416,6 +422,10 @@ it again on `:colorscheme`.
 
   ChangesetReviewCommentBody   A review comment’s body     links to ChangesetMeta
                                after its circle
+
+  ChangesetReviewDraft         A draft’s hollow circle and DiagnosticInfo’s
+                               the line numbers it covers  colour, bold
+                               in its file
 
   ChangesetBadge               The badge in the footer     Directory’s colour,
                                                            reversed, bold

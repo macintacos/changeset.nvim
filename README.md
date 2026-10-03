@@ -214,6 +214,12 @@ Neovim regains focus, and after `:Changeset pr start`, `pr abandon` and `pr dele
 after a review comment is saved. A file you open later is marked from the last answer,
 without asking GitHub again.
 
+Each draft of the PR is marked the same way with a hollow circle, drawn in
+`ChangesetReviewDraft`, whether or not a pending review exists. Its mark appears and goes
+as the draft is kept or deleted. A draft written against an older head of the PR isn't
+drawn or reopened; it stays in the file until `pr abandon`, and drafts of closed or merged
+PRs stay too.
+
 ## Picker
 
 With mini.pick set up, `require("changeset.pick").pick()` searches the same changes as the
@@ -290,6 +296,7 @@ The sidebar derives each group's default from your colorscheme, and derives it a
 | `ChangesetHeaderNotPending` | The circle while you have none | links to `ChangesetHeaderDim` |
 | `ChangesetReviewComment` | A review comment's circle and the line numbers it covers in its file | `DiagnosticOk`'s colour, bold |
 | `ChangesetReviewCommentBody` | A review comment's body after its circle | links to `ChangesetMeta` |
+| `ChangesetReviewDraft` | A draft's hollow circle and the line numbers it covers in its file | `DiagnosticInfo`'s colour, bold |
 | `ChangesetBadge` | The badge in the footer | `Directory`'s colour, reversed, bold |
 | `ChangesetFooter` | The footer's text | `Comment`'s colour on `StatusLine` |
 | `ChangesetFooterKey` | Keys and the filter in the footer | `StatusLine`, bold |
