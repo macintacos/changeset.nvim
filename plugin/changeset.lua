@@ -33,6 +33,9 @@ local subcommands = {
     delete = function()
       require("changeset.pr").delete()
     end,
+    submit = function()
+      require("changeset.pr").submit()
+    end,
   },
 }
 
@@ -76,7 +79,7 @@ end, {
   nargs = "?",
   range = true,
   bar = true,
-  desc = "Toggle the changeset sidebar, rebuild it, toggle PR Review Mode, start or abandon the PR's pending review, add a review comment to it or reopen a draft, or delete either",
+  desc = "Toggle the changeset sidebar, rebuild it, toggle PR Review Mode, start, submit or abandon the PR's pending review, add a review comment to it or reopen a draft, or delete either",
   complete = function(lead, line)
     -- Parses the last `|` segment so a modifier or earlier command still completes; an unset mark in a range makes it raise.
     local ok, cmd = pcall(vim.api.nvim_parse_cmd, line:match("[^|]*$"), {})

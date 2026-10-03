@@ -8,10 +8,11 @@ local STUBBED = {
   "changeset.window",
   "changeset.review_comments",
   "changeset.review_comment_window",
+  "changeset.submit_window",
 }
 
 describe("changeset.pr", function()
-  local notify, input, notes, prompts, fetched, started, deleted, deleted_comments, added, opened
+  local notify, input, notes, prompts, fetched, started, deleted, deleted_comments, added, opened, previews, submitted
   ---@type table? What `pending_state.get` answers.
   local held
   ---@type { err: string?, found: table? }[] What each fetch answers, in order; the last repeats.
@@ -28,7 +29,8 @@ describe("changeset.pr", function()
 
   before_each(function()
     os.remove(drafts.path())
-    notes, prompts, fetched, started, deleted, deleted_comments, added, opened = {}, {}, {}, {}, {}, {}, {}, {}
+    notes, prompts, fetched, started, deleted, deleted_comments, added, opened, previews, submitted =
+      {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
     held = nil
     answers, choice, failure = {}, "", nil
     tree = { root = "/tree/root", pr = 412 }
@@ -69,6 +71,15 @@ describe("changeset.pr", function()
       add_comment = function(id, new, cb)
         table.insert(added, { id = id, new = new })
         cb(failure)
+      end,
+      submit = function(id, submission, cb)
+        table.insert(submitted, { id = id, submission = submission })
+        cb(failure)
+      end,
+    }
+    package.loaded["changeset.submit_window"] = {
+      open = function(opts)
+        table.insert(previews, opts)
       end,
     }
     package.loaded["changeset.review_comment_window"] = {
@@ -236,6 +247,99 @@ describe("changeset.pr", function()
 
         assert.same({ 1, 1, 1 }, counts())
       end)
+    end)
+  end)
+
+  describe("submit", function()
+    local comment = { id = "C1", path = "a.lua", line = 3, body = "fix", outdated = false }
+    local review = { id = "R", comments = { comment } }
+
+    ---Submits through the preview `submit` opened, returning what `settled` got.
+    ---@param submission table
+    ---@return { err: string? }?
+    local function confirm(submission)
+      local got
+      previews[1].submit(submission, function(err)
+        got = { err = err }
+      end)
+      return got
+    end
+
+    it("says when there is no pending review", function()
+      answers = { { found = { pr = pr } } }
+
+      require("changeset.pr").submit()
+
+      assert.same({ vim.log.levels.INFO }, levels())
+      assert.truthy(notes[1].msg:find("no pending review", 1, true))
+      assert.same({}, previews)
+    end)
+
+    it("offers only a comment on the viewer's own PR", function()
+      answers = { { found = { pr = vim.tbl_extend("force", pr, { viewer_did_author = true }), review = review } } }
+
+      require("changeset.pr").submit()
+
+      assert.same({ "COMMENT" }, previews[1].events)
+    end)
+
+    it("offers every event on someone else's PR, a comment first", function()
+      answers = { { found = { pr = pr, review = review } } }
+
+      require("changeset.pr").submit()
+
+      assert.same({ "COMMENT", "APPROVE", "REQUEST_CHANGES" }, previews[1].events)
+    end)
+
+    it("previews the review's comments and the PR's drafts", function()
+      local draft = { path = "a.lua", line = 1, head = pr.head, body = "later" }
+      drafts.keep(pr, draft)
+      answers = { { found = { pr = pr, review = review } } }
+
+      require("changeset.pr").submit()
+
+      assert.same({ comment }, previews[1].comments)
+      assert.same({ draft }, previews[1].drafts)
+    end)
+
+    it("submits the review, reports it, fetches again and keeps the drafts", function()
+      drafts.keep(pr, { path = "a.lua", line = 1, head = pr.head, body = "later" })
+      answers = { { found = { pr = pr, review = review } } }
+      require("changeset.pr").submit()
+
+      local settled = confirm({ event = "APPROVE" })
+
+      assert.same({ { id = "R", submission = { event = "APPROVE" } } }, submitted)
+      assert.same({ err = nil }, settled)
+      assert.same({ vim.log.levels.INFO }, levels())
+      assert.truthy(notes[1].msg:find("submitted the pending review on #412", 1, true))
+      assert.equal(2, #fetched)
+      assert.equal(1, #drafts.list(pr))
+    end)
+
+    it("reports GitHub's rejection and fetches again", function()
+      answers, failure = { { found = { pr = pr, review = review } } }, "Review cannot be submitted"
+      require("changeset.pr").submit()
+
+      local settled = confirm({ event = "COMMENT" })
+
+      assert.same({ err = "Review cannot be submitted" }, settled)
+      assert.same({ vim.log.levels.ERROR }, levels())
+      assert.truthy(notes[1].msg:find("Review cannot be submitted", 1, true))
+      assert.equal(2, #fetched)
+    end)
+
+    it("refuses a submit GitHub would refuse without asking it", function()
+      answers = { { found = { pr = pr, review = { id = "R", comments = {} } } } }
+      require("changeset.pr").submit()
+
+      local reason = assert(confirm({ event = "COMMENT" })).err
+
+      assert.same({ vim.log.levels.WARN }, levels())
+      assert.truthy(reason)
+      assert.truthy(notes[1].msg:find(reason, 1, true))
+      assert.same({}, submitted)
+      assert.equal(1, #fetched)
     end)
   end)
 

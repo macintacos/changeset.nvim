@@ -36,7 +36,7 @@ local M = {}
 ---@field enabled? boolean Turn PR Review Mode on for every branch but the default. Only a restart turns it off again. Default false.
 
 ---@class changeset.Config.ReviewComment
----@field save? string[] Keys that save a review comment into the pending review, in insert and normal mode. Default { "<C-CR>", "<C-s>" }.
+---@field save? string[] Keys that save a review comment into the pending review, and close the submit preview's body window keeping the body, in insert and normal mode. Default { "<C-CR>", "<C-s>" }.
 
 ---The options in force: every top-level field set.
 ---@class changeset.Options : changeset.Config
