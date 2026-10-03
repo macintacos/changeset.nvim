@@ -14,6 +14,8 @@ local MIN_WIDTH = 20
 ---@field footer string Names where a save goes, e.g. "pending review on #412".
 ---@field keys string[] Keys that save, in insert and normal mode.
 ---@field save fun(body: string, done: fun(err: string?)) Called with the buffer's lines joined by "\n"; the window closes once `done` gets no error.
+---@field keep fun(body: string) Called with the buffer's lines joined by "\n", empty included, whenever the buffer goes (a close, an :e in the float, quitting) except after a taken save.
+---@field body string? The text it opens with.
 
 ---Open the window under `opts.line` of the current window, focused, in insert mode.
 ---@param opts changeset.ReviewCommentWindowOpts
@@ -22,6 +24,9 @@ function M.open(opts)
   local source = vim.api.nvim_get_current_win()
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = "wipe"
+  if opts.body then
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(opts.body, "\n"))
+  end
   -- bufpos anchors at the first text column, so the gutter and the border both come out of
   -- the window's width.
   local room = vim.api.nvim_win_get_width(source) - vim.fn.getwininfo(source)[1].textoff - 2
@@ -61,6 +66,22 @@ function M.open(opts)
     vim.cmd.stopinsert()
   end
 
+  local function text()
+    return table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+  end
+
+  local saved = false
+  -- Fires: the float's buffer going any way (a close, :q, :e in the float, quitting); read now, as it is wiped next.
+  vim.api.nvim_create_autocmd("BufUnload", {
+    buffer = buf,
+    once = true,
+    callback = function()
+      if not saved then
+        opts.keep(text())
+      end
+    end,
+  })
+
   local saving = false
   local function save()
     -- A double press must not add the review comment twice.
@@ -68,9 +89,10 @@ function M.open(opts)
       return
     end
     saving = true
-    opts.save(table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n"), function(err)
+    opts.save(text(), function(err)
       saving = false
       if not err then
+        saved = true
         close()
       end
     end)
@@ -81,12 +103,19 @@ function M.open(opts)
     vim.keymap.set("i", lhs, save, { buffer = buf, desc = "Save into the pending review" })
     map(lhs, save, "Save into the pending review")
   end
-  map("q", close, "Close without saving")
+  vim.keymap.set("i", "<S-Esc>", close, { buffer = buf, desc = "Close, keeping the text as a draft" })
+  map("<S-Esc>", close, "Close, keeping the text as a draft")
+  map("q", close, "Close, keeping the text as a draft")
   map("?", function()
     help.show(buf, own)
   end, "Show these keymaps")
 
-  vim.cmd.startinsert()
+  if opts.body then
+    vim.api.nvim_win_set_cursor(win, { vim.api.nvim_buf_line_count(buf), 0 })
+    vim.cmd("startinsert!")
+  else
+    vim.cmd.startinsert()
+  end
   return win
 end
 

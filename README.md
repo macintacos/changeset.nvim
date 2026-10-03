@@ -90,10 +90,12 @@ closes it. It takes one optional subcommand, and `pr` takes a verb:
 - `:Changeset review` turns [PR Review Mode](#pr-review-mode) off, or back on, for the
   current branch. It raises an error unless `pr_review.enabled` is set.
 - `:Changeset pr start` starts a [pending review](#pr-reviews) on the branch's open PR.
-- `:Changeset pr abandon` deletes the branch's [pending review](#pr-reviews).
-- `:Changeset pr comment` writes a review comment into the [pending review](#pr-reviews).
-- `:Changeset pr delete` deletes the review comment on the cursor's line from the branch's
-  [pending review](#pr-reviews).
+- `:Changeset pr abandon` deletes the branch's [pending review](#pr-reviews) and the PR's
+  drafts.
+- `:Changeset pr comment` writes a review comment into the [pending review](#pr-reviews),
+  or reopens the draft on the cursor's line.
+- `:Changeset pr delete` deletes the draft on the cursor's line, else the review comment
+  there in the branch's [pending review](#pr-reviews).
 
 `<Plug>(changeset-toggle)` does what `:Changeset toggle` does.
 
@@ -136,7 +138,7 @@ save keys with `review_comment.save`, in [Options](#options).
 | `<CR>` / `r` / `b` | kind menu | remember this set everywhere / for this repository / for this branch, then close |
 | `q` / `<Esc>` | kind menu | close, putting the tree back to the saved set |
 | `<C-CR>` / `<C-s>` | review comment window | save into the pending review and close; when GitHub refuses, the window and its text stay |
-| `q` | review comment window | close without saving |
+| `q` / `<S-Esc>` | review comment window | close, keeping the text as a local draft |
 | `?` | review comment window | list its keys |
 | `f` | sidebar | filter as you type, keeping ancestors so matches stay in place and highlighting every match until you clear the filter; `<Esc>` cancels and keeps the previous filter |
 | `R` | sidebar | rebuild now |
@@ -177,19 +179,24 @@ the sidebar closed.
 - `:Changeset pr start` starts a pending review on the branch's open PR. It needs an open
   PR and `gh` signed in. When a pending review is already under way, including one started
   on github.com, it says so instead.
-- `:Changeset pr abandon` asks y/n, then deletes the pending review and every review
-  comment in it.
+- `:Changeset pr abandon` asks y/n, then deletes the pending review, every review comment
+  in it, and the PR's drafts. A failed delete keeps the drafts.
 - `:Changeset pr comment` opens a markdown window under the cursor's line; from visual
   mode, `:'<,'>Changeset pr comment` opens it under the selection and comments on the
   selected lines. It needs a pending review, a sidebar opened on the repository so the
   PR's diff is read (you can close it again), the PR's head commit fetched, and lines
   inside the PR's diff in a saved file that matches that head. The keys in
   `review_comment.save`, `<C-CR>` or `<C-s>` by default, save it into the pending review
-  and close the window; `q` closes it without saving.
-- `:Changeset pr delete` deletes the review comment on the cursor's line, without asking.
-  When several take in that line, it deletes the narrowest; run it again for the next.
-  When the line has none, it says so. In a modified buffer it asks you to save first:
-  marks move with unsaved edits, while delete goes by line number.
+  and close the window. `q`, `<S-Esc>` (where the terminal sends it) and `:q` close it
+  and keep its text as a draft on this machine, as does quitting Neovim with it open;
+  empty text keeps nothing. A save GitHub rejects keeps the draft too. Running
+  `pr comment` anywhere on a draft's lines reopens it on its own lines; like a new one, it
+  needs a pending review to save into. Drafts never reach GitHub.
+- `:Changeset pr delete` deletes the draft on the cursor's line, else the review comment
+  there, without asking; a draft needs no pending review. When several take in that line,
+  it deletes the narrowest; run it again for the next. When the line has none, it says so.
+  In a modified buffer it asks you to save first: marks move with unsaved edits, while
+  delete goes by line number.
 
 With the sidebar open, a circle beside the PR number in its header shows whether you have
 a pending review on that PR: gray with none, green with one, including one started on
@@ -209,6 +216,12 @@ the branch or its PR changes, including a branch switch made outside the sidebar
 Neovim regains focus, and after `:Changeset pr start`, `pr abandon` and `pr delete`, and
 after a review comment is saved. A file you open later is marked from the last answer,
 without asking GitHub again.
+
+Each draft of the PR is marked the same way with a hollow circle, drawn in
+`ChangesetReviewDraft`, whether or not a pending review exists. Its mark appears and goes
+as the draft is kept or deleted. A draft written against an older head of the PR isn't
+drawn or reopened; it stays in the file until `pr abandon`, and drafts of closed or merged
+PRs stay too.
 
 ## Picker
 
@@ -286,6 +299,7 @@ The sidebar derives each group's default from your colorscheme, and derives it a
 | `ChangesetHeaderNotPending` | The circle while you have none | links to `ChangesetHeaderDim` |
 | `ChangesetReviewComment` | A review comment's circle and the line numbers it covers in its file | `DiagnosticOk`'s colour, bold |
 | `ChangesetReviewCommentBody` | A review comment's body after its circle | links to `ChangesetMeta` |
+| `ChangesetReviewDraft` | A draft's hollow circle and the line numbers it covers in its file | `DiagnosticInfo`'s colour, bold |
 | `ChangesetBadge` | The badge in the footer | `Directory`'s colour, reversed, bold |
 | `ChangesetFooter` | The footer's text | `Comment`'s colour on `StatusLine` |
 | `ChangesetFooterKey` | Keys and the filter in the footer | `StatusLine`, bold |
@@ -331,6 +345,7 @@ deferred. It installs nothing and starts no language server. Its one network req
 - The symbol cache: one JSON file per repository under `stdpath("cache")/changeset/`. You
   can delete it; the next build is slow once.
 - Hidden symbol kinds: `stdpath("state")/changeset/filters.json`.
+- Review comment drafts: `stdpath("state")/changeset/drafts.json`.
 - Sessions: `:mksession` restores the sidebar when `'sessionoptions'` contains `blank`
   (the default), and its cursor row too when it also contains `globals`.
 - Folds: kept in memory per repository until Neovim exits.

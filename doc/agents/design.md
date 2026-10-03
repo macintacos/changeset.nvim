@@ -334,10 +334,12 @@ set once the float is open, so a user's markdown `FileType` settings, such as `s
 reach it and win over the style.
 
 The border does the labelling, as the kind menu's does. The title names the line or lines,
-the footer where a save goes. Keys are not listed there: `?` answers that. `q` in normal
-mode closes without saving, since a review comment is written in insert mode and normal
-mode `q` is then a deliberate key. There is no `<Esc>` close, because a habitual `<Esc>`
-on the way to normal mode would throw the typed text away.
+the footer where a save goes. Keys are not listed there: `?` answers that. However the
+window's text goes, except the close a taken save makes, it is kept as a local draft: `q`
+in normal mode, `<S-Esc>` in either mode where the terminal sends it, `:q`, `<C-w>c`, an
+`:e` in the float, quitting Neovim. One `BufUnload` hook on the window's buffer catches
+them all, since the buffer goes with the window (`bufhidden=wipe`). Plain `<Esc>` still
+only leaves insert mode, so a habitual `<Esc>` on the way to normal mode never closes it.
 
 ### Stats
 
@@ -420,6 +422,15 @@ and italic: the § Three levels "not content" idiom, since the body is not the f
 Two review comments on one line show as two circles, each with its own body, in the order
 GitHub lists them; their ranges' number colours merge. The marks are drawn from the header
 circle's answer, so they appear, update and disappear when it does, and for the same tree.
+
+A draft is marked the same way, with `○` and its numbers in `ChangesetReviewDraft`, and
+its body in the same `ChangesetReviewCommentBody`. `○` is the `●`'s hollow twin, and the
+`DiagnosticInfo` blue a deliberate divergence like the `●`'s green: hollow and blue
+against the saved review comment's solid green says "only on this machine" at a glance,
+and blue because yellow already means "on loan". Drafts need the PR's identity and head
+from the header circle's answer, so they appear with it, but whether a pending review
+exists doesn't matter. A draft written against an older head isn't drawn, since its lines
+may have moved.
 
 ### Footer
 

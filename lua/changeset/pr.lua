@@ -1,9 +1,10 @@
----`:Changeset pr`'s verbs: start and abandon the pending review on the branch's open PR, add a review comment to it, and delete one of its review comments.
+---`:Changeset pr`'s verbs: start and abandon the pending review on the branch's open PR, add a review comment to it or reopen a draft, and delete a draft or one of its review comments.
 local Git = require("changeset.git")
 local Paths = require("changeset.paths")
 local build = require("changeset.build")
 local commentable = require("changeset.commentable")
 local config = require("changeset.config")
+local drafts = require("changeset.drafts")
 local pending_review = require("changeset.pending_review")
 local pending_state = require("changeset.pending_state")
 local review_comment_window = require("changeset.review_comment_window")
@@ -67,7 +68,7 @@ function M.start()
   end)
 end
 
----Asks, then deletes the pending review on the branch's open PR and every review comment in it.
+---Asks, then deletes the pending review on the branch's open PR, every review comment in it, and the PR's drafts.
 function M.abandon()
   on_pr("abandon", function(found, done)
     local number, review = found.pr.number, found.review
@@ -81,12 +82,15 @@ function M.abandon()
       return
     end
     pending_review.delete(review.id, function(err)
+      if not err then
+        drafts.drop_all(found.pr)
+      end
       done(err, "abandoned")
     end)
   end)
 end
 
----Deletes the review comment on the cursor's line from the pending review on the branch's open PR.
+---Deletes the draft on the cursor's line, else the review comment there in the pending review on the branch's open PR.
 function M.delete()
   -- Extmarks move with edits while review comment lines don't, so a modified buffer could delete the wrong one.
   if vim.bo.modified then
@@ -95,6 +99,14 @@ function M.delete()
   local path = vim.fs.relpath(root(), vim.fs.normalize(vim.api.nvim_buf_get_name(0)))
   local lnum = vim.api.nvim_win_get_cursor(0)[1]
   on_pr("delete a review comment from", function(found, done)
+    local draft = path and require("changeset.review_comments").at(drafts.list(found.pr), path, lnum)
+    if draft then
+      -- GitHub holds nothing to refetch; the drafts subscription redraws the mark.
+      if not drafts.drop(found.pr, draft) then
+        return say(vim.log.levels.ERROR, "can't delete the draft in %s", drafts.path())
+      end
+      return say(vim.log.levels.INFO, "deleted the draft on line %d", lnum)
+    end
     if not found.review then
       return say(vim.log.levels.INFO, "no pending review on #%d", found.pr.number)
     end
@@ -124,6 +136,7 @@ end
 
 ---Opens the review comment window under line `last` of the current buffer, for lines `first` to `last`,
 ---unless the pending review can't take a review comment there. Opening asks GitHub nothing.
+---A draft on line `last` reopens instead, on its own lines and unchecked.
 ---@param first integer
 ---@param last integer
 function M.comment(first, last)
@@ -147,13 +160,24 @@ function M.comment(first, last)
   if not (found and found.review) then
     return say(vim.log.levels.WARN, "start the review with `:Changeset pr start`")
   end
-  local matches_head = Git.matches_commit(tree.root, found.pr.head, path)
-  if matches_head == nil then
-    return say(vim.log.levels.WARN, "the PR's head, %s, isn't in this clone; fetch it first", found.pr.head:sub(1, 7))
+  local draft = require("changeset.review_comments").at(drafts.list(found.pr), path, last)
+  if draft then
+    -- Its lines passed the gates below when it was written at this head; a save GitHub rejects keeps it.
+    first, last = draft.start_line or draft.line, draft.line
+  else
+    local matches_head = Git.matches_commit(tree.root, found.pr.head, path)
+    if matches_head == nil then
+      return say(vim.log.levels.WARN, "the PR's head, %s, isn't in this clone; fetch it first", found.pr.head:sub(1, 7))
+    end
+    local refusal = commentable.refusal(hunks(tree, path), { first, last }, matches_head and not vim.bo[buf].modified)
+    if refusal then
+      return say(vim.log.levels.WARN, "can't add a review comment here: %s", refusal)
+    end
   end
-  local refusal = commentable.refusal(hunks(tree, path), { first, last }, matches_head and not vim.bo[buf].modified)
-  if refusal then
-    return say(vim.log.levels.WARN, "can't add a review comment here: %s", refusal)
+  ---@param body string
+  ---@return changeset.Draft
+  local function draft_of(body)
+    return { path = path, line = last, start_line = first < last and first or nil, head = found.pr.head, body = body }
   end
   local review_id, number = found.review.id, found.pr.number
   review_comment_window.open({
@@ -161,12 +185,25 @@ function M.comment(first, last)
     title = first < last and ("lines %d-%d"):format(first, last) or ("line %d"):format(last),
     footer = ("pending review on #%d"):format(number),
     keys = config.get().review_comment.save,
+    body = draft and draft.body,
+    keep = function(body)
+      if not drafts.keep(found.pr, draft_of(body)) then
+        say(vim.log.levels.ERROR, "can't keep the draft in %s", drafts.path())
+      end
+    end,
     save = function(body, done)
       local new = { path = path, line = last, start_line = first < last and first or nil, body = body }
       pending_review.add_comment(review_id, new, function(err)
         if err then
-          say(vim.log.levels.ERROR, "can't save the review comment: %s", err)
+          -- Now rather than on close: the window stays open, and may never close.
+          if drafts.keep(found.pr, draft_of(body)) then
+            say(vim.log.levels.ERROR, "can't save the review comment, so kept it as a draft: %s", err)
+          else
+            say(vim.log.levels.ERROR, "can't save the review comment, nor keep it in %s: %s", drafts.path(), err)
+          end
         else
+          -- A reopened draft, or one a close kept while this save was in flight.
+          drafts.drop(found.pr, draft_of(body))
           say(vim.log.levels.INFO, "added a review comment to the pending review on #%d", number)
           pending_state.fetch(tree.root)
         end
