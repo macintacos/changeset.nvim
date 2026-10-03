@@ -24,7 +24,7 @@ local TIMEOUT = 30000
 ---@field start_line integer? First line of a range.
 ---@field outdated boolean
 ---@field original_line integer? The line in the commit the review comment was made on.
----@field original_start_line integer?
+---@field original_start_line integer? First line of a range, in that commit.
 ---@field body string
 
 ---@class changeset.pending_review.Found

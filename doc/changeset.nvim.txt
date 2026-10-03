@@ -280,11 +280,11 @@ abandon` and `pr delete` work with the sidebar closed.
 - `:Changeset pr submit` opens a preview of the pending review: each review comment with
     its file and line or lines, outdated ones marked, and the PR’s drafts at its current head
     named as not included. On someone else’s PR, `c`, `a` and `r` choose Comment, Approve or
-    Request changes, Comment first; on your own PR it submits as Comment, since GitHub
-    refuses the other two there. `b` writes an optional markdown body. `<CR>` submits, and
-    `q` or `<Esc>` close without submitting. A Comment with no review comments and no body
-    is refused before asking GitHub; a submit GitHub refuses shows its reason, and the
-    preview and the pending review stay as they were. Drafts stay after a submit.
+    Request changes, Comment preselected; on your own PR it submits as Comment, since
+    GitHub refuses the other two there. `b` writes an optional markdown body. `<CR>`
+    submits, and `q` or `<Esc>` close without submitting. A Comment with no review comments
+    and no body is refused before asking GitHub; a submit GitHub refuses shows its reason,
+    and the preview and the pending review stay as they were. Drafts stay after a submit.
 - `:Changeset pr abandon` asks y/n, then deletes the pending review, every review comment
     in it, and the PR’s drafts. A failed delete keeps the drafts.
 - `:Changeset pr comment` opens a markdown window under the cursor’s line; from visual

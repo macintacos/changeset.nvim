@@ -21,3 +21,13 @@ describe("refusal", function()
     assert.is_nil(submittable.refusal({ event = "REQUEST_CHANGES" }, 0))
   end)
 end)
+
+describe("events", function()
+  it("offers only a comment on the viewer's own PR", function()
+    assert.same({ "COMMENT" }, submittable.events(true))
+  end)
+
+  it("offers every event on someone else's PR, a comment first", function()
+    assert.same({ "COMMENT", "APPROVE", "REQUEST_CHANGES" }, submittable.events(false))
+  end)
+end)

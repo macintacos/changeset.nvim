@@ -1353,6 +1353,11 @@ describe("changeset.render", function()
       assert.truthy(find(lines({ comments = { comment({}) } }), "a.lua  file"))
     end)
 
+    it("shows only a CRLF body's first line, without its carriage return", function()
+      local line = find(lines({ comments = { comment({ line = 4, body = "first\r\nsecond" }) } }), "a.lua")
+      assert.are.equal("first", line.text:match("(%S+)$"))
+    end)
+
     it("says when the review has no comments", function()
       assert.truthy(find(lines(), "No review comments"))
     end)

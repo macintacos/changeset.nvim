@@ -275,15 +275,7 @@ describe("changeset.pr", function()
       assert.same({}, previews)
     end)
 
-    it("offers only a comment on the viewer's own PR", function()
-      answers = { { found = { pr = vim.tbl_extend("force", pr, { viewer_did_author = true }), review = review } } }
-
-      require("changeset.pr").submit()
-
-      assert.same({ "COMMENT" }, previews[1].events)
-    end)
-
-    it("offers every event on someone else's PR, a comment first", function()
+    it("hands the window the events GitHub takes on the PR", function()
       answers = { { found = { pr = pr, review = review } } }
 
       require("changeset.pr").submit()

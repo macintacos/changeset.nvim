@@ -617,8 +617,6 @@ local function body_line(body)
 end
 
 ---The submit preview: the event row, the body row, what is sent, and the drafts that are not.
----
----Places are padded to one column so the bodies line up, as the sidebar's stats do.
 ---@param info changeset.SubmitInfo
 ---@return changeset.Line[] lines
 ---@return integer body_row The 1-based row the body is drawn on.
@@ -647,7 +645,7 @@ function M.submit_lines(info)
       { note and "  " or "" },
       { note or "", note and M.META_HL or nil },
       { (" "):rep(width - vim.fn.strdisplaywidth(shown) + 2) },
-      { (comment.body:match("^[^\n]*")), M.REVIEW_COMMENT_BODY_HL },
+      { (comment.body:match("^[^\r\n]*")), M.REVIEW_COMMENT_BODY_HL },
     })
   end
   if #info.comments == 0 then

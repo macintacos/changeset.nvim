@@ -14,11 +14,11 @@ local MAX_WIDTH = 96
 ---What `<CR>` sends, for the footer.
 local SENDS = { COMMENT = "comment on #%d", APPROVE = "approve #%d", REQUEST_CHANGES = "request changes on #%d" }
 
----Keys that choose an event, offered only for events among those given.
+---Keys that choose an event, offered only when more than one event is, and only for those.
 local CHOOSE = {
-  { "c", "COMMENT", "Submit as a comment" },
-  { "a", "APPROVE", "Submit as an approval" },
-  { "r", "REQUEST_CHANGES", "Submit requesting changes" },
+  { "c", "COMMENT", "Choose Comment" },
+  { "a", "APPROVE", "Choose Approve" },
+  { "r", "REQUEST_CHANGES", "Choose Request changes" },
 }
 
 ---@class changeset.SubmitWindowOpts
@@ -39,10 +39,16 @@ local function widest(lines)
   return width
 end
 
+---@type integer?
+local open_win
+
 ---Open the preview centred in the editor, focused.
 ---@param opts changeset.SubmitWindowOpts
 ---@return integer win
 function M.open(opts)
+  if open_win and vim.api.nvim_win_is_valid(open_win) then
+    vim.api.nvim_win_close(open_win, true)
+  end
   local source = vim.api.nvim_get_current_win()
   local event, body = opts.events[1], nil ---@type changeset.pending_review.Event, string?
   local body_row, body_win, closed, submitting = 1, nil, false, false
@@ -53,8 +59,14 @@ function M.open(opts)
   local function info()
     return { events = opts.events, event = event, body = body, comments = opts.comments, drafts = opts.drafts }
   end
+  local function footer()
+    return " " .. SENDS[event]:format(opts.number) .. " "
+  end
+  local function fit(lines)
+    return math.min(math.max(widest(lines), MIN_WIDTH), MAX_WIDTH, vim.o.columns - 4)
+  end
   local first = render.submit_lines(info())
-  local width = math.min(math.max(widest(first), MIN_WIDTH), MAX_WIDTH, vim.o.columns - 4)
+  local width = fit(first)
   local height = math.min(#first, vim.o.lines - 6)
   local win = vim.api.nvim_open_win(buf, true, {
     relative = "editor",
@@ -66,10 +78,11 @@ function M.open(opts)
     border = "rounded",
     title = (" Submit review · #%d "):format(opts.number),
     title_pos = "left",
-    footer = " " .. SENDS[event]:format(opts.number) .. " ",
+    footer = "",
     footer_pos = "left",
   })
   vim.wo[win].wrap = false
+  open_win = win
 
   local function draw()
     local lines
@@ -92,7 +105,9 @@ function M.open(opts)
       end
     end
     local config = vim.api.nvim_win_get_config(win)
-    config.footer = " " .. SENDS[event]:format(opts.number) .. " "
+    config.width = fit(lines)
+    config.col = math.floor((vim.o.columns - config.width) / 2)
+    config.footer = footer()
     vim.api.nvim_win_set_config(win, config)
   end
 
@@ -101,6 +116,8 @@ function M.open(opts)
       return
     end
     closed = true
+    local current = vim.api.nvim_get_current_win()
+    local focused = current == win or current == body_win
     if body_win and vim.api.nvim_win_is_valid(body_win) then
       vim.api.nvim_win_close(body_win, true)
     end
@@ -108,14 +125,15 @@ function M.open(opts)
       vim.api.nvim_win_close(win, true)
     end
     -- Closing the body float left `prevwin` on the preview, so Neovim would land on the first window.
-    if vim.api.nvim_win_is_valid(source) then
+    if focused and vim.api.nvim_win_is_valid(source) then
       vim.api.nvim_set_current_win(source)
     end
   end
-  -- Fires: the preview closing any way (a key, :q, <C-w>c), so its body float goes with it.
+  -- Fires: the preview closing any way (a key, :q, <C-w>c), so the body float and focus follow it.
   vim.api.nvim_create_autocmd("WinClosed", { pattern = tostring(win), once = true, callback = close })
 
   local function take_body(text)
+    -- The body float can outlive the preview; its keep must not redraw a wiped buffer.
     if closed then
       return
     end
@@ -124,6 +142,12 @@ function M.open(opts)
   end
 
   local function write_body()
+    if submitting then
+      return
+    end
+    if body_win and vim.api.nvim_win_is_valid(body_win) then
+      return vim.api.nvim_set_current_win(body_win)
+    end
     body_win = review_comment_window.open({
       line = body_row,
       title = "Review body",
@@ -143,6 +167,10 @@ function M.open(opts)
   local function submit()
     if submitting then
       return
+    end
+    -- Closing runs its keep synchronously, so `body` is current below.
+    if body_win and vim.api.nvim_win_is_valid(body_win) then
+      vim.api.nvim_win_close(body_win, true)
     end
     submitting = true
     opts.submit({ event = event, body = body }, function(err)

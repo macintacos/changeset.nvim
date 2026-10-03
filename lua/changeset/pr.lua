@@ -38,7 +38,8 @@ local function say(level, text, ...)
 end
 
 ---Finds the branch's PR and pending review and hands them to `act`, which mutates and calls
----`done`; `done` reports and refetches, so the header always follows a mutation.
+---`done`; `done` reports and refetches, so the header always follows a mutation. `done` may run
+---once per attempt, or not at all.
 ---@param verb string Reads between "can't" and "a pending review": "start", "abandon", "delete a review comment from".
 ---@param act fun(found: changeset.pending_review.Found, done: fun(err: string?, did: string))
 local function on_pr(verb, act)
@@ -101,8 +102,7 @@ function M.submit()
     end
     submit_window.open({
       number = found.pr.number,
-      -- GitHub refuses an approval or a change request on the viewer's own PR.
-      events = found.pr.viewer_did_author and { "COMMENT" } or { "COMMENT", "APPROVE", "REQUEST_CHANGES" },
+      events = submittable.events(found.pr.viewer_did_author),
       comments = review.comments,
       drafts = drafts.list(found.pr),
       keys = config.get().review_comment.save,

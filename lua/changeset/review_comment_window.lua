@@ -1,4 +1,4 @@
----The window a review comment is written in, under the line it is about.
+---The markdown window a review comment, or a review's body, is written in, under the line it is about.
 
 local help = require("changeset.help")
 
@@ -13,8 +13,8 @@ local MIN_WIDTH = 20
 ---@field title string The whole title, e.g. "Review comment · line 42".
 ---@field footer string Names where a save goes, e.g. "pending review on #412".
 ---@field keys string[] Keys that save, in insert and normal mode.
----@field save_desc string Describes the save keys.
----@field close_desc string Describes the keys that close without saving.
+---@field save_desc string The save keys' `desc`, which `?` lists.
+---@field close_desc string The `desc` of the keys that close without saving, which `?` lists.
 ---@field save fun(body: string, done: fun(err: string?)) Called with the buffer's lines joined by "\n"; the window closes once `done` gets no error.
 ---@field keep fun(body: string) Called with the buffer's lines joined by "\n", empty included, whenever the buffer goes (a close, an :e in the float, quitting) except after a taken save.
 ---@field body string? The text it opens with.

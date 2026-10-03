@@ -383,7 +383,8 @@ The title names the PR; the footer says what `<CR>` sends — `comment on #412`,
 `approve #412`, `request changes on #412` — and changes with the choice. `b` opens the
 review comment window under the body row, titled `Review body`; a save key or `q` both
 keep what was written, and a body of only whitespace is sent as none. The width fits the
-widest row between 44 and 96 columns, and the height fits the rows.
+widest row between 44 and 96 columns, re-fitted as the body changes, and the height fits
+the rows.
 
 ### Stats
 
@@ -621,11 +622,13 @@ repository's deliberate choice is none of that save's business.
   pending review from GitHub's last answer, so right after a push made inside Neovim it can
   refuse the file as differing from the head until `:Changeset pr start` or regaining focus
   refetches.
-- **Every close of the submit preview returns focus to where it opened from.** Closing
-  the body float leaves `prevwin` on the preview, so once the preview closes too Neovim
-  falls back to the first window. Closing the preview by any route closes the body float
-  with it, and the float's callbacks are ignored from then on: a `relative = "win"`
-  float outlives its anchor, and its keep would redraw a wiped buffer.
+- **Closing the submit preview from inside it returns focus to where it opened from.**
+  Closing the body float leaves `prevwin` on the preview, so once the preview closes too
+  Neovim would fall back to the first window. A close while focus is elsewhere leaves it
+  there.
+- **Closing the submit preview closes its body float.** By any route, and the float's
+  callbacks are ignored from then on: a `relative = "win"` float outlives its anchor, and
+  its keep would redraw a wiped buffer.
 - **`<C-s>` saves alongside `<C-CR>`** because many terminals never send `<C-CR>`.
 - **A file cached before its parser was installed keeps just the name rules** until it
   next changes: its entry was read without the syntax layer, and its stamp still matches.
