@@ -7,7 +7,7 @@ local M = {}
 ---@param hunk changeset.Hunk
 ---@param lnum integer
 ---@return boolean
-local function near(hunk, lnum)
+local function shows_line(hunk, lnum)
   if hunk.count == 0 then
     return hunk.lnum - 2 <= lnum and lnum <= hunk.lnum + 3
   end
@@ -19,7 +19,7 @@ end
 ---@return boolean
 local function in_diff(hunks, lnum)
   for _, hunk in ipairs(hunks) do
-    if near(hunk, lnum) then
+    if shows_line(hunk, lnum) then
       return true
     end
   end
