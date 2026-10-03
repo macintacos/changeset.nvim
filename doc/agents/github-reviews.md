@@ -70,3 +70,96 @@ gh pr create -R macintacos/changeset-nvim-review-sandbox --base main --head sand
   --body "Throwaway PR: two hunks in alpha.txt and two in beta.txt, for testing which lines GitHub's pending-review API accepts."
 gh pr diff 1 -R macintacos/changeset-nvim-review-sandbox
 ```
+
+## Lines a review comment accepts
+
+A line review comment needs both ends inside GitHub's hunks. `line`, and `startLine` when
+the review comment covers a range, must each fall on a new-side line of some hunk in
+`gh pr diff`, context lines included. The lines between them may leave the hunks: a range
+from one hunk into the next is accepted.
+
+GitHub refuses any other line silently. `addPullRequestReviewThread` exits 0 with
+`"thread": null` and no `errors`, and stores no review comment, so a caller must treat a
+null `thread` as a refusal. For a line outside every hunk, a file-level review comment
+works instead: pass `subjectType: FILE` with no `line`.
+
+To decide from `changeset.Hunk`, which carries no context, widen each hunk to GitHub's
+extent. Only one part of this mapping was measured on GitHub: that its hunks are git's
+`-U3` hunks, which the rows for lines 13 and 14 below and the hunk table in
+§ The sandbox show. The arithmetic itself is git's `-U3` arithmetic, from § The sandbox:
+
+```text
+count > 0  →  new-side extent lnum-3 .. lnum+count+2
+count = 0  →  new-side extent lnum-2 .. lnum+3        (pure deletion, unverified)
+clamp every extent to 1 .. #lines; merge extents that overlap or abut
+```
+
+Every row below ran against one pending review on pull request 1, with `side: RIGHT`
+and a body naming the case. A row counts as accepted only when the mutation returned a
+thread and the listed review comment kept the `line` and `startLine` asked for, which
+`tests/fixtures/github-reviews/pending-review-comments.json` shows for every accepted
+row. Before the matrix, the find query returned no pending review
+(`tests/fixtures/github-reviews/find-pending-review-empty.json`), and
+`addPullRequestReview` created the pending review
+(`tests/fixtures/github-reviews/add-pending-review.json`).
+
+| Case | Path | `startLine` | `line` | Accepted when added | Kept at submit | GitHub's error | Fixture |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Added line | `alpha.txt` | — | 31 | yes | pending | — | `tests/fixtures/github-reviews/add-thread-added-line.json` |
+| Last context line of a hunk | `alpha.txt` | — | 13 | yes | pending | — | `tests/fixtures/github-reviews/add-thread-context-line.json` |
+| First line past a hunk's context | `alpha.txt` | — | 14 | no | — | `thread: null`, no error | `tests/fixtures/github-reviews/add-thread-outside-hunk.json` |
+| Range over changed and context lines in one hunk | `alpha.txt` | 8 | 10 | yes | pending | — | `tests/fixtures/github-reviews/add-thread-range-in-hunk.json` |
+| Range over two hunks | `alpha.txt` | 10 | 31 | yes | pending | — | `tests/fixtures/github-reviews/add-thread-range-two-hunks.json` |
+| Range from outside a hunk into a changed line | `alpha.txt` | 4 | 10 | no | — | `thread: null`, no error | `tests/fixtures/github-reviews/add-thread-range-from-outside.json` |
+| Line deep outside any hunk | `alpha.txt` | — | 20 | no | — | `thread: null`, no error | `tests/fixtures/github-reviews/add-thread-deep-outside-hunk.json` |
+| File-level, `subjectType: FILE` | `alpha.txt` | — | — | yes | pending | — | `tests/fixtures/github-reviews/add-thread-file-level.json` |
+| Added line in a second file | `beta.txt` | — | 16 | yes | pending | — | `tests/fixtures/github-reviews/add-thread-beta-added-line.json` |
+
+The mutation's `thread` reports `startLine` equal to `line` for a single-line review
+comment, but the review comment itself stores `startLine: null`. For the file-level
+review comment, `thread.line` reads 1 while the review comment's `line` is null. Read
+lines from the review comment, not the thread.
+
+The calls that ran, with the line comment's `startLine` omitted for a single line:
+
+```sh
+gh api graphql -f owner=macintacos -f name=changeset-nvim-review-sandbox -F number=1 -f query='
+query($owner: String!, $name: String!, $number: Int!) {
+  viewer { login }
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      id headRefOid viewerDidAuthor
+      reviews(states: PENDING, first: 1) { nodes { id fullDatabaseId state commit { oid } author { login } } }
+    }
+  }
+}'
+
+gh api graphql -f pr=<pullRequest.id> -f query='
+mutation($pr: ID!) {
+  addPullRequestReview(input: {pullRequestId: $pr}) { pullRequestReview { id fullDatabaseId state commit { oid } } }
+}'
+
+gh api graphql -f review=<review id> -f path=alpha.txt -F startLine=8 -F line=10 -f body=<text> -f query='
+mutation($review: ID!, $path: String!, $line: Int!, $startLine: Int, $body: String!) {
+  addPullRequestReviewThread(input: {pullRequestReviewId: $review, path: $path, line: $line, side: RIGHT, startLine: $startLine, body: $body}) {
+    thread { id isOutdated line startLine comments(first: 1) { nodes { id fullDatabaseId line startLine } } }
+  }
+}'
+
+gh api graphql -f review=<review id> -f path=alpha.txt -f body=<text> -f query='
+mutation($review: ID!, $path: String!, $body: String!) {
+  addPullRequestReviewThread(input: {pullRequestReviewId: $review, path: $path, subjectType: FILE, body: $body}) {
+    thread { id isOutdated line startLine subjectType comments(first: 1) { nodes { id fullDatabaseId line startLine subjectType } } }
+  }
+}'
+
+gh api graphql -f review=<review id> -f query='
+query($review: ID!, $endCursor: String) {
+  node(id: $review) { ... on PullRequestReview {
+    comments(first: 20, after: $endCursor) {
+      pageInfo { hasNextPage endCursor }
+      nodes { id fullDatabaseId path line startLine originalLine originalStartLine outdated commit { oid } originalCommit { oid } diffHunk body }
+    }
+  } }
+}'
+```
