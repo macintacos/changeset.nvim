@@ -167,24 +167,26 @@ describe("plugin/changeset.lua", function()
   end)
 
   it("completes pr's verbs that match the argument", function()
-    assert.same({ "abandon", "start" }, vim.fn.getcompletion("Changeset pr ", "cmdline"))
+    assert.same({ "abandon", "delete", "start" }, vim.fn.getcompletion("Changeset pr ", "cmdline"))
     assert.same({ "start" }, vim.fn.getcompletion("Changeset pr s", "cmdline"))
     assert.same({ "start" }, vim.fn.getcompletion("silent Changeset pr s", "cmdline"))
     assert.same({}, vim.fn.getcompletion("Changeset toggle ", "cmdline"))
-    assert.same({ "abandon", "start" }, vim.fn.getcompletion("redraw | Changeset pr ", "cmdline"))
+    assert.same({ "abandon", "delete", "start" }, vim.fn.getcompletion("redraw | Changeset pr ", "cmdline"))
     assert.same({}, vim.fn.getcompletion("'<,'>Changeset ", "cmdline"))
   end)
 
   it("routes each pr verb to the pr module", function()
     local calls = {}
-    package.loaded["changeset.pr"] = { start = counter(calls, "start"), abandon = counter(calls, "abandon") }
+    package.loaded["changeset.pr"] =
+      { start = counter(calls, "start"), abandon = counter(calls, "abandon"), delete = counter(calls, "delete") }
 
     vim.cmd("Changeset pr start")
     vim.cmd("Changeset pr abandon")
+    vim.cmd("Changeset pr delete")
     vim.cmd("Changeset pr start | let g:changeset_pr_after = 1")
 
     package.loaded["changeset.pr"] = nil
-    assert.same({ start = 2, abandon = 1 }, calls)
+    assert.same({ start = 2, abandon = 1, delete = 1 }, calls)
     assert.equal(1, vim.g.changeset_pr_after)
   end)
 
@@ -201,7 +203,11 @@ describe("plugin/changeset.lua", function()
 
     assert.equal(1, #notes)
     assert.equal(vim.log.levels.ERROR, notes[1].level)
-    assert.truthy(notes[1].msg:find("abandon", 1, true) and notes[1].msg:find("start", 1, true))
+    assert.truthy(
+      notes[1].msg:find("abandon", 1, true)
+        and notes[1].msg:find("delete", 1, true)
+        and notes[1].msg:find("start", 1, true)
+    )
   end)
 
   it("reports words past a subcommand as an error", function()

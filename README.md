@@ -91,6 +91,8 @@ closes it. It takes one optional subcommand, and `pr` takes a verb:
   current branch. It raises an error unless `pr_review.enabled` is set.
 - `:Changeset pr start` starts a [pending review](#pr-reviews) on the branch's open PR.
 - `:Changeset pr abandon` deletes the branch's [pending review](#pr-reviews).
+- `:Changeset pr delete` deletes the review comment on the cursor's line from the branch's
+  [pending review](#pr-reviews).
 
 `<Plug>(changeset-toggle)` does what `:Changeset toggle` does.
 
@@ -164,13 +166,18 @@ It works without the sidebar, and the sidebar works without it.
 ## PR reviews
 
 A pending review is where GitHub holds your review comments on a PR until you submit or
-delete it. You have at most one per PR. Both commands below work with the sidebar closed.
+delete it. You have at most one per PR. All three commands below work with the sidebar
+closed.
 
 - `:Changeset pr start` starts a pending review on the branch's open PR. It needs an open
   PR and `gh` signed in. When a pending review is already under way, including one started
   on github.com, it says so instead.
 - `:Changeset pr abandon` asks y/n, then deletes the pending review and every review
   comment in it.
+- `:Changeset pr delete` deletes the review comment on the cursor's line, without asking.
+  When several take in that line, it deletes the narrowest; run it again for the next.
+  When the line has none, it says so. In a modified buffer it asks you to save first:
+  marks move with unsaved edits, while delete goes by line number.
 
 With the sidebar open, a circle beside the PR number in its header shows whether you have
 a pending review on that PR: gray with none, green with one, including one started on
@@ -179,6 +186,16 @@ github.com, drawn in `ChangesetHeaderNotPending` and `ChangesetHeaderPending` (s
 new branch or PR, when Neovim regains focus, and after each `:Changeset pr`. It is absent
 whenever the PR number is (no open PR, `gh` missing or signed out) and until GitHub first
 answers.
+
+Each review comment in your pending review, including ones added on github.com, is marked
+in its file's buffer: the line numbers it covers turn green, and its first line ends with
+a green circle and the first line of its body, drawn in `ChangesetReviewComment` and
+`ChangesetReviewCommentBody`. The marks appear once the sidebar or the picker has built the
+tree for the repository, and stay with the sidebar closed. Outdated and file-level review
+comments have no line, so they aren't drawn. The marks update with the circle: when the
+branch or its PR changes, including a branch switch made outside the sidebar, when Neovim
+regains focus, and after each `:Changeset pr`. A file you open later is marked from the
+last answer, without asking GitHub again.
 
 ## Picker
 
@@ -253,6 +270,8 @@ The sidebar derives each group's default from your colorscheme, and derives it a
 | `ChangesetHeaderRef` | The ref the tree is compared against | `Normal`'s colour on the header, bold |
 | `ChangesetHeaderPending` | The circle beside the PR while you have a pending review on it | `DiagnosticOk`'s colour on the header |
 | `ChangesetHeaderNotPending` | The circle while you have none | links to `ChangesetHeaderDim` |
+| `ChangesetReviewComment` | A review comment's circle and the line numbers it covers in its file | `DiagnosticOk`'s colour, bold |
+| `ChangesetReviewCommentBody` | A review comment's body after its circle | links to `ChangesetMeta` |
 | `ChangesetBadge` | The badge in the footer | `Directory`'s colour, reversed, bold |
 | `ChangesetFooter` | The footer's text | `Comment`'s colour on `StatusLine` |
 | `ChangesetFooterKey` | Keys and the filter in the footer | `StatusLine`, bold |

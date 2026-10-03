@@ -120,6 +120,19 @@ describe("pending_review", function()
 
       assert.equal("PRR_kwDOU6Rmbc8AAAABQfCQkw", found.review.id)
     end)
+
+    it("gives outdated review comments no line, and moved ones their new line", function()
+      gh.answer({ stdout = gh.pr_view({ url = SANDBOX }) })
+      gh.fixture("head-moves-find-after-push")
+      gh.fixture("head-moves-comments-after-push")
+
+      local _, found = run("find", nil)
+
+      assert.equal(12, found.review.comments[1].line)
+      assert.equal(3, #found.review.comments)
+      assert.is_nil(found.review.comments[2].line)
+      assert.is_nil(found.review.comments[3].line)
+    end)
   end)
 
   describe("start", function()

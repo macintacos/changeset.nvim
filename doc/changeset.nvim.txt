@@ -109,6 +109,8 @@ sidebar closes it. It takes one optional subcommand, and `pr` takes a verb:
     current branch. It raises an error unless `pr_review.enabled` is set.
 - `:Changeset pr start` starts a pending review |changeset.nvim-pr-reviews| on the branch’s open PR.
 - `:Changeset pr abandon` deletes the branch’s pending review |changeset.nvim-pr-reviews|.
+- `:Changeset pr delete` deletes the review comment on the cursor’s line from the branch’s
+    pending review |changeset.nvim-pr-reviews|.
 
 `<Plug>(changeset-toggle)` does what `:Changeset toggle` does.
 
@@ -230,14 +232,18 @@ It works without the sidebar, and the sidebar works without it.
 PR REVIEWS                                         *changeset.nvim-pr-reviews*
 
 A pending review is where GitHub holds your review comments on a PR until you
-submit or delete it. You have at most one per PR. Both commands below work with
-the sidebar closed.
+submit or delete it. You have at most one per PR. All three commands below work
+with the sidebar closed.
 
 - `:Changeset pr start` starts a pending review on the branch’s open PR. It needs an open
     PR and `gh` signed in. When a pending review is already under way, including one started
     on github.com, it says so instead.
 - `:Changeset pr abandon` asks y/n, then deletes the pending review and every review
     comment in it.
+- `:Changeset pr delete` deletes the review comment on the cursor’s line, without asking.
+    When several take in that line, it deletes the narrowest; run it again for the next.
+    When the line has none, it says so. In a modified buffer it asks you to save first:
+    marks move with unsaved edits, while delete goes by line number.
 
 With the sidebar open, a circle beside the PR number in its header shows
 whether you have a pending review on that PR: gray with none, green with one,
@@ -246,6 +252,17 @@ including one started on github.com, drawn in `ChangesetHeaderNotPending` and
 when the sidebar’s tree lands on a new branch or PR, when Neovim regains
 focus, and after each `:Changeset pr`. It is absent whenever the PR number is
 (no open PR, `gh` missing or signed out) and until GitHub first answers.
+
+Each review comment in your pending review, including ones added on github.com,
+is marked in its file’s buffer: the line numbers it covers turn green, and
+its first line ends with a green circle and the first line of its body, drawn
+in `ChangesetReviewComment` and `ChangesetReviewCommentBody`. The marks appear
+once the sidebar or the picker has built the tree for the repository, and stay
+with the sidebar closed. Outdated and file-level review comments have no line,
+so they aren’t drawn. The marks update with the circle: when the branch or
+its PR changes, including a branch switch made outside the sidebar, when Neovim
+regains focus, and after each `:Changeset pr`. A file you open later is marked
+from the last answer, without asking GitHub again.
 
 
 PICKER                                                 *changeset.nvim-picker*
@@ -334,79 +351,86 @@ HIGHLIGHT GROUPS                             *changeset.nvim-highlight-groups*
 The sidebar derives each group’s default from your colorscheme, and derives
 it again on `:colorscheme`.
 
-  ------------------------------------------------------------------------------
-  Group                       Colours                     Default
-  --------------------------- --------------------------- ----------------------
-  ChangesetMeta               Text that is not content:   Comment’s colour,
-                              counts, notes               italic
+  -------------------------------------------------------------------------------
+  Group                        Colours                     Default
+  ---------------------------- --------------------------- ----------------------
+  ChangesetMeta                Text that is not content:   Comment’s colour,
+                               counts, notes               italic
 
-  ChangesetMatch              Characters a filter matched links to Search
+  ChangesetMatch               Characters a filter matched links to Search
 
-  ChangesetHidden             A kind the tree is not      Comment’s colour,
-                              showing, in the kind menu   struck through
+  ChangesetHidden              A kind the tree is not      Comment’s colour,
+                               showing, in the kind menu   struck through
 
-  ChangesetHeader             The sidebar’s header strip  TabLine’s background
+  ChangesetHeader              The sidebar’s header strip  TabLine’s background
 
-  ChangesetHeaderIcon         The branch glyph on the     Directory’s colour on
-                              header                      the header
+  ChangesetHeaderIcon          The branch glyph on the     Directory’s colour on
+                               header                      the header
 
-  ChangesetHeaderDim          The remote, nouns and PR on Comment’s colour on
-                              the header                  the header
+  ChangesetHeaderDim           The remote, nouns and PR on Comment’s colour on
+                               the header                  the header
 
-  ChangesetHeaderRef          The ref the tree is         Normal’s colour on the
-                              compared against            header, bold
+  ChangesetHeaderRef           The ref the tree is         Normal’s colour on the
+                               compared against            header, bold
 
-  ChangesetHeaderPending      The circle beside the PR    DiagnosticOk’s colour
-                              while you have a pending    on the header
-                              review on it
+  ChangesetHeaderPending       The circle beside the PR    DiagnosticOk’s colour
+                               while you have a pending    on the header
+                               review on it
 
-  ChangesetHeaderNotPending   The circle while you have   links to
-                              none                        ChangesetHeaderDim
+  ChangesetHeaderNotPending    The circle while you have   links to
+                               none                        ChangesetHeaderDim
 
-  ChangesetBadge              The badge in the footer     Directory’s colour,
-                                                          reversed, bold
+  ChangesetReviewComment       A review comment’s circle   DiagnosticOk’s colour,
+                               and the line numbers it     bold
+                               covers in its file
 
-  ChangesetFooter             The footer’s text           Comment’s colour on
-                                                          StatusLine
+  ChangesetReviewCommentBody   A review comment’s body     links to ChangesetMeta
+                               after its circle
 
-  ChangesetFooterKey          Keys and the filter in the  StatusLine, bold
-                              footer
+  ChangesetBadge               The badge in the footer     Directory’s colour,
+                                                           reversed, bold
 
-  ChangesetSelected           The sidebar’s cursor row    Normal’s background
-                              while focused               tinted toward
-                                                          Statement
+  ChangesetFooter              The footer’s text           Comment’s colour on
+                                                           StatusLine
 
-  ChangesetHere               The row for where your      a lighter Statement
-                              cursor is                   tint
+  ChangesetFooterKey           Keys and the filter in the  StatusLine, bold
+                               footer
 
-  ChangesetPicked             The row last opened from    a lighter Statement
-                              the sidebar                 tint
+  ChangesetSelected            The sidebar’s cursor row    Normal’s background
+                               while focused               tinted toward
+                                                           Statement
 
-  ChangesetSelectedIcon       The glyph on the selected   Statement’s colour
-                              row
+  ChangesetHere                The row for where your      a lighter Statement
+                               cursor is                   tint
 
-  ChangesetHereIcon           The glyph on the row for    Statement’s colour
-                              where you are
+  ChangesetPicked              The row last opened from    a lighter Statement
+                               the sidebar                 tint
 
-  ChangesetPickedIcon         The glyph on the row last   Statement’s colour
-                              opened
+  ChangesetSelectedIcon        The glyph on the selected   Statement’s colour
+                               row
 
-  ChangesetNoCursor           The cursor while in the     fully blended
-                              sidebar, hidden
+  ChangesetHereIcon            The glyph on the row for    Statement’s colour
+                               where you are
 
-  ChangesetPreview            The band over a window      CursorLine’s
-                              being previewed into        background, else
-                                                          Visual’s
+  ChangesetPickedIcon          The glyph on the row last   Statement’s colour
+                               opened
 
-  ChangesetPreviewLabel       The badge at the head of    DiagnosticWarn’s
-                              that band                   colour, reversed, bold
+  ChangesetNoCursor            The cursor while in the     fully blended
+                               sidebar, hidden
 
-  ChangesetPreviewHint        The hint at the tail of     Comment’s colour on
-                              that band                   the band, italic
+  ChangesetPreview             The band over a window      CursorLine’s
+                               being previewed into        background, else
+                                                           Visual’s
 
-  ChangesetPreviewIcon        The file’s glyph on that    the file icon’s colour
-                              band                        on the band
-  ------------------------------------------------------------------------------
+  ChangesetPreviewLabel        The badge at the head of    DiagnosticWarn’s
+                               that band                   colour, reversed, bold
+
+  ChangesetPreviewHint         The hint at the tail of     Comment’s colour on
+                               that band                   the band, italic
+
+  ChangesetPreviewIcon         The file’s glyph on that    the file icon’s colour
+                               band                        on the band
+  -------------------------------------------------------------------------------
 A colorscheme’s definition of a group wins. So does your own `nvim_set_hl`,
 until the next `:colorscheme` clears it. To keep an override across colorscheme
 changes, set it from a `ColorScheme` autocmd:

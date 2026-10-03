@@ -363,6 +363,28 @@ view unless asked, so the sidebar scrolls them back in whenever it returns to it
 scroll away with the tree like any row would. Until the first diff is in the row is absent,
 rather than claiming that nothing changed.
 
+### Review comments in their files
+
+```text
+  7 ▎ local function find(root)        ● cache this per root?
+  8   if not ok then                   ● say which ref failed
+  9     return nil
+ 10   end                              ● ok here ● and simplify
+```
+
+Each review comment of the pending review is marked in its file's buffer by two things.
+Its line numbers, every line of a range, turn `ChangesetReviewComment`: the header
+circle's `DiagnosticOk` green, bold. The number column is the one margin gitsigns leaves
+alone, so the mark sits beside the `▎` without competing for its cell, and lighting every
+number of a range shows how far the cursor can be and still reach that review comment.
+With `'number'` and `'relativenumber'` both off there is no such column, and a range shows
+only its first line's circle. At the end of its first line sits the header's `●` in the
+same green, followed by the body's first line in `ChangesetReviewCommentBody`, `Comment`
+and italic: the § Three levels "not content" idiom, since the body is not the file's text.
+Two review comments on one line show as two circles, each with its own body, in the order
+GitHub lists them; their ranges' number colours merge. The marks are drawn from the header
+circle's answer, so they appear, update and disappear when it does, and for the same tree.
+
 ### Footer
 
 ```text
@@ -455,7 +477,10 @@ or not the sidebar is showing: after a write, when a buffer is reloaded because 
 changed outside Neovim, when Neovim regains focus, and when gitsigns sees HEAD move. Its
 per-buffer `GitSignsUpdate` is not one of them. It fires on every attach and every hunk
 change while typing, none of which moves a diff git reads from disk, and the symbol walk's
-own buffer loads would fire it too, restarting the walk they came from.
+own buffer loads would fire it too, restarting the walk they came from. Any of these that
+finds HEAD on another branch with a fork point rebuilds the tree for that branch instead,
+so the header, its circle and the review comment marks follow a switch made outside the
+sidebar. A detached HEAD, as in a stopped rebase or a bisect, only refreshes.
 
 Asking a language server about every changed file is what makes a cold build slow: 28
 files took about nine seconds in the config the plugin was extracted from, and the tree
@@ -520,7 +545,9 @@ repository's deliberate choice is none of that save's business.
   `BufRead` chain that would otherwise detect one. gitsigns is attached explicitly for the
   same reason: `BufRead` is what it attaches on. Its own `BufEnter` is run explicitly too,
   and only its own: gitsigns puts off signing a buffer it attached off screen — every file
-  the symbol walk loaded — until that buffer is entered, which a preview never does.
+  the symbol walk loaded — until that buffer is entered, which a preview never does. The
+  review comment marks' `BufReadPost` is run explicitly for the same reason, so a
+  previewed file shows its marks.
 - **`?` documents the sidebar, not its buffer.** A buffer collects mappings from whoever
   wants one — a blanket `FileType` autocmd elsewhere in a user's config is all it takes —
   and those keys are not this sidebar's interface. The keys it sets are recorded as it
