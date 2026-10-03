@@ -45,6 +45,21 @@ function M.answer(answer)
   vim.fn.writefile({ tostring(answer.code or 0) }, dir .. "/code")
 end
 
+local fixtures = vim.fs.dirname(vim.fs.dirname(debug.getinfo(1, "S").source:sub(2))) .. "/fixtures/github-reviews"
+
+---Queue a recorded GitHub response: `<name>.json` as stdout, plus `<name>.stderr` and
+---code 1 when that file exists.
+---@param name string
+function M.fixture(name)
+  local path = ("%s/%s"):format(fixtures, name)
+  local failed = vim.fn.filereadable(path .. ".stderr") == 1
+  M.answer({
+    stdout = vim.fn.readblob(path .. ".json"),
+    stderr = failed and vim.fn.readblob(path .. ".stderr") or nil,
+    code = failed and 1 or 0,
+  })
+end
+
 ---A `gh pr view --json` body for an open PR on github.com, with `fields` merged over it.
 ---@param fields table<string, any>
 ---@return string

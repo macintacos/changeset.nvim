@@ -78,3 +78,14 @@ _Avoid_: filter state
 Symbol kinds the tree leaves out, saved for this branch, this repository or everywhere,
 narrowest first.
 _Avoid_: kind filter
+
+### PR reviews
+
+**Pending review**:
+The viewer's unsubmitted GitHub review on the branch's PR, holding review comments until
+it is submitted or deleted. GitHub allows one per viewer per PR.
+_Avoid_: bare "review", which is PR Review Mode (`lua/changeset/review.lua`); draft review
+
+**Review comment**:
+A comment in a pending review, on one line or a range of lines of a file in the PR.
+_Avoid_: bare "comment", which is a source-code comment (`changeset.comments`)
