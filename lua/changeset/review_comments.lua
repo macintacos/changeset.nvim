@@ -25,14 +25,20 @@ end
 ---@param lnum integer
 ---@return changeset.ReviewComment?
 function M.at(comments, path, lnum)
-  local best, width
+  local narrowest, narrowest_width
   for _, comment in ipairs(comments) do
     local first, last = span(comment)
-    if comment.path == path and first and first <= lnum and lnum <= last and not (width and last - first >= width) then
-      best, width = comment, last - first
+    if
+      comment.path == path
+      and first
+      and first <= lnum
+      and lnum <= last
+      and not (narrowest_width and last - first >= narrowest_width)
+    then
+      narrowest, narrowest_width = comment, last - first
     end
   end
-  return best
+  return narrowest
 end
 
 ---@param buf integer
