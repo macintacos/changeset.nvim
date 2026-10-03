@@ -32,6 +32,8 @@ describe("review_comment_window", function()
       line = 5,
       title = "line 5",
       footer = "pending review on #412",
+      save_desc = "Save",
+      close_desc = "Close",
       keys = SAVE_KEYS,
       save = function(body, done)
         saves[#saves + 1] = body
@@ -79,15 +81,25 @@ describe("review_comment_window", function()
 
     assert.equal("markdown", vim.bo[buf].filetype)
     assert.is_true(vim.bo[buf].modifiable)
-    assert.truthy(config.title[1][1]:find("lines 4-5", 1, true))
+    assert.equal(" lines 4-5 ", config.title[1][1])
     assert.truthy(config.footer[1][1]:find("pending review on #7", 1, true))
+  end)
+
+  it("describes its keys with the descriptions it is given", function()
+    local _, buf = open({ save_desc = "Save it", close_desc = "Close it" })
+    for _, mode in ipairs({ "i", "n" }) do
+      for _, lhs in ipairs(SAVE_KEYS) do
+        assert.equal("Save it", buffer_map(buf, mode, lhs).desc)
+      end
+      assert.equal("Close it", buffer_map(buf, mode, "<S-Esc>").desc)
+    end
+    assert.equal("Close it", buffer_map(buf, "n", "q").desc)
   end)
 
   it("saves on each save key, in insert and normal mode", function()
     local _, buf = open()
     for _, mode in ipairs({ "i", "n" }) do
       for _, lhs in ipairs(SAVE_KEYS) do
-        assert.truthy(buffer_map(buf, mode, lhs).desc)
         local before = #saves
         press(buf, mode, lhs)
         assert.equal(before + 1, #saves)

@@ -10,9 +10,11 @@ local MIN_WIDTH = 20
 
 ---@class changeset.ReviewCommentWindowOpts
 ---@field line integer The current window's buffer line it opens under, 1-based.
----@field title string Names the line or lines, e.g. "line 42", "lines 40-42".
+---@field title string The whole title, e.g. "Review comment · line 42".
 ---@field footer string Names where a save goes, e.g. "pending review on #412".
 ---@field keys string[] Keys that save, in insert and normal mode.
+---@field save_desc string Describes the save keys.
+---@field close_desc string Describes the keys that close without saving.
 ---@field save fun(body: string, done: fun(err: string?)) Called with the buffer's lines joined by "\n"; the window closes once `done` gets no error.
 ---@field keep fun(body: string) Called with the buffer's lines joined by "\n", empty included, whenever the buffer goes (a close, an :e in the float, quitting) except after a taken save.
 ---@field body string? The text it opens with.
@@ -39,7 +41,7 @@ function M.open(opts)
     height = HEIGHT,
     style = "minimal",
     border = "rounded",
-    title = " Review comment · " .. opts.title .. " ",
+    title = " " .. opts.title .. " ",
     title_pos = "left",
     footer = " " .. opts.footer .. " ",
     footer_pos = "left",
@@ -100,12 +102,12 @@ function M.open(opts)
 
   local map, own = help.mapper(buf)
   for _, lhs in ipairs(opts.keys) do
-    vim.keymap.set("i", lhs, save, { buffer = buf, desc = "Save into the pending review" })
-    map(lhs, save, "Save into the pending review")
+    vim.keymap.set("i", lhs, save, { buffer = buf, desc = opts.save_desc })
+    map(lhs, save, opts.save_desc)
   end
-  vim.keymap.set("i", "<S-Esc>", close, { buffer = buf, desc = "Close, keeping the text as a draft" })
-  map("<S-Esc>", close, "Close, keeping the text as a draft")
-  map("q", close, "Close, keeping the text as a draft")
+  vim.keymap.set("i", "<S-Esc>", close, { buffer = buf, desc = opts.close_desc })
+  map("<S-Esc>", close, opts.close_desc)
+  map("q", close, opts.close_desc)
   map("?", function()
     help.show(buf, own)
   end, "Show these keymaps")

@@ -182,7 +182,9 @@ function M.comment(first, last)
   local review_id, number = found.review.id, found.pr.number
   review_comment_window.open({
     line = last,
-    title = first < last and ("lines %d-%d"):format(first, last) or ("line %d"):format(last),
+    title = "Review comment · " .. (first < last and ("lines %d-%d"):format(first, last) or ("line %d"):format(last)),
+    save_desc = "Save into the pending review",
+    close_desc = "Close, keeping the text as a draft",
     footer = ("pending review on #%d"):format(number),
     keys = config.get().review_comment.save,
     body = draft and draft.body,
