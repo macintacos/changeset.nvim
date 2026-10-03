@@ -34,6 +34,20 @@ function M.default_base(cwd)
   return "main"
 end
 
+---Whether the file at `path` on disk is the one commit `commit` holds; nil when the clone lacks `commit`.
+---@param root string
+---@param commit string
+---@param path string Repo-relative.
+---@return boolean?
+function M.matches_commit(root, commit, path)
+  -- Without `^{commit}`, `--verify --quiet` echoes a missing full SHA back and succeeds.
+  if #M.lines({ "git", "rev-parse", "--verify", "--quiet", commit .. "^{commit}" }, root) == 0 then
+    return nil
+  end
+  local at_commit = M.lines({ "git", "rev-parse", "--verify", "--quiet", commit .. ":" .. path }, root)[1]
+  return at_commit ~= nil and at_commit == M.lines({ "git", "hash-object", "--", path }, root)[1]
+end
+
 ---Resolve the commit where HEAD forked from `branch`.
 ---@param cwd string? Repository to measure; Neovim's own directory when absent.
 ---@param branch string Branch to measure against.

@@ -556,6 +556,10 @@ repository's deliberate choice is none of that save's business.
 - **A saved review comment leaves insert mode before the window closes.** The save keys
   are pressed while typing and the answer comes later; closing without `stopinsert` would
   leave the user in insert mode in their own file, where the next keys edit their code.
+- **Opening the review comment window asks GitHub nothing.** It reads the PR's head and
+  pending review from GitHub's last answer, so right after a push made inside Neovim it can
+  refuse the file as differing from the head until `:Changeset pr start` or regaining focus
+  refetches.
 - **`<C-s>` saves alongside `<C-CR>`** because many terminals never send `<C-CR>`.
 - **A file cached before its parser was installed keeps just the name rules** until it
   next changes: its entry was read without the syntax layer, and its stamp still matches.

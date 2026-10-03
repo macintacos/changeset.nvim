@@ -27,6 +27,9 @@ local subcommands = {
     abandon = function()
       require("changeset.pr").abandon()
     end,
+    comment = function(opts)
+      require("changeset.pr").comment(opts.line1, opts.line2)
+    end,
     delete = function()
       require("changeset.pr").delete()
     end,
@@ -68,13 +71,14 @@ vim.api.nvim_create_user_command("Changeset", function(opts)
   if not run then
     return vim.notify("Changeset: unknown subcommand " .. opts.args, vim.log.levels.ERROR)
   end
-  run()
+  run(opts)
 end, {
   nargs = "?",
+  range = true,
   bar = true,
-  desc = "Toggle the changeset sidebar, rebuild it, toggle PR Review Mode, start or abandon the PR's pending review, or delete a review comment from it",
+  desc = "Toggle the changeset sidebar, rebuild it, toggle PR Review Mode, start or abandon the PR's pending review, or add a review comment to it or delete one",
   complete = function(lead, line)
-    -- Parses the last `|` segment so a modifier or earlier command still completes; a range makes it raise.
+    -- Parses the last `|` segment so a modifier or earlier command still completes; an unset mark in a range makes it raise.
     local ok, cmd = pcall(vim.api.nvim_parse_cmd, line:match("[^|]*$"), {})
     if not ok then
       return {}

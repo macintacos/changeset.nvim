@@ -91,6 +91,7 @@ closes it. It takes one optional subcommand, and `pr` takes a verb:
   current branch. It raises an error unless `pr_review.enabled` is set.
 - `:Changeset pr start` starts a [pending review](#pr-reviews) on the branch's open PR.
 - `:Changeset pr abandon` deletes the branch's [pending review](#pr-reviews).
+- `:Changeset pr comment` writes a review comment into the [pending review](#pr-reviews).
 - `:Changeset pr delete` deletes the review comment on the cursor's line from the branch's
   [pending review](#pr-reviews).
 
@@ -169,14 +170,21 @@ It works without the sidebar, and the sidebar works without it.
 ## PR reviews
 
 A pending review is where GitHub holds your review comments on a PR until you submit or
-delete it. You have at most one per PR. All three commands below work with the sidebar
-closed.
+delete it. You have at most one per PR. `pr start`, `pr abandon` and `pr delete` work with
+the sidebar closed.
 
 - `:Changeset pr start` starts a pending review on the branch's open PR. It needs an open
   PR and `gh` signed in. When a pending review is already under way, including one started
   on github.com, it says so instead.
 - `:Changeset pr abandon` asks y/n, then deletes the pending review and every review
   comment in it.
+- `:Changeset pr comment` opens a markdown window under the cursor's line; from visual
+  mode, `:'<,'>Changeset pr comment` opens it under the selection and comments on the
+  selected lines. It needs a pending review, a sidebar opened on the repository so the
+  PR's diff is read (you can close it again), the PR's head commit fetched, and lines
+  inside the PR's diff in a saved file that matches that head. The keys in
+  `review_comment.save`, `<C-CR>` or `<C-s>` by default, save it into the pending review
+  and close the window; `q` closes it without saving.
 - `:Changeset pr delete` deletes the review comment on the cursor's line, without asking.
   When several take in that line, it deletes the narrowest; run it again for the next.
   When the line has none, it says so. In a modified buffer it asks you to save first:

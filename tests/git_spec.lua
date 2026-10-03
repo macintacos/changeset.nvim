@@ -233,4 +233,43 @@ describe("changeset.git", function()
       assert.is_string((ask(tmp .. "/missing")))
     end)
   end)
+
+  describe("matches_commit", function()
+    local head
+
+    before_each(function()
+      Fixture.init_repo("main", tmp)
+      vim.fn.writefile({ "one" }, tmp .. "/a.lua")
+      head = Fixture.commit("a", tmp)
+    end)
+
+    it("is true for a file unchanged since the commit", function()
+      assert.is_true(Git.matches_commit(tmp, head, "a.lua"))
+    end)
+
+    it("is false for a file edited since the commit", function()
+      vim.fn.writefile({ "two" }, tmp .. "/a.lua")
+      assert.is_false(Git.matches_commit(tmp, head, "a.lua"))
+    end)
+
+    it("is false for a file the commit doesn't hold", function()
+      vim.fn.writefile({ "new" }, tmp .. "/b.lua")
+      assert.is_false(Git.matches_commit(tmp, head, "b.lua"))
+    end)
+
+    it("is nil for a commit the clone lacks", function()
+      assert.is_nil(Git.matches_commit(tmp, "0123456789abcdef0123456789abcdef01234567", "a.lua"))
+    end)
+
+    it("checks the repository it is given rather than the one Neovim sits in", function()
+      local outside = vim.fn.tempname()
+      vim.fn.mkdir(outside, "p")
+      vim.fn.chdir(outside)
+
+      local matches = Git.matches_commit(tmp, head, "a.lua")
+
+      vim.fn.delete(outside, "rf")
+      assert.is_true(matches)
+    end)
+  end)
 end)
