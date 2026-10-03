@@ -341,6 +341,50 @@ in normal mode, `<S-Esc>` in either mode where the terminal sends it, `:q`, `<C-
 them all, since the buffer goes with the window (`bufhidden=wipe`). Plain `<Esc>` still
 only leaves insert mode, so a habitual `<Esc>` on the way to normal mode never closes it.
 
+### The submit preview shows what goes out before it goes
+
+`:Changeset pr submit` opens the pending review as GitHub would receive it:
+
+```text
+╭ Submit review · #412 ───────────────────────────────╮
+│  Comment   Approve   Request changes                │
+│                                                     │
+│ No body. b to write one.                            │
+│                                                     │
+│ ● lua/changeset/pr.lua:42      say which ref failed │
+│ ● lua/changeset/pr.lua:50-55   cache this per root? │
+│ ● README.md  outdated, was 12  fix the typo         │
+│ ● doc/x.md  outdated           gone                 │
+│ ● doc/notes.md  file           move this section    │
+│                                                     │
+│ ○ lua/changeset/view.lua:7  draft, not included     │
+╰ comment on #412 ────────────────────────────────────╯
+```
+
+It follows the kind menu's float, with two divergences. It is centred in the editor
+rather than docked, because `pr` verbs work with the sidebar closed and nothing behind it
+redraws. The event is chosen inside it, one key each (`c`, `a`, `r`), rather than in a
+picker, so checking what goes out and choosing how stay in one window. The chosen event
+is lit in `ChangesetSelected`, the sidebar's "this is the one" tint, so no new group is
+needed. On your own PR only Comment is offered, and the event row is left out rather
+than drawn with one choice.
+
+Every glyph is borrowed: `●` in `ChangesetReviewComment` for what is sent, `○` in
+`ChangesetReviewDraft` for drafts, bodies in `ChangesetReviewCommentBody`. What is not
+content is `ChangesetMeta`: `outdated, was 12`, plain `outdated` when GitHub gave no
+original line, `file` for a file-level review comment, `draft, not included`, and the two
+empty states. Places are padded to one column so the bodies line up. Those empty states
+direct, as § Empty and failed states do: `No body. b to write one.`, and `No review
+comments. Only the body is sent.` for the review `pr start` creates. Only drafts at the
+PR's current head are listed; older-head drafts aren't drawn anywhere, so they aren't
+named here either.
+
+The title names the PR; the footer says what `<CR>` sends — `comment on #412`,
+`approve #412`, `request changes on #412` — and changes with the choice. `b` opens the
+review comment window under the body row, titled `Review body`; a save key or `q` both
+keep what was written, and a body of only whitespace is sent as none. The width fits the
+widest row between 44 and 96 columns, and the height fits the rows.
+
 ### Stats
 
 Right-aligned virtual text, `+N` in `GitSignsAdd`, `-N` in `GitSignsDelete`. Numbers, not
@@ -576,6 +620,11 @@ repository's deliberate choice is none of that save's business.
   pending review from GitHub's last answer, so right after a push made inside Neovim it can
   refuse the file as differing from the head until `:Changeset pr start` or regaining focus
   refetches.
+- **Every close of the submit preview returns focus to where it opened from.** Closing
+  the body float leaves `prevwin` on the preview, so once the preview closes too Neovim
+  falls back to the first window. Closing the preview by any route closes the body float
+  with it, and the float's callbacks are ignored from then on: a `relative = "win"`
+  float outlives its anchor, and its keep would redraw a wiped buffer.
 - **`<C-s>` saves alongside `<C-CR>`** because many terminals never send `<C-CR>`.
 - **A file cached before its parser was installed keeps just the name rules** until it
   next changes: its entry was read without the syntax layer, and its stamp still matches.
