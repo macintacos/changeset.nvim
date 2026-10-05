@@ -225,21 +225,30 @@ new branch or PR, when Neovim regains focus, and after `:Changeset pr start`, `p
 the PR number is (no open PR, `gh` missing or signed out) and until GitHub first answers.
 
 Each review comment in your pending review, including ones added on github.com, is marked
-in its file's buffer: the line numbers it covers turn green, and its first line ends with
-a green circle and the first line of its body, drawn in `ChangesetReviewComment` and
+in its file's buffer: a green comment bubble, `󰍩`, fills the sign column on its first line
+over any other sign there, the line numbers it covers turn green, and its first line ends
+with a green circle and the first line of its body, drawn in `ChangesetReviewComment` and
 `ChangesetReviewCommentBody`. The marks appear once the sidebar or the picker has built
 the tree for the repository, and stay with the sidebar closed. Outdated and file-level
 review comments have no line, so they aren't drawn. The marks update with the circle: when
 the branch or its PR changes, including a branch switch made outside the sidebar, when
 Neovim regains focus, and after `:Changeset pr start`, `pr submit`, `pr abandon` and
 `pr delete`, and after a review comment is saved. A file you open later is marked from the
-last answer, without asking GitHub again.
+last answer, without asking GitHub again. The bubble needs a Nerd Font.
 
-Each draft of the PR is marked the same way with a hollow circle, drawn in
-`ChangesetReviewDraft`, whether or not a pending review exists. Its mark appears and goes
-as the draft is kept or deleted. A draft written against an older head of the PR isn't
-drawn or reopened; it stays in the file until `pr abandon`, and drafts of closed or merged
-PRs stay too.
+Each draft of the PR is marked the same way with an outline bubble, `󰍪`, and a hollow
+circle, drawn in `ChangesetReviewDraft`, whether or not a pending review exists. Its mark
+appears and goes as the draft is kept or deleted. A draft written against an older head of
+the PR isn't drawn or reopened; it stays in the file until `pr abandon`, and drafts of
+closed or merged PRs stay too. A line shows one bubble, a review comment's over a draft's.
+
+A `'statuscolumn'` can draw the bubbles somewhere else. They are the only extmarks in the
+namespace `changeset.review_comment_signs`, at most one on a line.
+`vim.api.nvim_create_namespace("changeset.review_comment_signs")` returns its id, and
+`vim.api.nvim_buf_get_extmarks(buf, id, { row, 0 }, { row, -1 }, { details = true })`,
+with `row` as `v:lnum - 1`, returns the line's bubble, if any. Its details hold
+`sign_text`, `"󰍩 "` or `"󰍪 "` (Neovim pads it to two cells), and `sign_hl_group`,
+`ChangesetReviewComment` or `ChangesetReviewDraft`.
 
 ## Picker
 
@@ -315,9 +324,9 @@ The sidebar derives each group's default from your colorscheme, and derives it a
 | `ChangesetHeaderRef` | The ref the tree is compared against | `Normal`'s colour on the header, bold |
 | `ChangesetHeaderPending` | The circle beside the PR while you have a pending review on it | `DiagnosticOk`'s colour on the header |
 | `ChangesetHeaderNotPending` | The circle while you have none | links to `ChangesetHeaderDim` |
-| `ChangesetReviewComment` | A review comment's circle and the line numbers it covers in its file | `DiagnosticOk`'s colour, bold |
+| `ChangesetReviewComment` | A review comment's bubble, its circle and the line numbers it covers in its file | `DiagnosticOk`'s colour, bold |
 | `ChangesetReviewCommentBody` | A review comment's body after its circle | links to `ChangesetMeta` |
-| `ChangesetReviewDraft` | A draft's hollow circle and the line numbers it covers in its file | `DiagnosticInfo`'s colour, bold |
+| `ChangesetReviewDraft` | A draft's outline bubble, its hollow circle and the line numbers it covers in its file | `DiagnosticInfo`'s colour, bold |
 | `ChangesetBadge` | The badge in the footer | `Directory`'s colour, reversed, bold |
 | `ChangesetFooter` | The footer's text | `Comment`'s colour on `StatusLine` |
 | `ChangesetFooterKey` | Keys and the filter in the footer | `StatusLine`, bold |

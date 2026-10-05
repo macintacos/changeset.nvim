@@ -450,33 +450,53 @@ rather than claiming that nothing changed.
 ### Review comments in their files
 
 ```text
-  7 ▎ local function find(root)        ● cache this per root?
-  8   if not ok then                   ● say which ref failed
-  9     return nil
- 10   end                              ● ok here ● and simplify
+  7 󰍩 local function find(root)        ● cache this per root?
+  8 󰍩 if not ok then                   ● say which ref failed
+  9 ▎   return nil
+ 10 󰍩 end                              ● ok here ● and simplify
 ```
 
-Each review comment of the pending review is marked in its file's buffer by two things.
+Each review comment of the pending review is marked in its file's buffer by three things.
 Its line numbers, every line of a range, turn `ChangesetReviewComment`: the header
 circle's `DiagnosticOk` green, bold. The number column is the one margin gitsigns leaves
-alone, so the mark sits beside the `▎` without competing for its cell, and lighting every
+alone, so the numbers sit beside the `▎` without competing for its cell, and lighting every
 number of a range shows how far the cursor can be and still reach that review comment.
 With `'number'` and `'relativenumber'` both off there is no such column, and a range shows
-only its first line's circle. At the end of its first line sits the header's `●` in the
-same green, followed by the body's first line in `ChangesetReviewCommentBody`, `Comment`
-and italic: the § Three levels "not content" idiom, since the body is not the file's text.
-Two review comments on one line show as two circles, each with its own body, in the order
-GitHub lists them; their ranges' number colours merge. The marks are drawn from the header
-circle's answer, so they appear, update and disappear when it does, and for the same tree.
+only its first line's bubble and circle. At the end of its first line sits the header's `●`
+in the same green, followed by the body's first line in `ChangesetReviewCommentBody`,
+`Comment` and italic: the § Three levels "not content" idiom, since the body is not the
+file's text. Two review comments on one line show as two circles, each with its own body,
+in the order GitHub lists them; their ranges' number colours merge. The marks are drawn
+from the header circle's answer, so they appear, update and disappear when it does, and
+for the same tree.
 
-A draft is marked the same way, with `○` and its numbers in `ChangesetReviewDraft`, and
-its body in the same `ChangesetReviewCommentBody`. `○` is the `●`'s hollow twin, and the
-`DiagnosticInfo` blue a deliberate divergence like the `●`'s green: hollow and blue
-against the saved review comment's solid green says "only on this machine" at a glance,
-and blue because yellow already means "on loan". Drafts need the PR's identity and head
-from the header circle's answer, so they appear with it, but whether a pending review
-exists doesn't matter. A draft written against an older head isn't drawn, since its lines
-may have moved.
+The third mark, a comment bubble `󰍩` in the same group, takes the sign column on the first
+line, and it is the one that does compete for a cell. It is left at the default extmark
+priority, 4096, far above gitsigns' 6 and a diagnostic's 10 and up, so it covers whatever
+sign the line had: while a review comment is open, that is what the line is about. It goes
+on the first line only. The lit numbers already show how far a range reaches, and a
+statuscolumn that draws the bubble in its fold column would lose every fold marker down a
+long range. A line gets one bubble however many review comments start on it, and a review
+comment's wins over a draft's, so the bubbles never stack. Under `'signcolumn'` `auto` they
+never widen the column, but the first bubble in a buffer with no other sign opens the
+column and shifts the text two cells. `auto:2` and wider still widen by one where a bubble
+shares its line with another sign. `yes` holds the text still. The bubbles live in a
+namespace of their own, `changeset.review_comment_signs`, so a statuscolumn can find a
+line's without sorting through the numbers and circles; `README.md` states that contract.
+
+No icon plugin has a category to ask for a comment, so, like the header's branch glyph,
+the bubble is borrowed rather than looked up: `󰍩` is nerd-font Material `message-text`, the
+glyph the config's which-key spec gives its messages entry. Without a nerd font it draws
+as a missing-glyph box, as the header's glyphs do.
+
+A draft is marked the same way, with `󰍪`, `○` and its numbers in `ChangesetReviewDraft`,
+and its body in the same `ChangesetReviewCommentBody`. `○` is the `●`'s hollow twin and
+`󰍪` the bubble's outline twin, and the `DiagnosticInfo` blue a deliberate divergence like
+the `●`'s green: hollow and blue against the saved review comment's solid green says "only
+on this machine" at a glance, and blue because yellow already means "on loan". Drafts need
+the PR's identity and head from the header circle's answer, so they appear with it, but
+whether a pending review exists doesn't matter. A draft written against an older head
+isn't drawn, since its lines may have moved.
 
 ### Footer
 

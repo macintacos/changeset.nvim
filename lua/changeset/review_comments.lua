@@ -8,6 +8,9 @@ local M = {}
 
 local ns = vim.api.nvim_create_namespace("changeset.review_comments")
 
+-- Holds only the bubbles, so a statuscolumn can find a line's without sorting out the rest.
+local sign_ns = vim.api.nvim_create_namespace("changeset.review_comment_signs")
+
 -- ponytail: lines are the PR head's, so where the file on disk differs from the head (unpushed commits, saved uncommitted edits) marks and delete land off by the lines moved above; hide marks in such a file if that bites.
 -- ponytail: a LEFT-side review comment (on a deleted line) spans its number in the new file; skip LEFT once it is recorded.
 ---@class changeset.Spanned
@@ -49,20 +52,36 @@ function M.at(comments, path, lnum)
   return narrowest
 end
 
+---@class changeset.review_comments.Look
+---@field circle string Leads the body at the end of the first line.
+---@field bubble string Fills the first line's sign column.
+---@field hl string
+
+---@type changeset.review_comments.Look
+local SAVED = { circle = "● ", bubble = "󰍩", hl = render.REVIEW_COMMENT_HL }
+
+---@type changeset.review_comments.Look
+local DRAFT = { circle = "○ ", bubble = "󰍪", hl = render.REVIEW_DRAFT_HL }
+
 ---@param buf integer
 ---@param spanned changeset.Spanned
----@param glyph string
----@param hl string
-local function mark(buf, spanned, glyph, hl)
+---@param look changeset.review_comments.Look
+local function mark(buf, spanned, look)
   local first, last = span(spanned)
-  vim.api.nvim_buf_set_extmark(buf, ns, first - 1, 0, {
+  local row = first - 1
+  vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
     end_row = last - 1,
-    number_hl_group = hl,
+    number_hl_group = look.hl,
     virt_text = {
-      { glyph, hl },
+      { look.circle, look.hl },
       { spanned.body:match("^[^\r\n]*"), render.REVIEW_COMMENT_BODY_HL },
     },
   })
+  -- The first bubble on a line stays: review comments are drawn before drafts.
+  if #vim.api.nvim_buf_get_extmarks(buf, sign_ns, { row, 0 }, { row, 0 }, { limit = 1 }) == 0 then
+    -- The default priority, 4096, draws it over gitsigns' and diagnostics' signs.
+    vim.api.nvim_buf_set_extmark(buf, sign_ns, row, 0, { sign_text = look.bubble, sign_hl_group = look.hl })
+  end
 end
 
 ---@class changeset.review_comments.Marks
@@ -88,6 +107,7 @@ end
 ---@param marks changeset.review_comments.Marks?
 local function draw(buf, marks)
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+  vim.api.nvim_buf_clear_namespace(buf, sign_ns, 0, -1)
   local name = vim.api.nvim_buf_get_name(buf)
   if not marks or name == "" then
     return
@@ -102,12 +122,12 @@ local function draw(buf, marks)
   end
   for _, comment in ipairs(marks.comments) do
     if fits(comment) then
-      mark(buf, comment, "● ", render.REVIEW_COMMENT_HL)
+      mark(buf, comment, SAVED)
     end
   end
   for _, draft in ipairs(marks.drafts) do
     if fits(draft) then
-      mark(buf, draft, "○ ", render.REVIEW_DRAFT_HL)
+      mark(buf, draft, DRAFT)
     end
   end
 end

@@ -20,6 +20,7 @@ package.loaded["changeset.pending_state"] = {
 }
 
 require("changeset.review_comments")
+local drafts = require("changeset.drafts")
 local render = require("changeset.render")
 
 ---@param path string
@@ -60,6 +61,16 @@ local function rows(buf)
   end, marks(buf))
 end
 
+---Each sign's row, text and group, found the way a statuscolumn would find them.
+---@param buf integer
+---@return table[]
+local function signs(buf)
+  local ns = vim.api.nvim_create_namespace("changeset.review_comment_signs")
+  return vim.tbl_map(function(mark)
+    return { mark[2], mark[4].sign_text, mark[4].sign_hl_group }
+  end, vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true }))
+end
+
 ---@param count integer
 ---@param name string
 local function lines(count, name)
@@ -89,6 +100,7 @@ describe("review_comments", function()
 
   after_each(function()
     vim.cmd("silent! %bwipeout!")
+    os.remove(drafts.path())
     vim.fn.delete(dir, "rf")
     if other then
       vim.fn.delete(other, "rf")
@@ -169,6 +181,51 @@ describe("review_comments", function()
     local details = assert(marks(beta)[1][4])
     assert.are.equal(render.REVIEW_COMMENT_HL, details.number_hl_group)
     assert.are.same({ { "● ", render.REVIEW_COMMENT_HL }, { "b", render.REVIEW_COMMENT_BODY_HL } }, details.virt_text)
+  end)
+
+  it("puts a bubble in the sign column on each review comment's first line", function()
+    found = full_answer()
+    on_answer()
+    local bubble, hl = "󰍩 ", render.REVIEW_COMMENT_HL
+    assert.are.same({ { 7, bubble, hl }, { 9, bubble, hl }, { 12, bubble, hl }, { 30, bubble, hl } }, signs(alpha))
+    assert.are.same({ { 15, bubble, hl } }, signs(beta))
+  end)
+
+  it("puts a hollow bubble on a draft's first line", function()
+    local pr = { id = "PR_1", number = 1, host = "github.com", owner = "o", name = "n", head = "h" }
+    found = { pr = pr }
+    drafts.keep(pr, { path = "beta.txt", line = 6, start_line = 5, head = "h", body = "d" })
+    assert.are.same({ { 4, "󰍪 ", render.REVIEW_DRAFT_HL } }, signs(beta))
+  end)
+
+  it("gives a line one bubble, a review comment's over a draft's", function()
+    found = full_answer()
+    found.pr = { id = "PR_1", number = 1, host = "github.com", owner = "o", name = "n", head = "h" }
+    drafts.keep(found.pr, { path = "beta.txt", line = 16, head = "h", body = "d" })
+    assert.are.same({ { 15, "󰍩 ", render.REVIEW_COMMENT_HL } }, signs(beta))
+  end)
+
+  it("draws the bubble over gitsigns' and diagnostics' signs on its line", function()
+    vim.wo.signcolumn = "yes"
+    -- 6 is gitsigns' default sign_priority.
+    vim.api.nvim_buf_set_extmark(beta, vim.api.nvim_create_namespace("spec.gitsigns"), 15, 0, {
+      sign_text = "▎",
+      priority = 6,
+    })
+    vim.diagnostic.set(vim.api.nvim_create_namespace("spec.diagnostics"), beta, {
+      { lnum = 15, col = 0, severity = vim.diagnostic.severity.ERROR, message = "x" },
+    })
+    found = full_answer()
+    on_answer()
+    assert.are.equal("󰍩 ", vim.api.nvim_eval_statusline("%s", { use_statuscol_lnum = 16 }).str)
+  end)
+
+  it("clears its bubbles with its marks", function()
+    found = full_answer()
+    on_answer()
+    found = { pr = found.pr }
+    on_answer()
+    assert.are.same({}, signs(beta))
   end)
 
   it("ends the line with only the first line of a CRLF body", function()
