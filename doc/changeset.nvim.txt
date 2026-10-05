@@ -295,10 +295,10 @@ GitHub it shows a Neovim progress message, which the message area draws as
 snacks pick up; none runs while a question or the submit preview waits on you.
 
 A branch created from a branch other than its PR’s target is compared against
-the branch it was created from, and the sidebar then leaves the PR out: its
-header shows no PR number or circle, its review comments and drafts aren’t
-marked, and `pr comment` refuses, since the lines it would offer are not the
-PR’s.
+the branch it was created from. When the branch forks from the PR’s target
+somewhere else, the sidebar then leaves the PR out: its header shows no PR
+number or circle, its review comments and drafts aren’t marked, and `pr
+comment` refuses, since the lines it would offer are not the PR’s.
 
 - `:Changeset pr start` starts a pending review on the branch’s open PR. It needs an open
     PR and `gh` signed in. When a pending review is already under way, including one started

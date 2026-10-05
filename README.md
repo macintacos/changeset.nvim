@@ -201,7 +201,8 @@ progress UIs such as fidget, noice and snacks pick up; none runs while a questio
 submit preview waits on you.
 
 A branch created from a branch other than its PR's target is compared against the branch
-it was created from, and the sidebar then leaves the PR out: its header shows no PR number
+it was created from. When the branch forks from the PR's target somewhere else, the
+sidebar then leaves the PR out: its header shows no PR number
 or circle, its review comments and drafts aren't marked, and `pr comment` refuses, since
 the lines it would offer are not the PR's.
 

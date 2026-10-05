@@ -46,8 +46,9 @@ local function measure(root, branch, pr)
   if parent and parent ~= default_branch then
     local parent_base, parent_ref = Git.merge_base(root, parent)
     if parent_base and not outgrown(root, parent_base, base) then
-      -- A review comment needs the tree's hunks to be the PR's, so the PR counts only while it merges into `parent`.
-      local number = pr and pr.target == parent and pr.number or nil
+      -- A review comment needs the tree's hunks to be the PR's, so the PR counts only while its target forks
+      -- from HEAD where `parent` does.
+      local number = pr and (pr.target == parent or Git.merge_base(root, pr.target) == parent_base) and pr.number or nil
       return { base = parent_base, ref = parent_ref, against = parent, default_branch = default_branch, pr = number }
     end
   end

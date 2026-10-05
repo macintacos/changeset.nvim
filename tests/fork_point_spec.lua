@@ -161,6 +161,36 @@ describe("fork_point", function()
     end
   end)
 
+  it("keeps the PR into the default branch once the parent is merged into it", function()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "main", number = 7 })
+    local root = repo("parent")
+    fixture.git({ "checkout", "-q", "main" }, root)
+    fixture.git({ "merge", "-q", "--no-ff", "-m", "merge parent", "parent" }, root)
+    fixture.git({ "checkout", "-q", "feature" }, root)
+
+    fork_point.get(root, "feature")
+    assert.is_true(await_heard(root, 1))
+
+    assert.equal(7, heard_in(root)[1].point.pr)
+  end)
+
+  it("keeps the PR into the default branch when the parent has no commits of its own", function()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "main", number = 7 })
+    local root = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(root, "p")
+    table.insert(roots, root)
+    fixture.init_repo("main", root)
+    commit_file(root, "main.txt")
+    fixture.git({ "checkout", "-q", "-b", "parent" }, root)
+    fixture.git({ "checkout", "-q", "-b", "feature", "parent" }, root)
+    commit_file(root, "feature.txt")
+
+    fork_point.get(root, "feature")
+    assert.is_true(await_heard(root, 1))
+
+    assert.equal(7, heard_in(root)[1].point.pr)
+  end)
+
   it("moves a branch created from the default branch to its PR's target", function()
     vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
     local root = repo("main")

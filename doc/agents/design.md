@@ -701,10 +701,13 @@ its parent, since there the parent's fork point descends from the default branch
 does a parent whose fork point is the default branch's, as before it has commits of its
 own.
 
-The PR stays on the tree only while its target is the parent. A review comment can only
-go on lines in the PR's diff, and `commentable` checks the tree's hunks, which match the
-PR's only when both are measured from the same branch. A branch whose PR targets another
-branch keeps its parent and loses the PR's number, circle, marks and `pr comment`. Showing
+The PR stays on the tree only while its target is the parent, or while HEAD forks from
+its target at the parent's fork point, as it does once the parent is merged into the
+target with a merge commit, or while the parent has no commits of its own. A review
+comment can only go on lines in the PR's diff, and `commentable` checks the tree's hunks,
+which match the PR's only when both are measured from the same commit. A branch whose PR
+targets a branch forking elsewhere keeps its parent and loses the PR's number, circle,
+marks and `pr comment`. Showing
 the PR there would offer lines GitHub refuses and hide lines it accepts. Retargeting the
 PR, or deleting a parent that has merged, brings them back.
 
