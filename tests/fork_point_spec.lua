@@ -104,6 +104,35 @@ describe("fork_point", function()
     assert.is_nil(point.pr)
   end)
 
+  it("keeps the branch it was created from while its fork point is the default branch's", function()
+    local root = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(root, "p")
+    table.insert(roots, root)
+    fixture.init_repo("main", root)
+    local fork = commit_file(root, "main.txt")
+    fixture.git({ "checkout", "-q", "-b", "parent" }, root)
+    fixture.git({ "checkout", "-q", "-b", "feature", "parent" }, root)
+    commit_file(root, "feature.txt")
+
+    local point = assert(fork_point.get(root, "feature"))
+
+    assert.equal(fork, point.base)
+    assert.equal("parent", point.against)
+  end)
+
+  it("moves to the default branch once the branch is rebased onto it past a squash-merged parent", function()
+    local root = repo("parent")
+    fixture.git({ "checkout", "-q", "main" }, root)
+    fixture.git({ "merge", "-q", "--squash", "parent" }, root)
+    local squashed = fixture.commit("squash parent", root)
+    fixture.git({ "rebase", "-q", "--onto", "main", "parent", "feature" }, root)
+
+    local point = assert(fork_point.get(root, "feature"))
+
+    assert.equal(squashed, point.base)
+    assert.equal("main", point.against)
+  end)
+
   it("keeps the PR whose target is the branch it was created from", function()
     vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
     local root, _, parent_base = repo("parent")

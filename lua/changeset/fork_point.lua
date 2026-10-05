@@ -23,24 +23,34 @@ local asking = {}
 ---@type table<fun(root: string, branch: string, point: changeset.ForkPoint), true>
 local subscribers = {}
 
----HEAD's fork point from the branch `branch` was created from, else from `pr`'s target, taking each only when
----HEAD shares a fork point with it, else from the default branch.
+---Whether the default branch's fork point has moved past the parent's, as it does once the branch is
+---rebased onto the default branch after its parent merged.
+---@param root string
+---@param parent_base string
+---@param default_base string?
+---@return boolean
+local function outgrown(root, parent_base, default_base)
+  return default_base ~= nil and default_base ~= parent_base and Git.is_ancestor(root, parent_base, default_base)
+end
+
+---HEAD's fork point from the branch `branch` was created from, unless the branch has outgrown it, else from
+---`pr`'s target, taking each only when HEAD shares a fork point with it, else from the default branch.
 ---@param root string
 ---@param branch string
 ---@param pr changeset.Pr?
 ---@return changeset.ForkPoint?
 local function measure(root, branch, pr)
   local default_branch = Git.default_base(root)
+  local base, ref = Git.merge_base(root, default_branch)
   local parent = Git.parent(root, branch)
   if parent and parent ~= default_branch then
-    local base, ref = Git.merge_base(root, parent)
-    if base then
+    local parent_base, parent_ref = Git.merge_base(root, parent)
+    if parent_base and not outgrown(root, parent_base, base) then
       -- A review comment needs the tree's hunks to be the PR's, so the PR counts only while it merges into `parent`.
       local number = pr and pr.target == parent and pr.number or nil
-      return { base = base, ref = ref, against = parent, default_branch = default_branch, pr = number }
+      return { base = parent_base, ref = parent_ref, against = parent, default_branch = default_branch, pr = number }
     end
   end
-  local base, ref = Git.merge_base(root, default_branch)
   if not base then
     return
   end

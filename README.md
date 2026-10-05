@@ -20,7 +20,8 @@ named, as in `git switch -c feature parent`, or the one you were on when you ran
 such parent is compared against its open PR's target, else the default branch. That
 covers a branch created from a commit, a detached `HEAD`, another worktree's `HEAD`, the
 default branch or its own remote counterpart, as checking out someone's PR does, and one
-whose parent has since been deleted.
+whose parent has since been deleted. It also covers a branch rebased onto the default
+branch past its parent, as after the parent was squash-merged.
 
 ## Requirements
 

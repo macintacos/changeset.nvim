@@ -86,6 +86,16 @@ function M.parent(cwd, branch)
   end
 end
 
+---Whether `ancestor` is in `commit`'s history, `commit` itself included.
+---@param cwd string Repository to ask.
+---@param ancestor string
+---@param commit string
+---@return boolean
+function M.is_ancestor(cwd, ancestor, commit)
+  vim.fn.system({ "git", "-C", cwd, "merge-base", "--is-ancestor", ancestor, commit })
+  return vim.v.shell_error == 0
+end
+
 ---Resolve the commit where HEAD forked from `branch`.
 ---@param cwd string? Repository to measure; Neovim's own directory when absent.
 ---@param branch string Branch to measure against.
