@@ -12,9 +12,10 @@ describe("PR Review Mode", function()
 
   ---A repo with `a.txt` changed on `parent`, then again on `child` cut from it.
   ---@param child string
-  local function stack(child)
+  ---@param source string? What `child`'s reflog says it was created from: HEAD, on `parent`, when absent.
+  local function stack(child, source)
     review.fixture(dir, "parent", { "a.txt" })
-    support.git({ "switch", "-q", "-c", child }, dir)
+    support.git({ "switch", "-q", "-c", child, source }, dir)
     vim.fn.writefile({ "one", "two", "three" }, dir .. "/a.txt")
     support.commit("child change", dir)
   end
@@ -64,6 +65,21 @@ describe("PR Review Mode", function()
   it("announces the PR's target branch once when toggled on", function()
     stack("stacked-announced")
     vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent" })
+    vim.fn.chdir(dir)
+    local bufs = edit({ "a.txt" })
+    assert.is_true(await(bufs, review.merge_base(dir, "parent"), 5000))
+    toggle()
+    assert.is_true(await(bufs, nil, 5000))
+
+    toggle()
+
+    local on = on_notices(5000)
+    assert.equal(1, #on)
+    assert.matches("vs parent", on[1])
+  end)
+
+  it("announces the branch it was created from when toggled on", function()
+    stack("created-from-parent", "parent")
     vim.fn.chdir(dir)
     local bufs = edit({ "a.txt" })
     assert.is_true(await(bufs, review.merge_base(dir, "parent"), 5000))

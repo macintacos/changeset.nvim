@@ -13,13 +13,21 @@ Use it to read a branch before you push it, or one you checked out to review. Th
 changes also show in gitsigns' gutter, through [PR Review Mode](#pr-review-mode), and in
 mini.pick, through the [Picker](#picker). Each works without the others.
 
+A branch is compared against the branch it was created from, so a stacked branch shows
+only its own changes, pushed or not, with or without a PR. git records that branch when
+the command names it, as `git switch -c feature parent` does; `git switch -c feature` on
+its own records only `HEAD`. A branch with no such parent is compared against its open
+PR's target, else the default branch. That covers a branch created from `HEAD`, a commit,
+the default branch or its own remote counterpart, as checking out someone's PR does, and
+one whose parent has since been deleted.
+
 ## Requirements
 
 changeset needs Neovim 0.12 or newer and `git`.
 
 Each optional integration adds a feature:
 
-- `gh`: a branch whose open PR targets another branch is compared against that branch.
+- `gh`: a branch with no parent is compared against its open PR's target.
 - A language server that lists a file's symbols (`textDocument/documentSymbol`): the
   symbol rows under each file. Without one, a file lists only its changes.
 - Treesitter parsers: finding the tests inside a source file by their syntax, so the
@@ -188,6 +196,11 @@ delete it. You have at most one per PR. `pr start`, `pr submit`, `pr abandon` an
 progress message, which the message area draws as `Changeset: asking GitHub …` and
 progress UIs such as fidget, noice and snacks pick up; none runs while a question or the
 submit preview waits on you.
+
+A branch created from a branch other than its PR's target is compared against the branch
+it was created from, and the sidebar then leaves the PR out: its header shows no PR number
+or circle, its review comments and drafts aren't marked, and `pr comment` refuses, since
+the lines it would offer are not the PR's.
 
 - `:Changeset pr start` starts a pending review on the branch's open PR. It needs an open
   PR and `gh` signed in. When a pending review is already under way, including one started

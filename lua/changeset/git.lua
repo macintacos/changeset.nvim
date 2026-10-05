@@ -48,6 +48,25 @@ function M.matches_commit(root, commit, path)
   return at_commit ~= nil and at_commit == M.lines({ "git", "hash-object", "--", path }, root)[1]
 end
 
+---The branch `branch` was created from, as the first entry of its reflog records it, named without its remote.
+---@param cwd string? Repository to ask; Neovim's own directory when absent.
+---@param branch string
+---@return string? parent nil when `branch` was created from HEAD, a commit or its own remote counterpart,
+---when that branch is gone, and when the reflog no longer holds its creation.
+function M.parent(cwd, branch)
+  local log = M.lines({ "git", "reflog", "show", "--format=%gs", "refs/heads/" .. branch }, cwd)
+  local source = (log[#log] or ""):match("^branch: Created from (.+)$")
+  -- Resolving HEAD would name whatever branch is checked out now.
+  if not source or source == "HEAD" then
+    return
+  end
+  local ref = M.lines({ "git", "rev-parse", "--symbolic-full-name", source }, cwd)[1] or ""
+  local name = ref:match("^refs/heads/(.+)$") or ref:match("^refs/remotes/[^/]+/(.+)$")
+  if name ~= branch then
+    return name
+  end
+end
+
 ---Resolve the commit where HEAD forked from `branch`.
 ---@param cwd string? Repository to measure; Neovim's own directory when absent.
 ---@param branch string Branch to measure against.

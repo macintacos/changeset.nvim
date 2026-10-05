@@ -256,7 +256,7 @@ fork_point.subscribe(function(root, branch, point)
   if not (tree and tree.root == root and tree.branch == branch and Paths.root(0) == root) then
     return
   end
-  -- An answer of no PR holds a default point no fresher than the tree's; rebuilding on it would ask gh again.
+  -- An answer that leaves no PR holds a point no fresher than the tree's; rebuilding on it would ask gh again.
   if not point.pr then
     return
   end

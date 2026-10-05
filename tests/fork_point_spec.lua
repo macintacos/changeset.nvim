@@ -35,17 +35,18 @@ local function commit_file(root, name)
 end
 
 ---A repository with `main`, then `parent` off it, then `feature` off that, checked out.
+---@param source string? What `feature`'s reflog says it was created from: HEAD, on `parent`, when absent.
 ---@return string root
 ---@return string default_base main's tip, where feature forked from main.
 ---@return string parent_base parent's tip.
-local function stacked_repo()
+local function stacked_repo(source)
   local root = vim.fn.resolve(vim.fn.tempname())
   vim.fn.mkdir(root, "p")
   fixture.init_repo("main", root)
   local default_base = commit_file(root, "main.txt")
   fixture.git({ "checkout", "-q", "-b", "parent" }, root)
   local parent_base = commit_file(root, "parent.txt")
-  fixture.git({ "checkout", "-q", "-b", "feature" }, root)
+  fixture.git({ "checkout", "-q", "-b", "feature", source }, root)
   commit_file(root, "feature.txt")
   return root, default_base, parent_base
 end
@@ -73,8 +74,9 @@ describe("fork_point", function()
     roots = {}
   end)
 
-  local function repo()
-    local root, default_base, parent_base = stacked_repo()
+  ---@param source string?
+  local function repo(source)
+    local root, default_base, parent_base = stacked_repo(source)
     table.insert(roots, root)
     return root, default_base, parent_base
   end
@@ -88,6 +90,57 @@ describe("fork_point", function()
     assert.equal("main", point.against)
     assert.equal("main", point.default_branch)
     assert.is_nil(point.pr)
+  end)
+
+  it("measures against the branch it was created from without waiting on gh", function()
+    local root, _, parent_base = repo("parent")
+
+    local point = assert(fork_point.get(root, "feature"))
+
+    assert.equal(parent_base, point.base)
+    assert.equal("parent", point.against)
+    assert.equal("parent", point.ref)
+    assert.is_nil(point.pr)
+  end)
+
+  it("keeps the PR whose target is the branch it was created from", function()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
+    local root, _, parent_base = repo("parent")
+
+    fork_point.get(root, "feature")
+    assert.is_true(await_heard(root, 1))
+    local point = heard_in(root)[1].point
+
+    assert.equal(parent_base, point.base)
+    assert.equal(7, point.pr)
+  end)
+
+  it("stays on the branch it was created from, without the PR, when the PR targets another", function()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "main", number = 7 })
+    local root, _, parent_base = repo("parent")
+
+    fork_point.get(root, "feature")
+    assert.is_true(await_heard(root, 1))
+    local point = heard_in(root)[1].point
+    local again = fork_point.get(root, "feature")
+
+    for _, p in ipairs({ point, again }) do
+      assert.equal(parent_base, p.base)
+      assert.equal("parent", p.against)
+      assert.is_nil(p.pr)
+    end
+  end)
+
+  it("moves a branch created from the default branch to its PR's target", function()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
+    local root = repo("main")
+
+    fork_point.get(root, "feature")
+    assert.is_true(await_heard(root, 1))
+    local point = heard_in(root)[1].point
+
+    assert.equal("parent", point.against)
+    assert.equal(7, point.pr)
   end)
 
   it("moves to the PR's target once gh answers, and keeps that answer", function()

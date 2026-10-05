@@ -117,6 +117,75 @@ describe("changeset.git", function()
     end)
   end)
 
+  describe("parent", function()
+    local root_commit
+
+    before_each(function()
+      root_commit = Fixture.init_repo("trunk", tmp)
+      Fixture.git({ "switch", "-q", "-c", "parent" }, tmp)
+      Fixture.git({ "commit", "-q", "--allow-empty", "-m", "parent work" }, tmp)
+      Fixture.git({ "update-ref", "refs/remotes/origin/parent", "parent" }, tmp)
+      Fixture.git({ "update-ref", "refs/remotes/origin/feature", "parent" }, tmp)
+    end)
+
+    it("names the local branch a branch was created from", function()
+      Fixture.git({ "switch", "-q", "-c", "feature", "parent" }, tmp)
+
+      assert.equal("parent", Git.parent(tmp, "feature"))
+    end)
+
+    it("names the branch behind a remote ref a branch was created from", function()
+      Fixture.git({ "switch", "-q", "-c", "feature", "origin/parent" }, tmp)
+
+      assert.equal("parent", Git.parent(tmp, "feature"))
+    end)
+
+    it("reads the repository it is given rather than the one Neovim sits in", function()
+      Fixture.git({ "switch", "-q", "-c", "feature", "parent" }, tmp)
+      vim.fn.chdir(previous_dir)
+
+      assert.equal("parent", Git.parent(tmp, "feature"))
+    end)
+
+    for _, created in ipairs({
+      { "its own remote counterpart, named short", { "switch", "-q", "-c", "feature", "origin/feature" } },
+      { "its own remote counterpart, named in full", { "branch", "feature", "refs/remotes/origin/feature" } },
+    }) do
+      it("is nil for a branch created from " .. created[1], function()
+        Fixture.git(created[2], tmp)
+
+        assert.is_nil(Git.parent(tmp, "feature"))
+      end)
+    end
+
+    it("is nil for a branch created from HEAD, whichever branch is checked out now", function()
+      Fixture.git({ "switch", "-q", "-c", "feature" }, tmp)
+      Fixture.git({ "switch", "-q", "parent" }, tmp)
+
+      assert.is_nil(Git.parent(tmp, "feature"))
+    end)
+
+    it("is nil for a branch created from a commit", function()
+      Fixture.git({ "switch", "-q", "-c", "feature", root_commit }, tmp)
+
+      assert.is_nil(Git.parent(tmp, "feature"))
+    end)
+
+    it("is nil once the branch it was created from is deleted", function()
+      Fixture.git({ "switch", "-q", "-c", "feature", "parent" }, tmp)
+      Fixture.git({ "branch", "-q", "-D", "parent" }, tmp)
+
+      assert.is_nil(Git.parent(tmp, "feature"))
+    end)
+
+    it("is nil for a branch whose reflog is gone", function()
+      Fixture.git({ "switch", "-q", "-c", "feature", "parent" }, tmp)
+      vim.fn.delete(tmp .. "/.git/logs/refs/heads/feature")
+
+      assert.is_nil(Git.parent(tmp, "feature"))
+    end)
+  end)
+
   describe("pr", function()
     after_each(gh.reset)
 

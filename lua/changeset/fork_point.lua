@@ -1,4 +1,4 @@
----Where the branch forked: the default branch's fork point, or its open PR's target's when stacked.
+---Where the branch forked: from the branch it was created from, else from its open PR's target, else from the default branch.
 local Git = require("changeset.git")
 
 local M = {}
@@ -6,7 +6,7 @@ local M = {}
 ---@class changeset.ForkPoint
 ---@field base string Commit HEAD forked at.
 ---@field ref string Ref whose history holds `base`, e.g. "origin/trunk".
----@field against string Branch `base` was measured against: the default branch, or the open PR's target.
+---@field against string Branch `base` was measured against: the one the branch was created from, the open PR's target, or the default branch.
 ---@field default_branch string The repository's default branch, whatever `against` is.
 ---@field pr integer? The open PR's number, while `base` is measured against its target.
 ---@field skipped string? The open PR's target when HEAD shares no fork point with it, so `base` stayed on the default branch's.
@@ -23,12 +23,23 @@ local asking = {}
 ---@type table<fun(root: string, branch: string, point: changeset.ForkPoint), true>
 local subscribers = {}
 
----HEAD's fork point from `pr`'s target when the two share one, else from the default branch.
+---HEAD's fork point from the branch `branch` was created from, else from `pr`'s target, taking each only when
+---HEAD shares a fork point with it, else from the default branch.
 ---@param root string
+---@param branch string
 ---@param pr changeset.Pr?
 ---@return changeset.ForkPoint?
-local function measure(root, pr)
+local function measure(root, branch, pr)
   local default_branch = Git.default_base(root)
+  local parent = Git.parent(root, branch)
+  if parent and parent ~= default_branch then
+    local base, ref = Git.merge_base(root, parent)
+    if base then
+      -- A review comment needs the tree's hunks to be the PR's, so the PR counts only while it merges into `parent`.
+      local number = pr and pr.target == parent and pr.number or nil
+      return { base = base, ref = ref, against = parent, default_branch = default_branch, pr = number }
+    end
+  end
   local base, ref = Git.merge_base(root, default_branch)
   if not base then
     return
@@ -48,11 +59,11 @@ end
 ---The fork point of `branch` at `root`. Asks gh about its PR unless gh has named a target or is being asked.
 ---@param root string Repository to measure in.
 ---@param branch string The branch checked out at `root`.
----@return changeset.ForkPoint? point nil when HEAD shares no fork point with the default branch.
+---@return changeset.ForkPoint? point nil when HEAD shares no fork point with the branch it was created from or the default branch.
 ---@return boolean asking Whether gh is still being asked, so subscribers will hear its answer.
 function M.get(root, branch)
   local key = root .. "\n" .. branch
-  local point = measure(root, prs[key])
+  local point = measure(root, branch, prs[key])
   if not point then
     return nil, false
   end
@@ -66,7 +77,7 @@ function M.get(root, branch)
     if pr then
       prs[key] = pr
       -- HEAD can have moved by the time gh answers; subscribers still need a point.
-      heard = measure(root, prs[key]) or heard
+      heard = measure(root, branch, prs[key]) or heard
     end
     for fn in pairs(subscribers) do
       fn(root, branch, heard)

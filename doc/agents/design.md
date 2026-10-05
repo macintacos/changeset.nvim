@@ -596,6 +596,44 @@ carries its read status — `reading`, `done`, or `skipped` for a deleted or Gen
 render childless: still waiting, a skipped file, and a file with genuinely nothing to show
 inside it — a 100% rename, a binary change.
 
+## What a branch is compared against
+
+A branch's changes are what it added to the branch it was created from, so that branch,
+its parent, is the base. A stacked branch then shows only its own changes from the first
+build, before gh answers and whether or not a PR exists. A PR's target is known only once
+gh answers, and a branch without a PR has none, so without the parent every stacked
+branch would be measured against `origin/HEAD`, the default branch.
+
+git keeps no parent in config: a branch's upstream is its own remote counterpart, and
+worktrunk records none. The one record is the creation entry of the branch's reflog,
+`branch: Created from <source>`, which names the source as the command was given it.
+`Git.parent` resolves that source and drops its remote, so `origin/parent` and
+`refs/remotes/origin/parent` both name `parent`. Any other source names no parent and the
+base stays as it was, the PR's target else the default branch:
+
+- `HEAD`, which `git switch -c feature` writes, and a commit name no branch. Resolving
+  `HEAD` would name the branch checked out now.
+- The branch's own remote counterpart, which `git switch feature`, `gh pr checkout` and
+  checking out a remote branch in a new worktree write. Taken as the parent, it would
+  diff someone else's PR against itself.
+- The default branch, so a branch cut from it still moves to its PR's target when that
+  is another branch.
+- A parent since deleted, and a reflog whose creation entry has expired or is missing.
+
+The parent is measured by `Git.merge_base`'s rules, origin's ref preferred when both it
+and the local branch hold the fork point, so a parent that was never pushed works too.
+
+The PR stays on the tree only while its target is the parent. A review comment can only
+go on lines in the PR's diff, and `commentable` checks the tree's hunks, which match the
+PR's only when both are measured from the same branch. A branch whose PR targets another
+branch keeps its parent and loses the PR's number, circle, marks and `pr comment`. Showing
+the PR there would offer lines GitHub refuses and hide lines it accepts. Retargeting the
+PR, or deleting a parent that has merged, brings them back.
+
+A parent guessed from the refs, such as the branch whose tip is nearest, isn't tried. It
+costs a merge-base per branch on every build, and any branch sharing that history can
+claim it.
+
 ## What it remembers
 
 The tree is built the first time something asks for it — `:Changeset`, the picker
