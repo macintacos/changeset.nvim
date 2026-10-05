@@ -375,4 +375,152 @@ describe("review_comment_window", function()
     local _, buf = open()
     assert.truthy(buffer_map(buf, "n", "<S-Esc>").desc)
   end)
+
+  describe("inline", function()
+    before_each(function()
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.split(("x\n"):rep(39) .. "x", "\n"))
+      vim.cmd.redraw()
+    end)
+
+    ---The screen rows of the float's top and bottom border, once drawn.
+    local function borders(win)
+      vim.cmd.redraw()
+      local top = vim.api.nvim_win_get_position(win)[1] + 1
+      return top, top + vim.api.nvim_win_get_height(win) + 1
+    end
+
+    local function row_of(line)
+      return vim.fn.screenpos(source, line, 1).row
+    end
+
+    ---The source buffer's extmarks that draw virtual lines.
+    local function padding()
+      return vim.tbl_filter(function(mark)
+        return mark[4].virt_lines ~= nil
+      end, vim.api.nvim_buf_get_extmarks(vim.api.nvim_win_get_buf(source), -1, 0, -1, { details = true }))
+    end
+
+    ---Tell the window its source scrolled or resized, as Neovim does from its main loop.
+    local function notify()
+      vim.api.nvim_exec_autocmds("WinScrolled", { pattern = tostring(source) })
+    end
+
+    local function scroll_to(topline)
+      vim.api.nvim_win_call(source, function()
+        vim.fn.winrestview({ topline = topline, lnum = topline })
+      end)
+      notify()
+    end
+
+    it("covers no line: its line stays directly above it, the next directly below", function()
+      local win = open({ line = 5 })
+      local top, bottom = borders(win)
+      assert.equal(row_of(5), top - 1)
+      assert.equal(row_of(6), bottom + 1)
+    end)
+
+    it("sits under the last screen row of a wrapped line", function()
+      vim.api.nvim_buf_set_lines(0, 4, 5, false, { ("w"):rep(200) })
+      local win = open({ line = 5 })
+      local top, bottom = borders(win)
+      assert.equal(vim.fn.screenpos(source, 5, 200).row, top - 1)
+      assert.equal(row_of(6), bottom + 1)
+    end)
+
+    it("scrolls a line near the bottom up just far enough to fit the box under it", function()
+      local win = open({ line = 20 })
+      local top, bottom = borders(win)
+      assert.equal(row_of(20), top - 1)
+      assert.equal(vim.fn.win_screenpos(source)[1] + vim.api.nvim_win_get_height(source) - 1, bottom)
+      assert.is_false(vim.api.nvim_win_get_config(win).hide)
+    end)
+
+    it("moves with its line as the source scrolls", function()
+      local win = open({ line = 10 })
+      scroll_to(4)
+      local top, bottom = borders(win)
+      assert.equal(7, row_of(10))
+      assert.equal(row_of(10), top - 1)
+      assert.equal(row_of(11), bottom + 1)
+    end)
+
+    it("hides while its line is scrolled out of the source, and comes back with it", function()
+      local win = open({ line = 5 })
+      scroll_to(6)
+      assert.is_true(vim.api.nvim_win_get_config(win).hide)
+      scroll_to(1)
+      assert.is_false(vim.api.nvim_win_get_config(win).hide)
+    end)
+
+    it("scrolls its line back into view when entered from the source", function()
+      local win = open({ line = 5 })
+      vim.api.nvim_set_current_win(source)
+      scroll_to(30)
+      vim.api.nvim_set_current_win(win)
+      notify()
+      local top = borders(win)
+      assert.is_false(vim.api.nvim_win_get_config(win).hide)
+      assert.equal(row_of(5), top - 1)
+    end)
+
+    it("keeps its padding under its line when the source's lines are replaced", function()
+      open({ line = 5 })
+      local source_buf = vim.api.nvim_win_get_buf(source)
+      vim.api.nvim_buf_set_lines(source_buf, 0, -1, false, vim.api.nvim_buf_get_lines(source_buf, 0, -1, false))
+      vim.wait(100, function()
+        return padding()[1][2] == 4
+      end)
+      assert.equal(4, padding()[1][2])
+    end)
+
+    it("re-fits its width and footer to a resized source", function()
+      vim.cmd("vsplit")
+      vim.cmd("vertical resize 40")
+      source = vim.api.nvim_get_current_win()
+      local win = open()
+      vim.api.nvim_win_set_width(source, 60)
+      notify()
+      local width, text = vim.api.nvim_win_get_width(win), footer(win)
+      vim.api.nvim_win_close(win, true)
+      vim.cmd.close()
+      assert.equal(58, width)
+      assert.equal(58, vim.fn.strdisplaywidth(text))
+    end)
+
+    for name, close in pairs({
+      q = function(buf)
+        press(buf, "n", "q")
+      end,
+      [":q"] = function()
+        vim.cmd.quit()
+      end,
+      ["<C-w>c"] = function()
+        vim.cmd.wincmd("c")
+      end,
+      ["a taken save"] = function(buf)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "text" })
+        press(buf, "n", "<C-s>")
+        answer(nil)
+      end,
+    }) do
+      it(("takes its padding with it when %s closes it"):format(name), function()
+        local _, buf = open()
+        assert.equal(1, #padding())
+        close(buf)
+        assert.same({}, padding())
+      end)
+    end
+
+    it("takes its padding with it when :e replaces its buffer", function()
+      local path = vim.fn.tempname()
+      vim.fn.writefile({ "other" }, path)
+      open()
+      vim.cmd.edit(path)
+      local left = padding()
+      vim.api.nvim_win_close(0, true)
+      vim.cmd.bwipeout({ args = { path }, bang = true })
+      os.remove(path)
+      assert.same({}, left)
+    end)
+  end)
 end)

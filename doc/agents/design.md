@@ -306,9 +306,10 @@ another branch can hide things this one never had.
 
 ### The review comment window opens under the line it is about
 
-A review comment is written in a float anchored to the buffer line it is about, or the
-last line of a range, so the line being discussed stays visible directly above it, and
-the lines after it are covered while it is open:
+A review comment is written in a float under the buffer line it is about, or the last line
+of a range, laid in line with the code: the lines after it move down to make room, so the
+line being discussed stays directly above the window and the code after it directly below,
+all readable while the review comment is drafted:
 
 ```text
 local function greet(name)
@@ -320,18 +321,28 @@ local function greet(name)
 │                                                                        │
 │                                                                        │
 ╰ pending review on #412 ─────────────────────────────────── <C-CR> save ╯
+  return "hello " .. name
+end
 ```
 
-It is attached to the window (`relative = "win"`, `bufpos`) rather than placed in editor
-cells, so it opens under that line wherever the line is on screen. Its width is the room
-right of the source window's gutter, less the border, between 20 and 72 columns: a review
-comment is prose, and prose reads at a short measure, while 20 keeps a cramped split
-usable. Six rows are room for a paragraph without hiding the code around it; a longer
-review comment scrolls. The buffer is `markdown`, so what GitHub will render is
-highlighted as it is typed, and it wraps at word boundaries. `style = "minimal"` drops the
-number column and sign column, which describe a file this buffer is not. The filetype is
-set once the float is open, so a user's markdown `FileType` settings, such as `spell`,
-reach it and win over the style.
+Neovim has no window inside a buffer's text, so blank virtual lines (`virt_lines`) as tall
+as the float and its border make the room, and the float lies on them. It is attached to
+the window (`relative = "win"`, `bufpos`), so it moves with its line as the source
+scrolls, and `row` counts past every screen row of a wrapped line. Opening scrolls the
+source the least that shows the line with the room under it. A floating source, the submit
+preview, has nothing to scroll past, so it grows by the room instead and shrinks back
+afterwards. While the row under the line is scrolled out of the source the float hides,
+and entering it scrolls the line back into view. Edits to the source never move the room
+off the line: it stays on the line number, as the float does.
+
+Its width is the room right of the source window's gutter, less the border, between 20
+and 72 columns, re-fitted as the source is resized: a review comment is prose, and prose
+reads at a short measure, while 20 keeps a cramped split usable. Six rows are room for a
+paragraph without pushing the code after it far away; a longer review comment scrolls.
+The buffer is `markdown`, so what GitHub will render is highlighted as it is typed, and it
+wraps at word boundaries. `style = "minimal"` drops the number column and sign column,
+which describe a file this buffer is not. The filetype is set once the float is open, so a
+user's markdown `FileType` settings, such as `spell`, reach it and win over the style.
 
 The border does the labelling, as the kind menu's does. The title names the line or lines.
 The footer says where a save goes and, at its right end, the first `review_comment.save`
@@ -342,7 +353,8 @@ drops the key. The other keys stay off the border: `?` lists them all. However t
 window's text goes, except the close a taken save makes, it is kept as a local draft: `q`
 in normal mode, `<S-Esc>` in either mode where the terminal sends it, `:q`, `<C-w>c`, an
 `:e` in the float, quitting Neovim. One `BufUnload` hook on the window's buffer catches
-them all, since the buffer goes with the window (`bufhidden=wipe`). Plain `<Esc>` still
+them all, since the buffer goes with the window (`bufhidden=wipe`), and takes the room
+under the line with it. Plain `<Esc>` still
 only leaves insert mode, so a habitual `<Esc>` on the way to normal mode never closes it.
 A save of only whitespace is no save: it closes the window like `q`, so the blank text
 reaches the same hook and the caller discards it, never GitHub.
@@ -387,7 +399,8 @@ named here either.
 
 The title names the PR; the footer says what `<CR>` sends — `comment on #412`,
 `approve #412`, `request changes on #412` — and changes with the choice. `b` opens the
-review comment window under the body row, titled `Review body`; a save key or `q` both
+review comment window under the body row, titled `Review body`, the preview growing to
+hold it; a save key or `q` both
 keep what was written, and a body of only whitespace is sent as none. The width fits the
 widest row between 44 and 96 columns, re-fitted as the body changes, and the height fits
 the rows.
@@ -656,6 +669,18 @@ repository's deliberate choice is none of that save's business.
   callbacks are ignored from then on: a `relative = "win"` float outlives its anchor, and
   its keep would redraw a wiped buffer.
 - **`<C-s>` saves alongside `<C-CR>`** because many terminals never send `<C-CR>`.
+- **A float is never clipped to the window it is anchored to.** Scrolled off its line, the
+  review comment window would sit at the source's edge over other text, or past it over
+  the status line and the next window, so it hides until the row under its line is back.
+- **Neovim scrolls any window back to its cursor, current or not.** Scrolling the source
+  to show the review comment window's line moves the source's cursor to that line too, or
+  the old view comes straight back.
+- **`WinScrolled` names only the first window that changed.** The review comment window
+  re-places itself on every one, whichever window it names, or a resize that changed
+  another window first would leave it misplaced.
+- **Replacing every line of a buffer carries its extmarks to the end.** The submit preview
+  redraws that way, so the review comment window puts its room back under its line after
+  every change to the source.
 - **A file cached before its parser was installed keeps just the name rules** until it
   next changes: its entry was read without the syntax layer, and its stamp still matches.
   Its comment lines are missing too, so its comment-only changes stay out of Docs. A moved

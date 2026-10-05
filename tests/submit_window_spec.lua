@@ -106,6 +106,36 @@ describe("submit_window", function()
     assert.equal(win, vim.api.nvim_win_get_config(0).win)
   end)
 
+  it("grows by the body window and its border while it is open, keeping every row in view", function()
+    local win, buf = open()
+    local height = vim.api.nvim_win_get_height(win)
+    press(buf, "b")
+    local body = vim.api.nvim_get_current_win()
+
+    assert.equal(height + vim.api.nvim_win_get_height(body) + 2, vim.api.nvim_win_get_height(win))
+    assert.equal(1, vim.fn.line("w0", win))
+    assert.is_false(vim.api.nvim_win_get_config(body).hide)
+    press(vim.api.nvim_win_get_buf(body), "q")
+    assert.equal(height, vim.api.nvim_win_get_height(win))
+  end)
+
+  it("keeps the body window's padding under the body row when the event changes", function()
+    local _, buf = open()
+    press(buf, "b")
+    local body_row = vim.api.nvim_win_get_config(0).bufpos[1]
+    press(buf, "a")
+    local function padding_row()
+      local padding = vim.iter(vim.api.nvim_buf_get_extmarks(buf, -1, 0, -1, { details = true })):find(function(mark)
+        return mark[4].virt_lines ~= nil
+      end)
+      return padding and padding[2]
+    end
+    vim.wait(100, function()
+      return padding_row() == body_row
+    end)
+    assert.equal(body_row, padding_row())
+  end)
+
   for _, lhs in ipairs({ "q", "<C-s>" }) do
     it(("submits a whitespace-only body closed with %s as none"):format(lhs), function()
       local _, buf = open()
