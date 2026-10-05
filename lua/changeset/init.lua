@@ -11,6 +11,7 @@ local build = require("changeset.build")
 local config = require("changeset.config")
 local draw = require("changeset.draw")
 local drafts = require("changeset.drafts")
+local fork_point = require("changeset.fork_point")
 local pending_state = require("changeset.pending_state")
 local render = require("changeset.render")
 local Rows = require("changeset.rows")
@@ -145,14 +146,29 @@ local function line_text(path, lnum)
   return ok and lines[lnum] or nil
 end
 
----Whether the tree is done growing under `path`: its diff is in, and so are its
----symbols unless the diff does not hold it.
----@param path string
+---Whether the Comments section is done growing: gh has said whether the branch has a PR, and GitHub has
+---answered for it.
+---@param tree changeset.Tree
 ---@return boolean
-local function decided(path)
+local function comments_decided(tree)
+  if fork_point.asking(tree.root, tree.branch) then
+    return false
+  end
+  return not tree.pr or pending_state.answered(tree.root, tree.pr)
+end
+
+---Whether the tree is done growing under `path`: its diff is in, and so are its
+---symbols unless the diff does not hold it. Row `id` in the Comments section also waits on GitHub.
+---@param path string
+---@param id string?
+---@return boolean
+local function decided(path, id)
   local tree = build.current()
   assert(tree, "changeset: no tree built yet")
   if not tree.collected then
+    return false
+  end
+  if id and vim.startswith(id, "#comments\0") and not comments_decided(tree) then
     return false
   end
   return not vim.iter(tree.files):any(function(file)
@@ -186,8 +202,23 @@ build.subscribe(function(event)
   on_tree_event[event]()
 end)
 
--- Fires: GitHub's answer on the PR's pending review being kept, so the header's circle and the Comments section follow it.
-pending_state.subscribe(redraw)
+---Redraw on GitHub's answer, and settle a restored Comments row waiting on it.
+local function answered()
+  local state = sidebar_state.current()
+  redraw()
+  if state and window.is_visible() then
+    apply(state.position:answered(draw.view(), decided))
+  end
+end
+
+-- Fires: GitHub's answer on the PR's pending review being kept or refused, so the header's circle and the Comments
+-- section follow it.
+pending_state.subscribe(answered)
+
+-- Fires: gh answering whether a branch has a PR. Scheduled so the tree takes up the answer first.
+fork_point.subscribe(function()
+  vim.schedule(answered)
+end)
 
 -- Fires: a draft kept or dropped, so the Comments section follows it without asking GitHub.
 drafts.subscribe(redraw)

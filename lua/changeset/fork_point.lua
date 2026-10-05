@@ -97,6 +97,14 @@ function M.get(root, branch)
   return point, true
 end
 
+---Whether gh is being asked about the PR of `branch` at `root`.
+---@param root string
+---@param branch string
+---@return boolean
+function M.asking(root, branch)
+  return asking[root .. "\n" .. branch] ~= nil
+end
+
 ---Hear every gh answer, for any repository and branch. Subscribing `fn` again does nothing.
 ---@param fn fun(root: string, branch: string, point: changeset.ForkPoint) Called with the fork point that answer leaves.
 function M.subscribe(fn)

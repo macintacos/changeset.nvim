@@ -8,6 +8,10 @@ local M = {}
 ---@type table<string, changeset.pending_review.Found>
 local answers = {}
 
+---PRs, by `key`, whose latest ask GitHub refused.
+---@type table<string, true>
+local failed = {}
+
 ---Each repository's latest ask; an answer to any other is not kept, so an older reply can't overwrite a newer one.
 ---@type table<string, table>
 local latest = {}
@@ -34,6 +38,14 @@ function M.get(root, number)
   return answers[key(root, number)]
 end
 
+---Whether GitHub has answered for PR `number` at `root`, refusing included.
+---@param root string
+---@param number integer
+---@return boolean
+function M.answered(root, number)
+  return answers[key(root, number)] ~= nil or failed[key(root, number)] ~= nil
+end
+
 ---Asks GitHub for `root`'s PR and its pending review, keeping the answer while the tree is still on that PR.
 ---@param root string
 ---@param cb fun(err: string?, found: changeset.pending_review.Found?)? Called with the raw answer, kept or not.
@@ -47,6 +59,11 @@ function M.fetch(root, cb)
       for fn in pairs(subscribers) do
         fn()
       end
+    elseif err and latest[root] == ask and tree and tree.root == root and tree.pr then
+      failed[key(root, tree.pr)] = true
+      for fn in pairs(subscribers) do
+        fn()
+      end
     end
     if cb then
       cb(err, answer)
@@ -54,7 +71,7 @@ function M.fetch(root, cb)
   end)
 end
 
----Calls `fn` after each answer is kept. Subscribing again does nothing.
+---Calls `fn` after each answer is kept, and after GitHub refuses the tree's PR. Subscribing again does nothing.
 ---@param fn fun()
 function M.subscribe(fn)
   subscribers[fn] = true
