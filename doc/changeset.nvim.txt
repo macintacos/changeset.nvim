@@ -288,8 +288,10 @@ snacks pick up; none runs while a question or the submit preview waits on you.
     submits, and `q` or `<Esc>` close without submitting. A Comment with no review comments
     and no body is refused before asking GitHub; a submit GitHub refuses shows its reason,
     and the preview and the pending review stay as they were. Drafts stay after a submit.
-- `:Changeset pr abandon` asks y/n, then deletes the pending review, every review comment
-    in it, and the PR’s drafts. A failed delete keeps the drafts.
+- `:Changeset pr abandon` asks you to confirm, then deletes the pending review, every
+    review comment in it, and the PR’s drafts. A failed delete keeps the drafts. The question
+    goes through `vim.ui.select`, so mini.pick or another picker that replaces it shows it.
+    No comes first, so `<CR>` alone keeps the review.
 - `:Changeset pr comment` opens a markdown window under the cursor’s line, moving the
     lines after it down rather than covering them; from visual mode,
     `:'<,'>Changeset pr comment` opens it under the selection and comments on the selected

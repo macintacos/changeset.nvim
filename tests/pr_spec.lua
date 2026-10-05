@@ -9,10 +9,11 @@ local STUBBED = {
   "changeset.review_comments",
   "changeset.review_comment_window",
   "changeset.submit_window",
+  "changeset.confirm",
 }
 
 describe("changeset.pr", function()
-  local notify, input, notes, prompts, fetched, started, deleted, deleted_comments, added, opened, previews, submitted
+  local notify, notes, prompts, fetched, started, deleted, deleted_comments, added, opened, previews, submitted
   ---@type { [1]: string, [2]: boolean }[] Each wait on gh or on the user, and whether progress showed meanwhile.
   local waits
   ---@type { id: integer|string, status: string }[] Every progress message changeset emitted, in order.
@@ -21,8 +22,8 @@ describe("changeset.pr", function()
   local held
   ---@type { err: string?, found: table? }[] What each fetch answers, in order; the last repeats.
   local answers
-  ---@type string What `vim.fn.input` answers.
-  local choice
+  ---@type boolean Whether the user confirms a question.
+  local confirmed
   ---@type string? What the client's `start`, `delete` or `add_comment` fails with.
   local failure
   local tree
@@ -62,17 +63,21 @@ describe("changeset.pr", function()
       end,
     })
     held = nil
-    answers, choice, failure = {}, "", nil
+    answers, confirmed, failure = {}, false, nil
     tree = { root = "/tree/root", pr = 412 }
-    notify, input = vim.notify, vim.fn.input
+    notify = vim.notify
     vim.notify = function(msg, level)
       table.insert(notes, { msg = msg, level = level })
     end
-    vim.fn.input = function(opts)
-      wait("ask")
-      table.insert(prompts, opts.prompt)
-      return choice
-    end
+    package.loaded["changeset.confirm"] = {
+      ask = function(question, yes)
+        wait("ask")
+        table.insert(prompts, question)
+        if confirmed then
+          yes()
+        end
+      end,
+    }
     package.loaded["changeset.pending_state"] = {
       subscribe = function() end,
       fetch = function(root, cb)
@@ -135,7 +140,7 @@ describe("changeset.pr", function()
   end)
 
   after_each(function()
-    vim.notify, vim.fn.input = notify, input
+    vim.notify = notify
     for _, name in ipairs(STUBBED) do
       package.loaded[name] = nil
     end
@@ -186,7 +191,7 @@ describe("changeset.pr", function()
     end)
 
     it("is gone while the user is asked, and back while GitHub abandons the review", function()
-      answers, choice = { { found = { pr = pr, review = { id = "R", comments = {} } } } }, "y"
+      answers, confirmed = { { found = { pr = pr, review = { id = "R", comments = {} } } } }, true
 
       require("changeset.pr").abandon()
 
@@ -260,30 +265,18 @@ describe("changeset.pr", function()
       assert.same({}, deleted)
     end)
 
-    for _, answer in ipairs({ "n", "", "nope y" }) do
-      it(("changes nothing when the answer is %q"):format(answer), function()
-        answers, choice = { { found = { pr = pr, review = review } } }, answer
+    it("changes nothing when declined", function()
+      answers = { { found = { pr = pr, review = review } } }
 
-        require("changeset.pr").abandon()
+      require("changeset.pr").abandon()
 
-        assert.equal(1, #prompts)
-        assert.same({}, deleted)
-        assert.equal(1, #fetched)
-      end)
-    end
-
-    for _, answer in ipairs({ "y", " YES " }) do
-      it(("deletes the review when the answer is %q"):format(answer), function()
-        answers, choice = { { found = { pr = pr, review = review } } }, answer
-
-        require("changeset.pr").abandon()
-
-        assert.same({ "R_1" }, deleted)
-      end)
-    end
+      assert.equal(1, #prompts)
+      assert.same({}, deleted)
+      assert.equal(1, #fetched)
+    end)
 
     it("deletes the review once confirmed, naming the PR and its review comments", function()
-      answers, choice = { { found = { pr = pr, review = review } } }, "y"
+      answers, confirmed = { { found = { pr = pr, review = review } } }, true
 
       require("changeset.pr").abandon()
 
@@ -295,7 +288,7 @@ describe("changeset.pr", function()
     end)
 
     it("reports a failed delete and still fetches again", function()
-      answers, choice, failure = { { found = { pr = pr, review = review } } }, "y", "network down"
+      answers, confirmed, failure = { { found = { pr = pr, review = review } } }, true, "network down"
 
       require("changeset.pr").abandon()
 
@@ -320,7 +313,7 @@ describe("changeset.pr", function()
       end
 
       it("drops this PR's drafts at every head once the review is deleted", function()
-        choice = "y"
+        confirmed = true
 
         require("changeset.pr").abandon()
 
@@ -328,16 +321,14 @@ describe("changeset.pr", function()
       end)
 
       it("keeps them when the delete fails", function()
-        choice, failure = "y", "network down"
+        confirmed, failure = true, "network down"
 
         require("changeset.pr").abandon()
 
         assert.same({ 1, 1, 1 }, counts())
       end)
 
-      it("keeps them when the answer is no", function()
-        choice = "n"
-
+      it("keeps them when declined", function()
         require("changeset.pr").abandon()
 
         assert.same({ 1, 1, 1 }, counts())

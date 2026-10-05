@@ -4,6 +4,7 @@ local Paths = require("changeset.paths")
 local build = require("changeset.build")
 local commentable = require("changeset.commentable")
 local config = require("changeset.config")
+local confirm = require("changeset.confirm")
 local drafts = require("changeset.drafts")
 local pending_review = require("changeset.pending_review")
 local pending_state = require("changeset.pending_state")
@@ -100,17 +101,14 @@ function M.abandon()
       return say(vim.log.levels.INFO, "no pending review on #%d", number)
     end
     local question = ("Abandon the pending review on #%d and its %s?"):format(number, review_comments(#review.comments))
-    -- Needs <CR>, so keys typed while gh was answering cancel rather than confirm.
-    local reply = vim.trim(vim.fn.input({ prompt = question .. " [y/N] ", cancelreturn = "" })):lower()
-    if reply ~= "y" and reply ~= "yes" then
-      return
-    end
-    mutate("abandoned", function(done)
-      pending_review.delete(review.id, function(err)
-        if not err then
-          drafts.drop_all(found.pr)
-        end
-        done(err)
+    confirm.ask(question, function()
+      mutate("abandoned", function(done)
+        pending_review.delete(review.id, function(err)
+          if not err then
+            drafts.drop_all(found.pr)
+          end
+          done(err)
+        end)
       end)
     end)
   end)
