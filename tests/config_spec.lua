@@ -18,6 +18,10 @@ describe("changeset.config", function()
     assert.same({ "<C-j>" }, config.get().review_comment.save)
   end)
 
+  it("puts the review comment bubble in the sign column by default", function()
+    assert.is_true(config.get().review_comment.sign)
+  end)
+
   it("rejects a bad value, naming the option, and keeps the options in force", function()
     config.setup({ layout = { min_file_width = 100 } })
     for _, case in ipairs({
@@ -30,6 +34,7 @@ describe("changeset.config", function()
       { { review_comment = { save = "<C-s>" } }, "review_comment.save" },
       { { review_comment = { save = {} } }, "review_comment.save" },
       { { review_comment = { save = { "" } } }, "review_comment.save" },
+      { { review_comment = { sign = "no" } }, "review_comment.sign" },
     }) do
       local ok, err = pcall(config.setup, case[1])
       assert.is_false(ok)

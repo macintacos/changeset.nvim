@@ -19,7 +19,8 @@ package.loaded["changeset.pending_state"] = {
   end,
 }
 
-require("changeset.review_comments")
+local review_comments = require("changeset.review_comments")
+local config = require("changeset.config")
 local drafts = require("changeset.drafts")
 local render = require("changeset.render")
 
@@ -71,6 +72,20 @@ local function signs(buf)
   end, vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true }))
 end
 
+---The sign text of every extmark in `buf`, whatever its namespace.
+---@param buf integer
+---@return string[]
+local function sign_texts(buf)
+  return vim
+    .iter(vim.api.nvim_buf_get_extmarks(buf, -1, 0, -1, { details = true }))
+    :map(function(mark)
+      return mark[4].sign_text
+    end)
+    :totable()
+end
+
+local PR = { id = "PR_1", number = 1, host = "github.com", owner = "o", name = "n", head = "h" }
+
 ---@param count integer
 ---@param name string
 local function lines(count, name)
@@ -99,6 +114,7 @@ describe("review_comments", function()
   end)
 
   after_each(function()
+    config.setup()
     vim.cmd("silent! %bwipeout!")
     os.remove(drafts.path())
     vim.fn.delete(dir, "rf")
@@ -192,16 +208,15 @@ describe("review_comments", function()
   end)
 
   it("puts a hollow bubble on a draft's first line", function()
-    local pr = { id = "PR_1", number = 1, host = "github.com", owner = "o", name = "n", head = "h" }
-    found = { pr = pr }
-    drafts.keep(pr, { path = "beta.txt", line = 6, start_line = 5, head = "h", body = "d" })
+    found = { pr = PR }
+    drafts.keep(PR, { path = "beta.txt", line = 6, start_line = 5, head = "h", body = "d" })
     assert.are.same({ { 4, "󰍪 ", render.REVIEW_DRAFT_HL } }, signs(beta))
   end)
 
   it("gives a line one bubble, a review comment's over a draft's", function()
     found = full_answer()
-    found.pr = { id = "PR_1", number = 1, host = "github.com", owner = "o", name = "n", head = "h" }
-    drafts.keep(found.pr, { path = "beta.txt", line = 16, head = "h", body = "d" })
+    found.pr = PR
+    drafts.keep(PR, { path = "beta.txt", line = 16, head = "h", body = "d" })
     assert.are.same({ { 15, "󰍩 ", render.REVIEW_COMMENT_HL } }, signs(beta))
   end)
 
@@ -218,6 +233,49 @@ describe("review_comments", function()
     found = full_answer()
     on_answer()
     assert.are.equal("󰍩 ", vim.api.nvim_eval_statusline("%s", { use_statuscol_lnum = 16 }).str)
+  end)
+
+  it("keeps the bubble out of the sign column when review_comment.sign is false", function()
+    config.setup({ review_comment = { sign = false } })
+    found = full_answer()
+    on_answer()
+    assert.are.same({}, sign_texts(beta))
+  end)
+
+  it("answers a review comment's bubble and group on its first line only", function()
+    found = full_answer()
+    on_answer()
+    assert.are.same({ "󰍩", render.REVIEW_COMMENT_HL }, { review_comments.bubble(alpha, 8) })
+    assert.are.same({}, { review_comments.bubble(alpha, 9) })
+  end)
+
+  it("answers a draft's outline bubble", function()
+    found = { pr = PR }
+    drafts.keep(PR, { path = "beta.txt", line = 6, start_line = 5, head = "h", body = "d" })
+    assert.are.same({ "󰍪", render.REVIEW_DRAFT_HL }, { review_comments.bubble(beta, 5) })
+  end)
+
+  it("answers the review comment's bubble on a line it shares with a draft", function()
+    found = full_answer()
+    found.pr = PR
+    drafts.keep(PR, { path = "beta.txt", line = 16, head = "h", body = "d" })
+    assert.are.same({ "󰍩", render.REVIEW_COMMENT_HL }, { review_comments.bubble(beta, 16) })
+  end)
+
+  it("answers each line's bubble when review_comment.sign is false", function()
+    config.setup({ review_comment = { sign = false } })
+    found = full_answer()
+    found.pr = PR
+    drafts.keep(PR, { path = "beta.txt", line = 6, head = "h", body = "d" })
+    assert.are.same({ "󰍩", render.REVIEW_COMMENT_HL }, { review_comments.bubble(beta, 16) })
+    assert.are.same({ "󰍪", render.REVIEW_DRAFT_HL }, { review_comments.bubble(beta, 6) })
+  end)
+
+  it("answers a line's bubble after text is typed at its start", function()
+    found = full_answer()
+    on_answer()
+    vim.api.nvim_buf_set_text(beta, 15, 0, 15, 0, { "typed " })
+    assert.are.same({ "󰍩", render.REVIEW_COMMENT_HL }, { review_comments.bubble(beta, 16) })
   end)
 
   it("clears its bubbles with its marks", function()

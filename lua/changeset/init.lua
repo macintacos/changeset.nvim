@@ -189,7 +189,7 @@ end)
 pending_state.subscribe(redraw)
 
 -- Loaded here because every tree is built through this module, so the marks exist whenever a tree can.
-require("changeset.review_comments")
+local review_comments = require("changeset.review_comments")
 
 ---The sidebar's footer, which its statusline evaluates on every redraw.
 ---@return string
@@ -232,6 +232,17 @@ function M.rows()
     root = state.tree.root,
     ref = state.tree.ref,
   }
+end
+
+---Public API: the comment bubble on line `lnum` of `buf` and its highlight group, for a `'statuscolumn'` to draw;
+---nil on a line without one. Answers from the buffer's marks alone, so it is cheap on every screen row, whatever
+---`review_comment.sign` is.
+---@param buf integer
+---@param lnum integer 1-based, as `v:lnum`.
+---@return string? glyph `󰍩` for a review comment, `󰍪` for a draft.
+---@return string? hl `ChangesetReviewComment` or `ChangesetReviewDraft`.
+function M.bubble(buf, lnum)
+  return review_comments.bubble(buf, lnum)
 end
 
 ---Configure changeset. Optional; reaches the sidebar the next time it opens; PR Review Mode, once on, stays on.

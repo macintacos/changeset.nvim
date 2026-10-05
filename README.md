@@ -253,13 +253,35 @@ appears and goes as the draft is kept or deleted. A draft written against an old
 the PR isn't drawn or reopened; it stays in the file until `pr abandon`, and drafts of
 closed or merged PRs stay too. A line shows one bubble, a review comment's over a draft's.
 
-A `'statuscolumn'` can draw the bubbles somewhere else. They are the only extmarks in the
-namespace `changeset.review_comment_signs`, at most one on a line.
-`vim.api.nvim_create_namespace("changeset.review_comment_signs")` returns its id, and
-`vim.api.nvim_buf_get_extmarks(buf, id, { row, 0 }, { row, -1 }, { details = true })`,
-with `row` as `v:lnum - 1`, returns the line's bubble, if any. Its details hold
-`sign_text`, `"󰍩 "` or `"󰍪 "` (Neovim pads it to two cells), and `sign_hl_group`,
-`ChangesetReviewComment` or `ChangesetReviewDraft`.
+A `'statuscolumn'` can draw the bubbles somewhere else. `%s` draws every plugin's signs or
+none, so set `review_comment.sign` to `false` to keep the bubbles out of the sign column, or
+a line shows its bubble twice. `require("changeset").bubble(buf, lnum)` returns the bubble
+on line `lnum` (1-based, as `v:lnum`) of buffer `buf` (0 for the current one) and its
+highlight group: `"󰍩", "ChangesetReviewComment"` for a review comment, `"󰍪",
+"ChangesetReviewDraft"` for a draft, or nil on a line without one. It answers from the marks
+already in the buffer, so it is cheap enough for every screen row, and it answers whatever
+`review_comment.sign` is.
+
+This statuscolumn draws the bubble where the fold column would be, then the line number and
+the signs:
+
+```lua
+function _G.bubble_or_fold()
+  -- No line has a bubble until changeset is loaded, and requiring it here would load it at startup.
+  local changeset = package.loaded.changeset
+  local glyph, hl
+  if changeset and vim.v.virtnum == 0 then
+    glyph, hl = changeset.bubble(0, vim.v.lnum)
+  end
+  return glyph and "%#" .. hl .. "#" .. glyph .. "%*" or "%C"
+end
+vim.o.foldcolumn = "1"
+vim.o.statuscolumn = "%{%v:lua.bubble_or_fold()%}%l %s"
+```
+
+In mini.statuscolumn, a `fold` section can be `%{%v:lua.bubble_or_fold()%}`: `%{%...%}`
+evaluates what the function returns as a format string, so the section draws the bubble on
+a line that carries one and `%C` everywhere else.
 
 ## Picker
 
@@ -309,6 +331,7 @@ Any `keymaps` entry can be `false` to leave that key unbound.
 | `layout.min_file_width` | `80` | Narrowest the files get beside the sidebar before it moves below them |
 | `pr_review.enabled` | `false` | PR Review Mode on every branch but the default |
 | `review_comment.save` | `<C-CR>`, `<C-s>` | List of keys that save a review comment, or keep the submit preview's body, in insert and normal mode |
+| `review_comment.sign` | `true` | Put each review comment's and draft's bubble in the sign column; `false` leaves it to a `'statuscolumn'` (see [PR reviews](#pr-reviews)) |
 
 The step keys, `keymaps.next` and `keymaps.prev`, are off by default. Once set, they work
 from any window, but only while the sidebar is open. Whatever they replaced comes back

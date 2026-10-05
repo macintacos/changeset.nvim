@@ -37,6 +37,7 @@ local M = {}
 
 ---@class changeset.Config.ReviewComment
 ---@field save? string[] Keys that save a review comment into the pending review, and close the submit preview's body window keeping the body, in insert and normal mode. Default { "<C-CR>", "<C-s>" }.
+---@field sign? boolean Put a comment bubble in the sign column on each review comment's and draft's first line; `false` leaves it to a statuscolumn that draws `require("changeset").bubble()`. Default true.
 
 ---The options in force: every top-level field set.
 ---@class changeset.Options : changeset.Config
@@ -70,7 +71,7 @@ local DEFAULTS = {
   },
   layout = { min_file_width = 80 },
   pr_review = { enabled = false },
-  review_comment = { save = { "<C-CR>", "<C-s>" } },
+  review_comment = { save = { "<C-CR>", "<C-s>" }, sign = true },
 }
 
 local current = vim.deepcopy(DEFAULTS)
@@ -96,6 +97,7 @@ local function validate(options)
         return type(lhs) == "string" and lhs ~= ""
       end)
   end, "non-empty list of non-empty strings")
+  vim.validate("review_comment.sign", options.review_comment.sign, "boolean")
 end
 
 ---Lay `opts` over the defaults, not over the last call's. On a bad value, raise an error naming the option and keep what was in force.

@@ -499,9 +499,18 @@ long range. A line gets one bubble however many review comments start on it, and
 comment's wins over a draft's, so the bubbles never stack. Under `'signcolumn'` `auto` they
 never widen the column, but the first bubble in a buffer with no other sign opens the
 column and shifts the text two cells. `auto:2` and wider still widen by one where a bubble
-shares its line with another sign. `yes` holds the text still. The bubbles live in a
-namespace of their own, `changeset.review_comment_signs`, so a statuscolumn can find a
-line's without sorting through the numbers and circles; `README.md` states that contract.
+shares its line with another sign. `yes` holds the text still.
+
+A statuscolumn that draws the bubble elsewhere, such as in its fold column, can't leave it
+out of `%s`, which draws every plugin's signs or none, so the bubble would show twice and
+the second copy would hide the line's `▎`. `review_comment.sign = false` keeps it out of
+the sign column. The mark stays, with `sign_hl_group` but no `sign_text`, which takes no
+cell and draws nothing. `require("changeset").bubble()` reads that group back to tell a
+review comment's bubble from a draft's, so it answers whatever the option is, and from the
+buffer's marks alone, since a statuscolumn asks on every screen row of every redraw. The
+bubbles live in a namespace of their own, `changeset.review_comment_signs`, so it finds a
+line's with one lookup. `README.md` states the function as the contract rather than the
+namespace's fields, which leaves how a mark carries its bubble free to change.
 
 No icon plugin has a category to ask for a comment, so, like the header's branch glyph,
 the bubble is borrowed rather than looked up: `󰍩` is nerd-font Material `message-text`, the

@@ -18,6 +18,10 @@ A new command is a `:Changeset` subcommand, never a second user command.
 sidebar's statusline evaluates it from a string, `v:lua.require'changeset'.footer()`,
 which the type check cannot follow.
 
+`bubble()` in `lua/changeset/init.lua` is public for a user's `'statuscolumn'`, which calls
+it on every screen row of every redraw. It answers from the buffer's extmarks alone, never
+from the drafts file, GitHub or the tree.
+
 ## Adding an option
 
 An option is a field of the `changeset.Config` class in `lua/changeset/config.lua`. A new
