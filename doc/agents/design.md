@@ -575,8 +575,9 @@ Attaching is visible to the rest of Neovim:
   is attached, and statusline LSP components list it on those buffers.
 - It advertises only `hoverProvider` and no `textDocumentSync`, so nothing sends it
   `didOpen` or `didChange`, and formatting, diagnostics, code actions, completion,
-  symbols, inlay hints and semantic tokens pass it over. The symbol walk waits for a client
-  that lists symbols, so `changeset` attaching never stands in for one.
+  symbols, inlay hints and semantic tokens pass it over. The symbol walk's wait for a server
+  ends only on a client that lists symbols, so `changeset` attaching first, as it does when
+  GitHub answers mid-wait, never marks a file as having no server.
 - In a file no other server attaches to, Neovim maps `K` to `vim.lsp.buf.hover()` unless
   `'keywordprg'` or a `K` mapping is set, so while it is attached `K` on a line with
   nothing says `No information available` instead of running `'keywordprg'`, and `grr`

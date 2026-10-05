@@ -63,7 +63,12 @@ local function await_client(bufnr, on_client)
     group = group,
     buffer = bufnr,
     desc = "changeset: a server reached a changed file, so its symbols can be requested",
-    callback = function()
+    callback = function(args)
+      -- A client that lists no symbols, such as changeset's hover, attaching first would mark the file as having no server.
+      local client = vim.lsp.get_client_by_id(args.data.client_id)
+      if not (client and client:supports_method(method)) then
+        return
+      end
       vim.schedule(function()
         finish(#vim.lsp.get_clients({ bufnr = bufnr, method = method }) > 0)
       end)

@@ -208,6 +208,65 @@ describe("changeset.resolve", function()
       assert.is_nil(report.items)
     end)
 
+    it("waits past a client that lists no symbols for one that does", function()
+      vim.lsp.config("stub_lua", { cmd = function() end, filetypes = { "lua" }, root_dir = function() end })
+      vim.lsp.enable("stub_lua")
+      enabled = "stub_lua"
+      ---Attach `buf` to an in-process server named `name` that answers each method from `answers`.
+      ---@param buf integer
+      ---@param name string
+      ---@param answers table<string, table>
+      local function attach(buf, name, answers)
+        vim.lsp.start({
+          name = name,
+          root_dir = root,
+          cmd = function(dispatchers)
+            return {
+              request = function(method, _, callback)
+                vim.schedule(function()
+                  callback(nil, answers[method])
+                end)
+                return true, 1
+              end,
+              notify = function(method)
+                if method == "exit" then
+                  dispatchers.on_exit(0, 15)
+                end
+                return true
+              end,
+              is_closing = function()
+                return false
+              end,
+              terminate = function() end,
+            }
+          end,
+        }, { bufnr = buf })
+      end
+      local report
+      local file = { path = "mod.lua", status = "added", added = 1, removed = 0, hunks = {} }
+      resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items)
+        report = { items = items }
+      end)
+      local buf = vim.fn.bufnr(root .. "/mod.lua")
+
+      attach(buf, "hover_only", { initialize = { capabilities = { hoverProvider = true } } })
+      vim.wait(100)
+      assert.is_nil(report)
+
+      local range = { start = { line = 0, character = 0 }, ["end"] = { line = 0, character = 9 } }
+      attach(buf, "symbols", {
+        initialize = { capabilities = { documentSymbolProvider = true } },
+        ["textDocument/documentSymbol"] = { { name = "one", kind = 12, range = range, selectionRange = range } },
+      })
+      assert.is_true(vim.wait(1000, function()
+        return report ~= nil
+      end, 25))
+      assert.are.equal("one", assert(report.items)[1].name)
+      for _, client in ipairs(vim.lsp.get_clients({ bufnr = buf })) do
+        client:stop()
+      end
+    end)
+
     ---Enable an in-process server for `filetype` that answers `symbols` for every file.
     ---@param name string
     ---@param filetype string
