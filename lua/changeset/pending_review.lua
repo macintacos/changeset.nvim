@@ -1,4 +1,4 @@
----The branch's pending GitHub review, driven through `gh api`: find, start, comment, delete, submit.
+---The branch's pending GitHub review, driven through `gh api`: find, start, comment, edit, delete, submit.
 local Git = require("changeset.git")
 
 local M = {}
@@ -59,6 +59,10 @@ local ADD_COMMENT = [[mutation($review: ID!, $path: String!, $line: Int!, $start
   addPullRequestReviewThread(input: {pullRequestReviewId: $review, path: $path, line: $line, side: RIGHT, startLine: $startLine, body: $body}) {
     thread { id isOutdated line startLine comments(first: 1) { nodes { id fullDatabaseId line startLine } } }
   }
+}]]
+
+local UPDATE_COMMENT = [[mutation($id: ID!, $body: String!) {
+  updatePullRequestReviewComment(input: {pullRequestReviewCommentId: $id, body: $body}) { pullRequestReviewComment { id body } }
 }]]
 
 local DELETE_COMMENT =
@@ -197,6 +201,16 @@ function M.add_comment(review_id, new, cb)
       body = new.body,
       outdated = false,
     })
+  end)
+end
+
+---Replace the body of the review comment with node ID `comment_id`.
+---@param comment_id string
+---@param body string
+---@param cb fun(err: string?)
+function M.update_comment(comment_id, body, cb)
+  graphql({ "-f", "id=" .. comment_id, "-f", "body=" .. body }, UPDATE_COMMENT, function(err)
+    cb(err)
   end)
 end
 

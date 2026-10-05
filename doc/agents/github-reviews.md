@@ -124,9 +124,16 @@ another `type`, and the message isn't reliable for telling refusals apart.
 | List review comments, page 2 of 3 | GraphQL | node | 2 nodes, `hasNextPage: true` | `tests/fixtures/github-reviews/review-comments-page-2.json` |
 | List review comments, page 3 of 3 | GraphQL | node | 2 nodes, `hasNextPage: false` | `tests/fixtures/github-reviews/review-comments-page-3.json` |
 | List review comments with `--paginate --slurp` | GraphQL | node | an array of the same 3 pages | `tests/fixtures/github-reviews/review-comments-paginate-slurp.json` |
+| Update a review comment's body | GraphQL | node | the review comment's `id` and new `body` | `tests/fixtures/github-reviews/update-review-comment.json` |
 | Delete a review comment | GraphQL | node | the pending review's `id` | `tests/fixtures/github-reviews/delete-review-comment.json` |
 | Delete the pending review | GraphQL | node | `state: PENDING`, the state it had | `tests/fixtures/github-reviews/delete-pending-review.json` |
 | Submit | GraphQL | node | § Submitting | `tests/fixtures/github-reviews/submit-comment-with-body.json` |
+
+The update was measured on 2026-10-05 with `gh` 2.102.0. It ran on a fresh pending review on
+pull request 1, holding one review comment on `alpha.txt` line 31, and gave that review
+comment a two-line body. Listing the review comments afterwards showed the new body, and the
+run then deleted the pending review. An empty body was never sent, so GitHub's answer to one
+is unmeasured.
 
 To hand-check finding a pending review started on github.com:
 
@@ -187,6 +194,10 @@ gh api graphql --paginate --slurp -f review=<pending review id> -f query='query(
       nodes { id fullDatabaseId path line startLine originalLine originalStartLine outdated commit { oid } originalCommit { oid } diffHunk body }
     }
   } }
+}'
+
+gh api graphql -f id=<review comment id> -f body=<text> -f query='mutation($id: ID!, $body: String!) {
+  updatePullRequestReviewComment(input: {pullRequestReviewCommentId: $id, body: $body}) { pullRequestReviewComment { id body } }
 }'
 
 gh api graphql -f id=<review comment id> -f query='mutation($id: ID!) { deletePullRequestReviewComment(input: {id: $id}) { pullRequestReview { id } } }'

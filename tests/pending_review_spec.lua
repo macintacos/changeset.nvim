@@ -224,6 +224,20 @@ describe("pending_review", function()
     assert.is_true(vim.list_contains(gh.calls()[1], "id=PRRC_1"))
   end)
 
+  it("updates a review comment's body, sending it verbatim", function()
+    gh.fixture("update-review-comment")
+
+    assert.is_nil((run("update_comment", "PRRC_1", "update: after\nsecond line")))
+    assert.is_true(vim.list_contains(gh.calls()[1], "id=PRRC_1"))
+    assert.equal("body=update: after\nsecond line", arg(gh.calls()[1], "body="))
+  end)
+
+  it("passes on GitHub's refusal of an update", function()
+    gh.answer({ stdout = '{"errors":[{"message":"Could not resolve to a node"}]}', stderr = "gh: nope", code = 1 })
+
+    assert.is_string((run("update_comment", "PRRC_GONE", "text")))
+  end)
+
   it("deletes the pending review", function()
     gh.fixture("delete-pending-review")
 
