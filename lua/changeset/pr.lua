@@ -166,18 +166,24 @@ local function place(spanned)
   return ("%s of %s"):format(lines_label(spanned.start_line or last, last), spanned.path)
 end
 
+---Deletes `draft` of `pr` from this machine.
+---@param pr changeset.Pr
+---@param draft changeset.Draft
+local function drop(pr, draft)
+  -- GitHub holds nothing to refetch; the drafts subscription redraws the mark.
+  if not drafts.drop(pr, draft) then
+    return say(vim.log.levels.ERROR, "can't delete the draft in %s", drafts.path())
+  end
+  say(vim.log.levels.INFO, "deleted the draft on %s", place(draft))
+end
+
 ---Deletes `listed`: a draft of `found.pr` at once, or a review comment of its pending review through `mutate`.
 ---@param found changeset.pending_review.Found
 ---@param mutate changeset.pr.Mutate
 ---@param listed changeset.Listed
 local function remove(found, mutate, listed)
-  local draft = listed.draft
-  if draft then
-    -- GitHub holds nothing to refetch; the drafts subscription redraws the mark.
-    if not drafts.drop(found.pr, draft) then
-      return say(vim.log.levels.ERROR, "can't delete the draft in %s", drafts.path())
-    end
-    return say(vim.log.levels.INFO, "deleted the draft on %s", place(draft))
+  if listed.draft then
+    return drop(found.pr, listed.draft)
   end
   local id = assert(listed.review_comment, "changeset: nothing listed to delete").id
   mutate("deleted a review comment from", function(done)
@@ -185,13 +191,19 @@ local function remove(found, mutate, listed)
   end)
 end
 
----Asks, then deletes `listed`, a draft of the branch's open PR or a review comment of its pending review.
+---Asks, then deletes `listed`, a draft of the branch's open PR or a review comment of its pending review. A draft
+---is keyed by the PR in GitHub's last answer, the one the Comments section was drawn from, so gh needn't answer.
 ---@param listed changeset.Listed
 function M.delete_listed(listed)
   local what = listed.draft and "draft" or "review comment"
   local spanned = listed.draft or listed.review_comment --[[@as changeset.Spanned]]
   local question = ("Delete the %s on %s?"):format(what, place(spanned))
+  local tree = build.current()
+  local held = tree and tree.pr and pending_state.get(tree.root, tree.pr)
   confirm.ask(question, function()
+    if listed.draft and held then
+      return drop(held.pr, listed.draft)
+    end
     on_pr("delete a review comment from", function(found, mutate)
       remove(found, mutate, listed)
     end)

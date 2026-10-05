@@ -302,12 +302,13 @@ describe("the sidebar's Comments section", function()
     end, 25))
   end)
 
-  it("asks, then deletes the draft on a row with d", function()
+  it("asks, then deletes the draft on a row with d while gh fails", function()
     local pr = open_with_review_comments()
     drafts.keep(pr, { path = "alpha.txt", line = 6, start_line = 5, head = pr.head, body = "a draft" })
     choice = "Yes"
-    gh.fixture("find-pending-review")
-    gh.fixture("review-comments-paginate-slurp")
+    gh.answer({ stderr = "gh: offline", code = 1 })
+    gh.answer({ stderr = "gh: offline", code = 1 })
+    local calls = #gh.calls()
 
     press_on("alpha.txt:5-6", "d")
 
@@ -316,6 +317,7 @@ describe("the sidebar's Comments section", function()
     end, 25))
     assert.same({ "Delete the draft on lines 5-6 of alpha.txt?" }, asked)
     assert.is_nil(line_of("a draft"))
+    assert.equal(calls, #gh.calls())
   end)
 
   it("deletes nothing with d on a row that lists no comment", function()

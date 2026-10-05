@@ -578,7 +578,9 @@ keys jump to its line, then open it in the review comment window. A draft reopen
 ends on its line. A review comment opens editable, its title, keys' descriptions and
 footer saying edit and update, and a save sends GitHub the new body. `d` asks through the
 same No/Yes question `pr abandon` uses, then deletes; a review comment goes through the
-same progress and refetch as `pr delete`, which shares the deletion.
+same progress and refetch as `pr delete`, which shares the deletion. A draft lives only on
+this machine, so it is dropped under the PR of GitHub's last answer, the one the section
+was drawn from, without asking gh again.
 
 An outdated or file-level review comment opens no window. The window lies under a line
 the review comment is about, and GitHub knows none for it: an outdated one's `original_line`

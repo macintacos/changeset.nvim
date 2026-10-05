@@ -385,7 +385,8 @@ empty body. Closing it any other way drops the edit and keeps no draft, since a
 draft on those lines would reopen as a second review comment; the review
 comment keeps its saved text. An outdated or file-level review comment has no
 line, so its row opens its file and says so. `d` on a row asks, the way `pr
-abandon` does, then deletes the review comment or draft.
+abandon` does, then deletes the review comment or draft; a draft goes without
+asking GitHub.
 
 A `'statuscolumn'` can draw the bubbles somewhere else. `%s` draws every
 plugin’s signs or none, so set `review_comment.sign` to `false` to keep the

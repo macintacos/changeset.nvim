@@ -657,8 +657,9 @@ describe("changeset.pr", function()
       assert.same({ "Delete the review comment on alpha.txt?" }, prompts)
     end)
 
-    it("asks, then deletes the draft it lists without asking GitHub to delete it", function()
+    it("asks, then deletes the draft it lists from GitHub's last answer, even when gh fails", function()
       confirmed = true
+      held, answers = { pr = pr }, { { err = "gh: not logged in" } }
       local draft = { path = "alpha.txt", start_line = 8, line = 10, head = HEAD, body = "d" }
       drafts.keep(pr, draft)
 
@@ -666,7 +667,8 @@ describe("changeset.pr", function()
 
       assert.same({ "Delete the draft on lines 8-10 of alpha.txt?" }, prompts)
       assert.same({}, drafts.list(pr))
-      assert.same({}, deleted_comments)
+      assert.same({}, fetched)
+      assert.same({ vim.log.levels.INFO }, levels())
     end)
   end)
 
