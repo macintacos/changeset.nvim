@@ -205,7 +205,8 @@ delete it. You have at most one per PR. `pr start`, `pr submit`, `pr abandon` an
   PR's diff is read (you can close it again), the PR's head commit fetched, and lines
   inside the PR's diff in a saved file that matches that head. The keys in
   `review_comment.save`, `<C-CR>` or `<C-s>` by default, save it into the pending review
-  and close the window; with only whitespace written, they close it and save nothing.
+  and close the window, whose border names the first of them; with only whitespace
+  written, they close it and save nothing.
   `q`, `<S-Esc>` (where the terminal sends it) and `:q` close it and keep its text as a
   draft on this machine, as does quitting Neovim with it open; empty text keeps nothing.
   A save GitHub rejects keeps the draft too. Running `pr comment` anywhere on a draft's

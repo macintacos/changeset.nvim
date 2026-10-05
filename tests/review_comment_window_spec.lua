@@ -85,6 +85,34 @@ describe("review_comment_window", function()
     assert.truthy(config.footer[1][1]:find("pending review on #7", 1, true))
   end)
 
+  ---The footer's text, its chunks joined.
+  local function footer(win)
+    return table.concat(vim.tbl_map(function(chunk)
+      return chunk[1]
+    end, vim.api.nvim_win_get_config(win).footer))
+  end
+
+  it("names its first save key at the right of the footer, across the border from where a save goes", function()
+    local win = open({ footer = "pending review on #412", keys = { "<C-CR>", "<C-s>" } })
+    assert.equal(72, vim.api.nvim_win_get_width(win))
+    assert.equal(" pending review on #412 " .. ("─"):rep(35) .. " <C-CR> save ", footer(win))
+  end)
+
+  it("writes the save key in Neovim's own notation", function()
+    local win = open({ keys = { "<c-enter>" } })
+    assert.truthy(vim.endswith(footer(win), " <C-CR> save "), footer(win))
+  end)
+
+  it("drops the save key from a footer too narrow for both", function()
+    vim.cmd("vsplit")
+    vim.cmd("vertical resize 30")
+    local win = open({ footer = "pending review on #412" })
+    local text = footer(win)
+    vim.api.nvim_win_close(win, true)
+    vim.cmd.close()
+    assert.equal(" pending review on #412 ", text)
+  end)
+
   it("describes its keys with the descriptions it is given", function()
     local _, buf = open({ save_desc = "Save it", close_desc = "Close it" })
     for _, mode in ipairs({ "i", "n" }) do

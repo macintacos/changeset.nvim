@@ -19,6 +19,21 @@ local MIN_WIDTH = 20
 ---@field keep fun(body: string) Called with the buffer's lines joined by "\n", empty included, whenever the buffer goes (a close, an :e in the float, quitting) except after a taken save.
 ---@field body string? The text it opens with.
 
+---Where a save goes on the left, `hint` on the right, the border between them; `hint` only
+---when both fit in `width`.
+---@param where string
+---@param hint string
+---@param width integer
+---@return [string, string][]
+local function footer(where, hint, width)
+  local left, right = " " .. where .. " ", " " .. hint .. " "
+  local gap = width - vim.fn.strdisplaywidth(left) - vim.fn.strdisplaywidth(right)
+  if gap < 1 then
+    return { { left, "FloatFooter" } }
+  end
+  return { { left, "FloatFooter" }, { ("─"):rep(gap), "FloatBorder" }, { right, "FloatFooter" } }
+end
+
 ---Open the window under `opts.line` of the current window, focused, in insert mode.
 ---@param opts changeset.ReviewCommentWindowOpts
 ---@return integer win
@@ -32,18 +47,21 @@ function M.open(opts)
   -- bufpos anchors at the first text column, so the gutter and the border both come out of
   -- the window's width.
   local room = vim.api.nvim_win_get_width(source) - vim.fn.getwininfo(source)[1].textoff - 2
+  local width = math.max(math.min(MAX_WIDTH, room), MIN_WIDTH)
+  local hint = vim.fn.keytrans(vim.keycode(opts.keys[1])) .. " save"
 
   local win = vim.api.nvim_open_win(buf, true, {
     relative = "win",
     win = source,
     bufpos = { opts.line - 1, 0 },
-    width = math.max(math.min(MAX_WIDTH, room), MIN_WIDTH),
+    width = width,
     height = HEIGHT,
     style = "minimal",
     border = "rounded",
     title = " " .. opts.title .. " ",
     title_pos = "left",
-    footer = " " .. opts.footer .. " ",
+    -- One footer_pos per float, so the hint shares the footer, pushed right by border.
+    footer = footer(opts.footer, hint, width),
     footer_pos = "left",
   })
   -- Set once the float is current, so the user's FileType settings land on it.

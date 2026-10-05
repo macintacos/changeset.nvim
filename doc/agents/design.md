@@ -319,7 +319,7 @@ local function greet(name)
 │                                                                        │
 │                                                                        │
 │                                                                        │
-╰ pending review on #412 ────────────────────────────────────────────────╯
+╰ pending review on #412 ─────────────────────────────────── <C-CR> save ╯
 ```
 
 It is attached to the window (`relative = "win"`, `bufpos`) rather than placed in editor
@@ -333,8 +333,12 @@ number column and sign column, which describe a file this buffer is not. The fil
 set once the float is open, so a user's markdown `FileType` settings, such as `spell`,
 reach it and win over the style.
 
-The border does the labelling, as the kind menu's does. The title names the line or lines,
-the footer where a save goes. Keys are not listed there: `?` answers that. However the
+The border does the labelling, as the kind menu's does. The title names the line or lines.
+The footer says where a save goes and, at its right end, the first `review_comment.save`
+key in Neovim's own notation (`<C-CR> save`), since every review comment ends with that key
+and it is the one nobody should have to look up. A float takes one `footer_pos`, so both
+share a left footer padded with border to the window's width; a window too narrow for both
+drops the key. The other keys stay off the border: `?` lists them all. However the
 window's text goes, except the close a taken save makes, it is kept as a local draft: `q`
 in normal mode, `<S-Esc>` in either mode where the terminal sends it, `:q`, `<C-w>c`, an
 `:e` in the float, quitting Neovim. One `BufUnload` hook on the window's buffer catches
