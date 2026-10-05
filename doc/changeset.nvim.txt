@@ -295,17 +295,20 @@ snacks pick up; none runs while a question or the submit preview waits on you.
 - `:Changeset pr comment` opens a markdown window under the cursor’s line, moving the
     lines after it down rather than covering them; from visual mode,
     `:'<,'>Changeset pr comment` opens it under the selection and comments on the selected
-    lines. It needs a pending review, a sidebar opened on the repository so the PR’s diff is
-    read (you can close it again), the PR’s head commit fetched, and lines inside the PR’s
-    diff in a saved file that matches that head. The keys in
+    lines. It needs a sidebar opened on the repository so the PR’s diff is read (you can
+    close it again), the PR’s head commit fetched, and lines inside the PR’s diff in a saved
+    file that matches that head. With no pending review, it asks whether to start one, the
+    way `pr abandon` asks; yes opens the window at once and starts the review in the
+    background, and a save waits for it. If the review can’t start, a save is kept as a
+    draft. The keys in
     `review_comment.save`, `<C-CR>` or `<C-s>` by default, save it into the pending review
     and close the window, whose border names the first of them; with only whitespace
     written, they close it and save nothing.
     `q`, `<S-Esc>` (where the terminal sends it) and `:q` close it and keep its text as a
     draft on this machine, as does quitting Neovim with it open; empty text keeps nothing.
     A save GitHub rejects keeps the draft too. Running `pr comment` anywhere on a draft’s
-    lines reopens it on its own lines; like a new one, it needs a pending review to save
-    into. Drafts never reach GitHub.
+    lines reopens it on its own lines, asking to start a pending review like a new one when
+    there is none. Drafts never reach GitHub.
 - `:Changeset pr delete` deletes the draft on the cursor’s line, else the review comment
     there, without asking; a draft needs no pending review. When several take in that line,
     it deletes the narrowest; run it again for the next. When the line has none, it says so.

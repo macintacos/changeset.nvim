@@ -83,7 +83,8 @@ describe("changeset.pr", function()
       fetch = function(root, cb)
         wait("fetch")
         table.insert(fetched, root)
-        local answer = answers[math.min(#fetched, #answers)]
+        local answer = answers[math.min(#fetched, #answers)] or {}
+        held = answer.found or held
         if cb then
           cb(answer.err, answer.found)
         end
@@ -96,7 +97,7 @@ describe("changeset.pr", function()
       start = function(id, cb)
         wait("start")
         table.insert(started, id)
-        cb(failure)
+        cb(failure, not failure and { id = "PRR_NEW", comments = {} } or nil)
       end,
       delete = function(id, cb)
         wait("delete")
@@ -735,16 +736,179 @@ describe("changeset.pr", function()
       refused("isn't measured against an open PR")
     end)
 
-    it("asks for a review to be started when GitHub hasn't answered", function()
-      held = nil
-      require("changeset.pr").comment(4, 4)
-      refused("start the review with `:Changeset pr start`")
+    describe("when GitHub hasn't answered", function()
+      before_each(function()
+        held = nil
+      end)
+
+      it("asks it with progress showing, then opens on the pending review it finds", function()
+        answers = { { found = { pr = held_pr, review = { id = "PRR_1", comments = {} } } } }
+
+        require("changeset.pr").comment(4, 4)
+
+        assert.same({ { "fetch", true } }, waits)
+        assert.equal(0, running())
+        assert.equal(1, #opened)
+      end)
+
+      it("asks it, then asks to start a pending review when it finds none", function()
+        answers = { { found = { pr = held_pr } } }
+
+        require("changeset.pr").comment(4, 4)
+
+        assert.same({ { "fetch", true }, { "ask", false } }, waits)
+      end)
+
+      it("opens nothing once the cursor has left the file", function()
+        answers = { { found = { pr = held_pr, review = { id = "PRR_1", comments = {} } } } }
+        local state = package.loaded["changeset.pending_state"]
+        local fetch, other = state.fetch, vim.api.nvim_create_buf(true, false)
+        state.fetch = function(root, cb)
+          vim.api.nvim_set_current_buf(other)
+          fetch(root, cb)
+        end
+
+        require("changeset.pr").comment(4, 4)
+
+        vim.api.nvim_buf_delete(other, { force = true })
+        assert.same({}, opened)
+      end)
+
+      it("warns with gh's text when it can't answer", function()
+        answers = { { err = "gh auth expired" } }
+
+        require("changeset.pr").comment(4, 4)
+
+        assert.same({ vim.log.levels.WARN }, levels())
+        assert.truthy(notes[1].msg:find("gh auth expired", 1, true))
+        assert.same({}, opened)
+        assert.equal(0, running())
+      end)
     end)
 
-    it("asks for a review to be started when there is none", function()
-      held.review = nil
-      require("changeset.pr").comment(4, 4)
-      refused("start the review with `:Changeset pr start`")
+    describe("with no pending review", function()
+      ---@type fun(err: string?, review: table?)? Lands the start GitHub was asked for.
+      local land
+
+      before_each(function()
+        held.review = nil
+        land = nil
+      end)
+
+      ---Leaves each start in flight until `land` is called.
+      local function hold_starts()
+        package.loaded["changeset.pending_review"].start = function(id, cb)
+          wait("start")
+          table.insert(started, id)
+          land = cb
+        end
+      end
+
+      it("asks whether to start one on the PR", function()
+        require("changeset.pr").comment(4, 4)
+
+        assert.equal(1, #prompts)
+        assert.truthy(prompts[1]:find("#412", 1, true))
+      end)
+
+      it("does nothing when declined", function()
+        require("changeset.pr").comment(4, 4)
+
+        assert.same({}, opened)
+        assert.same({}, started)
+        assert.same({}, notes)
+      end)
+
+      it("refuses a line outside the PR's diff before asking", function()
+        require("changeset.pr").comment(9, 9)
+
+        refused("outside the PR's diff")
+        assert.same({}, prompts)
+      end)
+
+      it("opens the window at once once confirmed, starting the review behind it with progress", function()
+        hold_starts()
+        confirmed = true
+
+        require("changeset.pr").comment(4, 4)
+
+        assert.equal(1, #opened)
+        assert.same({ "PR_1" }, started)
+        assert.same({ { "ask", false }, { "start", true } }, waits)
+        assert(land)(nil, { id = "PRR_NEW", comments = {} })
+        assert.equal(0, running())
+      end)
+
+      it("holds a save until the start lands, then saves into the new review", function()
+        hold_starts()
+        confirmed = true
+        require("changeset.pr").comment(4, 4)
+        local results = {}
+
+        opened[1].save("body", function(err)
+          table.insert(results, { err = err })
+        end)
+        assert.same({}, added)
+        assert(land)(nil, { id = "PRR_NEW", comments = {} })
+
+        assert.same({ { id = "PRR_NEW", new = { path = "a.lua", line = 4, body = "body" } } }, added)
+        assert.same({ {} }, results)
+      end)
+
+      it("saves straight into a review whose start has landed", function()
+        confirmed = true
+        require("changeset.pr").comment(4, 4)
+
+        opened[1].save("body", function() end)
+
+        assert.equal("PRR_NEW", added[1].id)
+      end)
+
+      it("keeps a save as a draft when the review can't start, and says so", function()
+        hold_starts()
+        confirmed = true
+        require("changeset.pr").comment(4, 4)
+        local results = {}
+        opened[1].save("text", function(err)
+          table.insert(results, err)
+        end)
+
+        assert(land)("boom")
+
+        assert.same({ "boom" }, results)
+        assert.same({}, added)
+        assert.same({ { path = "a.lua", line = 4, head = held_pr.head, body = "text" } }, drafts.list(held_pr))
+        assert.same({ vim.log.levels.ERROR, vim.log.levels.ERROR }, levels())
+        assert.truthy(notes[2].msg:find("draft", 1, true))
+        assert.equal("failed", progress[#progress].status)
+      end)
+
+      it("saves into the pending review GitHub finds when it refuses to start another", function()
+        hold_starts()
+        confirmed = true
+        answers = { { found = { pr = held_pr, review = { id = "PRR_ELSE", comments = {} } } } }
+        require("changeset.pr").comment(4, 4)
+
+        assert(land)("User can only have one pending review per pull request")
+        opened[1].save("body", function() end)
+
+        assert.equal("PRR_ELSE", added[1].id)
+        assert.equal(0, #vim.tbl_filter(function(level)
+          return level == vim.log.levels.ERROR
+        end, levels()))
+        assert.equal(0, running())
+      end)
+
+      it("reopens a draft on its own lines once confirmed", function()
+        confirmed = true
+        tree.files[1].hunks = {}
+        drafts.keep(held_pr, { path = "a.lua", line = 7, start_line = 5, head = held_pr.head, body = "draft" })
+
+        require("changeset.pr").comment(6, 6)
+
+        assert.equal("draft", opened[1].body)
+        assert.equal("Review comment · lines 5-7", opened[1].title)
+      end)
     end)
 
     it("names the PR's head when the clone lacks it", function()

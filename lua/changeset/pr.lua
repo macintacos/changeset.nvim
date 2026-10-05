@@ -188,8 +188,90 @@ local function hunks(tree, path)
   return {}
 end
 
+---Hands a pending review's node ID, or why there is none, to `cb` once GitHub has answered.
+---@alias changeset.pr.Review fun(cb: fun(err: string?, review_id: string?))
+
+---Hands `cb` GitHub's last answer for the tree's PR, asking first when there is none yet.
+---@param tree changeset.Tree
+---@param cb fun(found: changeset.pending_review.Found)
+local function with_found(tree, cb)
+  local found = pending_state.get(tree.root, tree.pr)
+  if found then
+    return cb(found)
+  end
+  local finish = progress("asking GitHub for the PR's pending review")
+  pending_state.fetch(tree.root, function(err)
+    finish(err)
+    found = pending_state.get(tree.root, tree.pr)
+    if not found then
+      return say(vim.log.levels.WARN, "can't add a review comment: %s", err or "try again in a moment")
+    end
+    cb(found)
+  end)
+end
+
+---Starts a pending review on `pr` behind a review comment being written. GitHub refuses a second
+---pending review, so a refusal may mean one was started meanwhile, which is then saved into instead.
+---@param repository string
+---@param pr changeset.pending_review.Pr
+---@return changeset.pr.Review
+local function start_behind(repository, pr)
+  local answer, waiting = nil, {}
+  ---@param err string?
+  ---@param id string?
+  local function settle(err, id)
+    answer = { err = err, id = id }
+    for _, cb in ipairs(waiting) do
+      cb(err, id)
+    end
+  end
+  local finish = progress(("asking GitHub to start the pending review on #%d"):format(pr.number))
+  pending_review.start(pr.id, function(err, review)
+    if review then
+      finish()
+      say(vim.log.levels.INFO, "started the pending review on #%d", pr.number)
+      settle(nil, review.id)
+      return pending_state.fetch(repository)
+    end
+    pending_state.fetch(repository, function()
+      local found = pending_state.get(repository, pr.number)
+      if found and found.review then
+        finish()
+        return settle(nil, found.review.id)
+      end
+      finish(err)
+      say(vim.log.levels.ERROR, "can't start the pending review: %s", err)
+      settle(err)
+    end)
+  end)
+  return function(cb)
+    if answer then
+      return cb(answer.err, answer.id)
+    end
+    table.insert(waiting, cb)
+  end
+end
+
+---Hands `cb` the pending review on `found.pr` to save into: the one under way, else, once the user
+---agrees, one started in the background.
+---@param repository string
+---@param found changeset.pending_review.Found
+---@param cb fun(review: changeset.pr.Review)
+local function with_review(repository, found, cb)
+  if found.review then
+    local id = found.review.id
+    return cb(function(saving)
+      saving(nil, id)
+    end)
+  end
+  confirm.ask(("Start a pending review on #%d?"):format(found.pr.number), function()
+    cb(start_behind(repository, found.pr))
+  end)
+end
+
 ---Opens the review comment window under line `last` of the current buffer, for lines `first` to `last`,
----unless the pending review can't take a review comment there. Opening asks GitHub nothing.
+---unless the pending review can't take a review comment there. With no pending review, it asks to
+---start one. Opening asks GitHub nothing unless it has yet to answer for the PR.
 ---A draft on line `last` reopens instead, on its own lines and unchecked.
 ---@param first integer
 ---@param last integer
@@ -210,63 +292,79 @@ function M.comment(first, last)
   if not tree.pr then
     return say(vim.log.levels.WARN, "the diff isn't measured against an open PR, so there's no review to add to")
   end
-  local found = pending_state.get(tree.root, tree.pr)
-  if not (found and found.review) then
-    return say(vim.log.levels.WARN, "start the review with `:Changeset pr start`")
-  end
-  local draft = require("changeset.review_comments").at(drafts.list(found.pr), path, last)
-  if draft then
-    -- Its lines passed the gates below when it was written at this head; a save GitHub rejects keeps it.
-    first, last = draft.start_line or draft.line, draft.line
-  else
-    local matches_head = Git.matches_commit(tree.root, found.pr.head, path)
-    if matches_head == nil then
-      return say(vim.log.levels.WARN, "the PR's head, %s, isn't in this clone; fetch it first", found.pr.head:sub(1, 7))
+  with_found(tree, function(found)
+    -- The window opens in the current one, which a wait on GitHub may have moved away.
+    if vim.api.nvim_get_current_buf() ~= buf then
+      return
     end
-    local refusal = commentable.refusal(hunks(tree, path), { first, last }, matches_head and not vim.bo[buf].modified)
-    if refusal then
-      return say(vim.log.levels.WARN, "can't add a review comment here: %s", refusal)
-    end
-  end
-  ---@param body string
-  ---@return changeset.Draft
-  local function draft_of(body)
-    return { path = path, line = last, start_line = first < last and first or nil, head = found.pr.head, body = body }
-  end
-  local review_id, number = found.review.id, found.pr.number
-  review_comment_window.open({
-    line = last,
-    title = "Review comment · " .. (first < last and ("lines %d-%d"):format(first, last) or ("line %d"):format(last)),
-    save_desc = "Save into the pending review",
-    close_desc = "Close, keeping the text as a draft",
-    footer = ("pending review on #%d"):format(number),
-    keys = config.get().review_comment.save,
-    body = draft and draft.body,
-    keep = function(body)
-      if not drafts.keep(found.pr, draft_of(body)) then
-        say(vim.log.levels.ERROR, "can't keep the draft in %s", drafts.path())
+    local draft = require("changeset.review_comments").at(drafts.list(found.pr), path, last)
+    if draft then
+      -- Its lines passed the gates below when it was written at this head; a save GitHub rejects keeps it.
+      first, last = draft.start_line or draft.line, draft.line
+    else
+      local matches_head = Git.matches_commit(tree.root, found.pr.head, path)
+      if matches_head == nil then
+        return say(
+          vim.log.levels.WARN,
+          "the PR's head, %s, isn't in this clone; fetch it first",
+          found.pr.head:sub(1, 7)
+        )
       end
-    end,
-    save = function(body, done)
-      local new = { path = path, line = last, start_line = first < last and first or nil, body = body }
-      pending_review.add_comment(review_id, new, function(err)
-        if err then
-          -- Now rather than on close: the window stays open, and may never close.
-          if drafts.keep(found.pr, draft_of(body)) then
-            say(vim.log.levels.ERROR, "can't save the review comment, so kept it as a draft: %s", err)
-          else
-            say(vim.log.levels.ERROR, "can't save the review comment, nor keep it in %s: %s", drafts.path(), err)
+      local refusal = commentable.refusal(hunks(tree, path), { first, last }, matches_head and not vim.bo[buf].modified)
+      if refusal then
+        return say(vim.log.levels.WARN, "can't add a review comment here: %s", refusal)
+      end
+    end
+    ---@param body string
+    ---@return changeset.Draft
+    local function draft_of(body)
+      return { path = path, line = last, start_line = first < last and first or nil, head = found.pr.head, body = body }
+    end
+    local number = found.pr.number
+    with_review(tree.root, found, function(review)
+      review_comment_window.open({
+        line = last,
+        title = "Review comment · "
+          .. (first < last and ("lines %d-%d"):format(first, last) or ("line %d"):format(last)),
+        save_desc = "Save into the pending review",
+        close_desc = "Close, keeping the text as a draft",
+        footer = ("pending review on #%d"):format(number),
+        keys = config.get().review_comment.save,
+        body = draft and draft.body,
+        keep = function(body)
+          if not drafts.keep(found.pr, draft_of(body)) then
+            say(vim.log.levels.ERROR, "can't keep the draft in %s", drafts.path())
           end
-        else
-          -- A reopened draft, or one a close kept while this save was in flight.
-          drafts.drop(found.pr, draft_of(body))
-          say(vim.log.levels.INFO, "added a review comment to the pending review on #%d", number)
-          pending_state.fetch(tree.root)
-        end
-        done(err)
-      end)
-    end,
-  })
+        end,
+        save = function(body, done)
+          ---@param err string?
+          local function saved(err)
+            if err then
+              -- Now rather than on close: the window stays open, and may never close.
+              if drafts.keep(found.pr, draft_of(body)) then
+                say(vim.log.levels.ERROR, "can't save the review comment, so kept it as a draft: %s", err)
+              else
+                say(vim.log.levels.ERROR, "can't save the review comment, nor keep it in %s: %s", drafts.path(), err)
+              end
+            else
+              -- A reopened draft, or one a close kept while this save was in flight.
+              drafts.drop(found.pr, draft_of(body))
+              say(vim.log.levels.INFO, "added a review comment to the pending review on #%d", number)
+              pending_state.fetch(tree.root)
+            end
+            done(err)
+          end
+          review(function(err, review_id)
+            if err then
+              return saved(err)
+            end
+            local new = { path = path, line = last, start_line = first < last and first or nil, body = body }
+            pending_review.add_comment(review_id, new, saved)
+          end)
+        end,
+      })
+    end)
+  end)
 end
 
 return M

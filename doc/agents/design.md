@@ -657,10 +657,15 @@ repository's deliberate choice is none of that save's business.
   the next loop iteration, so the window closes on the float's own `InsertLeave`; closing
   sooner ends insert mode in the user's file, nudging its cursor left and firing its
   `InsertLeave`.
-- **Opening the review comment window asks GitHub nothing.** It reads the PR's head and
-  pending review from GitHub's last answer, so right after a push made inside Neovim it can
-  refuse the file as differing from the head until `:Changeset pr start` or regaining focus
-  refetches.
+- **Opening the review comment window asks GitHub nothing once it has answered.** It reads
+  the PR's head and pending review from GitHub's last answer, so right after a push made
+  inside Neovim it can refuse the file as differing from the head until
+  `:Changeset pr start` or regaining focus refetches. Only before GitHub's first answer for
+  the PR does it ask, and then it opens only if the cursor is still in that file.
+- **A review comment can be written while its pending review starts.** Starting one from
+  `pr comment` opens the window at once rather than after GitHub answers, so typing never
+  waits on the network; only the save does. GitHub refuses a second pending review, so a
+  refused start finds the PR's pending review again and saves into the one it finds.
 - **Closing the submit preview from inside it returns focus to where it opened from.**
   Closing the body float leaves `prevwin` on the preview, so once the preview closes too
   Neovim would fall back to the first window. A close while focus is elsewhere leaves it
