@@ -526,6 +526,58 @@ the PR's identity and head from the header circle's answer, so they appear with 
 whether a pending review exists doesn't matter. A draft written against an older head
 isn't drawn, since its lines may have moved.
 
+### Hover answers with the review comments on a line
+
+```markdown
+**Review comment · lines 8-10**
+
+cache this per root?
+
+---
+
+**Draft · line 9 · only on this machine**
+
+and say which ref failed
+```
+
+Hover is answered by an in-process language server whose client is named `changeset`, not
+by wrapping `vim.lsp.buf.hover()` or mapping `K`. Users bind hover to `K`, to helpers built
+on `vim.lsp.buf_request_all`, or to a plugin, and every one of them asks LSP, so a client is
+the one place all of them hear from. It also answers on a line, or in a file, that no other
+server has hover for. Where its answer lands among other servers' is the hover UI's
+business: stock hover stacks each server's answer under a `# <name>` header. The name is
+what `README.md` gives a hover UI to sort on, so it is part of the contract.
+
+The answer is every review comment, then every draft, whose lines take in the cursor's
+line, in the order the marks draw them, each a bold heading in the review comment window's
+title vocabulary and the body as written, with `---` between them, the separator stock hover
+puts between servers. A line with none gets `nil`. It is read at request time from the same
+answer the marks draw from, so it follows them without re-attaching, and its lines are the
+PR head's, with the same caveat as the marks.
+
+A buffer is attached whenever a redraw marks it, so only a file with something to say gets
+the client, at the moment its bubble appears: a file buffer only, never a `buftype` one, and
+one client per repository root. It is not detached: a buffer whose marks go, or a tree that
+leaves the PR, answers `nil`. The server answers each request at once, reports it no longer
+pending so the client does not list it as pending forever, answers an unknown method with
+`MethodNotFound`, and exits on `shutdown` and `exit`.
+
+Attaching is visible to the rest of Neovim:
+
+- `LspAttach` fires on those buffers, so a user's handler runs there: keymaps it sets
+  unconditionally, such as `gd`, reach a markdown file no other server attaches to.
+- `:checkhealth vim.lsp` lists `changeset` with its command as a function, and statusline
+  LSP components list it on those buffers.
+- It advertises only `hoverProvider` and no `textDocumentSync`, so nothing sends it
+  `didOpen` or `didChange`, and formatting, diagnostics, code actions, completion,
+  symbols, inlay hints and semantic tokens pass it over. The symbol walk waits for a client
+  that lists symbols, so `changeset` attaching never stands in for one.
+- In a file no other server attaches to, Neovim maps `K` to `vim.lsp.buf.hover()` unless
+  `'keywordprg'` or a `K` mapping is set, so `K` on a line with nothing says
+  `No information available` instead of running `'keywordprg'`, and `grr` reports that no
+  server supports references where it was silent. Format, code actions and definition say
+  what they say with no client.
+
 ### The Comments section lists what you wrote
 
 ```text

@@ -1,7 +1,8 @@
----Marks each review comment of the tree's pending review, and each draft of its PR, in its file's buffer, at its line or range.
+---Marks each review comment of the tree's pending review, and each draft of its PR, in its file's buffer, at its line or range, and answers hover on those lines.
 local build = require("changeset.build")
 local config = require("changeset.config")
 local drafts = require("changeset.drafts")
+local hover = require("changeset.hover")
 local pending_state = require("changeset.pending_state")
 local render = require("changeset.render")
 
@@ -12,7 +13,7 @@ local ns = vim.api.nvim_create_namespace("changeset.review_comments")
 -- Holds only the bubbles, so `M.bubble` finds a line's without sorting out the rest.
 local sign_ns = vim.api.nvim_create_namespace("changeset.review_comment_signs")
 
--- ponytail: lines are the PR head's, so where the file on disk differs from the head (unpushed commits, saved uncommitted edits) marks and delete land off by the lines moved above; hide marks in such a file if that bites.
+-- ponytail: lines are the PR head's, so where the file on disk differs from the head (unpushed commits, saved uncommitted edits) marks, hover and delete land off by the lines moved above; hide marks in such a file if that bites.
 -- ponytail: a LEFT-side review comment (on a deleted line) spans its number in the new file; skip LEFT once it is recorded.
 ---@class changeset.Spanned
 ---@field path string
@@ -124,6 +125,49 @@ local function current_marks()
   end
 end
 
+---"line 4", or "lines 3-5" for a range.
+---@param first integer
+---@param last integer
+---@return string
+local function lines_label(first, last)
+  return first < last and ("lines %d-%d"):format(first, last) or ("line %d"):format(last)
+end
+
+---Markdown for each review comment, then each draft, whose lines cover line `lnum` of `fname`; nil when none does.
+---@param fname string
+---@param lnum integer
+---@return string?
+local function hover_text(fname, lnum)
+  local marks = current_marks()
+  local path = marks and vim.fs.relpath(marks.root, vim.fs.normalize(fname))
+  if not (marks and path) then
+    return
+  end
+  local entries = {}
+  ---@param spanned changeset.Spanned
+  ---@param kind string
+  ---@param note string?
+  local function add(spanned, kind, note)
+    local first, last = span(spanned)
+    if spanned.path == path and first and last and first <= lnum and lnum <= last then
+      local heading = table.concat({ kind, lines_label(first, last), note }, " · ")
+      local body = spanned.body:gsub("\r\n", "\n")
+      table.insert(entries, ("**%s**\n\n%s"):format(heading, body))
+    end
+  end
+  for _, comment in ipairs(marks.comments) do
+    add(comment, "Review comment")
+  end
+  for _, draft in ipairs(marks.drafts) do
+    add(draft, "Draft", "only on this machine")
+  end
+  if #entries > 0 then
+    return table.concat(entries, "\n\n---\n\n")
+  end
+end
+
+local attach_hover = hover.serve(hover_text)
+
 ---@param buf integer
 ---@param marks changeset.review_comments.Marks?
 local function draw(buf, marks)
@@ -141,15 +185,21 @@ local function draw(buf, marks)
     local first, last = span(spanned)
     return path ~= nil and spanned.path == path and first ~= nil and last <= line_count
   end
+  local marked = false
   for _, comment in ipairs(marks.comments) do
     if fits(comment) then
       mark(buf, comment, SAVED)
+      marked = true
     end
   end
   for _, draft in ipairs(marks.drafts) do
     if fits(draft) then
       mark(buf, draft, DRAFT)
+      marked = true
     end
+  end
+  if marked then
+    attach_hover(buf, marks.root)
   end
 end
 

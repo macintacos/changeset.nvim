@@ -270,6 +270,14 @@ appears and goes as the draft is kept or deleted. A draft written against an old
 the PR isn't drawn or reopened; it stays in the file until `pr abandon`, and drafts of
 closed or merged PRs stay too. A line shows one bubble, a review comment's over a draft's.
 
+Hover shows them too. A file with a mark gets a language server client named `changeset`,
+which answers hover on a line with each review comment and then each draft whose lines take
+it in, under a heading naming its lines, a draft's adding `only on this machine`. So `K`,
+`vim.lsp.buf.hover()` and hover plugins that ask LSP show them beside other servers'
+answers; a hover UI can sort on the name to put them first. The client offers only hover,
+but `LspAttach` fires for it, so your `LspAttach` keymaps and statusline LSP lists reach
+those files too.
+
 With the sidebar open on a branch measured against its open PR, a Comments section above Implementation
 lists your pending review's review comments and the PR's drafts at its current head, one
 row each, by file and then line: a green `●` for a review comment or a blue `○` for a
