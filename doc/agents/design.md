@@ -608,17 +608,26 @@ git keeps no parent in config: a branch's upstream is its own remote counterpart
 worktrunk records none. The one record is the creation entry of the branch's reflog,
 `branch: Created from <source>`, which names the source as the command was given it.
 `Git.parent` resolves that source and drops its remote, so `origin/parent` and
-`refs/remotes/origin/parent` both name `parent`. Any other source names no parent and the
-base stays as it was, the PR's target else the default branch:
+`refs/remotes/origin/parent` both name `parent`.
 
-- `HEAD`, which `git switch -c feature` writes, and a commit name no branch. Resolving
-  `HEAD` would name the branch checked out now.
+`git switch -c feature` and `git checkout -b feature` record only `HEAD`. Resolving it
+would name the branch checked out now, so the parent is read instead from the checkout
+they made, `checkout: moving from parent to feature`, the oldest such entry in the
+worktree's HEAD reflog. That entry then passes the same rules as a recorded source.
+
+Any other source names no parent and the base stays as it was, the PR's target else the
+default branch:
+
+- A commit, and a detached `HEAD`, whose checkout entry names a commit.
+- Another worktree's `HEAD`, as `git worktree add -b feature <path>` records. The new
+  worktree's HEAD reflog holds no checkout to `feature`.
 - The branch's own remote counterpart, which `git switch feature`, `gh pr checkout` and
   checking out a remote branch in a new worktree write. Taken as the parent, it would
   diff someone else's PR against itself.
 - The default branch, so a branch cut from it still moves to its PR's target when that
   is another branch.
-- A parent since deleted, and a reflog whose creation entry has expired or is missing.
+- A parent since deleted, and reflogs whose entries for the branch's creation have
+  expired or are missing.
 
 The parent is measured by `Git.merge_base`'s rules, origin's ref preferred when both it
 and the local branch hold the fork point, so a parent that was never pushed works too.

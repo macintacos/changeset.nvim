@@ -158,10 +158,36 @@ describe("changeset.git", function()
       end)
     end
 
-    it("is nil for a branch created from HEAD, whichever branch is checked out now", function()
-      Fixture.git({ "switch", "-q", "-c", "feature" }, tmp)
-      Fixture.git({ "switch", "-q", "parent" }, tmp)
+    for _, command in ipairs({
+      { "switch", "-q", "-c", "feature" },
+      { "checkout", "-q", "-b", "feature" },
+    }) do
+      it(("names the branch `git %s %s` was run on"):format(command[1], command[3]), function()
+        Fixture.git(command, tmp)
 
+        assert.equal("parent", Git.parent(tmp, "feature"))
+      end)
+    end
+
+    it("names the branch HEAD was on when it created the branch, not one it came back from", function()
+      Fixture.git({ "switch", "-q", "-c", "feature" }, tmp)
+      Fixture.git({ "switch", "-q", "-c", "other" }, tmp)
+      Fixture.git({ "switch", "-q", "feature" }, tmp)
+
+      assert.equal("parent", Git.parent(tmp, "feature"))
+    end)
+
+    it("is nil for a branch created from a detached HEAD", function()
+      Fixture.git({ "switch", "-q", "--detach" }, tmp)
+      Fixture.git({ "switch", "-q", "-c", "feature" }, tmp)
+
+      assert.is_nil(Git.parent(tmp, "feature"))
+    end)
+
+    it("is nil for a branch created from HEAD in another worktree", function()
+      Fixture.git({ "worktree", "add", "-q", "-b", "feature", tmp .. "/wt" }, tmp)
+
+      assert.is_nil(Git.parent(tmp .. "/wt", "feature"))
       assert.is_nil(Git.parent(tmp, "feature"))
     end)
 

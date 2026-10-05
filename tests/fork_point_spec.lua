@@ -35,7 +35,8 @@ local function commit_file(root, name)
 end
 
 ---A repository with `main`, then `parent` off it, then `feature` off that, checked out.
----@param source string? What `feature`'s reflog says it was created from: HEAD, on `parent`, when absent.
+---@param source string? What `feature`'s reflog says it was created from: parent's tip commit, which names no
+---parent, when absent.
 ---@return string root
 ---@return string default_base main's tip, where feature forked from main.
 ---@return string parent_base parent's tip.
@@ -46,7 +47,7 @@ local function stacked_repo(source)
   local default_base = commit_file(root, "main.txt")
   fixture.git({ "checkout", "-q", "-b", "parent" }, root)
   local parent_base = commit_file(root, "parent.txt")
-  fixture.git({ "checkout", "-q", "-b", "feature", source }, root)
+  fixture.git({ "checkout", "-q", "-b", "feature", source or parent_base }, root)
   commit_file(root, "feature.txt")
   return root, default_base, parent_base
 end

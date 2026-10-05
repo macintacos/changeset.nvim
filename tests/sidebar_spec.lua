@@ -750,8 +750,9 @@ describe("changeset sidebar", function()
       assert.is_true(shows(buf, "go.sum"))
 
       changeset.close()
-      -- A new branch builds a new tree over the same fold state, which must not fold Generated again.
-      Fixture.git({ "checkout", "-q", "-b", "other" }, tmp)
+      -- A new branch builds a new tree over the same fold state, which must not fold Generated again. Cut from
+      -- the commit rather than from `feature`, it has no parent and still shows feature's files.
+      Fixture.git({ "checkout", "-q", "-b", "other", Fixture.git({ "rev-parse", "HEAD" }, tmp) }, tmp)
       buf = open_sidebar()
 
       assert.is_true(shows(buf, "go.sum"))

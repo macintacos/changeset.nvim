@@ -12,10 +12,11 @@ describe("PR Review Mode", function()
 
   ---A repo with `a.txt` changed on `parent`, then again on `child` cut from it.
   ---@param child string
-  ---@param source string? What `child`'s reflog says it was created from: HEAD, on `parent`, when absent.
+  ---@param source string? What `child`'s reflog says it was created from: parent's tip commit, which names no
+  ---parent, when absent.
   local function stack(child, source)
     review.fixture(dir, "parent", { "a.txt" })
-    support.git({ "switch", "-q", "-c", child, source }, dir)
+    support.git({ "switch", "-q", "-c", child, source or support.git({ "rev-parse", "HEAD" }, dir) }, dir)
     vim.fn.writefile({ "one", "two", "three" }, dir .. "/a.txt")
     support.commit("child change", dir)
   end

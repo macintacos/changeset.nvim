@@ -48,16 +48,35 @@ function M.matches_commit(root, commit, path)
   return at_commit ~= nil and at_commit == M.lines({ "git", "hash-object", "--", path }, root)[1]
 end
 
+---What HEAD moved from the first time it moved to `branch`, as this worktree's HEAD reflog records it.
+---@param cwd string?
+---@param branch string
+---@return string? from A branch name, or a commit when HEAD was detached.
+local function moved_from(cwd, branch)
+  local moved = "^checkout: moving from (%S+) to " .. vim.pesc(branch) .. "$"
+  return vim
+    .iter(M.lines({ "git", "reflog", "show", "--format=%gs", "HEAD" }, cwd))
+    :rev()
+    :map(function(entry)
+      return entry:match(moved)
+    end)
+    :next()
+end
+
 ---The branch `branch` was created from, as the first entry of its reflog records it, named without its remote.
+---`git switch -c` and `git checkout -b` record only HEAD, so for them it is the branch HEAD moved from to reach
+---`branch`, provided that move was made in this worktree.
 ---@param cwd string? Repository to ask; Neovim's own directory when absent.
 ---@param branch string
----@return string? parent nil when `branch` was created from HEAD, a commit or its own remote counterpart,
----when that branch is gone, and when the reflog no longer holds its creation.
+---@return string? parent nil when `branch` was created from a commit, a detached HEAD, another worktree's HEAD or
+---its own remote counterpart, when that branch is gone, and when the reflogs no longer hold its creation.
 function M.parent(cwd, branch)
   local log = M.lines({ "git", "reflog", "show", "--format=%gs", "refs/heads/" .. branch }, cwd)
   local source = (log[#log] or ""):match("^branch: Created from (.+)$")
-  -- Resolving HEAD would name whatever branch is checked out now.
-  if not source or source == "HEAD" then
+  if source == "HEAD" then
+    source = moved_from(cwd, branch)
+  end
+  if not source then
     return
   end
   local ref = M.lines({ "git", "rev-parse", "--symbolic-full-name", source }, cwd)[1] or ""

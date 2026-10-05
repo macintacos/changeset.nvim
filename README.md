@@ -14,12 +14,13 @@ changes also show in gitsigns' gutter, through [PR Review Mode](#pr-review-mode)
 mini.pick, through the [Picker](#picker). Each works without the others.
 
 A branch is compared against the branch it was created from, so a stacked branch shows
-only its own changes, pushed or not, with or without a PR. git records that branch when
-the command names it, as `git switch -c feature parent` does; `git switch -c feature` on
-its own records only `HEAD`. A branch with no such parent is compared against its open
-PR's target, else the default branch. That covers a branch created from `HEAD`, a commit,
-the default branch or its own remote counterpart, as checking out someone's PR does, and
-one whose parent has since been deleted.
+only its own changes, pushed or not, with or without a PR. That is the branch the command
+named, as in `git switch -c feature parent`, or the one you were on when you ran
+`git switch -c feature` or `git checkout -b feature` in the same worktree. A branch with no
+such parent is compared against its open PR's target, else the default branch. That
+covers a branch created from a commit, a detached `HEAD`, another worktree's `HEAD`, the
+default branch or its own remote counterpart, as checking out someone's PR does, and one
+whose parent has since been deleted.
 
 ## Requirements
 
