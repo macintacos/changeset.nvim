@@ -205,11 +205,12 @@ delete it. You have at most one per PR. `pr start`, `pr submit`, `pr abandon` an
   PR's diff is read (you can close it again), the PR's head commit fetched, and lines
   inside the PR's diff in a saved file that matches that head. The keys in
   `review_comment.save`, `<C-CR>` or `<C-s>` by default, save it into the pending review
-  and close the window. `q`, `<S-Esc>` (where the terminal sends it) and `:q` close it
-  and keep its text as a draft on this machine, as does quitting Neovim with it open;
-  empty text keeps nothing. A save GitHub rejects keeps the draft too. Running
-  `pr comment` anywhere on a draft's lines reopens it on its own lines; like a new one, it
-  needs a pending review to save into. Drafts never reach GitHub.
+  and close the window; with only whitespace written, they close it and save nothing.
+  `q`, `<S-Esc>` (where the terminal sends it) and `:q` close it and keep its text as a
+  draft on this machine, as does quitting Neovim with it open; empty text keeps nothing.
+  A save GitHub rejects keeps the draft too. Running `pr comment` anywhere on a draft's
+  lines reopens it on its own lines; like a new one, it needs a pending review to save
+  into. Drafts never reach GitHub.
 - `:Changeset pr delete` deletes the draft on the cursor's line, else the review comment
   there, without asking; a draft needs no pending review. When several take in that line,
   it deletes the narrowest; run it again for the next. When the line has none, it says so.

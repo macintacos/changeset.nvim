@@ -98,6 +98,7 @@ describe("review_comment_window", function()
 
   it("saves on each save key, in insert and normal mode", function()
     local _, buf = open()
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "text" })
     for _, mode in ipairs({ "i", "n" }) do
       for _, lhs in ipairs(SAVE_KEYS) do
         local before = #saves
@@ -125,6 +126,7 @@ describe("review_comment_window", function()
 
   it("closes, wiping its buffer, once the save succeeds", function()
     local win, buf = open()
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "text" })
     press(buf, "i", "<C-s>")
     answer(nil)
 
@@ -212,6 +214,7 @@ describe("review_comment_window", function()
 
   it("saves once while a save is in flight, and again after a refusal", function()
     local _, buf = open()
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "text" })
     press(buf, "i", "<C-s>")
     press(buf, "n", "<C-CR>")
     assert.equal(1, #saves)
@@ -230,6 +233,7 @@ describe("review_comment_window", function()
 
   it("takes a save answered after q closed it", function()
     local _, buf = open()
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "text" })
     press(buf, "i", "<C-s>")
     press(buf, "n", "q")
     assert.no_errors(function()
@@ -278,8 +282,22 @@ describe("review_comment_window", function()
     assert.same({ "" }, kept)
   end)
 
+  it("closes on a save of only whitespace, handing the text to keep instead", function()
+    local win, buf = open()
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "  ", "" })
+    press(buf, "i", "<C-s>")
+    vim.wait(100, function()
+      return not vim.api.nvim_win_is_valid(win)
+    end)
+
+    assert.same({}, saves)
+    assert.is_false(vim.api.nvim_win_is_valid(win))
+    assert.same({ "  \n" }, kept)
+  end)
+
   it("keeps nothing once a save is taken", function()
     local _, buf = open()
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "text" })
     press(buf, "i", "<C-s>")
     answer(nil)
     assert.same({}, kept)
@@ -287,6 +305,7 @@ describe("review_comment_window", function()
 
   it("keeps nothing while a refused save leaves it open", function()
     local _, buf = open()
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "text" })
     press(buf, "i", "<C-s>")
     answer("boom")
     assert.same({}, kept)

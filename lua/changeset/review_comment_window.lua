@@ -15,7 +15,7 @@ local MIN_WIDTH = 20
 ---@field keys string[] Keys that save, in insert and normal mode.
 ---@field save_desc string The save keys' `desc`, which `?` lists.
 ---@field close_desc string The `desc` of the keys that close without saving, which `?` lists.
----@field save fun(body: string, done: fun(err: string?)) Called with the buffer's lines joined by "\n"; the window closes once `done` gets no error.
+---@field save fun(body: string, done: fun(err: string?)) Called with the buffer's lines joined by "\n", never only whitespace; the window closes once `done` gets no error.
 ---@field keep fun(body: string) Called with the buffer's lines joined by "\n", empty included, whenever the buffer goes (a close, an :e in the float, quitting) except after a taken save.
 ---@field body string? The text it opens with.
 
@@ -89,6 +89,10 @@ function M.open(opts)
     -- A double press must not add the review comment twice.
     if saving then
       return
+    end
+    -- Blank text never reaches `save`; the close hands it to `keep` instead.
+    if not text():find("%S") then
+      return close()
     end
     saving = true
     opts.save(text(), function(err)

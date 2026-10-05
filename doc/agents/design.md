@@ -340,6 +340,8 @@ in normal mode, `<S-Esc>` in either mode where the terminal sends it, `:q`, `<C-
 `:e` in the float, quitting Neovim. One `BufUnload` hook on the window's buffer catches
 them all, since the buffer goes with the window (`bufhidden=wipe`). Plain `<Esc>` still
 only leaves insert mode, so a habitual `<Esc>` on the way to normal mode never closes it.
+A save of only whitespace is no save: it closes the window like `q`, so the blank text
+reaches the same hook and the caller discards it, never GitHub.
 
 ### The submit preview shows what goes out before it goes
 

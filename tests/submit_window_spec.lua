@@ -106,12 +106,14 @@ describe("submit_window", function()
     assert.equal(win, vim.api.nvim_win_get_config(0).win)
   end)
 
-  it("submits a whitespace-only body as none", function()
-    local _, buf = open()
-    write_body(buf, { "  ", "" }, "q")
-    press(buf, "<CR>")
-    assert.same({ { event = "COMMENT" } }, submits)
-  end)
+  for _, lhs in ipairs({ "q", "<C-s>" }) do
+    it(("submits a whitespace-only body closed with %s as none"):format(lhs), function()
+      local _, buf = open()
+      write_body(buf, { "  ", "" }, lhs)
+      press(buf, "<CR>")
+      assert.same({ { event = "COMMENT" } }, submits)
+    end)
+  end
 
   it("shows the body once written", function()
     local _, buf = open()
