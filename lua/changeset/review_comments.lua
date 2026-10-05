@@ -168,14 +168,14 @@ end
 
 local attach_hover = hover.serve(hover_text)
 
+---Marks what `marks` holds for `buf`'s file, answering whether it marked anything.
 ---@param buf integer
----@param marks changeset.review_comments.Marks?
-local function draw(buf, marks)
-  vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-  vim.api.nvim_buf_clear_namespace(buf, sign_ns, 0, -1)
+---@param marks changeset.review_comments.Marks
+---@return boolean
+local function mark_file(buf, marks)
   local name = vim.api.nvim_buf_get_name(buf)
-  if not marks or name == "" then
-    return
+  if name == "" then
+    return false
   end
   local path = vim.fs.relpath(marks.root, vim.fs.normalize(name))
   local line_count = vim.api.nvim_buf_line_count(buf)
@@ -198,8 +198,18 @@ local function draw(buf, marks)
       marked = true
     end
   end
-  if marked then
+  return marked
+end
+
+---@param buf integer
+---@param marks changeset.review_comments.Marks?
+local function draw(buf, marks)
+  vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+  vim.api.nvim_buf_clear_namespace(buf, sign_ns, 0, -1)
+  if marks and mark_file(buf, marks) then
     attach_hover(buf, marks.root)
+  else
+    hover.detach(buf)
   end
 end
 

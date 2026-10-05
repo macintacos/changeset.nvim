@@ -128,11 +128,73 @@ describe("hover", function()
     assert.are.equal("**Review comment · line 20**\n\nfirst\nsecond", hover(alpha, 20))
   end)
 
-  it("answers nothing once the tree is on a PR GitHub hasn't answered for", function()
+  it("detaches a buffer once the tree is on a PR GitHub hasn't answered for", function()
     on_answer()
     tree = { root = dir, branch = "c", pr = 2 }
     on_tree("pr")
-    assert.is_nil(hover(alpha, 20))
+    assert.are.same({}, clients(alpha))
+  end)
+
+  it("detaches a buffer whose last review comment is deleted", function()
+    on_answer()
+    found.review.comments = { found.review.comments[3] }
+    on_answer()
+    assert.are.same({}, clients(alpha))
+  end)
+
+  it("keeps a buffer attached while it has a review comment", function()
+    on_answer()
+    table.remove(found.review.comments, 1)
+    on_answer()
+    assert.are.equal(1, #clients(alpha))
+  end)
+
+  it("stops the client once no buffer is attached to it", function()
+    on_answer()
+    found.review.comments = {}
+    on_answer()
+    assert.is_true(vim.wait(1000, function()
+      return #vim.lsp.get_clients({ name = "changeset" }) == 0
+    end, 10))
+  end)
+
+  it("gives K back to 'keywordprg' on a detached buffer no other server has hover for", function()
+    on_answer()
+    found.review.comments = {}
+    on_answer()
+    assert.are.same({}, vim.fn.maparg("K", "n", false, true))
+  end)
+
+  it("leaves K to another server that has hover on a detached buffer", function()
+    vim.lsp.start({
+      name = "other",
+      root_dir = dir,
+      cmd = function(dispatchers)
+        return {
+          request = function(method, _, callback)
+            callback(nil, method == "initialize" and { capabilities = { hoverProvider = true } } or nil)
+            return true, 1
+          end,
+          notify = function(method)
+            if method == "exit" then
+              dispatchers.on_exit(0, 15)
+            end
+            return true
+          end,
+          is_closing = function()
+            return false
+          end,
+          terminate = function() end,
+        }
+      end,
+    }, { bufnr = alpha })
+    on_answer()
+    found.review.comments = {}
+    on_answer()
+    assert.are.equal("vim.lsp.buf.hover()", vim.fn.maparg("K", "n", false, true).desc)
+    for _, client in ipairs(vim.lsp.get_clients({ name = "other" })) do
+      client:stop()
+    end
   end)
 
   it("attaches no client to a buffer that is not a file", function()
@@ -151,12 +213,14 @@ describe("hover", function()
     assert.are.same({}, clients(vim.api.nvim_get_current_buf()))
   end)
 
-  it("leaves no client behind once stopped", function()
-    on_answer()
-    local client = assert(clients(alpha)[1])
-    client:stop()
-    assert.is_true(vim.wait(1000, function()
-      return vim.lsp.get_client_by_id(client.id) == nil
-    end, 10))
-  end)
+  for _, force in ipairs({ false, true }) do
+    it(("leaves no client behind once stopped%s"):format(force and " by force" or ""), function()
+      on_answer()
+      local client = assert(clients(alpha)[1])
+      client:stop(force)
+      assert.is_true(vim.wait(1000, function()
+        return vim.lsp.get_client_by_id(client.id) == nil
+      end, 10))
+    end)
+  end
 end)

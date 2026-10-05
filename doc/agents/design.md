@@ -555,28 +555,35 @@ puts between servers. A line with none gets `nil`. It is read at request time fr
 answer the marks draw from, so it follows them without re-attaching, and its lines are the
 PR head's, with the same caveat as the marks.
 
-A buffer is attached whenever a redraw marks it, so only a file with something to say gets
-the client, at the moment its bubble appears: a file buffer only, never a `buftype` one, and
-one client per repository root. It is not detached: a buffer whose marks go, or a tree that
-leaves the PR, answers `nil`. The server answers each request at once, reports it no longer
-pending so the client does not list it as pending forever, answers an unknown method with
-`MethodNotFound`, and exits on `shutdown` and `exit`.
+A buffer is attached whenever a redraw marks it, and detached by the redraw that leaves it
+unmarked: its last review comment or draft going, the tree moving to another PR or to none,
+or GitHub's answer going away. So only a file with something to say has the client, for as
+long as its bubble shows: a file buffer only, never a `buftype` one, and one client per
+repository root. Neovim keeps a client with no buffer running, still listed by
+`:checkhealth vim.lsp`, so the detach that leaves none stops it, and the next mark starts a
+fresh one. The server answers each request at once, reports it no longer pending so the
+client does not list it as pending forever, and answers an unknown method with
+`MethodNotFound`. It reports its exit on `exit` and on a forced stop alike, since a client
+only cleans up once told, and an in-process server has no process to die.
 
 Attaching is visible to the rest of Neovim:
 
-- `LspAttach` fires on those buffers, so a user's handler runs there: keymaps it sets
-  unconditionally, such as `gd`, reach a markdown file no other server attaches to.
-- `:checkhealth vim.lsp` lists `changeset` with its command as a function, and statusline
-  LSP components list it on those buffers.
+- `LspAttach` fires on those buffers, and `LspDetach` as their marks go, so a user's
+  handlers run there: keymaps one sets unconditionally, such as `gd`, reach a markdown file
+  no other server attaches to, until its `LspDetach` handler takes them back.
+- `:checkhealth vim.lsp` lists `changeset` with its command as a function while a buffer
+  is attached, and statusline LSP components list it on those buffers.
 - It advertises only `hoverProvider` and no `textDocumentSync`, so nothing sends it
   `didOpen` or `didChange`, and formatting, diagnostics, code actions, completion,
   symbols, inlay hints and semantic tokens pass it over. The symbol walk waits for a client
   that lists symbols, so `changeset` attaching never stands in for one.
 - In a file no other server attaches to, Neovim maps `K` to `vim.lsp.buf.hover()` unless
-  `'keywordprg'` or a `K` mapping is set, so `K` on a line with nothing says
-  `No information available` instead of running `'keywordprg'`, and `grr` reports that no
-  server supports references where it was silent. Format, code actions and definition say
-  what they say with no client.
+  `'keywordprg'` or a `K` mapping is set, so while it is attached `K` on a line with
+  nothing says `No information available` instead of running `'keywordprg'`, and `grr`
+  reports that no server supports references where it was silent. Format, code actions and
+  definition say what they say with no client. Detaching gives both back. Neovim 0.12 never
+  unmaps its own `K`, on a detach or an exit, so the detach unmaps it once no server left on
+  the buffer has hover; with no client left, `grr` is silent again.
 
 ### The Comments section lists what you wrote
 

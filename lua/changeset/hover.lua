@@ -22,6 +22,13 @@ local function server(answer)
   }
   return function(dispatchers)
     local closing, request_id = false, 0
+    -- A client cleans up only on hearing the server exited, which a process says by dying.
+    local function exit()
+      if not closing then
+        closing = true
+        dispatchers.on_exit(0, 15)
+      end
+    end
     return {
       request = function(method, params, callback, notify_reply_callback)
         request_id = request_id + 1
@@ -39,16 +46,14 @@ local function server(answer)
       end,
       notify = function(method)
         if method == "exit" then
-          dispatchers.on_exit(0, 15)
+          exit()
         end
         return true
       end,
       is_closing = function()
         return closing
       end,
-      terminate = function()
-        closing = true
-      end,
+      terminate = exit,
     }
   end
 end
@@ -62,6 +67,35 @@ function M.serve(answer)
     if vim.bo[buf].buftype == "" then
       vim.lsp.start({ name = NAME, cmd = cmd, root_dir = root }, { bufnr = buf })
     end
+  end
+end
+
+-- Neovim maps `K` to hover as a hover server attaches and, in 0.12, never unmaps it, so a
+-- buffer left without one would keep a `K` that answers nothing instead of `'keywordprg'`.
+---@param buf integer
+local function unmap_default_k(buf)
+  if #vim.lsp.get_clients({ bufnr = buf, method = "textDocument/hover" }) > 0 then
+    return
+  end
+  for _, map in ipairs(vim.api.nvim_buf_get_keymap(buf, "n")) do
+    if map.lhs == "K" and map.desc == "vim.lsp.buf.hover()" then
+      vim.api.nvim_buf_del_keymap(buf, "n", "K")
+    end
+  end
+end
+
+---Detaches `buf` from its `changeset` client, stopping a client left with no buffer, which Neovim keeps running.
+---@param buf integer
+function M.detach(buf)
+  local attached = vim.lsp.get_clients({ bufnr = buf, name = NAME })
+  for _, client in ipairs(attached) do
+    vim.lsp.buf_detach_client(buf, client.id)
+    if next(client.attached_buffers) == nil then
+      client:stop()
+    end
+  end
+  if #attached > 0 then
+    unmap_default_k(buf)
   end
 end
 
