@@ -738,6 +738,106 @@ describe("changeset.rows", function()
     end)
   end)
 
+  describe("comments", function()
+    ---@param id string
+    ---@param path string
+    ---@param line integer?
+    ---@return changeset.ReviewComment
+    local function review_comment(id, path, line)
+      return { id = id, path = path, line = line, outdated = line == nil, body = id .. " body\nmore" }
+    end
+
+    ---@param path string
+    ---@param line integer
+    ---@return changeset.Draft
+    local function draft(path, line)
+      return { path = path, line = line, head = "abc", body = "draft at " .. line }
+    end
+
+    ---@param section changeset.Row
+    ---@return string[]
+    local function listed(section)
+      return vim.tbl_map(function(row)
+        return row.listed.review_comment and row.listed.review_comment.id or row.listed.draft.body
+      end, section.children)
+    end
+
+    it("lists the review comments and drafts by path, then line", function()
+      local section = assert(
+        Rows.comments(
+          { review_comment("PRRC_b3", "b.ts", 3), review_comment("PRRC_a9", "a.ts", 9) },
+          { draft("a.ts", 2) }
+        )
+      )
+
+      assert.same({ "draft at 2", "PRRC_a9", "PRRC_b3" }, listed(section))
+    end)
+
+    it("puts a review comment before a draft on its line", function()
+      local section = assert(Rows.comments({ review_comment("PRRC_a2", "a.ts", 2) }, { draft("a.ts", 2) }))
+
+      assert.same({ "PRRC_a2", "draft at 2" }, listed(section))
+    end)
+
+    it("is nothing when there is nothing to list", function()
+      assert.is_nil(Rows.comments({}, {}))
+    end)
+
+    it("counts what it lists on its header, which carries no stat", function()
+      local section = assert(Rows.comments({ review_comment("PRRC_a9", "a.ts", 9) }, { draft("a.ts", 2) }))
+
+      assert.equal("section", section.kind)
+      assert.equal(2, section.comments)
+      assert.is_nil(section.added)
+    end)
+
+    it("goes to each listed line", function()
+      local section = assert(Rows.comments({ review_comment("PRRC_a9", "a.ts", 9) }, { draft("a.ts", 2) }))
+
+      assert.same({ 2, 9 }, {
+        section.children[1].lnum,
+        section.children[2].lnum,
+      })
+    end)
+
+    it("lists an outdated review comment with no line to go to", function()
+      local section = assert(Rows.comments({ review_comment("PRRC_old", "a.ts", nil) }, {}))
+
+      assert.equal("PRRC_old", section.children[1].listed.review_comment.id)
+      assert.is_nil(section.children[1].lnum)
+    end)
+
+    it("gives every row its own id, apart from every file section's", function()
+      local section = assert(
+        Rows.comments(
+          { review_comment("PRRC_a2", "a.ts", 2), review_comment("PRRC_b2", "a.ts", 2) },
+          { draft("a.ts", 2) }
+        )
+      )
+      local distinct = { [section.id] = true }
+      for _, row in ipairs(section.children) do
+        distinct[row.id] = true
+      end
+
+      assert.equal(4, vim.tbl_count(distinct))
+      assert.is_false(vim.list_contains(Rows.section_ids(), section.children[1].id))
+      assert.is_true(vim.list_contains(Rows.section_ids(), section.id))
+    end)
+
+    it("is never where a line of its file is located", function()
+      local rows = Rows.build({ file(PATH, { hunk(5, 1) }) }, { [PATH] = {} })
+      table.insert(rows, 1, (assert(Rows.comments({ review_comment("PRRC_5", PATH, 5) }, {}))))
+
+      assert.equal(FILE_ID .. "\0#orphans", Rows.locate(rows, PATH, 5).id)
+      assert.same(
+        { FILE_ID },
+        vim.tbl_map(function(row)
+          return row.id
+        end, Rows.files(rows))
+      )
+    end)
+  end)
+
   describe("find", function()
     it("finds a row by its id at any depth", function()
       local rows = Rows.build({ file(PATH, { hunk(5, 1) }) }, { [PATH] = { sym("load", "Method", 0, 3, 8) } })

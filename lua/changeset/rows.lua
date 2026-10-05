@@ -1,4 +1,4 @@
----Builds the row tree, and says how far a file's symbols have been read.
+---Builds the row tree, its Comments section included, and says how far a file's symbols have been read.
 
 local comments = require("changeset.comments")
 local sections = require("changeset.sections")
@@ -11,11 +11,11 @@ local M = {}
 local SEP = " › "
 
 ---A row of the sidebar tree. Sections sit at the top with files under them; symbols, or an orphan group
----holding orphan hunks, nest below.
+---holding orphan hunks, nest below. The Comments section holds comment rows instead of files.
 ---@class changeset.Row
 ---@field id string           Stable identity: `#key` for a section, then `\0`-joined segments. A `chain` row carries its head's.
----@field kind "section"|"file"|"symbol"|"orphans"|"orphan"
----@field depth integer       0 for a section row, 1 for a file row.
+---@field kind "section"|"file"|"symbol"|"orphans"|"orphan"|"comment"
+---@field depth integer       0 for a section row, 1 for a file or comment row.
 ---@field name string         Display text; a compressed chain is joined by " › ".
 ---@field path string         Repo-relative file path; empty on a section row.
 ---@field lnum integer?       1-based jump target; nil when the row is not navigable.
@@ -30,7 +30,14 @@ local SEP = " › "
 ---@field read changeset.ReadStatus? File rows only: how far this file's symbols have been read.
 ---@field files integer?      Section rows only: how many files the section holds, before any filter.
 ---@field icon string?        Section rows only: the directory name its section header's icon is looked up by.
+---@field comments integer?   The Comments section's row only: how many rows it lists, before any filter.
+---@field listed changeset.Listed? Comment rows only: what the row lists.
 ---@field children changeset.Row[]
+
+---What a comment row lists: a review comment of the pending review, or a draft of its PR.
+---@class changeset.Listed
+---@field review_comment changeset.ReviewComment?
+---@field draft changeset.Draft? Set when `review_comment` isn't.
 
 ---A line of a file, repo-relative.
 ---@class changeset.Spot
@@ -482,12 +489,17 @@ function M.section_id(key)
   return "#" .. key
 end
 
----Every section row's id, whether or not the section holds a file.
+-- Not a `section_id`: the Comments section classifies no file.
+local COMMENTS_ID = "#comments"
+
+---Every section row's id, the Comments section's included, whether or not the section holds a row.
 ---@return string[]
 function M.section_ids()
-  return vim.tbl_map(function(section)
+  local ids = vim.tbl_map(function(section)
     return M.section_id(section.key)
   end, sections.ORDER)
+  table.insert(ids, 1, COMMENTS_ID)
+  return ids
 end
 
 ---@param section changeset.Section
@@ -650,6 +662,79 @@ function M.build(files, symbols_by_path, lines)
     :totable()
 end
 
+---@param listed changeset.Listed
+---@return changeset.Spanned
+local function spanned(listed)
+  return listed.review_comment or listed.draft --[[@as changeset.Spanned]]
+end
+
+---A comment row's id: a review comment's own, or a draft's path and lines.
+---@param listed changeset.Listed
+---@return string
+local function comment_id(listed)
+  if listed.review_comment then
+    return COMMENTS_ID .. "\0" .. listed.review_comment.id
+  end
+  local draft = listed.draft --[[@as changeset.Draft]]
+  return ("%s\0#draft:%s:%d-%d"):format(COMMENTS_ID, draft.path, draft.start_line or draft.line, draft.line)
+end
+
+---The Comments section: a row per review comment of the pending review and per draft of its PR, by path, then
+---line, a review comment ahead of a draft on its line. A row goes to its line; an outdated or file-level review
+---comment has none. The header counts the rows, and carries no stat: a review comment changes no line.
+---@param review_comments changeset.ReviewComment[]
+---@param drafts changeset.Draft[]
+---@return changeset.Row? section nil when there is nothing to list.
+function M.comments(review_comments, drafts)
+  local listed = {}
+  for _, review_comment in ipairs(review_comments) do
+    listed[#listed + 1] = { review_comment = review_comment }
+  end
+  for _, draft in ipairs(drafts) do
+    listed[#listed + 1] = { draft = draft }
+  end
+  if #listed == 0 then
+    return nil
+  end
+  local arrival = {}
+  for i, entry in ipairs(listed) do
+    arrival[entry] = i
+  end
+  table.sort(listed, function(a, b)
+    local x, y = spanned(a), spanned(b)
+    if x.path ~= y.path then
+      return x.path < y.path
+    end
+    if (x.line or 0) ~= (y.line or 0) then
+      return (x.line or 0) < (y.line or 0)
+    end
+    return arrival[a] < arrival[b]
+  end)
+  return {
+    id = COMMENTS_ID,
+    kind = "section",
+    depth = 0,
+    name = "Comments",
+    path = "",
+    comments = #listed,
+    ancestor = false,
+    children = vim.tbl_map(function(entry)
+      local spot = spanned(entry)
+      return {
+        id = comment_id(entry),
+        kind = "comment",
+        depth = 1,
+        name = spot.path,
+        path = spot.path,
+        lnum = spot.line,
+        ancestor = false,
+        listed = entry,
+        children = {},
+      }
+    end, listed),
+  }
+end
+
 ---Follow single-child links down from a symbol row; a row with two children, or none, ends the chain.
 ---@param row changeset.Row
 ---@return changeset.Row deepest
@@ -742,7 +827,7 @@ local function deepest_symbol(row, lnum)
   return inner and deepest_symbol(inner, lnum) or row
 end
 
----The file rows under `build`'s sections, in display order.
+---The file rows under `build`'s sections, in display order; the Comments section holds none.
 ---@param rows changeset.Row[] Section rows.
 ---@return changeset.Row[]
 function M.files(rows)
@@ -752,6 +837,9 @@ function M.files(rows)
       return section.children
     end)
     :flatten()
+    :filter(function(row)
+      return row.kind == "file"
+    end)
     :totable()
 end
 

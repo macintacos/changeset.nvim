@@ -268,6 +268,13 @@ appears and goes as the draft is kept or deleted. A draft written against an old
 the PR isn't drawn or reopened; it stays in the file until `pr abandon`, and drafts of
 closed or merged PRs stay too. A line shows one bubble, a review comment's over a draft's.
 
+With the sidebar open on a branch with an open PR, a Comments section above Implementation
+lists your pending review's review comments and the PR's drafts at its current head, one
+row each, by file and then line: a green `●` for a review comment or a blue `○` for a
+draft, the file's name and line, and the first line of the body. Outdated and file-level
+review comments get a row too, saying so in place of a line. The section follows the marks,
+and is left out while it has nothing to list.
+
 A `'statuscolumn'` can draw the bubbles somewhere else. `%s` draws every plugin's signs or
 none, so set `review_comment.sign` to `false` to keep the bubbles out of the sign column, or
 a line shows its bubble twice. `require("changeset").bubble(buf, lnum)` returns the bubble

@@ -10,6 +10,7 @@ local actions = require("changeset.actions")
 local build = require("changeset.build")
 local config = require("changeset.config")
 local draw = require("changeset.draw")
+local drafts = require("changeset.drafts")
 local pending_state = require("changeset.pending_state")
 local render = require("changeset.render")
 local Rows = require("changeset.rows")
@@ -51,7 +52,7 @@ local function preview_current()
     return
   end
   assert(state, "changeset: no tree built yet")
-  if row.lnum and row.kind ~= "file" then
+  if row.kind == "comment" or (row.lnum and row.kind ~= "file") then
     window.preview(
       state.tree.root .. "/" .. row.path,
       row.lnum,
@@ -185,8 +186,11 @@ build.subscribe(function(event)
   on_tree_event[event]()
 end)
 
--- Fires: GitHub's answer on the PR's pending review being kept, so the header's circle follows it.
+-- Fires: GitHub's answer on the PR's pending review being kept, so the header's circle and the Comments section follow it.
 pending_state.subscribe(redraw)
+
+-- Fires: a draft kept or dropped, so the Comments section follows it without asking GitHub.
+drafts.subscribe(redraw)
 
 -- Loaded here because every tree is built through this module, so the marks exist whenever a tree can.
 local review_comments = require("changeset.review_comments")

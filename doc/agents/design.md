@@ -526,6 +526,52 @@ the PR's identity and head from the header circle's answer, so they appear with 
 whether a pending review exists doesn't matter. A draft written against an older head
 isn't drawn, since its lines may have moved.
 
+### The Comments section lists what you wrote
+
+```text
+ 󰍩  Comments            3 comments
+ ● 󰢱 pr.lua:42  say which ref failed
+ ● 󰂺 README.md  outdated, was 12  fix the typo
+ ○ 󰢱 view.lua:7  cache this?
+
+ 󰴉  Implementation      2 files      +12 -3
+```
+
+The marks in the files show a review comment where you read, but finding the ones you
+wrote means visiting every file. So the sidebar lists them in a section of their own, first,
+above Implementation: they are what you come back to. It is a section of another kind. It
+classifies no file, so its rows are not file rows, and it holds every review comment of the
+pending review and every draft of the PR at its current head, one row each, by path and
+then line, a review comment ahead of a draft on its line.
+
+Its header follows § Sections: an icon, the label, and a count of its rows in the meta
+colour, taken before any filter. The icon is the marks' bubble, `󰍩`, borrowed as they
+borrow it and drawn in `ChangesetReviewComment`. It carries no `+N -N`: a review comment
+changes no line, so a stat there would mean nothing.
+
+A row speaks the marks' language. Their circle stands in the rail's column, `●` in
+`ChangesetReviewComment` for a review comment and `○` in `ChangesetReviewDraft` for a draft,
+so solid green still means "on GitHub" and hollow blue "only on this machine". The file's
+icon follows, then its name and the line or range. The directory is left out, as the
+preview band and `y` both carry the whole path. The body's first line comes last, in
+`ChangesetReviewCommentBody` like the marks' body, clipped to fit. An outdated review
+comment, whose line GitHub no longer knows, still gets a row, with `outdated, was 12` in
+the meta colour in place of a line, and a file-level one reads `file`, as the submit
+preview says it.
+
+The section draws from the same answer the marks do, `pending_state` for the tree's PR and
+`drafts.list`, so it shows only while the tree is measured against an open PR, and is left
+out while it lists nothing. It follows that answer and every draft kept or dropped by
+redrawing alone; the diff is never read again for it. A redraw keeps what each row was last
+drawn from, so moving the cursor reads no drafts from disk.
+
+Being no file, its rows stay out of what counts files. The footer names no file on one,
+"you are here" never lands on one, `H` and `L` leave its rows and its fold alone, and the
+picker lists none: the picker lists changes, and a review comment is not one. They are rows
+for everything else. `h` and `l` fold the section, remembered like any other, `]]` and `[[`
+stop on its header, a filter matches a row by its path, moving onto one previews its line,
+`y` copies its `path:line`, and opening one marks it as the pick.
+
 ### Footer
 
 ```text
@@ -537,7 +583,7 @@ only while that window has focus, so it takes the global bar's place exactly whe
 sidebar's keys are worth naming, and hands it back the moment you leave. The badge is the
 header glyph's `Directory` colour, reversed, standing where the mode badge would. The
 position counts the files on screen — a folded section's files are not — and names no file
-while the cursor is on a section header. A file shown in more than one section counts
+while the cursor is on a section header or a comment row. A file shown in more than one section counts
 once, at its first row. The filter in force is named, since once its prompt closes the lit
 matches are the only other trace of it. Only four actions are offered, each under the key
 `keymaps` gives it and left out when set to `false` — `?` lists the rest.

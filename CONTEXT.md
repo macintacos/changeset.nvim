@@ -98,3 +98,8 @@ _Avoid_: bare "body" where a review comment's could be meant
 A review comment's text kept on this machine when GitHub refuses its save, or when its
 window goes without a save GitHub took. It never reaches GitHub.
 _Avoid_: draft review, which is the pending review
+
+**Comments section**:
+The sidebar's first section, listing the pending review's review comments and the PR's
+drafts, one comment row each. It classifies no file.
+_Avoid_: comment list, comments panel

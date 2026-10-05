@@ -165,6 +165,11 @@ M.NO_CURSOR_HL = "ChangesetNoCursor"
 ---@type string
 M.PREVIEW_ICON_HL = "ChangesetPreviewIcon"
 
+---Glyph heading the Comments section: the file marks' bubble, borrowed as they borrow it, since no icon plugin has a
+---category to ask for a comment.
+---@type string
+M.COMMENTS_ICON = "󰍩"
+
 ---Glyph at the right edge of the selected row.
 ---@type string
 M.SELECTED_ICON = "◀"
@@ -374,14 +379,15 @@ end
 -- Cells a section label is padded to, so every section header's count starts in one column.
 local LABEL_CELLS = 20
 
----A section header: icon, label, file count, and the section's stat at the right edge. No rail.
+---A section header: icon, label, a count of its files or comments, and the section's stat at the right edge. No rail.
 ---@param section changeset.Row
 ---@param opts changeset.RenderOpts
 ---@return changeset.Line
 local function section_line(section, opts)
   local glyph, icon_hl = opts.icon(section)
   local stat = M.stat_chunks(section)
-  local count = ("%d file%s"):format(section.files, section.files == 1 and "" or "s")
+  local n, noun = section.comments or section.files, section.comments and "comment" or "file"
+  local count = ("%d %s%s"):format(n, noun, n == 1 and "" or "s")
   local fixed_cells = vim.fn.strdisplaywidth(MARGIN .. glyph .. "  " .. section.name .. count) + stat_cells(stat)
   local pad = math.max(1, math.min(LABEL_CELLS - vim.fn.strdisplaywidth(section.name), opts.width - fixed_cells))
   return compose(section, {
@@ -442,6 +448,57 @@ local function append_children(out, row, bars, opts)
   end
 end
 
+---@param spanned { line: integer?, start_line: integer? }
+---@return string
+local function span(spanned)
+  if spanned.start_line and spanned.start_line ~= spanned.line then
+    return ("%d-%d"):format(spanned.start_line, spanned.line)
+  end
+  return tostring(spanned.line)
+end
+
+---Where a review comment or draft sits, its file named `name`: its line or range, else why it has none.
+---@param name string
+---@param spanned changeset.ReviewComment|changeset.Draft
+---@return string where
+---@return string? note
+local function comment_place(name, spanned)
+  if spanned.outdated then
+    local was = spanned.original_line
+      and span({ line = spanned.original_line, start_line = spanned.original_start_line })
+    return name, was and "outdated, was " .. was or "outdated"
+  end
+  if not spanned.line then
+    return name, "file"
+  end
+  return name .. ":" .. span(spanned)
+end
+
+---A comment row: the file marks' circle in the rail's column, the file's icon, its name and line, and the body's
+---first line, quiet like the marks' and clipped to fit.
+---@param row changeset.Row
+---@param opts changeset.RenderOpts
+---@return changeset.Line
+local function comment_line(row, opts)
+  local listed = assert(row.listed, "changeset: a comment row lists nothing")
+  local spanned = listed.review_comment or listed.draft --[[@as changeset.Draft]]
+  local glyph, icon_hl = opts.icon(row)
+  local where, note = comment_place(vim.fs.basename(row.path), spanned)
+  local lead = MARGIN .. PENDING_ICON .. " " .. glyph .. " " .. where .. (note and "  " .. note or "") .. "  "
+  local room = opts.width - vim.fn.strdisplaywidth(lead) - stat_cells(nil)
+  return compose(row, {
+    { MARGIN },
+    listed.draft and { DRAFT_ICON, M.REVIEW_DRAFT_HL } or { PENDING_ICON, M.REVIEW_COMMENT_HL },
+    { " " },
+    { glyph, icon_hl },
+    { " " .. where },
+    { note and "  " or "" },
+    { note or "", note and M.META_HL or nil },
+    { "  " },
+    { clip_right(spanned.body:match("^[^\r\n]*"), room), M.REVIEW_COMMENT_BODY_HL },
+  })
+end
+
 ---@param out changeset.Line[]
 ---@param file changeset.Row
 ---@param opts changeset.RenderOpts
@@ -498,16 +555,20 @@ function M.lines(rows, opts)
     end
     out[#out + 1] = section_line(section, opts)
     if not opts.collapsed(section.id) then
-      for _, file in ipairs(section.children) do
-        append_file(out, file, opts)
+      for _, child in ipairs(section.children) do
+        if child.kind == "comment" then
+          out[#out + 1] = comment_line(child, opts)
+        else
+          append_file(out, child, opts)
+        end
       end
     end
   end
   for _, line in ipairs(out) do
     -- A section header never matches the filter: lighting its label would claim a match.
     if line.row.kind ~= "section" then
-      for _, span in ipairs(matches(line.text, opts.query or "")) do
-        line.marks[#line.marks + 1] = { col = span[1], end_col = span[2], hl = M.MATCH_HL, priority = MATCH_PRIORITY }
+      for _, run in ipairs(matches(line.text, opts.query or "")) do
+        line.marks[#line.marks + 1] = { col = run[1], end_col = run[2], hl = M.MATCH_HL, priority = MATCH_PRIORITY }
       end
     end
   end
@@ -570,31 +631,6 @@ end
 
 local EVENT_LABEL = { COMMENT = "Comment", APPROVE = "Approve", REQUEST_CHANGES = "Request changes" }
 
----@param spanned { line: integer?, start_line: integer? }
----@return string
-local function span(spanned)
-  if spanned.start_line and spanned.start_line ~= spanned.line then
-    return ("%d-%d"):format(spanned.start_line, spanned.line)
-  end
-  return tostring(spanned.line)
-end
-
----Where a review comment sits: its line or range, else why it has none.
----@param comment changeset.ReviewComment
----@return string where
----@return string? note
-local function comment_place(comment)
-  if comment.outdated then
-    local was = comment.original_line
-      and span({ line = comment.original_line, start_line = comment.original_start_line })
-    return comment.path, was and "outdated, was " .. was or "outdated"
-  end
-  if not comment.line then
-    return comment.path, "file"
-  end
-  return comment.path .. ":" .. span(comment)
-end
-
 ---@param info changeset.SubmitInfo
 ---@return changeset.Line
 local function event_line(info)
@@ -631,7 +667,7 @@ function M.submit_lines(info)
 
   local places, width = {}, 0
   for i, comment in ipairs(info.comments) do
-    local where, note = comment_place(comment)
+    local where, note = comment_place(comment.path, comment)
     places[i] = { where, note }
     width = math.max(width, vim.fn.strdisplaywidth(where .. (note and "  " .. note or "")))
   end

@@ -113,14 +113,14 @@ end
 
 ---Where the file holding line `lnum` stands among the files on screen; a file
 ---shown in several sections counts once.
----@param rows { depth: integer, path: string }[] One per line, as `render.lines` hands them back: 0 a section header, 1 a file.
+---@param rows { depth: integer, path: string, kind: string? }[] One per line, as `render.lines` hands them back: 0 a section header, 1 a file or comment row.
 ---@param lnum integer
----@return integer? index nil on a section header's line, or when no file is at or above `lnum`.
+---@return integer? index nil on a section header's line or a comment row's, or when no file is at or above `lnum`.
 ---@return integer total
 function M.position(rows, lnum)
   local index, total, index_of_path = nil, 0, {}
   for i, row in ipairs(rows) do
-    if row.depth == 1 then
+    if row.depth == 1 and row.kind ~= "comment" then
       if not index_of_path[row.path] then
         total = total + 1
         index_of_path[row.path] = total

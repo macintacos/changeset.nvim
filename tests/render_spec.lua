@@ -202,6 +202,100 @@ describe("changeset.render", function()
     end)
   end)
 
+  describe("the Comments section", function()
+    ---@param listed changeset.Listed
+    ---@param lnum integer?
+    ---@return changeset.Row
+    local function comment_row(listed, lnum)
+      local path = (listed.review_comment or listed.draft).path
+      return {
+        id = "#comments\0" .. path,
+        kind = "comment",
+        depth = 1,
+        name = path,
+        path = path,
+        lnum = lnum,
+        ancestor = false,
+        children = {},
+        listed = listed,
+      }
+    end
+
+    ---@param fields table?
+    ---@return changeset.Row
+    local function saved(fields)
+      local review_comment = vim.tbl_extend(
+        "force",
+        { id = "c", path = "src/a.lua", line = 42, outdated = false, body = "note\nmore" },
+        fields or {}
+      )
+      return comment_row({ review_comment = review_comment }, review_comment.line)
+    end
+
+    ---@param children changeset.Row[]
+    ---@return changeset.Row
+    local function comments(children)
+      return {
+        id = "#comments",
+        kind = "section",
+        depth = 0,
+        name = "Comments",
+        path = "",
+        comments = #children,
+        ancestor = false,
+        children = children,
+      }
+    end
+
+    it("counts what it lists on its header, with no stat", function()
+      local one = render.lines({ comments({ saved() }) }, opts())[1]
+      local two = render.lines({ comments({ saved(), saved({ id = "d" }) }) }, opts())[1]
+
+      assert.truthy(one.text:find("Comments", 1, true))
+      assert.truthy(one.text:find("1 comment$"))
+      assert.truthy(two.text:find("2 comments$"))
+      assert.is_nil(stat_mark(one))
+    end)
+
+    it("leads a review comment's row with a solid circle in its group", function()
+      local line = render.lines({ comments({ saved() }) }, opts())[2]
+
+      assert.equal(" ● ", line.text:sub(1, #" ● "))
+      assert.equal(render.REVIEW_COMMENT_HL, mark_over(line, "●").hl)
+    end)
+
+    it("leads a draft's row with a hollow circle in its group", function()
+      local draft = { path = "src/a.lua", line = 7, head = "h", body = "later" }
+      local line = render.lines({ comments({ comment_row({ draft = draft }, 7) }) }, opts())[2]
+
+      assert.equal(" ○ ", line.text:sub(1, #" ○ "))
+      assert.equal(render.REVIEW_DRAFT_HL, mark_over(line, "○").hl)
+    end)
+
+    it("names the file and the line or range, then the body's first line, quiet", function()
+      local one = render.lines({ comments({ saved() }) }, opts())[2]
+      local range = render.lines({ comments({ saved({ start_line = 40 }) }) }, opts())[2]
+
+      assert.is_true(vim.endswith(one.text, "a.lua:42  note"))
+      assert.is_true(vim.endswith(range.text, "a.lua:40-42  note"))
+      assert.equal(render.REVIEW_COMMENT_BODY_HL, mark_over(one, "note").hl)
+    end)
+
+    it("says, quietly, that an outdated review comment has no line", function()
+      local line = render.lines({ comments({ saved({ line = nil, outdated = true, original_line = 12 }) }) }, opts())[2]
+
+      assert.is_true(vim.endswith(line.text, "a.lua  outdated, was 12  note"))
+      assert.equal(render.META_HL, mark_over(line, "outdated, was 12").hl)
+    end)
+
+    it("clips the body to the width", function()
+      local line = render.lines({ comments({ saved({ body = ("word "):rep(40) }) }) }, opts({ width = 40 }))[2]
+
+      assert.is_true(vim.fn.strdisplaywidth(line.text) <= 40 - 2)
+      assert.truthy(line.text:find("…$"))
+    end)
+  end)
+
   describe("lines", function()
     describe("file rows", function()
       local rails = {

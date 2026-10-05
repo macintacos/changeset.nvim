@@ -1,6 +1,8 @@
----Puts the tree on the sidebar's buffer, through the pure `render`: lines, marks, header and row states.
----The sidebar state's View decides what is on each line; `band_for` builds a row's preview band.
+---Puts the tree on the sidebar's buffer, through the pure `render`: the Comments section over its sections, lines,
+---marks, header and row states. The sidebar state's View decides what is on each line; `band_for` builds a row's
+---preview band.
 
+local drafts = require("changeset.drafts")
 local icons = require("changeset.icons")
 local pending_state = require("changeset.pending_state")
 local render = require("changeset.render")
@@ -18,13 +20,20 @@ local ns = vim.api.nvim_create_namespace("changeset")
 -- Separate from `ns` so the tracker can repaint row backgrounds without redrawing the tree.
 local rows_ns = vim.api.nvim_create_namespace("changeset.rows")
 
+---The Comments section as last drawn, kept so a repaint reads no drafts from disk.
+---@type changeset.Row?
+local comments_section
+
 ---@param row changeset.Row
 ---@return string glyph, string hl
 local function icon_for(row)
+  if row.comments then
+    return render.COMMENTS_ICON, render.REVIEW_COMMENT_HL
+  end
   if row.kind == "section" then
     return icons.get("directory", row.icon)
   end
-  if row.kind == "file" then
+  if row.kind == "file" or row.kind == "comment" then
     return icons.get("file", row.path)
   end
   return icons.get("lsp", row.kind == "symbol" and row.symbol_kind or "Text")
@@ -61,6 +70,21 @@ function M.band_for(row, jump)
   }
 end
 
+---The Comments section for `tree`'s PR, from GitHub's last answer and the drafts on disk.
+---@param tree changeset.Tree
+---@return changeset.Row?
+local function comments_for(tree)
+  local found = tree.pr and pending_state.get(tree.root, tree.pr)
+  return found and Rows.comments(found.review and found.review.comments or {}, drafts.list(found.pr))
+end
+
+---The tree as the sidebar lays it out: the Comments section, while it lists anything, over `rows`.
+---@param rows changeset.Row[]
+---@return changeset.Row[]
+local function laid_out(rows)
+  return comments_section and { comments_section, unpack(rows) } or rows
+end
+
 ---The sidebar as drawn, for `changeset.position`; errors before the first build.
 ---@return changeset.position.View
 function M.view()
@@ -68,7 +92,7 @@ function M.view()
   assert(state, "changeset: no tree built yet")
   local win = window.win()
   return {
-    rows = state.rows,
+    rows = laid_out(state.rows),
     visible = state.view:visible(),
     cursor = win and vim.api.nvim_win_get_cursor(win)[1],
     focused = window.is_focused(),
@@ -205,8 +229,11 @@ function M.draw(kinds_key)
   assert(state, "changeset: no tree built yet")
 
   local width = vim.api.nvim_win_get_width(win)
-  local lines, lnum =
-    state.view:show(state.rows, { icon = icon_for, width = width, cursor = vim.api.nvim_win_get_cursor(win)[1] })
+  comments_section = comments_for(state.tree)
+  local lines, lnum = state.view:show(
+    laid_out(state.rows),
+    { icon = icon_for, width = width, cursor = vim.api.nvim_win_get_cursor(win)[1] }
+  )
 
   local text = vim.tbl_map(function(line)
     return line.text

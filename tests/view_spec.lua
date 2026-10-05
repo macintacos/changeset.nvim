@@ -223,6 +223,17 @@ describe("changeset.view", function()
       assert.same({ 1, 2 }, { view.position(rows, 8) })
     end)
 
+    it("names no file on a Comments row, nor counts one", function()
+      local with_comments = {
+        { depth = 0, kind = "section" },
+        { depth = 1, kind = "comment", path = "a.lua" },
+        { depth = 0, kind = "section" },
+        { depth = 1, kind = "file", path = "a.lua" },
+      }
+
+      assert.same({ nil, 1 }, { view.position(with_comments, 2) })
+    end)
+
     it("has no position on an empty tree", function()
       assert.same({ nil, 0 }, { view.position({}, 1) })
     end)
@@ -314,6 +325,18 @@ describe("changeset.view", function()
 
       local shown = show(v, with_docs)
       assert.equal("Docs", shown[#shown])
+    end)
+
+    it("keeps the Comments section folded under unfold_files", function()
+      local review_comment = { id = "PRRC_1", path = "mod.lua", line = 5, outdated = false, body = "why?" }
+      local with_comments = { assert(Rows.comments({ review_comment }, {})), unpack(ROWS) }
+      local v = fresh()
+      show(v, with_comments)
+      v:step_out(1)
+
+      v:unfold_files()
+
+      assert.same({ "Comments", "Implementation" }, vim.list_slice(show(v, with_comments), 1, 2))
     end)
 
     it("folds and unfolds a section from its header", function()
