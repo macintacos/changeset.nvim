@@ -899,6 +899,20 @@ describe("changeset.pr", function()
         assert.equal(0, running())
       end)
 
+      it("opens and starts nothing once the question has taken the cursor off the file", function()
+        local other = vim.api.nvim_create_buf(true, false)
+        package.loaded["changeset.confirm"].ask = function(_, yes)
+          vim.api.nvim_set_current_buf(other)
+          yes()
+        end
+
+        require("changeset.pr").comment(4, 4)
+
+        vim.api.nvim_buf_delete(other, { force = true })
+        assert.same({}, opened)
+        assert.same({}, started)
+      end)
+
       it("reopens a draft on its own lines once confirmed", function()
         confirmed = true
         tree.files[1].hunks = {}

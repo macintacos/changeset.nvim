@@ -661,7 +661,8 @@ repository's deliberate choice is none of that save's business.
   the PR's head and pending review from GitHub's last answer, so right after a push made
   inside Neovim it can refuse the file as differing from the head until
   `:Changeset pr start` or regaining focus refetches. Only before GitHub's first answer for
-  the PR does it ask, and then it opens only if the cursor is still in that file.
+  the PR does it ask. After any wait, on GitHub or on the question that starts a pending
+  review, it opens only if the cursor is still in that file.
 - **A review comment can be written while its pending review starts.** Starting one from
   `pr comment` opens the window at once rather than after GitHub answers, so typing never
   waits on the network; only the save does. GitHub refuses a second pending review, so a

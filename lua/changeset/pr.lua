@@ -252,23 +252,6 @@ local function start_behind(repository, pr)
   end
 end
 
----Hands `cb` the pending review on `found.pr` to save into: the one under way, else, once the user
----agrees, one started in the background.
----@param repository string
----@param found changeset.pending_review.Found
----@param cb fun(review: changeset.pr.Review)
-local function with_review(repository, found, cb)
-  if found.review then
-    local id = found.review.id
-    return cb(function(saving)
-      saving(nil, id)
-    end)
-  end
-  confirm.ask(("Start a pending review on #%d?"):format(found.pr.number), function()
-    cb(start_behind(repository, found.pr))
-  end)
-end
-
 ---Opens the review comment window under line `last` of the current buffer, for lines `first` to `last`,
 ---unless the pending review can't take a review comment there. With no pending review, it asks to
 ---start one. Opening asks GitHub nothing unless it has yet to answer for the PR.
@@ -321,7 +304,8 @@ function M.comment(first, last)
       return { path = path, line = last, start_line = first < last and first or nil, head = found.pr.head, body = body }
     end
     local number = found.pr.number
-    with_review(tree.root, found, function(review)
+    ---@param review changeset.pr.Review The pending review a save goes into.
+    local function open(review)
       review_comment_window.open({
         line = last,
         title = "Review comment · "
@@ -363,6 +347,19 @@ function M.comment(first, last)
           end)
         end,
       })
+    end
+    if found.review then
+      local id = found.review.id
+      return open(function(saving)
+        saving(nil, id)
+      end)
+    end
+    confirm.ask(("Start a pending review on #%d?"):format(number), function()
+      -- Answering can move the cursor too, and the window opens in the current one.
+      if vim.api.nvim_get_current_buf() ~= buf then
+        return
+      end
+      open(start_behind(tree.root, found.pr))
     end)
   end)
 end
