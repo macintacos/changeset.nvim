@@ -270,7 +270,7 @@ appears and goes as the draft is kept or deleted. A draft written against an old
 the PR isn't drawn or reopened; it stays in the file until `pr abandon`, and drafts of
 closed or merged PRs stay too. A line shows one bubble, a review comment's over a draft's.
 
-With the sidebar open on a branch with an open PR, a Comments section above Implementation
+With the sidebar open on a branch measured against its open PR, a Comments section above Implementation
 lists your pending review's review comments and the PR's drafts at its current head, one
 row each, by file and then line: a green `●` for a review comment or a blue `○` for a
 draft, the file's name and line, and the first line of the body. Outdated and file-level

@@ -95,8 +95,9 @@ The text a pending review is submitted with, apart from its review comments.
 _Avoid_: bare "body" where a review comment's could be meant
 
 **Draft**:
-A review comment's text kept on this machine when GitHub refuses its save, or when its
-window goes without a save GitHub took. It never reaches GitHub.
+A new review comment's text kept on this machine when GitHub refuses its save, or when its
+window goes without a save GitHub took. Editing a saved review comment never keeps one. It
+never reaches GitHub.
 _Avoid_: draft review, which is the pending review
 
 **Comments section**:

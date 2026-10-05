@@ -1,4 +1,4 @@
----Review comment text kept on this machine whenever a save GitHub took didn't close its window; never sent to GitHub.
+---New review comment text kept on this machine whenever a save GitHub took didn't close its window; never sent to GitHub.
 ---
 ---Every mutation re-reads the file and rewrites only its own PR's list, so two
 ---Neovims writing drafts don't drop each other's.

@@ -369,13 +369,13 @@ draft written against an older head of the PR isn’t drawn or reopened; it
 stays in the file until `pr abandon`, and drafts of closed or merged PRs stay
 too. A line shows one bubble, a review comment’s over a draft’s.
 
-With the sidebar open on a branch with an open PR, a Comments section above
-Implementation lists your pending review’s review comments and the PR’s
-drafts at its current head, one row each, by file and then line: a green `●`
-for a review comment or a blue `○` for a draft, the file’s name and line,
-and the first line of the body. Outdated and file-level review comments get a
-row too, saying so in place of a line. The section follows the marks, and is
-left out while it has nothing to list.
+With the sidebar open on a branch measured against its open PR, a Comments
+section above Implementation lists your pending review’s review comments and
+the PR’s drafts at its current head, one row each, by file and then line: a
+green `●` for a review comment or a blue `○` for a draft, the file’s name
+and line, and the first line of the body. Outdated and file-level review
+comments get a row too, saying so in place of a line. The section follows the
+marks, and is left out while it has nothing to list.
 
 `<CR>` on a row, or a split or tab key, goes to its line and opens it there. A
 draft reopens as `pr comment` reopens one. A review comment opens editable,
