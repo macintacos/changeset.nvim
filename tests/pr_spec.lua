@@ -13,6 +13,10 @@ local STUBBED = {
 
 describe("changeset.pr", function()
   local notify, input, notes, prompts, fetched, started, deleted, deleted_comments, added, opened, previews, submitted
+  ---@type { [1]: string, [2]: boolean }[] Each wait on gh or on the user, and whether progress showed meanwhile.
+  local waits
+  ---@type { id: integer|string, status: string }[] Every progress message changeset emitted, in order.
+  local progress
   ---@type table? What `pending_state.get` answers.
   local held
   ---@type { err: string?, found: table? }[] What each fetch answers, in order; the last repeats.
@@ -27,10 +31,36 @@ describe("changeset.pr", function()
   local HEAD = "abcdef0123456789abcdef0123456789abcdef01"
   local pr = { id = "PR_1", number = 412, host = "github.com", owner = "acme", name = "widgets", head = HEAD }
 
+  ---How many progress messages are still running.
+  ---@return integer
+  local function running()
+    local last = {}
+    for _, event in ipairs(progress) do
+      last[event.id] = event.status
+    end
+    return #vim.tbl_filter(function(status)
+      return status == "running"
+    end, vim.tbl_values(last))
+  end
+
+  ---@param what string
+  local function wait(what)
+    table.insert(waits, { what, running() > 0 })
+  end
+
   before_each(function()
     os.remove(drafts.path())
     notes, prompts, fetched, started, deleted, deleted_comments, added, opened, previews, submitted =
       {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
+    waits, progress = {}, {}
+    -- Fires: changeset emitting or updating a progress message.
+    vim.api.nvim_create_autocmd("Progress", {
+      group = vim.api.nvim_create_augroup("pr_spec.progress", { clear = true }),
+      pattern = "changeset",
+      callback = function(ev)
+        table.insert(progress, { id = ev.data.id, status = ev.data.status })
+      end,
+    })
     held = nil
     answers, choice, failure = {}, "", nil
     tree = { root = "/tree/root", pr = 412 }
@@ -39,12 +69,14 @@ describe("changeset.pr", function()
       table.insert(notes, { msg = msg, level = level })
     end
     vim.fn.input = function(opts)
+      wait("ask")
       table.insert(prompts, opts.prompt)
       return choice
     end
     package.loaded["changeset.pending_state"] = {
       subscribe = function() end,
       fetch = function(root, cb)
+        wait("fetch")
         table.insert(fetched, root)
         local answer = answers[math.min(#fetched, #answers)]
         if cb then
@@ -57,28 +89,34 @@ describe("changeset.pr", function()
     }
     package.loaded["changeset.pending_review"] = {
       start = function(id, cb)
+        wait("start")
         table.insert(started, id)
         cb(failure)
       end,
       delete = function(id, cb)
+        wait("delete")
         table.insert(deleted, id)
         cb(failure)
       end,
       delete_comment = function(id, cb)
+        wait("delete_comment")
         table.insert(deleted_comments, id)
         cb(failure)
       end,
       add_comment = function(id, new, cb)
+        wait("add_comment")
         table.insert(added, { id = id, new = new })
         cb(failure)
       end,
       submit = function(id, submission, cb)
+        wait("submit")
         table.insert(submitted, { id = id, submission = submission })
         cb(failure)
       end,
     }
     package.loaded["changeset.submit_window"] = {
       open = function(opts)
+        wait("preview")
         table.insert(previews, opts)
       end,
     }
@@ -108,6 +146,63 @@ describe("changeset.pr", function()
       return note.level
     end, notes)
   end
+
+  describe("progress", function()
+    it("shows while GitHub is asked for the PR, and ends when it can't answer", function()
+      answers = { { err = "no open PR" } }
+
+      require("changeset.pr").start()
+
+      assert.same({ { "fetch", true } }, waits)
+      assert.equal("failed", progress[#progress].status)
+      assert.equal(0, running())
+    end)
+
+    it("ends when the verb asks GitHub nothing more", function()
+      answers = { { found = { pr = pr, review = { id = "R", comments = {} } } } }
+
+      require("changeset.pr").start()
+
+      assert.same({ { "fetch", true } }, waits)
+      assert.equal(0, running())
+    end)
+
+    it("shows while GitHub changes the review, then ends before the header refetches", function()
+      answers = { { found = { pr = pr } } }
+
+      require("changeset.pr").start()
+
+      assert.same({ { "fetch", true }, { "start", true }, { "fetch", false } }, waits)
+      assert.equal("success", progress[#progress].status)
+    end)
+
+    it("ends failed when GitHub refuses the change", function()
+      answers, failure = { { found = { pr = pr } } }, "network down"
+
+      require("changeset.pr").start()
+
+      assert.equal("failed", progress[#progress].status)
+      assert.equal(0, running())
+    end)
+
+    it("is gone while the user is asked, and back while GitHub abandons the review", function()
+      answers, choice = { { found = { pr = pr, review = { id = "R", comments = {} } } } }, "y"
+
+      require("changeset.pr").abandon()
+
+      assert.same({ { "fetch", true }, { "ask", false }, { "delete", true }, { "fetch", false } }, waits)
+    end)
+
+    it("is gone while the submit preview is open, and back while GitHub submits", function()
+      local review = { id = "R", comments = { { id = "C", path = "a.lua", line = 1, body = "x", outdated = false } } }
+      answers = { { found = { pr = pr, review = review } } }
+      require("changeset.pr").submit()
+
+      previews[1].submit({ event = "COMMENT" }, function() end)
+
+      assert.same({ { "fetch", true }, { "preview", false }, { "submit", true }, { "fetch", false } }, waits)
+    end)
+  end)
 
   describe("start", function()
     it("warns with gh's text when there is no PR", function()
@@ -371,6 +466,12 @@ describe("changeset.pr", function()
       assert.same({ vim.log.levels.INFO }, levels())
       assert.truthy(notes[1].msg:find("#412", 1, true))
       assert.equal(2, #fetched)
+    end)
+
+    it("shows progress while GitHub deletes the review comment", function()
+      delete_on(12, { { id = "C_1", path = "alpha.txt", line = 12, body = "x" } })
+
+      assert.same({ { "fetch", true }, { "delete_comment", true }, { "fetch", false } }, waits)
     end)
 
     it("deletes a range review comment from a line inside it", function()

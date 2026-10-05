@@ -681,6 +681,10 @@ repository's deliberate choice is none of that save's business.
 - **Replacing every line of a buffer carries its extmarks to the end.** The submit preview
   redraws that way, so the review comment window puts its room back under its line after
   every change to the source.
+- **Progress runs only while gh is asked.** A `pr` verb's progress message ends as soon as
+  GitHub answers the find, before the verb decides anything, and each change gets one of
+  its own. So a verb that answers without asking more leaves none running, and none spins
+  under a question or the submit preview, where the wait is the user's.
 - **A file cached before its parser was installed keeps just the name rules** until it
   next changes: its entry was read without the syntax layer, and its stamp still matches.
   Its comment lines are missing too, so its comment-only changes stay out of Docs. A moved

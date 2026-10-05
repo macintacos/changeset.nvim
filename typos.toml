@@ -1,6 +1,7 @@
 [default.extend-words]
-enew = "enew" # :enew
-noet = "noet" # vim modeline: noexpandtab
+enew  = "enew"  # :enew
+noet  = "noet"  # vim modeline: noexpandtab
+noice = "noice" # noice.nvim
 
 [files]
 extend-exclude = [

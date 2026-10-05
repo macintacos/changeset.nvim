@@ -272,7 +272,10 @@ PR REVIEWS                                         *changeset.nvim-pr-reviews*
 
 A pending review is where GitHub holds your review comments on a PR until you
 submit or delete it. You have at most one per PR. `pr start`, `pr submit`, `pr
-abandon` and `pr delete` work with the sidebar closed.
+abandon` and `pr delete` work with the sidebar closed. While one waits on
+GitHub it shows a Neovim progress message, which the message area draws as
+`Changeset: asking GitHub …` and progress UIs such as fidget, noice and
+snacks pick up; none runs while a question or the submit preview waits on you.
 
 - `:Changeset pr start` starts a pending review on the branch’s open PR. It needs an open
     PR and `gh` signed in. When a pending review is already under way, including one started

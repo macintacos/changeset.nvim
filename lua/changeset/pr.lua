@@ -37,43 +37,64 @@ local function say(level, text, ...)
   vim.notify("Changeset: " .. text:format(...), level)
 end
 
----Finds the branch's PR and pending review and hands them to `act`, which mutates and calls
----`done`; `done` reports and refetches, so the header always follows a mutation. `done` may run
----once per attempt, or not at all.
+---Shows `text` as a running progress message, which UIs such as fidget draw as a spinner, until
+---the returned function ends it.
+---@param text string
+---@return fun(err: string?) finish Ends it failed when given an error.
+local function progress(text)
+  local opts = { kind = "progress", source = "changeset", title = "Changeset", status = "running" }
+  opts.id = vim.api.nvim_echo({ { text } }, false, opts)
+  return function(err)
+    opts.status = err and "failed" or "success"
+    vim.api.nvim_echo({ { text } }, false, opts)
+  end
+end
+
+---Finds the branch's PR and pending review and hands them to `act`, which may answer itself or
+---change the review through `mutate`. `mutate` shows progress while `mutation` waits on gh, then
+---reports and refetches, so the header always follows a change. Progress never runs while `act`
+---waits on the user.
 ---@param verb string Reads between "can't" and "a pending review": "start", "abandon", "delete a review comment from".
----@param act fun(found: changeset.pending_review.Found, done: fun(err: string?, did: string))
+---@param act fun(found: changeset.pending_review.Found, mutate: fun(did: string, mutation: fun(done: fun(err: string?))))
 local function on_pr(verb, act)
   local repository = root()
+  local finish = progress("asking GitHub for the PR's pending review")
   pending_state.fetch(repository, function(err, found)
+    finish(err)
     if not found then
       return say(vim.log.levels.WARN, "can't %s a pending review: %s", verb, err)
     end
-    act(found, function(act_err, did)
-      if act_err then
-        say(vim.log.levels.ERROR, "can't %s the pending review: %s", verb, act_err)
-      else
-        say(vim.log.levels.INFO, "%s the pending review on #%d", did, found.pr.number)
-      end
-      pending_state.fetch(repository)
+    local number = found.pr.number
+    act(found, function(did, mutation)
+      local finish_mutation = progress(("asking GitHub to %s the pending review on #%d"):format(verb, number))
+      mutation(function(mutation_err)
+        finish_mutation(mutation_err)
+        if mutation_err then
+          say(vim.log.levels.ERROR, "can't %s the pending review: %s", verb, mutation_err)
+        else
+          say(vim.log.levels.INFO, "%s the pending review on #%d", did, number)
+        end
+        pending_state.fetch(repository)
+      end)
     end)
   end)
 end
 
 ---Starts a pending review on the branch's open PR, unless one is already under way.
 function M.start()
-  on_pr("start", function(found, done)
+  on_pr("start", function(found, mutate)
     if found.review then
       return say(vim.log.levels.INFO, "a pending review is already under way on #%d", found.pr.number)
     end
-    pending_review.start(found.pr.id, function(err)
-      done(err, "started")
+    mutate("started", function(done)
+      pending_review.start(found.pr.id, done)
     end)
   end)
 end
 
 ---Asks, then deletes the pending review on the branch's open PR, every review comment in it, and the PR's drafts.
 function M.abandon()
-  on_pr("abandon", function(found, done)
+  on_pr("abandon", function(found, mutate)
     local number, review = found.pr.number, found.review
     if not review then
       return say(vim.log.levels.INFO, "no pending review on #%d", number)
@@ -84,18 +105,20 @@ function M.abandon()
     if reply ~= "y" and reply ~= "yes" then
       return
     end
-    pending_review.delete(review.id, function(err)
-      if not err then
-        drafts.drop_all(found.pr)
-      end
-      done(err, "abandoned")
+    mutate("abandoned", function(done)
+      pending_review.delete(review.id, function(err)
+        if not err then
+          drafts.drop_all(found.pr)
+        end
+        done(err)
+      end)
     end)
   end)
 end
 
 ---Previews the pending review on the branch's open PR, then submits it with the event and body chosen there.
 function M.submit()
-  on_pr("submit", function(found, done)
+  on_pr("submit", function(found, mutate)
     local review = found.review
     if not review then
       return say(vim.log.levels.INFO, "no pending review on #%d", found.pr.number)
@@ -112,9 +135,11 @@ function M.submit()
           say(vim.log.levels.WARN, "can't submit the pending review: %s", reason)
           return settled(reason)
         end
-        pending_review.submit(review.id, submission, function(err)
-          settled(err)
-          done(err, "submitted")
+        mutate("submitted", function(done)
+          pending_review.submit(review.id, submission, function(err)
+            settled(err)
+            done(err)
+          end)
         end)
       end,
     })
@@ -129,7 +154,7 @@ function M.delete()
   end
   local path = vim.fs.relpath(root(), vim.fs.normalize(vim.api.nvim_buf_get_name(0)))
   local lnum = vim.api.nvim_win_get_cursor(0)[1]
-  on_pr("delete a review comment from", function(found, done)
+  on_pr("delete a review comment from", function(found, mutate)
     local draft = path and require("changeset.review_comments").at(drafts.list(found.pr), path, lnum)
     if draft then
       -- GitHub holds nothing to refetch; the drafts subscription redraws the mark.
@@ -145,8 +170,8 @@ function M.delete()
     if not comment then
       return say(vim.log.levels.INFO, "no review comment on line %d", lnum)
     end
-    pending_review.delete_comment(comment.id, function(err)
-      done(err, "deleted a review comment from")
+    mutate("deleted a review comment from", function(done)
+      pending_review.delete_comment(comment.id, done)
     end)
   end)
 end
