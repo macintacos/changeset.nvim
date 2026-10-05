@@ -484,19 +484,28 @@ local function comment_line(row, opts)
   local spanned = listed.review_comment or listed.draft --[[@as changeset.Draft]]
   local glyph, icon_hl = opts.icon(row)
   local where, note = comment_place(vim.fs.basename(row.path), spanned)
-  local lead = MARGIN .. PENDING_ICON .. " " .. glyph .. " " .. where .. (note and "  " .. note or "") .. "  "
-  local room = opts.width - vim.fn.strdisplaywidth(lead) - stat_cells(nil)
-  return compose(row, {
+  local room = opts.width - vim.fn.strdisplaywidth(MARGIN .. PENDING_ICON .. " " .. glyph .. " ") - stat_cells(nil)
+  where = clip_right(where, room)
+  local chunks = {
     { MARGIN },
     listed.draft and { DRAFT_ICON, M.REVIEW_DRAFT_HL } or { PENDING_ICON, M.REVIEW_COMMENT_HL },
     { " " },
     { glyph, icon_hl },
     { " " .. where },
-    { note and "  " or "" },
-    { note or "", note and M.META_HL or nil },
-    { "  " },
-    { clip_right(spanned.body:match("^[^\r\n]*"), room), M.REVIEW_COMMENT_BODY_HL },
-  })
+  }
+  room = room - vim.fn.strdisplaywidth(where)
+  -- Each of the note and the body needs its two-cell gap and a cell to show anything.
+  for _, part in ipairs({
+    { note, M.META_HL },
+    { spanned.body:match("^[^\r\n]*"), M.REVIEW_COMMENT_BODY_HL },
+  }) do
+    if part[1] and room >= 3 then
+      local text = clip_right(part[1], room - 2)
+      vim.list_extend(chunks, { { "  " }, { text, part[2] } })
+      room = room - 2 - vim.fn.strdisplaywidth(text)
+    end
+  end
+  return compose(row, chunks)
 end
 
 ---@param out changeset.Line[]

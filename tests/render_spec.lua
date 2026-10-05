@@ -294,6 +294,22 @@ describe("changeset.render", function()
       assert.is_true(vim.fn.strdisplaywidth(line.text) <= 40 - 2)
       assert.truthy(line.text:find("…$"))
     end)
+
+    for _, width in ipairs({ 44, 30 }) do
+      it(("fits an outdated review comment on a long file name to width %d"):format(width), function()
+        local outdated = saved({
+          path = "lua/changeset/review_comment_window.lua",
+          line = nil,
+          outdated = true,
+          original_line = 120,
+          original_start_line = 112,
+        })
+        local line = render.lines({ comments({ outdated }) }, opts({ width = width }))[2]
+
+        assert.is_true(vim.fn.strdisplaywidth(line.text) <= width - 2, line.text)
+        assert.truthy(line.text:find("review_comment_", 1, true))
+      end)
+    end
   end)
 
   describe("lines", function()
