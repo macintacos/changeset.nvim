@@ -14,6 +14,8 @@ local STUBBED = {
 
 describe("changeset.pr", function()
   local notify, notes, prompts, fetched, started, deleted, deleted_comments, added, opened, previews, submitted
+  ---@type { id: string, body: string }[] Each review comment `update_comment` was asked to change.
+  local updated
   ---@type { [1]: string, [2]: boolean }[] Each wait on gh or on the user, and whether progress showed meanwhile.
   local waits
   ---@type { id: integer|string, status: string }[] Every progress message changeset emitted, in order.
@@ -53,7 +55,7 @@ describe("changeset.pr", function()
     os.remove(drafts.path())
     notes, prompts, fetched, started, deleted, deleted_comments, added, opened, previews, submitted =
       {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
-    waits, progress = {}, {}
+    waits, progress, updated = {}, {}, {}
     -- Fires: changeset emitting or updating a progress message.
     vim.api.nvim_create_autocmd("Progress", {
       group = vim.api.nvim_create_augroup("pr_spec.progress", { clear = true }),
@@ -107,6 +109,11 @@ describe("changeset.pr", function()
       delete_comment = function(id, cb)
         wait("delete_comment")
         table.insert(deleted_comments, id)
+        cb(failure)
+      end,
+      update_comment = function(id, body, cb)
+        wait("update_comment")
+        table.insert(updated, { id = id, body = body })
         cb(failure)
       end,
       add_comment = function(id, new, cb)
@@ -568,7 +575,7 @@ describe("changeset.pr", function()
 
         assert.same({}, drafts.list(pr))
         assert.same({ vim.log.levels.INFO }, levels())
-        assert.truthy(notes[1].msg:find("deleted the draft on line 9", 1, true))
+        assert.truthy(notes[1].msg:find("deleted the draft on lines 8-10 of alpha.txt", 1, true))
         assert.same({}, deleted_comments)
         assert.equal(1, #fetched)
       end)
@@ -614,6 +621,52 @@ describe("changeset.pr", function()
         assert.equal(1, #drafts.list(old))
         assert.truthy(notes[1].msg:find("no review comment on line 9", 1, true))
       end)
+    end)
+  end)
+
+  describe("delete_listed", function()
+    local review_comment = { id = "C_1", path = "alpha.txt", line = 12, outdated = false, body = "x" }
+
+    before_each(function()
+      answers = { { found = { pr = pr, review = { id = "PRR_1", comments = { review_comment } } } } }
+    end)
+
+    it("asks first, then deletes the review comment it lists with progress, and fetches again", function()
+      confirmed = true
+
+      require("changeset.pr").delete_listed({ review_comment = review_comment })
+
+      assert.same({ "Delete the review comment on line 12 of alpha.txt?" }, prompts)
+      assert.same({ "C_1" }, deleted_comments)
+      assert.same({ { "ask", false }, { "fetch", true }, { "delete_comment", true }, { "fetch", false } }, waits)
+    end)
+
+    it("asks GitHub nothing when declined", function()
+      require("changeset.pr").delete_listed({ review_comment = review_comment })
+
+      assert.equal(1, #prompts)
+      assert.same({}, fetched)
+      assert.same({}, deleted_comments)
+    end)
+
+    it("names an outdated review comment's file alone", function()
+      require("changeset.pr").delete_listed({
+        review_comment = { id = "C_2", path = "alpha.txt", outdated = true, original_line = 3, body = "x" },
+      })
+
+      assert.same({ "Delete the review comment on alpha.txt?" }, prompts)
+    end)
+
+    it("asks, then deletes the draft it lists without asking GitHub to delete it", function()
+      confirmed = true
+      local draft = { path = "alpha.txt", start_line = 8, line = 10, head = HEAD, body = "d" }
+      drafts.keep(pr, draft)
+
+      require("changeset.pr").delete_listed({ draft = draft })
+
+      assert.same({ "Delete the draft on lines 8-10 of alpha.txt?" }, prompts)
+      assert.same({}, drafts.list(pr))
+      assert.same({}, deleted_comments)
     end)
   end)
 
@@ -1084,6 +1137,104 @@ describe("changeset.pr", function()
       require("changeset.pr").comment(6, 6)
       opened[1].save("draft", function() end)
       assert.same({}, drafts.list(held_pr))
+    end)
+
+    describe("open_listed", function()
+      local review_comment = { id = "C_1", path = "a.lua", start_line = 3, line = 4, outdated = false, body = "old" }
+
+      it("reopens the draft it lists, though a narrower one ends on its line", function()
+        drafts.keep(held_pr, draft())
+        drafts.keep(held_pr, draft({ start_line = nil, body = "narrow" }))
+
+        require("changeset.pr").open_listed({ draft = draft() })
+
+        assert.equal("draft", opened[1].body)
+        assert.equal("Review comment · lines 5-7", opened[1].title)
+      end)
+
+      it("opens a review comment under its lines, editable, saying a save updates it", function()
+        require("changeset.pr").open_listed({ review_comment = review_comment })
+
+        assert.equal("old", opened[1].body)
+        assert.equal(4, opened[1].line)
+        assert.equal("Edit review comment · lines 3-4", opened[1].title)
+        assert.truthy(opened[1].footer:find("#412", 1, true))
+        for _, text in ipairs({ opened[1].footer, opened[1].save_desc, opened[1].close_desc }) do
+          assert.is_nil(text:lower():find("add", 1, true), text)
+          assert.truthy(text:lower():find("edit", 1, true) or text:lower():find("update", 1, true), text)
+        end
+      end)
+
+      it("updates the review comment on a save, and fetches again", function()
+        require("changeset.pr").open_listed({ review_comment = review_comment })
+        local results = {}
+
+        opened[1].save("new", function(err)
+          table.insert(results, { err = err })
+        end)
+
+        assert.same({ { id = "C_1", body = "new" } }, updated)
+        assert.same({}, added)
+        assert.same({ {} }, results)
+        assert.same({ vim.log.levels.INFO }, levels())
+        assert.same({ "/tree/root" }, fetched)
+      end)
+
+      it("hands a refused update to the window and keeps no draft", function()
+        failure = "boom"
+        require("changeset.pr").open_listed({ review_comment = review_comment })
+        local results = {}
+
+        opened[1].save("new", function(err)
+          table.insert(results, err)
+        end)
+
+        assert.same({ "boom" }, results)
+        assert.same({ vim.log.levels.ERROR }, levels())
+        assert.same({}, drafts.list(held_pr))
+      end)
+
+      it("keeps no draft of an edit closed unsaved, and says the review comment kept its text", function()
+        require("changeset.pr").open_listed({ review_comment = review_comment })
+
+        opened[1].keep("changed")
+
+        assert.same({}, drafts.list(held_pr))
+        assert.same({ vim.log.levels.INFO }, levels())
+      end)
+
+      it("says nothing of an edit closed with its text unchanged", function()
+        require("changeset.pr").open_listed({ review_comment = review_comment })
+
+        opened[1].keep("old")
+
+        assert.same({}, notes)
+      end)
+
+      it("asks to delete the review comment when the edit closes blank", function()
+        confirmed = true
+        answers = { { found = { pr = held_pr, review = { id = "PRR_1", comments = { review_comment } } } } }
+        require("changeset.pr").open_listed({ review_comment = review_comment })
+
+        opened[1].keep("  \n")
+
+        assert.is_true(vim.wait(1000, function()
+          return #deleted_comments > 0
+        end))
+        assert.same({ "Delete the review comment on lines 3-4 of a.lua?" }, prompts)
+        assert.same({ "C_1" }, deleted_comments)
+        assert.same({}, updated)
+      end)
+
+      it("opens nothing for a review comment with no line, and says why", function()
+        local outdated = { id = "C_2", path = "a.lua", outdated = true, original_line = 3, body = "old" }
+
+        require("changeset.pr").open_listed({ review_comment = outdated })
+
+        assert.same({}, opened)
+        assert.same({ vim.log.levels.INFO }, levels())
+        assert.truthy(notes[1].msg:find("outdated", 1, true))
+      end)
     end)
 
     it("drops a draft kept while its save was in flight, once the save is taken", function()

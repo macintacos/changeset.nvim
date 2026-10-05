@@ -1,4 +1,4 @@
----`:Changeset pr`'s verbs: start, submit and abandon the pending review on the branch's open PR, add a review comment to it or reopen a draft, and delete a draft or one of its review comments.
+---`:Changeset pr`'s verbs: start, submit and abandon the pending review on the branch's open PR, add a review comment to it, edit one or reopen a draft, and delete a draft or one of its review comments.
 local Git = require("changeset.git")
 local Paths = require("changeset.paths")
 local build = require("changeset.build")
@@ -51,12 +51,15 @@ local function progress(text)
   end
 end
 
+---Changes the pending review: progress shows while `mutation` waits on gh, then it reports and refetches.
+---@alias changeset.pr.Mutate fun(did: string, mutation: fun(done: fun(err: string?)))
+
 ---Finds the branch's PR and pending review and hands them to `act`, which may answer itself or
 ---change the review through `mutate`. `mutate` shows progress while `mutation` waits on gh, then
 ---reports and refetches, so the header always follows a change. Progress never runs while `act`
 ---waits on the user.
 ---@param verb string Reads between "can't" and "a pending review": "start", "abandon", "delete a review comment from".
----@param act fun(found: changeset.pending_review.Found, mutate: fun(did: string, mutation: fun(done: fun(err: string?))))
+---@param act fun(found: changeset.pending_review.Found, mutate: changeset.pr.Mutate)
 local function on_pr(verb, act)
   local repository = root()
   local finish = progress("asking GitHub for the PR's pending review")
@@ -144,6 +147,57 @@ function M.submit()
   end)
 end
 
+---"line 4", or "lines 3-5" for a range.
+---@param first integer
+---@param last integer
+---@return string
+local function lines_label(first, last)
+  return first < last and ("lines %d-%d"):format(first, last) or ("line %d"):format(last)
+end
+
+---Where `spanned` sits, for a sentence: "line 4 of a.lua", or "a.lua" when it has no line.
+---@param spanned changeset.Spanned
+---@return string
+local function place(spanned)
+  local last = spanned.line
+  if not last then
+    return spanned.path
+  end
+  return ("%s of %s"):format(lines_label(spanned.start_line or last, last), spanned.path)
+end
+
+---Deletes `listed`: a draft of `found.pr` at once, or a review comment of its pending review through `mutate`.
+---@param found changeset.pending_review.Found
+---@param mutate changeset.pr.Mutate
+---@param listed changeset.Listed
+local function remove(found, mutate, listed)
+  local draft = listed.draft
+  if draft then
+    -- GitHub holds nothing to refetch; the drafts subscription redraws the mark.
+    if not drafts.drop(found.pr, draft) then
+      return say(vim.log.levels.ERROR, "can't delete the draft in %s", drafts.path())
+    end
+    return say(vim.log.levels.INFO, "deleted the draft on %s", place(draft))
+  end
+  local id = assert(listed.review_comment, "changeset: nothing listed to delete").id
+  mutate("deleted a review comment from", function(done)
+    pending_review.delete_comment(id, done)
+  end)
+end
+
+---Asks, then deletes `listed`, a draft of the branch's open PR or a review comment of its pending review.
+---@param listed changeset.Listed
+function M.delete_listed(listed)
+  local what = listed.draft and "draft" or "review comment"
+  local spanned = listed.draft or listed.review_comment --[[@as changeset.Spanned]]
+  local question = ("Delete the %s on %s?"):format(what, place(spanned))
+  confirm.ask(question, function()
+    on_pr("delete a review comment from", function(found, mutate)
+      remove(found, mutate, listed)
+    end)
+  end)
+end
+
 ---Deletes the draft on the cursor's line, else the review comment there in the pending review on the branch's open PR.
 function M.delete()
   -- Extmarks move with edits while review comment lines don't, so a modified buffer could delete the wrong one.
@@ -155,11 +209,7 @@ function M.delete()
   on_pr("delete a review comment from", function(found, mutate)
     local draft = path and require("changeset.review_comments").at(drafts.list(found.pr), path, lnum)
     if draft then
-      -- GitHub holds nothing to refetch; the drafts subscription redraws the mark.
-      if not drafts.drop(found.pr, draft) then
-        return say(vim.log.levels.ERROR, "can't delete the draft in %s", drafts.path())
-      end
-      return say(vim.log.levels.INFO, "deleted the draft on line %d", lnum)
+      return remove(found, mutate, { draft = draft })
     end
     if not found.review then
       return say(vim.log.levels.INFO, "no pending review on #%d", found.pr.number)
@@ -168,9 +218,7 @@ function M.delete()
     if not comment then
       return say(vim.log.levels.INFO, "no review comment on line %d", lnum)
     end
-    mutate("deleted a review comment from", function(done)
-      pending_review.delete_comment(comment.id, done)
-    end)
+    remove(found, mutate, { review_comment = comment })
   end)
 end
 
@@ -255,10 +303,11 @@ end
 ---Opens the review comment window under line `last` of the current buffer, for lines `first` to `last`,
 ---unless the pending review can't take a review comment there. With no pending review, it asks to
 ---start one. Opening asks GitHub nothing unless it has yet to answer for the PR.
----A draft on line `last` reopens instead, on its own lines and unchecked.
+---A draft reopens instead, on its own lines and unchecked: `reopen`, else the one on line `last`.
 ---@param first integer
 ---@param last integer
-function M.comment(first, last)
+---@param reopen changeset.Draft?
+function M.comment(first, last, reopen)
   local buf, tree = vim.api.nvim_get_current_buf(), build.current()
   if not tree then
     return say(vim.log.levels.WARN, "open the sidebar on this file's repository first, so the PR's diff is read")
@@ -280,7 +329,7 @@ function M.comment(first, last)
     if vim.api.nvim_get_current_buf() ~= buf then
       return
     end
-    local draft = require("changeset.review_comments").at(drafts.list(found.pr), path, last)
+    local draft = reopen or require("changeset.review_comments").at(drafts.list(found.pr), path, last)
     if draft then
       -- Its lines passed the gates below when it was written at this head; a save GitHub rejects keeps it.
       first, last = draft.start_line or draft.line, draft.line
@@ -308,8 +357,7 @@ function M.comment(first, last)
     local function open(review)
       review_comment_window.open({
         line = last,
-        title = "Review comment · "
-          .. (first < last and ("lines %d-%d"):format(first, last) or ("line %d"):format(last)),
+        title = "Review comment · " .. lines_label(first, last),
         save_desc = "Save into the pending review",
         close_desc = "Close, keeping the text as a draft",
         footer = ("pending review on #%d"):format(number),
@@ -362,6 +410,69 @@ function M.comment(first, last)
       open(start_behind(tree.root, found.pr))
     end)
   end)
+end
+
+---Opens the window under `comment`'s lines of the current buffer, holding its text: a save updates it in the
+---pending review, and closing it blank asks to delete it. Closing it otherwise drops the edit, never keeping a
+---draft: one would reopen through `M.comment` as a second review comment on those lines.
+---@param comment changeset.ReviewComment
+local function edit(comment)
+  local buf, tree = vim.api.nvim_get_current_buf(), assert(build.current(), "changeset: no tree built yet")
+  with_found(tree, function(found)
+    -- The window opens in the current one, which a wait on GitHub may have moved away.
+    if vim.api.nvim_get_current_buf() ~= buf then
+      return
+    end
+    local number = found.pr.number
+    local last = assert(comment.line, "changeset: a review comment with no line can't be edited under it")
+    review_comment_window.open({
+      line = last,
+      title = "Edit review comment · " .. lines_label(comment.start_line or last, last),
+      save_desc = "Update the review comment in the pending review",
+      close_desc = "Close, dropping the edit",
+      footer = ("edit in pending review on #%d"):format(number),
+      keys = config.get().review_comment.save,
+      body = comment.body,
+      keep = function(body)
+        if not body:find("%S") then
+          -- Scheduled: the question opens a window, and this one is still closing.
+          return vim.schedule(function()
+            M.delete_listed({ review_comment = comment })
+          end)
+        end
+        if body ~= comment.body then
+          say(vim.log.levels.INFO, "closed without updating, so the review comment keeps its saved text")
+        end
+      end,
+      save = function(body, done)
+        pending_review.update_comment(comment.id, body, function(err)
+          if err then
+            say(vim.log.levels.ERROR, "can't update the review comment: %s", err)
+          else
+            say(vim.log.levels.INFO, "updated a review comment in the pending review on #%d", number)
+            pending_state.fetch(tree.root)
+          end
+          done(err)
+        end)
+      end,
+    })
+  end)
+end
+
+---Opens `listed` under its lines of the current buffer: a draft reopens as `M.comment` reopens one, and a
+---review comment opens editable. One with no line, outdated or on the whole file, opens nothing.
+---@param listed changeset.Listed
+function M.open_listed(listed)
+  local draft = listed.draft
+  if draft then
+    return M.comment(draft.start_line or draft.line, draft.line, draft)
+  end
+  local comment = assert(listed.review_comment, "changeset: nothing listed to open")
+  if not comment.line then
+    local why = comment.outdated and "it's outdated, its line changed since it was written" or "it's on the whole file"
+    return say(vim.log.levels.INFO, "the review comment on %s has no line to open under: %s", comment.path, why)
+  end
+  edit(comment)
 end
 
 return M
