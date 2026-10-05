@@ -48,14 +48,15 @@ function M.matches_commit(root, commit, path)
   return at_commit ~= nil and at_commit == M.lines({ "git", "hash-object", "--", path }, root)[1]
 end
 
----What HEAD moved from the first time it moved to `branch`, as this worktree's HEAD reflog records it.
+---What HEAD moved from when it moved to `branch` at `commit`, as this worktree's HEAD reflog records it.
 ---@param cwd string?
 ---@param branch string
+---@param commit string The commit `branch` was created at, which tells its move from an earlier branch's of that name.
 ---@return string? from A branch name, or a commit when HEAD was detached.
-local function moved_from(cwd, branch)
-  local moved = "^checkout: moving from (%S+) to " .. vim.pesc(branch) .. "$"
+local function moved_from(cwd, branch, commit)
+  local moved = "^" .. vim.pesc(commit) .. " checkout: moving from (%S+) to " .. vim.pesc(branch) .. "$"
   return vim
-    .iter(M.lines({ "git", "reflog", "show", "--format=%gs", "HEAD" }, cwd))
+    .iter(M.lines({ "git", "reflog", "show", "--format=%H %gs", "HEAD" }, cwd))
     :rev()
     :map(function(entry)
       return entry:match(moved)
@@ -71,10 +72,10 @@ end
 ---@return string? parent nil when `branch` was created from a commit, a detached HEAD, another worktree's HEAD or
 ---its own remote counterpart, when that branch is gone, and when the reflogs no longer hold its creation.
 function M.parent(cwd, branch)
-  local log = M.lines({ "git", "reflog", "show", "--format=%gs", "refs/heads/" .. branch }, cwd)
-  local source = (log[#log] or ""):match("^branch: Created from (.+)$")
+  local log = M.lines({ "git", "reflog", "show", "--format=%H %gs", "refs/heads/" .. branch }, cwd)
+  local commit, source = (log[#log] or ""):match("^(%x+) branch: Created from (.+)$")
   if source == "HEAD" then
-    source = moved_from(cwd, branch)
+    source = moved_from(cwd, branch, commit)
   end
   if not source then
     return

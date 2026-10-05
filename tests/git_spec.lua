@@ -177,6 +177,15 @@ describe("changeset.git", function()
       assert.equal("parent", Git.parent(tmp, "feature"))
     end)
 
+    it("names the branch HEAD was on when it created the branch, not an earlier branch of that name", function()
+      Fixture.git({ "switch", "-q", "-c", "feature" }, tmp)
+      Fixture.git({ "switch", "-q", "trunk" }, tmp)
+      Fixture.git({ "branch", "-q", "-D", "feature" }, tmp)
+      Fixture.git({ "switch", "-q", "-c", "feature" }, tmp)
+
+      assert.equal("trunk", Git.parent(tmp, "feature"))
+    end)
+
     it("is nil for a branch created from a detached HEAD", function()
       Fixture.git({ "switch", "-q", "--detach" }, tmp)
       Fixture.git({ "switch", "-q", "-c", "feature" }, tmp)
