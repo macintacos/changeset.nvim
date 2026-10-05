@@ -349,10 +349,10 @@ The footer says where a save goes and, at its right end, the first `review_comme
 key in Neovim's own notation (`<C-CR> save`), since every review comment ends with that key
 and it is the one nobody should have to look up. A float takes one `footer_pos`, so both
 share a left footer padded with border to the window's width; a window too narrow for both
-drops the key. The other keys stay off the border: `?` lists them all. However the
-window's text goes, except the close a taken save makes, it is kept as a local draft: `q`
-in normal mode, `<S-Esc>` in either mode where the terminal sends it, `:q`, `<C-w>c`, an
-`:e` in the float, quitting Neovim. One `BufUnload` hook on the window's buffer catches
+drops the key. The other keys stay off the border: `?` lists them all. However a new
+review comment's text goes, except the close a taken save makes, it is kept as a local
+draft: `q` in normal mode, `<S-Esc>` in either mode where the terminal sends it, `:q`,
+`<C-w>c`, an `:e` in the float, quitting Neovim. One `BufUnload` hook on the window's buffer catches
 them all, since the buffer goes with the window (`bufhidden=wipe`), and takes the room
 under the line with it. Plain `<Esc>` still
 only leaves insert mode, so a habitual `<Esc>` on the way to normal mode never closes it.
@@ -572,6 +572,19 @@ for everything else. `h` and `l` fold the section, remembered like any other, `]
 stop on its header, a filter matches a row by its path, moving onto one previews its line,
 `y` copies its `path:line`, and opening one marks it as the pick.
 
+A row is for finding what you wrote, so its keys act on that. `<CR>` and the split and tab
+keys jump to its line, then open it in the review comment window. A draft reopens as
+`:Changeset pr comment` reopens one, the exact draft the row lists even when a narrower one
+ends on its line. A review comment opens editable, its title, keys' descriptions and
+footer saying edit and update, and a save sends GitHub the new body. `d` asks through the
+same No/Yes question `pr abandon` uses, then deletes; a review comment goes through the
+same progress and refetch as `pr delete`, which shares the deletion.
+
+An outdated or file-level review comment opens no window. The window lies under a line
+the review comment is about, and GitHub knows none for it: an outdated one's `original_line`
+counts lines of a commit the file has moved on from, so a window there would sit under
+some other text. Its row jumps to the file and says why; `d` still deletes it.
+
 ### Footer
 
 ```text
@@ -762,6 +775,12 @@ repository's deliberate choice is none of that save's business.
 
 - **A refused review comment keeps the window and its text.** Only a save GitHub accepted
   closes it, so a refusal can be fixed and saved again rather than retyped.
+- **An edit closed without a save keeps no draft.** A draft is keyed by path, lines and
+  head, and reopens through `pr comment` as a new review comment, so keeping one would
+  turn the edit into a duplicate. The review comment keeps its saved text on GitHub, so
+  only the edit is lost, and a changed one says so. Closing it with only whitespace, by a
+  save key or any other close, asks to delete it instead, since an empty body is never
+  sent.
 - **A saved review comment leaves insert mode before the window closes.** The save keys
   are pressed while typing and the answer comes later. `stopinsert` only takes effect on
   the next loop iteration, so the window closes on the float's own `InsertLeave`; closing

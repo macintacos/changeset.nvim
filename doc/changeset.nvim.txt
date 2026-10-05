@@ -164,7 +164,9 @@ preview’s body window with `review_comment.save`, in
                           in without leaving the sidebar
 
   <CR>        sidebar     open the change there, focusing that window at
-                          the row’s line; nothing on a section header
+                          the row’s line; on a Comments row, then open
+                          its review comment or draft under that line;
+                          nothing on a section header
 
   <S-CR>      sidebar     open the change, then close the sidebar
 
@@ -198,12 +200,12 @@ preview’s body window with `review_comment.save`, in
 
   q / <Esc>   kind menu   close, putting the tree back to the saved set
 
-  <C-CR> /    review      save into the pending review and close; when
-  <C-s>       comment     GitHub refuses, the window and its text stay
-              window
+  <C-CR> /    review      save into the pending review, or update the
+  <C-s>       comment     review comment being edited, and close; when
+              window      GitHub refuses, the window and its text stay
 
-  q / <S-Esc> review      close, keeping the text as a local draft
-              comment
+  q / <S-Esc> review      close, keeping the text as a local draft;
+              comment     editing a review comment, drop the edit
               window
 
   ?           review      list its keys
@@ -240,8 +242,12 @@ preview’s body window with `review_comment.save`, in
   y           sidebar     copy the row’s path:line to the clipboard;
                           nothing on a section header
 
+  d           sidebar     on a Comments row, ask, then delete its review
+                          comment or draft; nothing on any other row
+
   / - <C-t>   sidebar     open the change in a vsplit / split / new tab
-                          instead
+                          instead, opening a Comments row’s review
+                          comment or draft as <CR> does
 
   ?           sidebar     list the keys the sidebar bound, keymaps.next /
                           keymaps.prev included when set: which-key’s
@@ -371,6 +377,16 @@ and the first line of the body. Outdated and file-level review comments get a
 row too, saying so in place of a line. The section follows the marks, and is
 left out while it has nothing to list.
 
+`<CR>` on a row, or a split or tab key, goes to its line and opens it there. A
+draft reopens as `pr comment` reopens one. A review comment opens editable,
+titled `Edit review comment`: a save key updates it on GitHub, and saving or
+closing it with only whitespace asks whether to delete it rather than send an
+empty body. Closing it any other way drops the edit and keeps no draft, since a
+draft on those lines would reopen as a second review comment; the review
+comment keeps its saved text. An outdated or file-level review comment has no
+line, so its row opens its file and says so. `d` on a row asks, the way `pr
+abandon` does, then deletes the review comment or draft.
+
 A `'statuscolumn'` can draw the bubbles somewhere else. `%s` draws every
 plugin’s signs or none, so set `review_comment.sign` to `false` to keep the
 bubbles out of the sign column, or a line shows its bubble twice.
@@ -426,61 +442,64 @@ Pass options to `require("changeset").setup()` as nested tables:
 
 Any `keymaps` entry can be `false` to leave that key unbound.
 
-  -------------------------------------------------------------------------
-  Option                  Default   Description
-  ----------------------- --------- ---------------------------------------
-  keymaps.jump            <CR>      Go to this change
+  --------------------------------------------------------------------------
+  Option                   Default   Description
+  ------------------------ --------- ---------------------------------------
+  keymaps.jump             <CR>      Go to this change
 
-  keymaps.jump_close      <S-CR>    Go to this change and close the sidebar
+  keymaps.jump_close       <S-CR>    Go to this change and close the sidebar
 
-  keymaps.jump_vsplit     /         Go to this change in a vertical split
+  keymaps.jump_vsplit      /         Go to this change in a vertical split
 
-  keymaps.jump_split      -         Go to this change in a split
+  keymaps.jump_split       -         Go to this change in a split
 
-  keymaps.jump_tab        <C-t>     Go to this change in a new tab
+  keymaps.jump_tab         <C-t>     Go to this change in a new tab
 
-  keymaps.close           q         Close the sidebar
+  keymaps.close            q         Close the sidebar
 
-  keymaps.expand          l         Expand
+  keymaps.expand           l         Expand
 
-  keymaps.collapse        h         Collapse, or step out to the parent
+  keymaps.collapse         h         Collapse, or step out to the parent
 
-  keymaps.collapse_all    H         Collapse every file
+  keymaps.collapse_all     H         Collapse every file
 
-  keymaps.expand_all      L         Expand every file
+  keymaps.expand_all       L         Expand every file
 
-  keymaps.next_section    ]]        Next section header
+  keymaps.next_section     ]]        Next section header
 
-  keymaps.prev_section    [[        Previous section header
+  keymaps.prev_section     [[        Previous section header
 
-  keymaps.refresh         R         Rebuild the tree
+  keymaps.refresh          R         Rebuild the tree
 
-  keymaps.yank            y         Copy path:line
+  keymaps.yank             y         Copy path:line
 
-  keymaps.help            ?         List the sidebar’s keys
+  keymaps.delete_comment   d         Delete the review comment or draft on a
+                                     Comments row
 
-  keymaps.filter_kinds    F         Open the symbol-kind menu
+  keymaps.help             ?         List the sidebar’s keys
 
-  keymaps.filter          f         Filter the tree
+  keymaps.filter_kinds     F         Open the symbol-kind menu
 
-  keymaps.next            false     Next row, from any window
+  keymaps.filter           f         Filter the tree
 
-  keymaps.prev            false     Previous row, from any window
+  keymaps.next             false     Next row, from any window
 
-  layout.min_file_width   80        Narrowest the files get beside the
-                                    sidebar before it moves below them
+  keymaps.prev             false     Previous row, from any window
 
-  pr_review.enabled       false     PR Review Mode on every branch but the
-                                    default
+  layout.min_file_width    80        Narrowest the files get beside the
+                                     sidebar before it moves below them
 
-  review_comment.save     <C-CR>,   List of keys that save a review
-                          <C-s>     comment, or keep the submit preview’s
-                                    body, in insert and normal mode
+  pr_review.enabled        false     PR Review Mode on every branch but the
+                                     default
 
-  review_comment.sign     true      Put each review comment’s and draft’s
-                                    bubble in the sign column; false leaves
-                                    it to a 'statuscolumn' (see PR reviews)
-  -------------------------------------------------------------------------
+  review_comment.save      <C-CR>,   List of keys that save a review
+                           <C-s>     comment, or keep the submit preview’s
+                                     body, in insert and normal mode
+
+  review_comment.sign      true      Put each review comment’s and draft’s
+                                     bubble in the sign column; false leaves
+                                     it to a 'statuscolumn' (see PR reviews)
+  --------------------------------------------------------------------------
 The step keys, `keymaps.next` and `keymaps.prev`, are off by default. Once set,
 they work from any window, but only while the sidebar is open. Whatever they
 replaced comes back when it closes.

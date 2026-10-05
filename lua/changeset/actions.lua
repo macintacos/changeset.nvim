@@ -1,11 +1,13 @@
 ---What each sidebar key does, and the keymaps that bind them.
----The fold, step and filter keys ask the sidebar's view, then move the cursor or redraw.
+---The fold, step and filter keys ask the sidebar's view, then move the cursor or redraw; on a comment row the jump
+---keys open what it lists, and the delete key deletes it.
 
 local Paths = require("changeset.paths")
 local build = require("changeset.build")
 local draw = require("changeset.draw")
 local help = require("changeset.help")
 local icons = require("changeset.icons")
+local pr = require("changeset.pr")
 local sidebar_state = require("changeset.sidebar_state")
 local view = require("changeset.view")
 local window = require("changeset.window")
@@ -34,6 +36,7 @@ end
 
 ---@param how "reuse"|"vsplit"|"split"|"tab"
 ---@param hooks changeset.ActionHooks
+---@return changeset.Row? committed The row opened, if any.
 local function commit(how, hooks)
   local state = sidebar_state.current()
   local row = draw.row_at_cursor()
@@ -46,6 +49,15 @@ local function commit(how, hooks)
   assert(state, "changeset: no tree built yet")
   if window.commit(state.tree.root .. "/" .. row.path, row.lnum or 1, how) then
     hooks.pick(row)
+    return row
+  end
+end
+
+---Open what a comment row lists in the window a commit left focused.
+---@param row changeset.Row?
+local function open_listed(row)
+  if row and row.listed then
+    pr.open_listed(row.listed)
   end
 end
 
@@ -190,23 +202,30 @@ function M.set_keymaps(buf, keys, hooks)
   end
 
   map(keys.jump, function()
-    commit("reuse", hooks)
+    open_listed(commit("reuse", hooks))
   end, "Go to this change")
   -- The commit leaves the cursor in the window it jumped to, and `close` keeps
   -- focus where it already is, so the sidebar goes without taking the jump back.
   map(keys.jump_close, function()
-    commit("reuse", hooks)
+    local row = commit("reuse", hooks)
     hooks.close()
+    open_listed(row)
   end, "Go to this change and close the tree")
   map(keys.jump_vsplit, function()
-    commit("vsplit", hooks)
+    open_listed(commit("vsplit", hooks))
   end, "Go to this change in a vertical split")
   map(keys.jump_split, function()
-    commit("split", hooks)
+    open_listed(commit("split", hooks))
   end, "Go to this change in a split")
   map(keys.jump_tab, function()
-    commit("tab", hooks)
+    open_listed(commit("tab", hooks))
   end, "Go to this change in a new tab")
+  map(keys.delete_comment, function()
+    local row = draw.row_at_cursor()
+    if row and row.listed then
+      pr.delete_listed(row.listed)
+    end
+  end, "Delete this review comment or draft")
   map(keys.close, hooks.close, "Close the tree")
   map(keys.expand, function(state)
     local lnum = cursor()

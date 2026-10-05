@@ -23,6 +23,7 @@ local M = {}
 ---@field prev_section? string|false Previous section. Default `[[`.
 ---@field refresh? string|false Rebuild the tree. Default `R`.
 ---@field yank? string|false Yank path:line. Default `y`.
+---@field delete_comment? string|false Delete the review comment or draft a Comments row lists. Default `d`.
 ---@field help? string|false Show these keymaps. Default `?`.
 ---@field filter_kinds? string|false Filter by symbol kind. Default `F`.
 ---@field filter? string|false Filter the tree. Default `f`.
@@ -63,6 +64,7 @@ local DEFAULTS = {
     prev_section = "[[",
     refresh = "R",
     yank = "y",
+    delete_comment = "d",
     help = "?",
     filter_kinds = "F",
     filter = "f",

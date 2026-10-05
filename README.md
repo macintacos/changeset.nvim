@@ -139,7 +139,7 @@ comment window and the submit preview's body window with `review_comment.save`, 
 | Key | Where | Does |
 | --- | --- | ------------ |
 | `j` / `k` | sidebar | move, previewing into the window you were last in without leaving the sidebar |
-| `<CR>` | sidebar | open the change there, focusing that window at the row's line; nothing on a section header |
+| `<CR>` | sidebar | open the change there, focusing that window at the row's line; on a Comments row, then open its review comment or draft under that line; nothing on a section header |
 | `<S-CR>` | sidebar | open the change, then close the sidebar |
 | `q` | sidebar | close, return you to your window and put back what each previewed window showed |
 | `h` | sidebar | collapse; on a section header, fold its section; with nothing left to collapse, step out to the parent, so repeated `h` walks up to the file and then its section header |
@@ -150,8 +150,8 @@ comment window and the submit preview's body window with `review_comment.save`, 
 | `x` | kind menu | hide or show the kind under the cursor, redrawing the tree at once |
 | `<CR>` / `r` / `b` | kind menu | remember this set everywhere / for this repository / for this branch, then close |
 | `q` / `<Esc>` | kind menu | close, putting the tree back to the saved set |
-| `<C-CR>` / `<C-s>` | review comment window | save into the pending review and close; when GitHub refuses, the window and its text stay |
-| `q` / `<S-Esc>` | review comment window | close, keeping the text as a local draft |
+| `<C-CR>` / `<C-s>` | review comment window | save into the pending review, or update the review comment being edited, and close; when GitHub refuses, the window and its text stay |
+| `q` / `<S-Esc>` | review comment window | close, keeping the text as a local draft; editing a review comment, drop the edit |
 | `?` | review comment window | list its keys |
 | `<CR>` | submit preview | submit the review; when it is refused, the preview stays |
 | `c` / `a` / `r` | submit preview | choose Comment / Approve / Request changes; only on someone else's PR |
@@ -163,7 +163,8 @@ comment window and the submit preview's body window with `review_comment.save`, 
 | `f` | sidebar | filter as you type, keeping ancestors so matches stay in place and highlighting every match until you clear the filter; `<Esc>` cancels and keeps the previous filter |
 | `R` | sidebar | rebuild now |
 | `y` | sidebar | copy the row's `path:line` to the clipboard; nothing on a section header |
-| `/` `-` `<C-t>` | sidebar | open the change in a vsplit / split / new tab instead |
+| `d` | sidebar | on a Comments row, ask, then delete its review comment or draft; nothing on any other row |
+| `/` `-` `<C-t>` | sidebar | open the change in a vsplit / split / new tab instead, opening a Comments row's review comment or draft as `<CR>` does |
 | `?` | sidebar | list the keys the sidebar bound, `keymaps.next` / `keymaps.prev` included when set: which-key's popup where it is installed, a float where it is not |
 | `]h` / `[h` | anywhere, while open | off unless set as `keymaps.next` / `keymaps.prev`; move the sidebar's selection to the next / previous row, previewing it and skipping section headers, so you can review without focusing the sidebar |
 
@@ -275,6 +276,15 @@ draft, the file's name and line, and the first line of the body. Outdated and fi
 review comments get a row too, saying so in place of a line. The section follows the marks,
 and is left out while it has nothing to list.
 
+`<CR>` on a row, or a split or tab key, goes to its line and opens it there. A draft
+reopens as `pr comment` reopens one. A review comment opens editable, titled
+`Edit review comment`: a save key updates it on GitHub, and saving or closing it with only
+whitespace asks whether to delete it rather than send an empty body. Closing it any other
+way drops the edit and keeps no draft, since a draft on those lines would reopen as a
+second review comment; the review comment keeps its saved text. An outdated or file-level
+review comment has no line, so its row opens its file and says so. `d` on a row asks, the
+way `pr abandon` does, then deletes the review comment or draft.
+
 A `'statuscolumn'` can draw the bubbles somewhere else. `%s` draws every plugin's signs or
 none, so set `review_comment.sign` to `false` to keep the bubbles out of the sign column, or
 a line shows its bubble twice. `require("changeset").bubble(buf, lnum)` returns the bubble
@@ -345,6 +355,7 @@ Any `keymaps` entry can be `false` to leave that key unbound.
 | `keymaps.prev_section` | `[[` | Previous section header |
 | `keymaps.refresh` | `R` | Rebuild the tree |
 | `keymaps.yank` | `y` | Copy `path:line` |
+| `keymaps.delete_comment` | `d` | Delete the review comment or draft on a Comments row |
 | `keymaps.help` | `?` | List the sidebar's keys |
 | `keymaps.filter_kinds` | `F` | Open the symbol-kind menu |
 | `keymaps.filter` | `f` | Filter the tree |
