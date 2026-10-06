@@ -144,6 +144,18 @@ describe("changeset.herdr", function()
     assert.equal("Thinking", row.cells[2][1])
   end)
 
+  it("leaves the title blank where the tab's label already holds it, keeping its column", function()
+    -- herdr can prefix a label with the tab's number glyph.
+    local row = herdr._row({ pane_id = "p", agent = "x", tab_id = "t", title = "parser" }, { t = "󰎤 parser" })
+
+    assert.same(
+      { "x", "", "󰎤 parser", "" },
+      vim.tbl_map(function(cell)
+        return cell[1]
+      end, row.cells)
+    )
+  end)
+
   it("reports that there is no agent when none is left", function()
     fake.set("agent list", fake.agents({ mine }))
     assert.equal("no agent in this herdr workspace", (send("hi")))
