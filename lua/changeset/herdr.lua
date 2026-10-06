@@ -175,13 +175,18 @@ end
 ---@param cb fun(err: string?, agent: string?) On the main loop. `agent` names who got it on success;
 ---`err` is a short sentence for `vim.notify`, without a "Changeset:" prefix; both nil when the pick was cancelled.
 function M.send(text, cb)
-  local workspace = present(vim.env.HERDR_WORKSPACE_ID)
-  local refusal = not workspace and "not inside a herdr pane, so there's no agent to send to"
-    or vim.fn.executable("herdr") ~= 1 and "herdr isn't on PATH, so there's no agent to send to"
-  if refusal then
-    return vim.schedule(function()
-      cb(refusal)
+  ---@param why string
+  local function refuse(why)
+    vim.schedule(function()
+      cb(why)
     end)
+  end
+  local workspace = present(vim.env.HERDR_WORKSPACE_ID)
+  if not workspace then
+    return refuse("not inside a herdr pane, so there's no agent to send to")
+  end
+  if vim.fn.executable("herdr") ~= 1 then
+    return refuse("herdr isn't on PATH, so there's no agent to send to")
   end
   list_agents(function(agents)
     if not agents then

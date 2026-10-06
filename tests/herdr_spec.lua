@@ -157,7 +157,7 @@ describe("changeset.herdr", function()
     local err, _, called = send("hi")
     vim.system = system
     assert.is_true(called)
-    assert.is_not_nil(err)
+    assert.truthy(err)
   end)
 
   it("refuses an agent that is at a prompt by the time of the send", function()

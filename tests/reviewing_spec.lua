@@ -156,7 +156,7 @@ describe("changeset.reviewing", function()
       end)
 
       os.remove(comment_store.path())
-      assert.is_not_nil(err)
+      assert.truthy(err)
       assert.equal(vim.log.levels.ERROR, notes[1].level)
     end)
 
@@ -223,7 +223,7 @@ describe("changeset.reviewing", function()
       end)
 
       os.remove(comment_store.path())
-      assert.is_not_nil(err)
+      assert.truthy(err)
     end)
 
     it("drops an edit closed without saving, and says so", function()
