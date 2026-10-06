@@ -421,6 +421,18 @@ from the sidebar's `n-v` one, so neither removes the other's. Leaving the window
 way cancels. Every close gives focus back to the window the dialog opened from before the
 answer runs, so whatever the answer opens or focuses is not undone by the close.
 
+A dialog is modal, and three things hold it so:
+
+- **Its window keeps its buffer**, through `winfixbuf`. The float takes its opener's
+  jumplist, so a reflexive `<C-o>` would otherwise leave a file in it, still open, with the
+  cursor hidden everywhere and the answer never coming. A buffer forced in anyway, as `:b!`
+  can, cancels the dialog as leaving does.
+- **One is open at a time.** A second, from a global key pressed inside the first or an
+  agent list arriving late, is refused and answers as cancelled: it would take focus, and
+  the first's leave would then cancel both.
+- **A resized editor fits and centres it again**, with the sums it opened with. Its text
+  keeps the wrap it opened with.
+
 ### Stats
 
 Right-aligned virtual text, `+N` in `GitSignsAdd`, `-N` in `GitSignsDelete`. Numbers, not
