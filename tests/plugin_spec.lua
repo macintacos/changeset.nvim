@@ -22,6 +22,22 @@ local function counter(calls, key)
   end
 end
 
+---The stdout of a fresh headless Neovim that loads the plugin, runs `args` and, once startup is done, `probe`.
+---@param args string[] More arguments, before the probe's.
+---@param probe string Lua that writes its answer with io.write.
+---@return string
+local function after_startup(args, probe)
+  local root = vim.fn.fnamemodify(vim.api.nvim_get_runtime_file("plugin/changeset.lua", false)[1], ":h:h")
+  local cmd = { vim.v.progpath, "--headless", "-u", "NONE", "--cmd", "set rtp^=" .. root }
+  vim.list_extend(cmd, { "--cmd", "runtime plugin/changeset.lua" })
+  vim.list_extend(cmd, args)
+  vim.list_extend(
+    cmd,
+    { "--cmd", "autocmd VimEnter * ++once lua vim.schedule(function() " .. probe .. "; vim.cmd('qa!') end)" }
+  )
+  return vim.system(cmd):wait(10000).stdout
+end
+
 -- The cases run in order: the first real `require("changeset.build")` is the last case's,
 -- since its autocmds outlive it and the first case asserts there are none.
 describe("plugin/changeset.lua", function()
@@ -85,7 +101,7 @@ describe("plugin/changeset.lua", function()
 
   it("completes the subcommands that match the argument", function()
     assert.same(
-      { "abandon", "comment", "delete", "refresh", "review", "submit", "toggle" },
+      { "abandon", "comment", "delete", "list", "next", "prev", "refresh", "review", "submit", "toggle", "yank" },
       vim.fn.getcompletion("Changeset ", "cmdline")
     )
     assert.same({ "refresh", "review" }, vim.fn.getcompletion("Changeset re", "cmdline"))
@@ -216,5 +232,70 @@ describe("plugin/changeset.lua", function()
     vim.cmd("Changeset refresh")
 
     assert.truthy(package.loaded["changeset.build"])
+  end)
+
+  it("routes each <Plug> map to its subcommand", function()
+    local calls = {}
+    local names = { "comment", "delete", "next", "prev", "list", "yank", "submit", "abandon" }
+    local reviewing = {}
+    for _, name in ipairs(names) do
+      reviewing[name] = counter(calls, name)
+    end
+    package.loaded["changeset.reviewing"] = reviewing
+    package.loaded["changeset.build"] = { refresh = counter(calls, "refresh") }
+    require("changeset.config").setup({ pr_review = { enabled = true } })
+    package.loaded["changeset.review"] = { toggle = counter(calls, "review") }
+
+    for _, name in ipairs(vim.list_extend({ "refresh", "review" }, names)) do
+      vim.api.nvim_feedkeys(vim.keycode(("<Plug>(changeset-%s)"):format(name)), "x", false)
+    end
+
+    package.loaded["changeset.reviewing"] = nil
+    package.loaded["changeset.build"] = nil
+    package.loaded["changeset.review"] = nil
+    require("changeset.config").setup()
+    for name, count in pairs(calls) do
+      assert.equal(1, count, name)
+    end
+  end)
+
+  it("routes the visual <Plug>(changeset-comment) the selected lines", function()
+    local ranges = {}
+    package.loaded["changeset.reviewing"] = {
+      comment = function(first, last)
+        table.insert(ranges, { first, last })
+      end,
+    }
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_set_current_buf(buf)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(("x"):rep(10, "\n"), "\n"))
+
+    vim.api.nvim_feedkeys("2GVj" .. vim.keycode("<Plug>(changeset-comment)"), "x", false)
+
+    vim.api.nvim_buf_delete(buf, { force = true })
+    package.loaded["changeset.reviewing"] = nil
+    assert.same({ { 2, 3 } }, ranges)
+  end)
+
+  it("maps the default <C-g> keys once startup is done", function()
+    local probe =
+      "io.write(vim.fn.maparg('<C-g>c', 'n'), ' ', vim.fn.maparg('<C-g>c', 'x'), ' ', vim.fn.maparg('<C-g>m', 'n'))"
+
+    assert.equal(
+      "<Plug>(changeset-comment) <Plug>(changeset-comment) <Plug>(changeset-review)",
+      after_startup({}, probe)
+    )
+  end)
+
+  it("leaves a <C-g> key the user mapped alone", function()
+    local probe = "io.write(vim.fn.maparg('<C-g>d', 'n'), ' ', vim.fn.maparg('<C-g>n', 'n'))"
+
+    assert.equal(":echo 1<CR> <Plug>(changeset-next)", after_startup({ "-c", "nnoremap <C-g>d :echo 1<CR>" }, probe))
+  end)
+
+  it("maps no default keys when vim.g.changeset_no_default_maps is set", function()
+    local probe = "io.write(vim.fn.maparg('<C-g>c', 'n'), vim.fn.maparg('<C-g>c', 'x'))"
+
+    assert.equal("", after_startup({ "-c", "let g:changeset_no_default_maps = 1" }, probe))
   end)
 end)

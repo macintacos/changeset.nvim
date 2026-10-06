@@ -1,4 +1,4 @@
----Entry points: `:Changeset`, `<Plug>(changeset-toggle)`, session restore and the mini.pick registry.
+---Entry points: `:Changeset`, its `<Plug>` maps and default `<C-g>` keys, session restore and the mini.pick registry.
 ---Loads `changeset` only when it is used — not at load, nor for a session without a sidebar: its module-level
 ---autocmds start the tracker and watchers.
 
@@ -32,6 +32,18 @@ local subcommands = {
   submit = function()
     require("changeset.reviewing").submit()
   end,
+  next = function()
+    require("changeset.reviewing").next()
+  end,
+  prev = function()
+    require("changeset.reviewing").prev()
+  end,
+  list = function()
+    require("changeset.reviewing").list()
+  end,
+  yank = function()
+    require("changeset.reviewing").yank()
+  end,
 }
 
 vim.api.nvim_create_user_command("Changeset", function(opts)
@@ -54,7 +66,43 @@ end, {
   end,
 })
 
-vim.keymap.set("n", "<Plug>(changeset-toggle)", subcommands.toggle, { desc = "Toggle the changeset sidebar" })
+---Each subcommand's default key under `<C-g>`, and what it does.
+local keys = {
+  { "c", "comment", "Comment on this line, or the selection, or edit the comment there", { "n", "x" } },
+  { "d", "delete", "Delete the review comment on this line" },
+  { "n", "next", "Next review comment" },
+  { "p", "prev", "Previous review comment" },
+  { "l", "list", "List the review comments in the quickfix list" },
+  { "y", "yank", "Copy the review as text" },
+  { "s", "submit", "Send the review to an agent" },
+  { "a", "abandon", "Abandon the review" },
+  { "t", "toggle", "Toggle the changeset sidebar" },
+  { "r", "refresh", "Rebuild the changeset sidebar" },
+  { "m", "review", "Toggle PR Review Mode" },
+}
+
+for _, key in ipairs(keys) do
+  local name, desc = key[2], key[3]
+  -- <Cmd>, not a function, so a map loads no changeset module until it's used.
+  vim.keymap.set("n", ("<Plug>(changeset-%s)"):format(name), ("<Cmd>Changeset %s<CR>"):format(name), { desc = desc })
+end
+-- `:`, not <Cmd>, so the selection arrives as the '<,'> range.
+vim.keymap.set("x", "<Plug>(changeset-comment)", ":Changeset comment<CR>", { silent = true, desc = keys[1][3] })
+
+---Maps each default `<C-g>` key not already taken, unless `vim.g.changeset_no_default_maps` is set.
+local function map_defaults()
+  if vim.g.changeset_no_default_maps then
+    return
+  end
+  for _, key in ipairs(keys) do
+    local lhs = "<C-g>" .. key[1]
+    for _, mode in ipairs(key[4] or { "n" }) do
+      if vim.fn.maparg(lhs, mode) == "" then
+        vim.keymap.set(mode, lhs, ("<Plug>(changeset-%s)"):format(key[2]), { desc = key[3] })
+      end
+    end
+  end
+end
 
 local group = vim.api.nvim_create_augroup("changeset.plugin", {})
 
@@ -80,9 +128,15 @@ local function register_picker()
   end
 end
 
-if vim.v.vim_did_enter == 1 then
+local function after_startup()
   register_picker()
+  map_defaults()
+end
+
+if vim.v.vim_did_enter == 1 then
+  after_startup()
 else
-  -- Fires: once startup is done, so a mini.pick set up anywhere in the user's config is seen.
-  vim.api.nvim_create_autocmd("VimEnter", { group = group, once = true, callback = register_picker })
+  -- Fires: once startup is done, so a mini.pick set up, a key mapped or the default keys turned off anywhere in the
+  -- user's config is seen.
+  vim.api.nvim_create_autocmd("VimEnter", { group = group, once = true, callback = after_startup })
 end
