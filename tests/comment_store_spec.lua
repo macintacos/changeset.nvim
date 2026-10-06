@@ -92,27 +92,63 @@ describe("changeset.comment_store", function()
     assert.same({ comment() }, require("changeset.comment_store").list(ROOT))
   end)
 
-  local function record_with_comment(fields)
-    return '{"/repo":[{"path":"a","body":"b",' .. fields .. "}]}"
+  ---Writes `text` as the record, as a hand edit would.
+  local function write_record(text)
+    vim.fn.mkdir(vim.fs.dirname(comment_store.path()), "p")
+    vim.fn.writefile({ text }, comment_store.path())
   end
-  for _, junk in ipairs({
-    "[1,2]",
-    '{"/repo":"y"}',
-    '{"/repo":[{"path":"a","body":"b"}]}',
-    record_with_comment('"line":3,"start_line":"1"'),
-    record_with_comment('"line":0'),
-    record_with_comment('"line":3,"start_line":3'),
-    record_with_comment('"line":3,"start_line":4'),
+
+  for _, junk in ipairs({ "[1,2]", '{"/repo":[1,}', '"text"' }) do
+    it("lists nothing from a record holding " .. junk .. ", and refuses to write over it", function()
+      write_record(junk)
+
+      assert.same({}, comment_store.list(ROOT))
+      assert.is_false(comment_store.keep(ROOT, comment()))
+      assert.is_false(comment_store.drop_all(ROOT))
+      assert.same({ junk }, vim.fn.readfile(comment_store.path()))
+    end)
+  end
+
+  for _, entry in ipairs({
+    '{"path":"a","body":"b"}',
+    '{"path":"a","body":"b","line":3,"start_line":"1"}',
+    '{"path":"a","body":"b","line":0}',
+    '{"path":"a","body":"b","line":3,"start_line":3}',
   }) do
-    it("lists nothing from a file holding " .. junk .. ", and keeps afterwards", function()
-      vim.fn.mkdir(vim.fs.dirname(comment_store.path()), "p")
-      vim.fn.writefile({ junk }, comment_store.path())
+    it("skips the entry " .. entry .. " in a list, and keeps it through a write", function()
+      write_record('{"/repo":[' .. entry .. "]}")
 
       assert.same({}, comment_store.list(ROOT))
       assert.is_true(comment_store.keep(ROOT, comment()))
       assert.same({ comment() }, comment_store.list(ROOT))
+      assert.same(vim.json.decode(entry), jsonfile.read(comment_store.path())[ROOT][1])
     end)
   end
+
+  it("reads a null start_line as a single-line comment", function()
+    write_record('{"/repo":[{"path":"a","body":"b","line":3,"start_line":null}]}')
+
+    assert.same({ { path = "a", body = "b", line = 3 } }, comment_store.list(ROOT))
+  end)
+
+  it("drops exactly the comments it is given in one write, leaving one edited since", function()
+    comment_store.keep(ROOT, comment())
+    comment_store.keep(ROOT, comment({ line = 9, start_line = nil }))
+    comment_store.keep(ROOT, comment({ line = 12, start_line = nil, body = "edited" }))
+    local writes = 0
+    comment_store.subscribe(function()
+      writes = writes + 1
+    end)
+
+    local written = comment_store.drop_each(
+      ROOT,
+      { comment(), comment({ line = 9, start_line = nil }), comment({ line = 12, start_line = nil }) }
+    )
+
+    assert.is_true(written)
+    assert.equal(1, writes)
+    assert.same({ comment({ line = 12, start_line = nil, body = "edited" }) }, comment_store.list(ROOT))
+  end)
 
   it("runs a subscriber once per write", function()
     local calls = 0
