@@ -522,6 +522,28 @@ Attaching is visible to the rest of Neovim:
   unmaps its own `K`, on a detach or an exit, so the detach unmaps it once no server left on
   the buffer has hover; with no client left, `grr` is silent again.
 
+### Submitting hands the review to an agent
+
+`:Changeset submit` turns the review into text and pastes it into an AI agent's prompt in
+another pane of the same herdr workspace, through `changeset.herdr`. Each review comment
+becomes a block: its `path:line` or `path:first-last`, its lines fenced in the file's
+filetype, and its body. The lines are read as they are now, from the buffer when the file
+is loaded, so the agent sees what the comment was written against, unsaved edits included.
+Blocks go by path, then line, a blank line apart, the way the Comments section orders them.
+A block whose lines can't be read, its file gone or its range past the end, keeps its place
+and body and drops the fence rather than quoting the wrong lines.
+
+The paste is left unsent and the agent's pane focused. The review is the start of a
+conversation, not all of it: the user adds what the comments don't say, such as what to
+fix first, and presses Enter. With one agent in the workspace it goes there; with several,
+`vim.ui.select` picks, so the user never routes a review to an agent they can't see.
+
+The review comments are deleted once the paste lands, because the agent now holds them and
+a later submit would paste them twice. Only the ones sent go: one written, or edited, while
+the picker was open stays for the next review. A refusal keeps them all. An agent at a
+permission prompt refuses, since herdr would drop the paste there without a word, and a
+review that vanished into a prompt would read as delivered. A cancelled pick says nothing.
+
 ### The Comments section lists what you wrote
 
 ```text

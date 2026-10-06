@@ -83,14 +83,19 @@ _Avoid_: kind filter
 
 **Review comment**:
 A note on one line or a range of lines of a file, kept on this machine for the repository's
-root until it is deleted or the review is abandoned.
+root until it is deleted, submitted or the review is abandoned.
 _Avoid_: bare "comment", which is a source-code comment (`changeset.comments`); draft
 
 **Review**:
-Every review comment of a repository. The first one written starts it, and
+Every review comment of a repository. The first one written starts it, and submitting or
 `:Changeset abandon` ends it.
 _Avoid_: pending review; bare "review" where PR Review Mode (`lua/changeset/review.lua`)
 could be meant
+
+**Submit**:
+Pasting the review into an AI agent's prompt in another herdr pane, unsent, then deleting
+the review comments that went.
+_Avoid_: send, post; "submit" never means GitHub here
 
 **Comments section**:
 The sidebar's first section, listing the repository's review comments, one comment row

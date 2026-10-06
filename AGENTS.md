@@ -79,6 +79,7 @@ digraph rules_router {
     "What does the change touch?" -> "Load doc/agents/design.md" [label="anything a user can see the sidebar do: its look, keys, previews, rebuilds, caching, windows"];
     "What does the change touch?" -> "Load doc/agents/api-rules.md" [label="what users call or configure: options, :Changeset, <Plug> maps, highlight groups, public functions"];
     "What does the change touch?" -> "Load doc/agents/dependency-rules.md" [label="test dependencies: pins, treesitter parsers, .luarc.check.json"];
+    "What does the change touch?" -> "Load doc/agents/herdr.md" [label="handing a review to an AI agent through herdr: the herdr calls, their JSON and error envelope"];
 }
 ```
 
