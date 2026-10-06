@@ -9,7 +9,19 @@ function M.root(buf)
   return vim.fs.normalize(git or assert(vim.uv.cwd()))
 end
 
----Set the `+` register and notify. `content` may be a string or list of strings.
+---Puts `text` on the clipboard, or in the unnamed register when Neovim has no clipboard provider.
+---@param text string
+---@return string where "", or where the text went instead of the clipboard, for the end of a message.
+function M.put(text)
+  if vim.fn.has("clipboard") == 1 then
+    vim.fn.setreg("+", text)
+    return ""
+  end
+  vim.fn.setreg('"', text)
+  return ' in the " register, with no clipboard provider'
+end
+
+---Put `content` on the clipboard, as `put` does, and notify. `content` may be a string or list of strings.
 ---@param content string|string[]|nil
 ---@param label string Short description used in the notification.
 function M.copy(content, label)
@@ -33,9 +45,9 @@ function M.copy(content, label)
     return
   end
 
-  vim.fn.setreg("+", text)
+  local where = M.put(text --[[@as string]])
   local suffix = count > 1 and (" (%d)"):format(count) or ""
-  vim.notify(("Copied %s%s"):format(label, suffix))
+  vim.notify(("Copied %s%s%s"):format(label, suffix, where))
 end
 
 return M

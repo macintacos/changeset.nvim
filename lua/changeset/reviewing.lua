@@ -294,16 +294,23 @@ function M._review_text(comments, read)
   )
 end
 
+---The loaded buffer of the file at `full`, if any.
+---@param full string
+---@return integer?
+local function loaded(full)
+  -- Not `bufnr(full)`: it takes a pattern, and settles for another file whose name `full` prefixes.
+  return vim.iter(vim.api.nvim_list_bufs()):find(function(b)
+    return vim.api.nvim_buf_is_loaded(b) and vim.fs.normalize(vim.api.nvim_buf_get_name(b)) == full
+  end)
+end
+
 ---Reads lines of `repository`'s files from their loaded buffers, which hold unsaved edits, else from disk.
 ---@param repository string
 ---@return changeset.reviewing.ReadLines
 local function reader(repository)
   return function(path, first, last)
     local full = vim.fs.joinpath(repository, path)
-    -- Not `bufnr(full)`: it takes a pattern, and settles for another file whose name `full` prefixes.
-    local buf = vim.iter(vim.api.nvim_list_bufs()):find(function(b)
-      return vim.api.nvim_buf_is_loaded(b) and vim.fs.normalize(vim.api.nvim_buf_get_name(b)) == full
-    end)
+    local buf = loaded(full)
     local lines
     if buf then
       lines = vim.api.nvim_buf_get_lines(buf, first - 1, last, false)
@@ -326,23 +333,23 @@ function M.submit()
   end
   require("changeset.herdr").send(M._review_text(comments, reader(repository)), function(err, agent)
     if err then
-      return say(vim.log.levels.WARN, "can't send the review: %s", err)
+      return say(vim.log.levels.WARN, "can't submit the review: %s", err)
     end
     if not agent then
       return
     end
-    local count = #comments == 1 and "1 comment" or ("%d comments"):format(#comments)
+    local count = #comments == 1 and "1 comment waits" or ("%d comments wait"):format(#comments)
     -- Only what went: a comment written or edited while the pick was open stays.
     if not comment_store.drop_each(repository, comments) then
       return say(
         vim.log.levels.WARN,
-        "sent the review's %s to %s, but they are still listed: can't remove them from %s",
-        count,
+        "submitted the review to %s: its %s in the prompt, but they are still listed: can't remove them from %s",
         agent,
+        count,
         comment_store.path()
       )
     end
-    say(vim.log.levels.INFO, "sent the review's %s to %s", count, agent)
+    say(vim.log.levels.INFO, "submitted the review to %s: its %s in the prompt", agent, count)
   end)
 end
 
@@ -366,16 +373,18 @@ local function in_order(comments)
   return sorted
 end
 
----Where `comment` starts against line `lnum` of `path`, in the order of `in_order`: 1 after, -1 before, 0 there.
+---Where `comment` starts against line `lnum` of `path`, `count` lines long, in the order of `in_order`: 1 after,
+----1 before, 0 there. A comment past the end starts on the last line, where a jump to it lands.
 ---@param comment changeset.ReviewComment
 ---@param path string
 ---@param lnum integer
+---@param count integer
 ---@return integer
-local function side(comment, path, lnum)
+local function side(comment, path, lnum, count)
   if comment.path ~= path then
     return comment.path > path and 1 or -1
   end
-  local first = first_line(comment)
+  local first = math.min(first_line(comment), count)
   return first > lnum and 1 or first < lnum and -1 or 0
 end
 
@@ -384,9 +393,10 @@ end
 ---@param comments changeset.ReviewComment[]
 ---@param path string?
 ---@param lnum integer
+---@param count integer `path`'s line count.
 ---@param step 1|-1
 ---@return integer index, boolean wrapped
-local function neighbour(comments, path, lnum, step)
+local function neighbour(comments, path, lnum, count, step)
   local from, to = 1, #comments
   if step == -1 then
     from, to = to, from
@@ -395,16 +405,34 @@ local function neighbour(comments, path, lnum, step)
     return from, false
   end
   for i = from, to, step do
-    if side(comments[i], path, lnum) == step then
+    if side(comments[i], path, lnum, count) == step then
       return i, false
     end
   end
   return from, true
 end
 
----Jumps to the review comment `step` away from the cursor, wrapping at either end.
+---Whether `win` is a window a jump can show a file in: a file's, not floating, its buffer free to change.
+---@param win integer
+---@return boolean
+local function file_window(win)
+  return vim.bo[vim.api.nvim_win_get_buf(win)].buftype == ""
+    and vim.api.nvim_win_get_config(win).relative == ""
+    and not vim.wo[win].winfixbuf
+end
+
+---Jumps to the review comment `step` away from the cursor, wrapping at either end. From a window that holds no
+---file, it jumps in the previous window.
 ---@param step 1|-1
 local function jump(step)
+  local from_sidebar = window.is_focused()
+  if not from_sidebar and not file_window(0) then
+    local previous = vim.fn.win_getid(vim.fn.winnr("#"))
+    if previous == 0 or not file_window(previous) then
+      return say(vim.log.levels.WARN, "run `:Changeset %s` from a file", step == 1 and "next" or "prev")
+    end
+    vim.api.nvim_set_current_win(previous)
+  end
   local repository = root()
   local comments = vim.tbl_filter(function(comment)
     return vim.uv.fs_stat(vim.fs.joinpath(repository, comment.path)) ~= nil
@@ -412,10 +440,17 @@ local function jump(step)
   if #comments == 0 then
     return say(vim.log.levels.INFO, "no review comments in %s", repository)
   end
-  local from_sidebar = window.is_focused()
+  if not from_sidebar and vim.bo.modified then
+    return say(vim.log.levels.WARN, UNSAVED)
+  end
   local path = not from_sidebar and file_path(repository) or nil
-  local i, wrapped = neighbour(comments, path, vim.api.nvim_win_get_cursor(0)[1], step)
+  local cursor = vim.api.nvim_win_get_cursor(0)[1]
+  local i, wrapped = neighbour(comments, path, cursor, vim.api.nvim_buf_line_count(0), step)
   local full = vim.fs.joinpath(repository, comments[i].path)
+  local target = loaded(full)
+  if target and vim.bo[target].modified then
+    return say(vim.log.levels.WARN, UNSAVED)
+  end
   local lnum = first_line(comments[i])
   if from_sidebar then
     if not window.commit(full, lnum, "reuse") then
@@ -429,7 +464,7 @@ local function jump(step)
     vim.bo[buf].buflisted = true
     vim.cmd("normal! m'")
     vim.api.nvim_win_set_buf(0, buf)
-    vim.api.nvim_win_set_cursor(0, { lnum, 0 })
+    vim.api.nvim_win_set_cursor(0, { math.min(lnum, vim.api.nvim_buf_line_count(buf)), 0 })
   end
   -- Echoed like a search count, not notified, so notifier plugins don't toast every jump.
   local text = ("review comment %d of %d"):format(i, #comments)
@@ -469,15 +504,16 @@ function M.list()
   vim.cmd.copen()
 end
 
----Copies the review, as `submit` would send it, to the `+` register, keeping the comments.
+---Copies the review, as `submit` would paste it, as `Paths.put` does, keeping the comments.
 function M.yank()
   local repository = root()
   local comments = comment_store.list(repository)
   if #comments == 0 then
     return say(vim.log.levels.INFO, "no review comments to copy")
   end
-  vim.fn.setreg("+", M._review_text(comments, reader(repository)))
-  say(vim.log.levels.INFO, "copied the review's %s", #comments == 1 and "1 comment" or #comments .. " comments")
+  local where = Paths.put(M._review_text(comments, reader(repository)))
+  local count = #comments == 1 and "1 comment" or #comments .. " comments"
+  say(vim.log.levels.INFO, "copied the review's %s%s", count, where)
 end
 
 return M

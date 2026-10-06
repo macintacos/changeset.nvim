@@ -621,6 +621,73 @@ describe("changeset.reviewing", function()
       assert.same({ { dir .. "/a.lua", 2, "reuse" } }, committed)
     end)
 
+    it("lands on the last line of a file that shrank under its comment, and moves on from it", function()
+      three_comments()
+      comment_store.keep(dir, comment({ line = 50 }))
+      vim.api.nvim_win_set_cursor(0, { 5, 0 })
+
+      reviewing.next()
+      assert.same({ "a.lua", 10 }, { where() })
+      reviewing.next()
+      assert.same({ "b.lua", 3 }, { where() })
+    end)
+
+    it("jumps in the previous window from a window that holds no file", function()
+      three_comments()
+      local file_win = vim.api.nvim_get_current_win()
+      vim.cmd("new")
+      vim.bo.buftype = "nofile"
+      local scratch = vim.api.nvim_get_current_buf()
+
+      reviewing.next()
+
+      assert.equal(file_win, vim.api.nvim_get_current_win())
+      assert.same({ "a.lua", 2 }, { where() })
+      assert.equal(1, #vim.fn.win_findbuf(scratch))
+      vim.api.nvim_buf_delete(scratch, { force = true })
+    end)
+
+    it("refuses, without raising, from a window it can't put a file in with no file window before it", function()
+      three_comments()
+      vim.cmd("silent! only")
+      vim.wo.winfixbuf = true
+      vim.cmd("vnew")
+      vim.bo.buftype = "nofile"
+      local scratch = vim.api.nvim_get_current_buf()
+      vim.cmd("wincmd p")
+
+      local ok, err = pcall(reviewing.next)
+
+      vim.wo.winfixbuf = false
+      vim.api.nvim_buf_delete(scratch, { force = true })
+      assert(ok, err)
+      assert.equal(vim.log.levels.WARN, notes[1].level)
+    end)
+
+    it("refuses in a modified buffer", function()
+      three_comments()
+      vim.api.nvim_buf_set_lines(0, 0, 0, false, { "new" })
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+
+      reviewing.next()
+
+      assert.same({ "a.lua", 1 }, { where() })
+      assert.equal(vim.log.levels.WARN, notes[1].level)
+    end)
+
+    it("refuses when the comment's file has unsaved edits", function()
+      three_comments()
+      vim.cmd.edit(dir .. "/b.lua")
+      vim.api.nvim_buf_set_lines(0, 0, 0, false, { "new" })
+      vim.cmd("hide edit " .. dir .. "/a.lua")
+      vim.api.nvim_win_set_cursor(0, { 9, 0 })
+
+      reviewing.next()
+
+      assert.same({ "a.lua", 9 }, { where() })
+      assert.equal(vim.log.levels.WARN, notes[1].level)
+    end)
+
     it("says when there are no comments", function()
       edit_file()
 
@@ -673,22 +740,39 @@ describe("changeset.reviewing", function()
   end)
 
   describe("yank", function()
-    it("copies the review text and keeps the comments", function()
-      edit_file()
-      comment_store.keep(dir, comment())
-      vim.fn.setreg("+", "")
+    local has
 
-      reviewing.yank()
-
-      assert.equal(
-        reviewing._review_text({ comment() }, function()
-          return { "x" }
-        end),
-        vim.fn.getreg("+")
-      )
-      assert.same({ comment() }, comment_store.list(dir))
-      assert.same({ msg = "Changeset: copied the review's 1 comment", level = vim.log.levels.INFO }, notes[1])
+    before_each(function()
+      has = vim.fn.has
     end)
+
+    after_each(function()
+      vim.fn.has = has
+    end)
+
+    it(
+      "copies the review text to the unnamed register without a clipboard, saying so, and keeps the comments",
+      function()
+        vim.fn.has = function(feature)
+          return feature == "clipboard" and 0 or has(feature)
+        end
+        edit_file()
+        comment_store.keep(dir, comment())
+        vim.fn.setreg('"', "")
+
+        reviewing.yank()
+
+        assert.equal(
+          reviewing._review_text({ comment() }, function()
+            return { "x" }
+          end),
+          vim.fn.getreg('"')
+        )
+        assert.same({ comment() }, comment_store.list(dir))
+        assert.equal(vim.log.levels.INFO, notes[1].level)
+        assert.truthy(notes[1].msg:find('"', 1, true))
+      end
+    )
 
     it("says when there is nothing to copy", function()
       edit_file()
