@@ -530,6 +530,29 @@ it again on `:colorscheme`.
   ChangesetNoCursor            The cursor while in the     fully blended
                                sidebar, hidden
 
+  ChangesetButton              A dialog’s button           Normal, else
+                                                           NormalFloat shaded
+                                                           toward its text where
+                                                           they share a
+                                                           background
+
+  ChangesetButtonFocus         A dialog’s focused button   Statement’s colour,
+                                                           reversed, bold
+
+  ChangesetButtonDanger        The button that deletes, in DiagnosticError’s
+                               a dialog asking first       colour on the button’s
+                                                           background
+
+  ChangesetButtonDangerFocus   That button while focused   DiagnosticError’s
+                                                           colour, reversed, bold
+
+  ChangesetButtonKey           The letter that presses a   underlined
+                               button
+
+  ChangesetDialogSelected      A dialog’s focused row      NormalFloat’s
+                                                           background tinted
+                                                           toward Statement
+
   ChangesetPreview             The band over a window      CursorLine’s
                                being previewed into        background, else
                                                            Visual’s

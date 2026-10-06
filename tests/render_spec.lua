@@ -1022,6 +1022,8 @@ describe("changeset.render", function()
       "Statement",
       "Normal",
       "DiagnosticOk",
+      "NormalFloat",
+      "DiagnosticError",
     }
     local saved
 
@@ -1237,6 +1239,60 @@ describe("changeset.render", function()
         { 0xc8a0f0, 0xc8a0f0, 0xc8a0f0 },
         { group(render.SELECTED_ICON_HL).fg, group(render.HERE_ICON_HL).fg, group(render.PICKED_ICON_HL).fg }
       )
+    end)
+
+    it("tints a dialog's focused row over the float's background, not the editor's", function()
+      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = 0xf0f0f0 })
+      vim.api.nvim_set_hl(0, "NormalFloat", { fg = 0xcccccc, bg = BACKGROUND })
+      vim.api.nvim_set_hl(0, "Statement", { fg = RED })
+
+      render.define_highlights()
+
+      local r, g, b = unpack(channels(group(render.DIALOG_SELECTED_HL).bg))
+      assert.is_true(r > 0x10 and r < 0xf0)
+      assert.same({ 0x10, 0x10 }, { g, b })
+    end)
+
+    it("cuts a dialog's buttons from the editor's surface, where the theme keeps its text legible", function()
+      vim.api.nvim_set_hl(0, "Normal", { fg = 0x111111, bg = 0xf0f0f0 })
+      vim.api.nvim_set_hl(0, "NormalFloat", { fg = 0xffffff, bg = 0x000000 })
+
+      render.define_highlights()
+
+      assert.same({ 0x111111, 0xf0f0f0 }, { group(render.BUTTON_HL).fg, group(render.BUTTON_HL).bg })
+      assert.equal(0xf0f0f0, group(render.BUTTON_DANGER_HL).bg)
+    end)
+
+    it("shades a dialog's buttons toward the float's text when the float is the editor's surface", function()
+      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = 0x000000 })
+      vim.api.nvim_set_hl(0, "NormalFloat", { fg = 0xffffff, bg = 0x000000 })
+
+      render.define_highlights()
+
+      local r, g, b = unpack(channels(group(render.BUTTON_HL).bg))
+      assert.is_true(r > 0 and r < 0x80)
+      assert.same({ r, r }, { g, b })
+      assert.equal(0xffffff, group(render.BUTTON_HL).fg)
+    end)
+
+    it("draws the destructive button in the theme's error colour, reversed while focused", function()
+      vim.api.nvim_set_hl(0, "DiagnosticError", { fg = RED })
+
+      render.define_highlights()
+
+      assert.equal(RED, group(render.BUTTON_DANGER_HL).fg)
+      assert.same(
+        { RED, true },
+        { group(render.BUTTON_DANGER_FOCUS_HL).fg, group(render.BUTTON_DANGER_FOCUS_HL).reverse }
+      )
+    end)
+
+    it("draws the focused button reversed in the accent", function()
+      vim.api.nvim_set_hl(0, "Statement", { fg = 0xc8a0f0 })
+
+      render.define_highlights()
+
+      assert.same({ 0xc8a0f0, true }, { group(render.BUTTON_FOCUS_HL).fg, group(render.BUTTON_FOCUS_HL).reverse })
     end)
 
     it("strikes a hidden kind through as well as dimming it", function()

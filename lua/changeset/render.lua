@@ -147,6 +147,30 @@ M.PICKED_ICON_HL = "ChangesetPickedIcon"
 ---@type string
 M.NO_CURSOR_HL = "ChangesetNoCursor"
 
+---Group for a dialog's button. Created by `define_highlights`.
+---@type string
+M.BUTTON_HL = "ChangesetButton"
+
+---Group for a dialog's focused button. Created by `define_highlights`.
+---@type string
+M.BUTTON_FOCUS_HL = "ChangesetButtonFocus"
+
+---Group for a dialog's destructive button. Created by `define_highlights`.
+---@type string
+M.BUTTON_DANGER_HL = "ChangesetButtonDanger"
+
+---Group for a dialog's destructive button while focused. Created by `define_highlights`.
+---@type string
+M.BUTTON_DANGER_FOCUS_HL = "ChangesetButtonDangerFocus"
+
+---Group laid over the letter that presses a dialog's button. Created by `define_highlights`.
+---@type string
+M.BUTTON_KEY_HL = "ChangesetButtonKey"
+
+---Background of a dialog's focused row. Created by `define_highlights`.
+---@type string
+M.DIALOG_SELECTED_HL = "ChangesetDialogSelected"
+
 ---Group for the filetype glyph on the preview band. Recoloured by `band_icon` for each
 ---file; defining it yourself draws every file's glyph in one colour.
 ---@type string
@@ -190,6 +214,9 @@ local GUTTER = 2
 
 -- How far each state's background moves from the window's toward the accent.
 local SELECTED_TINT, HERE_TINT, PICKED_TINT = 0.2, 0.12, 0.06
+
+-- How far a dialog's button moves from the float's background toward its text, when it can't take the editor's.
+local BUTTON_SHADE = 0.15
 
 -- Stands in at the tail of the preview band when the row names no destination.
 local HINT = "%s to open"
@@ -891,6 +918,21 @@ function M.define_highlights()
   set_default(M.SELECTED_ICON_HL, { fg = accent })
   set_default(M.HERE_ICON_HL, { fg = accent })
   set_default(M.PICKED_ICON_HL, { fg = accent })
+  -- A dialog sits on NormalFloat, which no theme checked paints like Normal, so its tints start from the float.
+  local float = vim.api.nvim_get_hl(0, { name = "NormalFloat", link = false })
+  local float_bg, float_fg = float.bg or base, float.fg or normal.fg or 0x808080
+  -- A button is cut from the editor's surface, where the theme keeps its text and its error colour legible. A
+  -- float drawn on that surface, or on a transparent one, is shaded toward its text instead.
+  local surface = normal.bg ~= nil and normal.bg ~= float_bg
+  local pill = surface and normal.bg or mix(float_bg, float_fg, BUTTON_SHADE)
+  local danger = vim.api.nvim_get_hl(0, { name = "DiagnosticError", link = false }).fg
+  set_default(M.BUTTON_HL, { fg = surface and normal.fg or float_fg, bg = pill })
+  set_default(M.BUTTON_DANGER_HL, { fg = danger, bg = pill })
+  -- Reversed, as the badges are, so no background is read off a theme that may leave it transparent.
+  set_default(M.BUTTON_FOCUS_HL, { fg = accent, reverse = true, bold = true })
+  set_default(M.BUTTON_DANGER_FOCUS_HL, { fg = danger, reverse = true, bold = true })
+  set_default(M.BUTTON_KEY_HL, { underline = true })
+  set_default(M.DIALOG_SELECTED_HL, { bg = mix(float_bg, accent, SELECTED_TINT) })
   -- Fully blended is the TUI's cue to hide the cursor outright. `nocombine` is only
   -- there to keep the group: one holding nothing but `blend` is stored as cleared.
   set_default(M.NO_CURSOR_HL, { blend = 100, nocombine = true })

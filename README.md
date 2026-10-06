@@ -372,6 +372,12 @@ The sidebar derives each group's default from your colorscheme, and derives it a
 | `ChangesetHereIcon` | The glyph on the row for where you are | `Statement`'s colour |
 | `ChangesetPickedIcon` | The glyph on the row last opened | `Statement`'s colour |
 | `ChangesetNoCursor` | The cursor while in the sidebar, hidden | fully blended |
+| `ChangesetButton` | A dialog's button | `Normal`, else `NormalFloat` shaded toward its text where they share a background |
+| `ChangesetButtonFocus` | A dialog's focused button | `Statement`'s colour, reversed, bold |
+| `ChangesetButtonDanger` | The button that deletes, in a dialog asking first | `DiagnosticError`'s colour on the button's background |
+| `ChangesetButtonDangerFocus` | That button while focused | `DiagnosticError`'s colour, reversed, bold |
+| `ChangesetButtonKey` | The letter that presses a button | underlined |
+| `ChangesetDialogSelected` | A dialog's focused row | `NormalFloat`'s background tinted toward `Statement` |
 | `ChangesetPreview` | The band over a window being previewed into | `CursorLine`'s background, else `Visual`'s |
 | `ChangesetPreviewLabel` | The badge at the head of that band | `DiagnosticWarn`'s colour, reversed, bold |
 | `ChangesetPreviewHint` | The hint at the tail of that band | `Comment`'s colour on the band, italic |
