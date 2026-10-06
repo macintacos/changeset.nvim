@@ -100,8 +100,11 @@ describe("changeset.health", function()
     local saved = vim.env.HERDR_WORKSPACE_ID
     vim.env.HERDR_WORKSPACE_ID = nil
     local outside = checked_level("herdr")
+    vim.env.HERDR_WORKSPACE_ID = ""
+    local empty = checked_level("herdr")
     vim.env.HERDR_WORKSPACE_ID = saved
     assert.equal("warn", outside)
+    assert.equal("warn", empty)
   end)
 
   it("reports the icon provider, and warns without one", function()

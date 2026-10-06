@@ -143,6 +143,23 @@ describe("changeset.herdr", function()
     assert.same({}, fake.calls())
   end)
 
+  it("says herdr isn't on PATH inside a herdr pane without it, without calling it", function()
+    local err = require("support.gh").without(send, "hi")
+    assert.matches("isn't on PATH", err)
+    assert.same({}, fake.calls())
+  end)
+
+  it("refuses when herdr can't be started", function()
+    local system = vim.system
+    vim.system = function()
+      error("E2BIG")
+    end
+    local err, _, called = send("hi")
+    vim.system = system
+    assert.is_true(called)
+    assert.is_not_nil(err)
+  end)
+
   it("refuses an agent that is at a prompt by the time of the send", function()
     fake.answer("agent list", fake.agents({ alpha }))
     fake.answer("agent list", fake.agents({ agent({ pane_id = "w1:p1", name = "alpha", agent_status = "blocked" }) }))

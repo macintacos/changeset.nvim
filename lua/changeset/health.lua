@@ -53,7 +53,7 @@ local function probe()
     nvim_012 = vim.fn.has("nvim-0.12") == 1,
     git = vim.fn.executable("git") == 1,
     gh = vim.fn.executable("gh") == 1,
-    herdr = vim.env.HERDR_WORKSPACE_ID ~= nil and vim.fn.executable("herdr") == 1,
+    herdr = (vim.env.HERDR_WORKSPACE_ID or "") ~= "" and vim.fn.executable("herdr") == 1,
     icons = icons.source(),
     which_key = loads("which-key"),
     mini_pick = mini_pick,

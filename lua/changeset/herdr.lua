@@ -92,7 +92,9 @@ end
 ---@param args string[]
 ---@param cb fun(result: table?, code: string?)
 local function herdr(args, cb)
-  vim.system(
+  -- A spawn can fail even after the executable check: the binary gone since, or an argv over the OS's limit.
+  local started = pcall(
+    vim.system,
     vim.list_extend({ "herdr" }, args),
     { text = true, timeout = TIMEOUT },
     vim.schedule_wrap(function(res)
@@ -105,6 +107,11 @@ local function herdr(args, cb)
       cb(ok and type(out) == "table" and out.result or {}, nil)
     end)
   )
+  if not started then
+    vim.schedule(function()
+      cb(nil, "")
+    end)
+  end
 end
 
 ---@param cb fun(agents: changeset.HerdrAgent[]?)
@@ -169,9 +176,11 @@ end
 ---`err` is a short sentence for `vim.notify`, without a "Changeset:" prefix; both nil when the pick was cancelled.
 function M.send(text, cb)
   local workspace = present(vim.env.HERDR_WORKSPACE_ID)
-  if not workspace or vim.fn.executable("herdr") ~= 1 then
+  local refusal = not workspace and "not inside a herdr pane, so there's no agent to send to"
+    or vim.fn.executable("herdr") ~= 1 and "herdr isn't on PATH, so there's no agent to send to"
+  if refusal then
     return vim.schedule(function()
-      cb("not inside a herdr pane, so there's no agent to send to")
+      cb(refusal)
     end)
   end
   list_agents(function(agents)

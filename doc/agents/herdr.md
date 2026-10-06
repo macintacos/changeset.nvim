@@ -7,7 +7,9 @@ JSON it reads, and what each one can surprise you with.
 
 ## Calls
 
-Each call runs `herdr` from PATH through `vim.system` with a 5-second timeout.
+Each call runs `herdr` from PATH through `vim.system` with a 5-second timeout. A spawn that
+fails, the binary gone since the check or an argv over the OS limit, counts as a refused
+call.
 
 | Command                                | Reads                                                     |
 | -------------------------------------- | --------------------------------------------------------- |
@@ -17,8 +19,9 @@ Each call runs `herdr` from PATH through `vim.system` with a 5-second timeout.
 | `herdr agent focus <pane_id>`          | nothing                                                   |
 
 An agent entry carries `agent`, `agent_status`, `pane_id`, `tab_id`, `workspace_id`,
-`name`, `display_agent`, `title`, `cwd` and `focused`. changeset reads `state_labels`, an
-optional `{status = label}` map, from the entry when it is there.
+`title`, `cwd` and `focused`. herdr leaves `name`, `display_agent` and `state_labels`, a
+`{status = label}` map, out of an entry until something sets them, so changeset reads each
+as optional.
 
 `tab list` runs only when the user must pick between several agents, and only for the tab
 labels in the picker rows. A failed one leaves the rows without a tab.
@@ -27,8 +30,9 @@ labels in the picker rows. A failed one leaves the rows without a tab.
 
 `agent list` lists every agent in every workspace. changeset keeps only entries with a
 non-empty `agent`, a `workspace_id` equal to `$HERDR_WORKSPACE_ID` and a `pane_id` other
-than `$HERDR_PANE_ID`, its own pane. Without `$HERDR_WORKSPACE_ID`, Neovim is not in a
-herdr pane, and changeset makes no call at all.
+than `$HERDR_PANE_ID`, its own pane. Without a non-empty `$HERDR_WORKSPACE_ID`, Neovim is not in a
+herdr pane, and changeset makes no call at all; with it but no `herdr` on PATH, changeset
+says so and makes none either.
 
 ## Null fields
 
