@@ -242,6 +242,11 @@ end
 ---@param answer fun(value: any) Called once, with nil on a cancel.
 ---@return changeset.DialogState?
 local function open(lines, frame, answer)
+  -- A dialog closed under `noautocmd` never ran its leave, so its lock outlives its window. Its cursor entry is the
+  -- one this dialog adds again, and removes on closing.
+  if active and not vim.api.nvim_win_is_valid(active.win) then
+    active = nil
+  end
   -- A second dialog, opened from the first by a global key or arriving late from herdr, would take focus, and the
   -- first's leave would then cancel both.
   if active then

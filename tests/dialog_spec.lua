@@ -181,6 +181,17 @@ describe("changeset.dialog", function()
       assert.equal(opener, vim.api.nvim_get_current_win())
     end)
 
+    it("opens after a dialog closed without its autocmds, and gives the cursor back once closed", function()
+      local before = vim.o.guicursor
+      ask()
+      vim.cmd("noautocmd close")
+
+      ask()
+      answer("q")
+
+      assert.equal(before, vim.o.guicursor)
+    end)
+
     it("refuses a second dialog while it is open, staying up to be answered", function()
       ask()
       local first = Dialog.win()
