@@ -159,6 +159,109 @@ describe("changeset.dialog", function()
     end)
   end)
 
+  describe("choose", function()
+    ---@type { chosen: integer?, answered: boolean }
+    local result
+
+    local ITEMS = {
+      { icon = { "●", "DiagnosticOk" }, cells = { { "alpha" }, { "idle" }, { "parser" }, { "Fix the parser" } } },
+      {
+        icon = { "●", "DiagnosticError" },
+        cells = { { "beta" }, { "blocked" } },
+        unavailable = "answer its prompt first",
+      },
+      { icon = { "●", "DiagnosticWarn" }, cells = { { "codex" }, { "working" }, { "" }, { "" } } },
+    }
+
+    ---@param items changeset.DialogItem[]?
+    local function pick(items)
+      -- Its own table, which a dialog closed by an earlier case can't answer into.
+      local mine = { answered = false }
+      result = mine
+      dialog.choose({ title = "Send the review", items = items or ITEMS, action = "send" }, function(index)
+        mine.chosen, mine.answered = index, true
+      end)
+      assert(Dialog.win(), "no dialog opened")
+    end
+
+    ---@param keys string
+    ---@return integer? chosen
+    local function answer(keys)
+      Dialog.press(keys)
+      settle(function()
+        return result.answered
+      end)
+      return result.chosen
+    end
+
+    it("lines its rows up in columns, a row's last cell running free, and says why one can't be chosen", function()
+      pick()
+
+      assert.same({
+        "▌ 1  ● alpha  idle     parser  Fix the parser",
+        "  2  ● beta   blocked  answer its prompt first",
+        "  3  ● codex  working",
+      }, Dialog.lines())
+    end)
+
+    for _, case in ipairs({
+      { keys = "<CR>", chosen = 1 },
+      { keys = "j<CR>", chosen = 3 },
+      { keys = "<Down><CR>", chosen = 3 },
+      { keys = "jj<CR>", chosen = 3 },
+      { keys = "jk<CR>", chosen = 1 },
+      { keys = "j<Up><CR>", chosen = 1 },
+      { keys = "k<CR>", chosen = 1 },
+      { keys = "3", chosen = 3 },
+    }) do
+      it(("chooses row %d on %s, passing over the row that can't be chosen"):format(case.chosen, case.keys), function()
+        pick()
+
+        assert.equal(case.chosen, answer(case.keys))
+        assert.equal(opener, vim.api.nvim_get_current_win())
+      end)
+    end
+
+    it("starts on the first row that can be chosen", function()
+      pick({ ITEMS[2], ITEMS[1] })
+
+      assert.equal(2, answer("<CR>"))
+    end)
+
+    it("chooses a row clicked", function()
+      pick()
+
+      Dialog.click("codex")
+      settle(function()
+        return result.answered
+      end)
+
+      assert.equal(3, result.chosen)
+    end)
+
+    it("stays open on a row that can't be chosen, by its number or a click", function()
+      pick()
+
+      answer("2")
+      Dialog.click("beta")
+      settle(function()
+        return result.answered
+      end)
+
+      assert.is_false(result.answered)
+      assert.truthy(Dialog.win())
+    end)
+
+    for _, keys in ipairs({ "q", "<Esc>" }) do
+      it(("calls back with nothing on %s"):format(keys), function()
+        pick()
+
+        assert.is_nil(answer(keys))
+        assert.is_true(result.answered)
+      end)
+    end
+  end)
+
   describe("_body", function()
     ---@param lines [string, string?][][]
     ---@return string[]

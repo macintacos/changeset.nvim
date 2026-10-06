@@ -1,4 +1,4 @@
----Dialogs drawn as changeset's own floats: a question before a destructive action.
+---Dialogs drawn as changeset's own floats: a question before a destructive action, and a choice among rows.
 local render = require("changeset.render")
 
 local M = {}
@@ -15,6 +15,10 @@ local QUOTE = "▎ "
 local ELLIPSIS = "…"
 -- The button that changes nothing, first and focused so a <CR> typed ahead lands on it.
 local SAFE = "Keep"
+-- Marks the focused row, at its left edge, where a list is read from.
+local BAR = "▌"
+-- Rows a digit chooses directly.
+local NUMBERED = 9
 
 ---@class changeset.DialogBlock A paragraph of a dialog's body.
 ---@field text string
@@ -31,6 +35,21 @@ local SAFE = "Keep"
 ---@alias changeset.DialogChunk { [1]: string, [2]: string|string[]|nil }
 
 ---@alias changeset.DialogLine changeset.DialogChunk[]
+
+---@class changeset.DialogItem A row to choose.
+---@field icon? changeset.DialogChunk Drawn before the cells.
+---@field cells changeset.DialogChunk[] One per column; each but the row's last is padded to its column's widest.
+---@field unavailable? string Why it can't be chosen, drawn after its dimmed cells.
+
+---@class changeset.ChooseOpts
+---@field title string What choosing does, e.g. "Send the review".
+---@field items changeset.DialogItem[]
+---@field action string The verb for choosing, which the footer names: "send".
+
+---@class changeset.DialogFrame
+---@field title string
+---@field footer? string
+---@field width integer Cells inside the border, cut to the editor's.
 
 ---@class changeset.DialogState
 ---@field win integer
@@ -113,10 +132,11 @@ local function room(pad)
   return vim.o.columns - 2 - 2 * pad
 end
 
----Writes `lines` into `buf`, colouring each chunk.
+---Writes `lines` into `buf`, colouring each chunk and tinting line `focused` across the window.
 ---@param buf integer
 ---@param lines changeset.DialogLine[]
-local function paint(buf, lines)
+---@param focused integer?
+local function paint(buf, lines, focused)
   local texts, marks = {}, {}
   for i, line in ipairs(lines) do
     local parts, col = {}, 0
@@ -135,6 +155,9 @@ local function paint(buf, lines)
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   for _, mark in ipairs(marks) do
     vim.api.nvim_buf_set_extmark(buf, ns, mark[1], mark[2], { end_col = mark[3], hl_group = mark[4] })
+  end
+  if focused then
+    vim.api.nvim_buf_set_extmark(buf, ns, focused - 1, 0, { line_hl_group = render.DIALOG_SELECTED_HL })
   end
 end
 
@@ -167,14 +190,14 @@ local function line_cells(line)
   end, line)))
 end
 
----Opens and enters a float holding `lines`, `width` cells wide within the editor, centred on it.
+---Opens and enters a float holding `lines`, centred on the editor.
 ---@param lines changeset.DialogLine[]
----@param title string
----@param width integer
+---@param frame changeset.DialogFrame
 ---@param answer fun(value: any) Called once, with nil on a cancel.
 ---@return changeset.DialogState
-local function open(lines, title, width, answer)
-  width = math.min(math.max(width, cells(" " .. title .. " ")), vim.o.columns - 2)
+local function open(lines, frame, answer)
+  local title, footer = " " .. frame.title .. " ", frame.footer and " " .. frame.footer .. " "
+  local width = math.min(math.max(frame.width, cells(title), footer and cells(footer) or 0), vim.o.columns - 2)
   local height = math.min(#lines, math.max(vim.o.lines - vim.o.cmdheight - 4, 1))
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = "wipe"
@@ -193,10 +216,14 @@ local function open(lines, title, width, answer)
     col = math.max(math.floor((vim.o.columns - width - 2) / 2), 0),
     style = "minimal",
     border = "rounded",
-    title = { { " " .. title .. " ", "FloatTitle" } },
+    title = { { title, "FloatTitle" } },
     title_pos = "left",
+    footer = footer and { { footer, "FloatFooter" } },
+    footer_pos = footer and "left",
     zindex = ZINDEX,
   })
+  -- A row wider than the editor is cut at the border, not wrapped onto the next.
+  vim.wo[state.win].wrap = false
   -- Fires: focus leaving the dialog other than through its keys, which cancels it: it is modal while open.
   vim.api.nvim_create_autocmd("WinLeave", {
     buffer = buf,
@@ -279,7 +306,7 @@ function M.confirm(opts, yes)
   end
 
   local focus = 1
-  local state = open(lines(focus), opts.title, width + 2 * PAD, function(ok)
+  local state = open(lines(focus), { title = opts.title, width = width + 2 * PAD }, function(ok)
     if ok then
       yes()
     end
@@ -333,6 +360,162 @@ function M.confirm(opts, yes)
       end
     end
   end, "Press the button clicked")
+end
+
+---What `item` shows after its number and icon: its cells, or its cells dimmed and why it can't be chosen.
+---@param item changeset.DialogItem
+---@return changeset.DialogChunk[]
+local function shown(item)
+  if not item.unavailable then
+    return item.cells
+  end
+  local out = vim.tbl_map(function(cell)
+    return { cell[1], "Comment" }
+  end, item.cells)
+  out[#out + 1] = { item.unavailable, render.META_HL }
+  return out
+end
+
+---Each item's row: its number, icon and cells, the columns lined up, and a blank cell for the focus bar.
+---@param items changeset.DialogItem[]
+---@return changeset.DialogLine[]
+function M._rows(items)
+  local widths = {}
+  for _, item in ipairs(items) do
+    local row = shown(item)
+    for c = 1, #row - 1 do
+      widths[c] = math.max(widths[c] or 0, cells(row[c][1]))
+    end
+  end
+  local lines = {}
+  for i, item in ipairs(items) do
+    local number = i <= NUMBERED and tostring(i) or " "
+    local line = { { "  " }, { number, item.unavailable and "Comment" or nil }, { "  " } }
+    if item.icon then
+      vim.list_extend(line, { item.icon, { " " } })
+    end
+    local row = shown(item)
+    for c, cell in ipairs(row) do
+      line[#line + 1] = cell
+      if c < #row then
+        line[#line + 1] = { (" "):rep(widths[c] - cells(cell[1]) + 2) }
+      end
+    end
+    lines[i] = line
+  end
+  return lines
+end
+
+---`line` cut to `width` cells, the cut marked with "…".
+---@param line changeset.DialogLine
+---@param width integer
+---@return changeset.DialogLine
+local function clip(line, width)
+  if line_cells(line) <= width then
+    return line
+  end
+  local out, left = {}, width - cells(ELLIPSIS)
+  for _, chunk in ipairs(line) do
+    if cells(chunk[1]) > left then
+      out[#out + 1] = { head(chunk[1], left) .. ELLIPSIS, chunk[2] }
+      return out
+    end
+    out[#out + 1] = chunk
+    left = left - cells(chunk[1])
+  end
+  return out
+end
+
+---Asks which of `opts.items` to act on, calling back with its index, or with nil once cancelled. An unavailable
+---item is shown but can't be chosen. `cb` runs scheduled, once the dialog has closed and focus is back on the window
+---it opened from.
+---@param opts changeset.ChooseOpts
+---@param cb fun(index: integer?)
+function M.choose(opts, cb)
+  local rows = vim.tbl_map(function(row)
+    return clip(row, vim.o.columns - 4)
+  end, M._rows(opts.items))
+  local width = 0
+  for _, row in ipairs(rows) do
+    width = math.max(width, line_cells(row) + 2)
+  end
+  local available = {}
+  for i, item in ipairs(opts.items) do
+    if not item.unavailable then
+      available[#available + 1] = i
+    end
+  end
+  local digits = #opts.items == 1 and "1" or ("1-%d"):format(math.min(#opts.items, NUMBERED))
+
+  ---@param focus integer?
+  ---@return changeset.DialogLine[]
+  local function lines(focus)
+    return vim.tbl_map(function(i)
+      local row = vim.list_slice(rows[i])
+      if i == focus then
+        row[1] = { BAR .. " ", render.SELECTED_ICON_HL }
+      end
+      return row
+    end, vim.fn.range(1, #rows))
+  end
+
+  local focus = available[1]
+  local state = open(lines(focus), {
+    title = opts.title,
+    footer = ("<CR> or %s %s  q cancel"):format(digits, opts.action),
+    width = width,
+  }, cb)
+
+  ---@param to integer?
+  local function move(to)
+    focus = to
+    paint(state.buf, lines(focus), focus)
+    if focus then
+      vim.api.nvim_win_set_cursor(state.win, { focus, #BAR + 1 })
+    end
+  end
+  ---@param i integer?
+  local function choose(i)
+    if i and opts.items[i] and not opts.items[i].unavailable then
+      finish(state, i)
+    end
+  end
+  ---@param by integer 1 for the next row that can be chosen, -1 for the previous.
+  local function step(by)
+    if not focus then
+      return
+    end
+    for i = focus + by, by > 0 and #opts.items or 1, by do
+      if not opts.items[i].unavailable then
+        return move(i)
+      end
+    end
+  end
+  move(focus)
+
+  map(state, { "j", "<Down>" }, function()
+    step(1)
+  end, "Focus the next row")
+  map(state, { "k", "<Up>" }, function()
+    step(-1)
+  end, "Focus the previous row")
+  map(state, { "<CR>" }, function()
+    choose(focus)
+  end, "Choose the focused row")
+  for i = 1, math.min(#opts.items, NUMBERED) do
+    map(state, { tostring(i) }, function()
+      choose(i)
+    end, ("Choose row %d"):format(i))
+  end
+  map(state, { "q", "<Esc>" }, function()
+    finish(state, nil)
+  end, "Cancel")
+  map(state, { "<LeftRelease>" }, function()
+    local pos = vim.fn.getmousepos()
+    if pos.winid == state.win then
+      choose(pos.line)
+    end
+  end, "Choose the row clicked")
 end
 
 return M
