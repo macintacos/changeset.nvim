@@ -212,7 +212,7 @@ describe("changeset.reviewing", function()
       reviewing.open(comment())
       window().keep("")
       assert.is_false(asking())
-      reply("d", function()
+      reply("D", function()
         return #comment_store.list(dir) == 0
       end)
 
@@ -298,7 +298,7 @@ describe("changeset.reviewing", function()
       comment_store.keep(dir, comment())
 
       reviewing.ask_delete(comment())
-      reply("d", function()
+      reply("D", function()
         return #comment_store.list(dir) == 0
       end)
 
@@ -336,7 +336,7 @@ describe("changeset.reviewing", function()
 
       reviewing.abandon()
       assert.truthy(table.concat(Dialog.lines(), " "):find("2", 1, true))
-      reply("a", function()
+      reply("A", function()
         return #comment_store.list(dir) == 0
       end)
 
@@ -349,7 +349,7 @@ describe("changeset.reviewing", function()
       tree, focused = { root = "/tree/root" }, true
 
       reviewing.abandon()
-      reply("a", function()
+      reply("A", function()
         return #comment_store.list("/tree/root") == 0
       end)
 

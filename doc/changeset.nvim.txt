@@ -333,11 +333,12 @@ or `:Changeset abandon` ends it. None of this needs the sidebar, a PR or `gh`.
 These questions are changeset’s own floats, centred on the editor. One before
 deleting names what goes and offers two buttons, Keep and the verb: focus
 starts on Keep, so an Enter typed ahead deletes nothing. `<Tab>`, `<S-Tab>`,
-`h` and `l` move between them, `<CR>` or `<Space>` presses the focused one, its
-underlined letter presses it directly, and so does a click; `q` or `<Esc>`
-keeps. The agent picker numbers its rows: `j` and `k` move, `<CR>` or a row’s
-number sends, and `q` or `<Esc>` cancels without a word. Leaving either window
-any other way cancels it.
+`h` and `l` move between them, `<CR>` or `<Space>` presses the focused one, and
+so does a click. Each underlined letter presses its button: `k` for Keep, and
+with Shift for the verb, `D` or `A`, so a `dd` on a Comments row stops at the
+question. `q` or `<Esc>` keeps. The agent picker numbers its rows: `j` and `k`
+move, `<CR>` or a row’s number sends, and `q` or `<Esc>` cancels without a
+word. Leaving either window any other way cancels it.
 
 `:Changeset next` and `:Changeset prev` walk the review comments by file and
 then line, from the cursor, wrapping at either end, and skip any whose file is

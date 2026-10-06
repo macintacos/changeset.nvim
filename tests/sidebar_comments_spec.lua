@@ -252,12 +252,21 @@ describe("the sidebar's Comments section", function()
 
     press_on("alpha.txt:13", "d")
     assert.truthy(Dialog.lines()[2]:find("alpha.txt:13", 1, true))
-    Dialog.press("d")
+    Dialog.press("D")
 
     assert.is_true(vim.wait(5000, function()
       return #comment_store.list(root) == 2
     end, 25))
     assert.truthy(Sidebar.lines()[1]:find("2 comments", 1, true))
+  end)
+
+  it("stops at the question on dd, deleting nothing until asked", function()
+    local root = open_with_review_comments()
+
+    press_on("alpha.txt:13", "dd")
+
+    assert.truthy(Dialog.lines()[2]:find("alpha.txt:13", 1, true))
+    assert.equal(3, #comment_store.list(root))
   end)
 
   it("deletes nothing with d on a row that lists no comment", function()

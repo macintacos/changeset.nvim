@@ -368,7 +368,13 @@ function M.confirm(opts, yes)
     press(focus)
   end, "Press the focused button")
   for i, label in ipairs(labels) do
-    map(state, { label:sub(1, 1):lower() }, function()
+    local letter = label:sub(1, 1)
+    if i == #labels then
+      -- The action takes Shift. Its letter without, as in Vim's `dd` with the second `d` typed ahead of the
+      -- dialog, presses nothing, and quietly: unmapped, the read-only buffer would answer it with E21.
+      map(state, { letter:lower() }, function() end, ("Nothing: %s takes %s"):format(label, letter:upper()))
+    end
+    map(state, { i == #labels and letter:upper() or letter:lower() }, function()
       press(i)
     end, label)
   end

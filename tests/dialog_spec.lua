@@ -63,8 +63,9 @@ describe("changeset.dialog", function()
     end)
 
     for _, case in ipairs({
-      { keys = "a", confirms = true },
+      { keys = "A", confirms = true },
       { keys = "k", confirms = false },
+      { keys = "aA", confirms = true },
       { keys = "l<CR>", confirms = true },
       { keys = "<Tab><CR>", confirms = true },
       { keys = "<Right><Space>", confirms = true },
@@ -82,6 +83,17 @@ describe("changeset.dialog", function()
         assert.equal(opener, vim.api.nvim_get_current_win())
       end)
     end
+
+    it("stays open, without a word, on the action's letter typed without Shift, as a `dd` would", function()
+      ask()
+      vim.v.errmsg = ""
+
+      answer("a")
+
+      assert.is_false(confirmed)
+      assert.truthy(Dialog.win())
+      assert.equal("", vim.v.errmsg)
+    end)
 
     it("presses a button clicked with the mouse", function()
       ask()
@@ -148,7 +160,7 @@ describe("changeset.dialog", function()
         pcall(Dialog.press, keys:format(file))
 
         assert.equal(buf, vim.api.nvim_win_get_buf((assert(Dialog.win()))))
-        assert.is_true(answer("a"))
+        assert.is_true(answer("A"))
         vim.fn.delete(file)
       end)
     end
@@ -175,7 +187,7 @@ describe("changeset.dialog", function()
         seen = { win = vim.api.nvim_get_current_win(), windows = #vim.api.nvim_list_wins() }
       end)
 
-      Dialog.press("a")
+      Dialog.press("A")
       settle(function()
         return seen ~= nil
       end)

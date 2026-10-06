@@ -402,8 +402,10 @@ colour legible; where the float shares that background, the float's is shaded to
 text instead. The focused one is reversed and bold, the only bold in a dialog, in the
 accent the sidebar's selection uses, or in the error colour for the verb. Focus starts on
 Keep, so an Enter typed ahead keeps. Each label's first letter is underlined and presses
-it. Delete's is `d`, the sidebar's default delete key too, so `dd` on a Comments row deletes
-without a look: the question catches a stray `d`, not a deliberate one.
+it, Keep's as `k` and the verb's only with Shift, `D` or `A`. The verb's letter without
+Shift does nothing, silently. `dd` is how a Vim hand deletes a line, and on a Comments row
+its second `d` arrives before the question draws: unshifted, it would delete the review
+comment unseen, skipping the look the quote exists for.
 
 The picker lines its rows up in columns, a row's last cell running free. Each row leads with
 its number, which a digit presses, and a `●` in its status's colour: idle and done in
