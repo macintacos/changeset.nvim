@@ -44,10 +44,19 @@ local function redraw()
   draw.draw(bound_keys.filter_kinds)
 end
 
+---The row a step from the sidebar just opened, which its next `CursorMoved` mustn't preview over the opened line.
+---@type string?
+local opened_id
+
+---Whether the sidebar's next `WinEnter` is a step handing focus back, which mustn't land on your row and undo it.
+local stepping_back = false
+
 local function preview_current()
   local state = sidebar_state.current()
   local row = draw.row_at_cursor()
-  if not row then
+  local opened = opened_id
+  opened_id = nil
+  if not row or row.id == opened then
     return
   end
   assert(state, "changeset: no tree built yet")
@@ -169,27 +178,77 @@ local function rebuild()
   apply(state.position:rebuilt(draw.view(), before, decided))
 end
 
----The step pressed while the diff is read, taken once it lands; a later press replaces it.
----@type integer?
-local waiting_step
+---A step pressed before the tree was ready, with the window and buffer it was pressed in.
+---@class changeset.WaitingStep
+---@field count integer Presses added up, down for positive.
+---@field win integer
+---@field buf integer
+
+---@type changeset.WaitingStep?
+local waiting
+
+---What a step from `M.step` lends `actions.open_step`.
+---@type changeset.ActionHooks
+local step_hooks = {
+  pick = pick,
+  close = function()
+    M.close()
+  end,
+  back = function(row)
+    opened_id = row and row.id
+    stepping_back = true
+  end,
+}
+
+---Whether a step can be taken: the diff is read, and so are the symbols of the file the step would start from, or
+---its rows would be the placeholders drawn while they're read.
+---@param tree changeset.Tree
+---@return boolean
+local function ready(tree)
+  if not tree.collected then
+    return false
+  end
+  local win = window.peek_target()
+  local name = win and vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win)) or ""
+  local path = name ~= "" and vim.fs.relpath(tree.root, vim.fs.normalize(name))
+  return not path or decided(path)
+end
+
+---Take the waiting step once the tree is ready, if you're still where you pressed it; else drop it unsaid.
+local function take_waiting()
+  local tree = build.current()
+  if not (waiting and window.is_visible() and tree and ready(tree)) then
+    return
+  end
+  local step = waiting
+  waiting = nil
+  if
+    step.count == 0
+    or vim.api.nvim_get_current_win() ~= step.win
+    or vim.api.nvim_win_get_buf(step.win) ~= step.buf
+  then
+    return
+  end
+  local state = assert(sidebar_state.current(), "changeset: no tree built yet")
+  -- Landed again: the rows the sidebar opened on held no row for where you are.
+  apply(state.position:entered(draw.view()))
+  actions.open_step(step.count, step_hooks)
+end
 
 ---What the sidebar does as the tree changes.
 ---@type table<changeset.TreeEvent, fun()>
 local on_tree_event = {
   diff = function()
     rebuild()
-    if waiting_step and window.is_visible() then
-      local count = waiting_step
-      waiting_step = nil
-      local state = assert(sidebar_state.current(), "changeset: no tree built yet")
-      -- Landed again: the rows the sidebar opened on held no row for where you are.
-      apply(state.position:entered(draw.view()))
-      M.step(count)
-    end
+    take_waiting()
   end,
-  symbols = rebuild,
+  symbols = function()
+    rebuild()
+    take_waiting()
+  end,
   pr = redraw,
   failed = function()
+    waiting = nil
     assert(sidebar_state.current(), "changeset: no tree built yet").position:failed()
   end,
 }
@@ -373,7 +432,9 @@ function M.open()
     desc = "changeset: put the sidebar's cursor on the row you are on",
     callback = function()
       local state = sidebar_state.current()
-      if state and vim.api.nvim_get_current_win() == window.win() and not left_float then
+      local back = stepping_back
+      stepping_back = false
+      if state and vim.api.nvim_get_current_win() == window.win() and not left_float and not back then
         apply(state.position:entered(draw.view()))
       end
     end,
@@ -413,11 +474,9 @@ function M.open()
   end
 end
 
----Whether `step` opened the sidebar and has yet to put its cursor on your row, waiting for the diff.
-
 ---Dismiss the sidebar and its step keys, putting back what they replaced. The tree stays, and keeps refreshing.
 function M.close()
-  waiting_step = nil
+  waiting = nil
   require("changeset.menu").close()
   actions.unbind_step_keys()
   vim.api.nvim_clear_autocmds({ group = augroup })
@@ -456,9 +515,9 @@ local function next_action(st)
   return st.focused and "close" or "focus"
 end
 
----Steps the sidebar's selected row `count` places and opens it in the window you are editing in, focus staying put.
----A closed sidebar opens first, unfocused, on the row for where you are; a step pressed before the diff is read
----waits for it.
+---Steps the sidebar's selected row `count` places and opens it in the window you are editing in. From a file window
+---or the sidebar, focus stays there. A closed sidebar opens first, unfocused, on the row for where you are. Presses
+---made before the tree is ready add up, and are taken once it is.
 ---@param count integer Down for positive.
 function M.step(count)
   if not window.is_visible() then
@@ -470,11 +529,14 @@ function M.step(count)
     apply(state.position:entered(draw.view()))
   end
   local tree = build.current()
-  if not (tree and tree.collected) then
-    waiting_step = count
+  if not (tree and ready(tree)) then
+    local win = vim.api.nvim_get_current_win()
+    local buf = vim.api.nvim_win_get_buf(win)
+    local before = waiting and waiting.win == win and waiting.buf == buf and waiting.count or 0
+    waiting = { count = before + count, win = win, buf = buf }
     return vim.api.nvim_echo({ { "reading the changes…" } }, false, {})
   end
-  actions.open_step(count, { pick = pick, close = M.close })
+  actions.open_step(count, step_hooks)
 end
 
 ---Open, focus, or dismiss the sidebar, depending on where the cursor is.

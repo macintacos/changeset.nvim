@@ -21,6 +21,7 @@ local M = {}
 ---@class changeset.ActionHooks
 ---@field pick fun(row: changeset.Row) Mark `row` as the one last opened from the sidebar.
 ---@field close fun() Dismiss the sidebar.
+---@field back? fun(row: changeset.Row?) Told, before focus goes back to the sidebar, which row a step from it opened.
 
 ---The sidebar's cursor line, while it stands.
 ---@return integer?
@@ -79,28 +80,52 @@ local function place_of(row)
   return ("%s:%d"):format(row.path, row.lnum or 1)
 end
 
----Where the window a commit opens into stands, as `place_of` spells it; nil when it holds no file of the tree.
+---The file of the tree, and the line, that the window a commit opens into stands on; nil when it holds none.
 ---@param root string
----@return string?
-local function current_place(root)
+---@return string? path
+---@return integer line
+local function standing(root)
   local win = window.peek_target()
   if not win then
-    return nil
+    return nil, 0
   end
   local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win))
-  local path = name ~= "" and vim.fs.relpath(root, vim.fs.normalize(name))
-  return path and ("%s:%d"):format(path, vim.api.nvim_win_get_cursor(win)[1]) or nil
+  local path = name ~= "" and vim.fs.relpath(root, vim.fs.normalize(name)) or nil
+  return path, vim.api.nvim_win_get_cursor(win)[1]
+end
+
+---The row a step starts from: the cursor's when it opens where the window stands, else the last row of that file
+---opening at or above its line. The sidebar can be on a shallower row, such as the file's, than where you are.
+---@param state changeset.SidebarState
+---@param lnum integer The cursor's row.
+---@param path string?
+---@param line integer
+---@return integer
+local function start_row(state, lnum, path, line)
+  local row = state.view:row(lnum)
+  if not path or (row and place_of(row) == ("%s:%d"):format(path, line)) then
+    return lnum
+  end
+  local found
+  for i, each in ipairs(state.view:visible()) do
+    if each.path == path and each.kind ~= "section" and (each.lnum or 1) <= line then
+      found = i
+    end
+  end
+  return found or lnum
 end
 
 ---The row `count` places past the sidebar's cursor, down for a positive `count`: each place a row that opens
----somewhere other than the last, starting from where the window it opens into stands. Stops at the last such row.
+---somewhere other than the last, starting from where the window it opens into stands. A deleted file's row opens
+---nowhere, so it is never one. Stops at the last such row.
 ---@param state changeset.SidebarState
 ---@param lnum integer
 ---@param count integer
+---@param here string? Where the window stands, as `place_of` spells it.
 ---@return integer
-local function placed(state, lnum, count)
+local function placed(state, lnum, count, here)
   local delta = count > 0 and 1 or -1
-  local here, to = current_place(state.tree.root), lnum
+  local to = lnum
   for _ = 1, math.abs(count) do
     local at = to
     repeat
@@ -109,37 +134,38 @@ local function placed(state, lnum, count)
         return to
       end
       at = next_lnum
-    until place_of(assert(state.view:row(at))) ~= here
+      local row = assert(state.view:row(at))
+    until not (row.kind == "file" and row.status == "deleted") and place_of(row) ~= here
     to, here = at, place_of(assert(state.view:row(at)))
   end
   return to
 end
 
 ---Steps the sidebar's cursor `count` places, then opens that row as `<CR>` does, without its review comment, in
----the window the sidebar opens changes in. Focus stays where it was.
+---the window the sidebar opens changes in. From a file window or the sidebar, focus stays there; from a window that
+---holds no file, it goes where the row opened.
 ---@param count integer Down for positive.
 ---@param hooks changeset.ActionHooks
 function M.open_step(count, hooks)
-  local state, from = sidebar_state.current(), cursor()
-  if not (state and from) then
+  local state, lnum = sidebar_state.current(), cursor()
+  if not (state and lnum) then
     return
   end
-  local to = placed(state, from, count)
+  local path, line = standing(state.tree.root)
+  local from = start_row(state, lnum, path, line)
+  local to = placed(state, from, count, path and ("%s:%d"):format(path, line))
   if to == from then
     -- Not wrapped, so a run of `.` stops here rather than looping.
     return vim.api.nvim_echo({ { count > 0 and "no next change" or "no previous change" } }, false, {})
   end
   local focus = vim.api.nvim_get_current_win()
   move(to)
-  commit("reuse", hooks)
+  local row = commit("reuse", hooks)
   if focus == window.win() then
-    -- Unannounced, or the sidebar's WinEnter would land its cursor back on the row you are on, undoing the step.
-    local ignore = vim.o.eventignore
-    vim.o.eventignore = "all"
+    if hooks.back then
+      hooks.back(row)
+    end
     vim.api.nvim_set_current_win(focus)
-    vim.o.eventignore = ignore
-    window.sync_cursor()
-    draw.paint()
   end
 end
 

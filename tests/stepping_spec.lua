@@ -64,22 +64,66 @@ describe("changeset.step", function()
     assert.equal(win, vim.api.nvim_get_current_win())
     settle()
 
-    -- The step runs as the diff lands, before any symbols: from mod.lua's row, the next place is other.lua's.
+    -- Taken once mod.lua's symbols are read, so its rows are its changes: L2 opens where you are, L8 is next.
     assert.equal(win, vim.api.nvim_get_current_win())
-    assert.same({ "other.lua", 3 }, { shown(win) })
-    assert.is_nil(Sidebar.cursor_line():find("why", 1, true))
+    assert.same({ "mod.lua", 8 }, { shown(win) })
   end)
 
-  it("takes only the last step pressed while the changes are read", function()
+  it("never steps backwards from a cold press past your file's last change", function()
+    local win = edit(8)
+
+    changeset.step(1)
+    settle()
+
+    assert.same({ "other.lua", 3 }, { shown(win) })
+  end)
+
+  it("adds up presses made while the changes are read, a press the other way taking one off", function()
     local win = edit(2)
 
+    changeset.step(1)
     changeset.step(1)
     changeset.step(-1)
     settle()
 
-    -- From mod.lua's row, the previous place is the review comment's.
-    assert.same({ "other.lua", 3 }, { shown(win) })
-    assert.truthy(Sidebar.cursor_line():find("why", 1, true))
+    assert.same({ "mod.lua", 8 }, { shown(win) })
+  end)
+
+  it("drops a waiting step once you have moved to another buffer", function()
+    local win = edit(2)
+
+    changeset.step(1)
+    vim.cmd.edit("other.lua")
+    settle()
+    print("ECHO", vim.inspect(echoed), Sidebar.cursor_line())
+
+    assert.same({ "other.lua", 1 }, { shown(win) })
+  end)
+
+  it("drops a waiting step when the diff fails to read", function()
+    local win = edit(2)
+    local diff = require("changeset.diff")
+    local collect = diff.collect
+    local failed = false
+    diff.collect = function(_, _, done)
+      diff.collect = collect
+      vim.schedule(function()
+        done(nil, "simulated failure")
+        failed = true
+      end)
+    end
+    local notify = vim.notify
+    vim.notify = function() end
+
+    changeset.step(1)
+    assert(vim.wait(2000, function()
+      return failed
+    end))
+    require("changeset.build").refresh()
+    settle()
+
+    vim.notify = notify
+    assert.same({ "mod.lua", 2 }, { shown(win) })
   end)
 
   it("drops a waiting step when the sidebar closes first", function()
@@ -142,17 +186,51 @@ describe("changeset.step", function()
     assert.equal(1, #echoed)
   end)
 
+  it("steps over a deleted file's row, which opens nowhere", function()
+    local win = edit(2)
+    Fixture.git({ "rm", "-q", "plain.lua" }, tmp)
+    Fixture.commit("drop plain.lua", tmp)
+    changeset.open()
+    settle()
+    Sidebar.cursor_to("L3")
+    vim.api.nvim_set_current_win(win)
+    local notify, notes = vim.notify, {}
+    vim.notify = function(msg)
+      table.insert(notes, msg)
+    end
+
+    changeset.step(1)
+
+    vim.notify = notify
+    assert.same({}, notes)
+    assert.same({ "no next change" }, echoed)
+    assert.same({ "other.lua", 3 }, { shown(win) })
+  end)
+
   it("opens the row in the window the sidebar opens changes in, keeping focus on the sidebar", function()
     local win = edit(2)
     changeset.toggle()
     settle()
     local sidebar = assert(window.win())
-    Sidebar.cursor_to("L2")
+    Sidebar.cursor_to("L8")
+    local left = {}
+    vim.api.nvim_create_autocmd("WinLeave", {
+      group = vim.api.nvim_create_augroup("stepping_spec", {}),
+      callback = function()
+        left[vim.api.nvim_get_current_win()] = true
+      end,
+    })
 
     changeset.step(1)
+    -- The main loop fires this once the sidebar's cursor has moved; a spec has to.
+    vim.api.nvim_exec_autocmds("CursorMoved", { buffer = window.buf() })
+    Sidebar.flush()
 
+    vim.api.nvim_del_augroup_by_name("stepping_spec")
     assert.equal(sidebar, vim.api.nvim_get_current_win())
-    assert.same({ "mod.lua", 8 }, { shown(win) })
+    assert.same({ "other.lua", 3 }, { shown(win) })
+    assert.equal("", vim.wo[win].winbar)
+    assert.truthy(left[win])
   end)
 
   describe("through <Plug>(changeset-next) and .", function()
@@ -187,8 +265,6 @@ describe("changeset.step", function()
       -- The mod.lua row previews line 1, so the steps open Other changes, then L8.
       assert.equal(window.win(), vim.api.nvim_get_current_win())
       assert.same({ "mod.lua", 8 }, { shown(win) })
-      Sidebar.flush()
-      assert.equal("", vim.wo[win].winbar)
     end)
   end)
 end)
