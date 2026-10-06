@@ -533,7 +533,7 @@ describe("changeset.reviewing", function()
     end)
   end)
 
-  describe("next and prev", function()
+  describe("next_comment and prev_comment", function()
     local echoed, echo
 
     before_each(function()
@@ -565,12 +565,12 @@ describe("changeset.reviewing", function()
       three_comments()
       vim.api.nvim_win_set_cursor(0, { 2, 3 })
 
-      reviewing.next()
+      reviewing.next_comment(1)
       assert.same({ "a.lua", 4 }, { where() })
       assert.equal(0, vim.api.nvim_win_get_cursor(0)[2])
       assert.equal("review comment 2 of 3", echoed[1])
 
-      reviewing.next()
+      reviewing.next_comment(1)
       assert.same({ "b.lua", 3 }, { where() })
     end)
 
@@ -578,9 +578,9 @@ describe("changeset.reviewing", function()
       three_comments()
       vim.api.nvim_win_set_cursor(0, { 4, 0 })
 
-      reviewing.prev()
+      reviewing.prev_comment(1)
       assert.same({ "a.lua", 2 }, { where() })
-      reviewing.prev()
+      reviewing.prev_comment(1)
       assert.same({ "b.lua", 3 }, { where() })
       assert.matches("review comment 3 of 3.*wrapped", echoed[2])
     end)
@@ -590,7 +590,7 @@ describe("changeset.reviewing", function()
       vim.cmd.edit(dir .. "/b.lua")
       vim.api.nvim_win_set_cursor(0, { 3, 0 })
 
-      reviewing.next()
+      reviewing.next_comment(1)
 
       assert.same({ "a.lua", 2 }, { where() })
       assert.matches("wrapped", echoed[1])
@@ -602,7 +602,7 @@ describe("changeset.reviewing", function()
       vim.cmd.edit(dir .. "/b.lua")
       vim.api.nvim_win_set_cursor(0, { 3, 0 })
 
-      reviewing.next()
+      reviewing.next_comment(1)
 
       assert.same({ "a.lua", 2 }, { where() })
     end)
@@ -616,7 +616,7 @@ describe("changeset.reviewing", function()
         return true
       end
 
-      reviewing.next()
+      reviewing.next_comment(1)
 
       assert.same({ { dir .. "/a.lua", 2, "reuse" } }, committed)
     end)
@@ -626,9 +626,9 @@ describe("changeset.reviewing", function()
       comment_store.keep(dir, comment({ line = 50 }))
       vim.api.nvim_win_set_cursor(0, { 5, 0 })
 
-      reviewing.next()
+      reviewing.next_comment(1)
       assert.same({ "a.lua", 10 }, { where() })
-      reviewing.next()
+      reviewing.next_comment(1)
       assert.same({ "b.lua", 3 }, { where() })
     end)
 
@@ -639,7 +639,7 @@ describe("changeset.reviewing", function()
       vim.bo.buftype = "nofile"
       local scratch = vim.api.nvim_get_current_buf()
 
-      reviewing.next()
+      reviewing.next_comment(1)
 
       assert.equal(file_win, vim.api.nvim_get_current_win())
       assert.same({ "a.lua", 2 }, { where() })
@@ -656,7 +656,7 @@ describe("changeset.reviewing", function()
       local scratch = vim.api.nvim_get_current_buf()
       vim.cmd("wincmd p")
 
-      local ok, err = pcall(reviewing.next)
+      local ok, err = pcall(reviewing.next_comment, 1)
 
       vim.wo.winfixbuf = false
       vim.api.nvim_buf_delete(scratch, { force = true })
@@ -664,12 +664,37 @@ describe("changeset.reviewing", function()
       assert.equal(vim.log.levels.WARN, notes[1].level)
     end)
 
+    it("steps over as many comments as its count", function()
+      three_comments()
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+
+      reviewing.next_comment(2)
+      assert.same({ "a.lua", 4 }, { where() })
+      reviewing.prev_comment(3)
+      assert.same({ "a.lua", 4 }, { where() })
+      assert.equal("review comment 2 of 3, wrapped", echoed[#echoed])
+    end)
+
+    it("keeps focus where it was when it refuses the file window before it", function()
+      three_comments()
+      vim.api.nvim_buf_set_lines(0, 0, 0, false, { "new" })
+      vim.cmd("new")
+      vim.bo.buftype = "nofile"
+      local scratch_win = vim.api.nvim_get_current_win()
+
+      reviewing.next_comment(1)
+
+      assert.equal(scratch_win, vim.api.nvim_get_current_win())
+      assert.equal(vim.log.levels.WARN, notes[1].level)
+      vim.api.nvim_buf_delete(0, { force = true })
+    end)
+
     it("refuses in a modified buffer", function()
       three_comments()
       vim.api.nvim_buf_set_lines(0, 0, 0, false, { "new" })
       vim.api.nvim_win_set_cursor(0, { 1, 0 })
 
-      reviewing.next()
+      reviewing.next_comment(1)
 
       assert.same({ "a.lua", 1 }, { where() })
       assert.equal(vim.log.levels.WARN, notes[1].level)
@@ -682,7 +707,7 @@ describe("changeset.reviewing", function()
       vim.cmd("hide edit " .. dir .. "/a.lua")
       vim.api.nvim_win_set_cursor(0, { 9, 0 })
 
-      reviewing.next()
+      reviewing.next_comment(1)
 
       assert.same({ "a.lua", 9 }, { where() })
       assert.equal(vim.log.levels.WARN, notes[1].level)
@@ -691,7 +716,7 @@ describe("changeset.reviewing", function()
     it("says when there are no comments", function()
       edit_file()
 
-      reviewing.next()
+      reviewing.next_comment(1)
 
       assert.same({ { msg = "Changeset: no review comments in " .. dir, level = vim.log.levels.INFO } }, notes)
     end)

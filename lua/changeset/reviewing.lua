@@ -1,5 +1,6 @@
----`:Changeset comment`, `delete`, `abandon`, `submit`, `next`, `prev`, `list` and `yank`, which write, delete, clear,
----send to an agent, walk, list and copy the review comments kept on this machine, and the Comments rows' open and delete.
+---`:Changeset comment`, `delete`, `abandon`, `submit`, `next-comment`, `prev-comment`, `list` and `yank`, which write,
+---delete, clear, paste into an agent's prompt, walk, list and copy the review comments kept on this machine, and the
+---Comments rows' open and delete.
 local Paths = require("changeset.paths")
 local buffers = require("changeset.buffers")
 local build = require("changeset.build")
@@ -142,13 +143,14 @@ local function at(repository, path, lnum)
   return review_comments.at(comment_store.list(repository), path, lnum)
 end
 
----The current buffer's path in its repository; nil for a buffer that isn't a file there.
+---`buf`'s path in its repository; nil for a buffer that isn't a file there.
 ---@param repository string
+---@param buf integer
 ---@return string?
-local function file_path(repository)
-  local name = vim.api.nvim_buf_get_name(0)
+local function file_path(repository, buf)
+  local name = vim.api.nvim_buf_get_name(buf)
   -- relpath prefixes the cwd to a relative name, so a non-file buffer would pass from inside the repo.
-  return vim.bo.buftype == "" and name ~= "" and vim.fs.relpath(repository, vim.fs.normalize(name)) or nil
+  return vim.bo[buf].buftype == "" and name ~= "" and vim.fs.relpath(repository, vim.fs.normalize(name)) or nil
 end
 
 ---Opens the review comment window under line `last` of the current buffer, for lines `first` to `last`, or an
@@ -158,7 +160,7 @@ end
 ---@param last integer
 function M.comment(first, last)
   local repository = Paths.root(0)
-  local path = file_path(repository)
+  local path = file_path(repository, 0)
   if not path then
     return say(vim.log.levels.WARN, "run `:Changeset comment` from a file in %s", repository)
   end
@@ -206,7 +208,7 @@ function M.delete()
     return say(vim.log.levels.WARN, UNSAVED)
   end
   local repository = Paths.root(0)
-  local path = file_path(repository)
+  local path = file_path(repository, 0)
   local lnum = vim.api.nvim_win_get_cursor(0)[1]
   local comment = path and at(repository, path, lnum)
   if not comment then
@@ -324,7 +326,7 @@ local function reader(repository)
   end
 end
 
----Pastes the repository's review comments into an agent's prompt through herdr, then deletes the ones sent.
+---Pastes the repository's review comments into an agent's prompt through herdr, then deletes the ones pasted.
 function M.submit()
   local repository = root()
   local comments = comment_store.list(repository)
@@ -421,31 +423,48 @@ local function file_window(win)
     and not vim.wo[win].winfixbuf
 end
 
----Jumps to the review comment `step` away from the cursor, wrapping at either end. From a window that holds no
----file, it jumps in the previous window.
----@param step 1|-1
-local function jump(step)
-  local from_sidebar = window.is_focused()
-  if not from_sidebar and not file_window(0) then
-    local previous = vim.fn.win_getid(vim.fn.winnr("#"))
-    if previous == 0 or not file_window(previous) then
-      return say(vim.log.levels.WARN, "run `:Changeset %s` from a file", step == 1 and "next" or "prev")
-    end
-    vim.api.nvim_set_current_win(previous)
+---The window a comment jump goes in: the current one when it holds a file, else the one before it when that does.
+---@return integer?
+local function jump_window()
+  if file_window(0) then
+    return vim.api.nvim_get_current_win()
   end
-  local repository = root()
+  local previous = vim.fn.win_getid(vim.fn.winnr("#"))
+  if previous ~= 0 and file_window(previous) then
+    return previous
+  end
+end
+
+---Jumps to the review comment `count` away from the cursor, forward for a positive `count`, wrapping at either
+---end. From a window that holds no file, it jumps in the window before it.
+---@param count integer
+local function jump(count)
+  local step = count > 0 and 1 or -1
+  local from_sidebar = window.is_focused()
+  local win = from_sidebar and vim.api.nvim_get_current_win() or jump_window()
+  if not win then
+    return say(vim.log.levels.WARN, "run `:Changeset %s-comment` from a file", step == 1 and "next" or "prev")
+  end
+  local buf = vim.api.nvim_win_get_buf(win)
+  local repository = from_sidebar and root() or Paths.root(buf)
   local comments = vim.tbl_filter(function(comment)
     return vim.uv.fs_stat(vim.fs.joinpath(repository, comment.path)) ~= nil
   end, in_order(comment_store.list(repository)))
   if #comments == 0 then
     return say(vim.log.levels.INFO, "no review comments in %s", repository)
   end
-  if not from_sidebar and vim.bo.modified then
+  if not from_sidebar and vim.bo[buf].modified then
     return say(vim.log.levels.WARN, UNSAVED)
   end
-  local path = not from_sidebar and file_path(repository) or nil
-  local cursor = vim.api.nvim_win_get_cursor(0)[1]
-  local i, wrapped = neighbour(comments, path, cursor, vim.api.nvim_buf_line_count(0), step)
+  local path = not from_sidebar and file_path(repository, buf) or nil
+  local cursor = vim.api.nvim_win_get_cursor(win)[1]
+  local i, wrapped = neighbour(comments, path, cursor, vim.api.nvim_buf_line_count(buf), step)
+  for _ = 2, math.abs(count) do
+    i = i + step
+    if i < 1 or i > #comments then
+      i, wrapped = (i - 1) % #comments + 1, true
+    end
+  end
   local full = vim.fs.joinpath(repository, comments[i].path)
   local target = loaded(full)
   if target and vim.bo[target].modified then
@@ -457,28 +476,31 @@ local function jump(step)
       return
     end
   else
-    local buf = buffers.load(full)
-    if not buf then
+    local file = buffers.load(full)
+    if not file then
       return say(vim.log.levels.WARN, "can't open %s", full)
     end
-    vim.bo[buf].buflisted = true
+    vim.api.nvim_set_current_win(win)
+    vim.bo[file].buflisted = true
     vim.cmd("normal! m'")
-    vim.api.nvim_win_set_buf(0, buf)
-    vim.api.nvim_win_set_cursor(0, { math.min(lnum, vim.api.nvim_buf_line_count(buf)), 0 })
+    vim.api.nvim_win_set_buf(win, file)
+    vim.api.nvim_win_set_cursor(win, { math.min(lnum, vim.api.nvim_buf_line_count(file)), 0 })
   end
   -- Echoed like a search count, not notified, so notifier plugins don't toast every jump.
   local text = ("review comment %d of %d"):format(i, #comments)
   vim.api.nvim_echo({ { wrapped and text .. ", wrapped" or text } }, false, {})
 end
 
----Jumps to the next review comment of the repository.
-function M.next()
-  jump(1)
+---Jumps `count` review comments forward in the repository.
+---@param count integer
+function M.next_comment(count)
+  jump(count)
 end
 
----Jumps to the previous review comment of the repository.
-function M.prev()
-  jump(-1)
+---Jumps `count` review comments back in the repository.
+---@param count integer
+function M.prev_comment(count)
+  jump(-count)
 end
 
 local QF_TITLE = "Changeset review comments"

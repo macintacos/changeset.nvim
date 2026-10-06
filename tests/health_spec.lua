@@ -91,7 +91,7 @@ describe("changeset.health", function()
     assert.equal("warn", level({ gh = false }, "`gh` not found"))
   end)
 
-  it("says whether :Changeset submit has herdr agents to send to", function()
+  it("says whether :Changeset submit has herdr agents to paste into", function()
     assert.equal("ok", level({}, "running inside herdr"))
     assert.equal("warn", level({ herdr = false }, "not inside a herdr pane"))
   end)
