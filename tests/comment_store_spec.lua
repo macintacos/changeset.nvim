@@ -109,6 +109,18 @@ describe("changeset.comment_store", function()
     end)
   end
 
+  it("refuses to write over a record it can't open", function()
+    comment_store.keep(ROOT, comment())
+    local before = vim.fn.readfile(comment_store.path())
+    vim.fn.setfperm(comment_store.path(), "---------")
+
+    local written = comment_store.keep(ROOT, comment({ line = 9, start_line = nil }))
+    vim.fn.setfperm(comment_store.path(), "rw-r--r--")
+
+    assert.is_false(written)
+    assert.same(before, vim.fn.readfile(comment_store.path()))
+  end)
+
   for _, entry in ipairs({
     '{"path":"a","body":"b"}',
     '{"path":"a","body":"b","line":3,"start_line":"1"}',

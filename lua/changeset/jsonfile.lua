@@ -22,11 +22,11 @@ end
 
 ---`file` as a JSON object, `null` read as absent, for a record that must not be written over when unreadable.
 ---@param file string
----@return table? data Empty when the file is missing; nil when it exists but isn't a JSON object.
+---@return table? data Empty when the file is missing; nil when it exists but can't be opened or isn't a JSON object.
 function M.read_object(file)
   local fd = io.open(file, "r")
   if not fd then
-    return {}
+    return not vim.uv.fs_stat(file) and {} or nil
   end
   local content = fd:read("*a")
   fd:close()
