@@ -377,6 +377,17 @@ describe("plugin/changeset.lua", function()
     )
   end)
 
+  it("leaves a user's own maps onto changeset's <Plug> maps alone", function()
+    local probe =
+      "io.write(vim.fn.maparg('<C-g>n', 'n'), ' ', vim.fn.maparg('<C-g>cn', 'n'), ' ', vim.fn.maparg('<C-g>cc', 'n'))"
+    local args = { "-c", "nmap <C-g>n <Plug>(changeset-prev)", "-c", "nmap <C-g>cn <Plug>(changeset-comment)" }
+
+    assert.equal(
+      "<Plug>(changeset-prev) <Plug>(changeset-comment) <Plug>(changeset-comment)",
+      after_startup(args, probe)
+    )
+  end)
+
   describe("a pause after <C-g>c", function()
     ---Types `keys` into ten numbered lines with `'timeoutlen'` short, then reports the comment's range, the mode and
     ---the lines.

@@ -116,8 +116,8 @@ end
 -- `:`, not <Cmd>, so the selection arrives as the '<,'> range.
 vim.keymap.set("x", "<Plug>(changeset-comment)", ":Changeset comment<CR>", { silent = true, desc = keys[1][3] })
 
----Whether a user's global map in `mode` has `lhs`, or starts it, or starts with it: either way `lhs` would clash
----with it. Buffer-local maps don't count, being only the buffer current at startup's, and nor do changeset's own.
+---Whether a global map in `mode` has `lhs`, or starts it, or starts with it: either way `lhs` would clash with it.
+---Buffer-local maps don't count, being only the buffer current at startup's.
 ---@param lhs string
 ---@param mode string
 ---@return boolean
@@ -125,8 +125,7 @@ local function taken(lhs, mode)
   -- Compared as keytrans spells them, as `lhs` reads in nvim_get_keymap: `lhsraw` holds <C-g> in another form.
   local spelled = vim.fn.keytrans(vim.keycode(lhs))
   return vim.iter(vim.api.nvim_get_keymap(mode)):any(function(map)
-    local own = vim.startswith(map.rhs or "", "<Plug>(changeset-")
-    return not own and (vim.startswith(map.lhs, spelled) or vim.startswith(spelled, map.lhs))
+    return vim.startswith(map.lhs, spelled) or vim.startswith(spelled, map.lhs)
   end)
 end
 
@@ -135,16 +134,22 @@ local function map_defaults()
   if vim.g.changeset_no_default_maps then
     return
   end
+  -- Decided before any default is mapped, which would all clash with it. A user's map that blocks `<C-g>cc` blocks it
+  -- too.
+  local pause = { n = not taken("<C-g>c", "n"), x = not taken("<C-g>c", "x") }
   for _, key in ipairs(keys) do
     local lhs = "<C-g>" .. key[1]
     for _, mode in ipairs(key[4] or { "n" }) do
       if not taken(lhs, mode) then
         vim.keymap.set(mode, lhs, ("<Plug>(changeset-%s)"):format(key[2]), { desc = key[3] })
-        -- So a pause after the <C-g>c prefix comments, rather than leaving Select mode's or a pending `c`.
-        if key[2] == "comment" and not taken("<C-g>c", mode) then
-          vim.keymap.set(mode, "<C-g>c", "<Plug>(changeset-comment)", { desc = key[3] })
-        end
       end
+    end
+  end
+  -- So a pause after the <C-g>c prefix comments, rather than leaving Select mode's or a pending `c`. Mapped last, or
+  -- `cn` and `cp` would see it as a clash.
+  for mode, comments in pairs(pause) do
+    if comments then
+      vim.keymap.set(mode, "<C-g>c", "<Plug>(changeset-comment)", { desc = keys[1][3] })
     end
   end
 end
