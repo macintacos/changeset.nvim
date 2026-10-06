@@ -8,6 +8,7 @@ describe("changeset.health", function()
     nvim_012 = true,
     git = true,
     gh = true,
+    herdr = true,
     icons = "mini.icons",
     which_key = true,
     mini_pick = "set up",
@@ -88,6 +89,19 @@ describe("changeset.health", function()
   it("reports gh, and warns without it", function()
     assert.equal("ok", level({}, "`gh` found"))
     assert.equal("warn", level({ gh = false }, "`gh` not found"))
+  end)
+
+  it("says whether :Changeset submit has herdr agents to send to", function()
+    assert.equal("ok", level({}, "running inside herdr"))
+    assert.equal("warn", level({ herdr = false }, "not inside a herdr pane"))
+  end)
+
+  it("probes herdr from its workspace variable and executable", function()
+    local saved = vim.env.HERDR_WORKSPACE_ID
+    vim.env.HERDR_WORKSPACE_ID = nil
+    local outside = checked_level("herdr")
+    vim.env.HERDR_WORKSPACE_ID = saved
+    assert.equal("warn", outside)
   end)
 
   it("reports the icon provider, and warns without one", function()

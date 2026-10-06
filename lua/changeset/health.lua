@@ -22,6 +22,7 @@ local M = {}
 ---@field nvim_012 boolean
 ---@field git boolean
 ---@field gh boolean
+---@field herdr boolean Inside a herdr pane, with `herdr` executable.
 ---@field icons "mini.icons"|"nvim-web-devicons"|false|nil
 ---@field which_key boolean
 ---@field mini_pick false|"installed"|"set up"
@@ -52,6 +53,7 @@ local function probe()
     nvim_012 = vim.fn.has("nvim-0.12") == 1,
     git = vim.fn.executable("git") == 1,
     gh = vim.fn.executable("gh") == 1,
+    herdr = vim.env.HERDR_WORKSPACE_ID ~= nil and vim.fn.executable("herdr") == 1,
     icons = icons.source(),
     which_key = loads("which-key"),
     mini_pick = mini_pick,
@@ -88,6 +90,14 @@ local function gh(facts)
     return finding("ok", "`gh` found")
   end
   return finding("warn", "`gh` not found: PR target branch detection is off")
+end
+
+---@param facts changeset.health.Facts
+local function herdr(facts)
+  if facts.herdr then
+    return finding("ok", "running inside herdr: `:Changeset submit` can send the review to its agents")
+  end
+  return finding("warn", "not inside a herdr pane: `:Changeset submit` has no agent to send to")
 end
 
 ---@param facts changeset.health.Facts
@@ -166,6 +176,7 @@ function M._report(facts)
       name = "Optional integrations",
       findings = vim.list_extend({
         gh(facts),
+        herdr(facts),
         icon_provider(facts),
         which_key(facts),
         mini_pick(facts),
