@@ -532,4 +532,170 @@ describe("changeset.reviewing", function()
       assert.equal(vim.log.levels.INFO, notes[1].level)
     end)
   end)
+
+  describe("next and prev", function()
+    local echoed, echo
+
+    before_each(function()
+      echoed, echo = {}, vim.api.nvim_echo
+      vim.api.nvim_echo = function(chunks)
+        table.insert(echoed, chunks[1][1])
+      end
+    end)
+
+    after_each(function()
+      vim.api.nvim_echo = echo
+    end)
+
+    ---Writes `b.lua` beside `a.lua` and keeps comments on a.lua:4, a.lua:2-7 and b.lua:3.
+    local function three_comments()
+      edit_file()
+      vim.fn.writefile(vim.split(("y"):rep(10, "\n"), "\n"), dir .. "/b.lua")
+      comment_store.keep(dir, comment({ path = "b.lua", line = 3 }))
+      comment_store.keep(dir, comment())
+      comment_store.keep(dir, comment({ start_line = 2, line = 7 }))
+    end
+
+    ---@return string path, integer line
+    local function where()
+      return vim.fs.basename(vim.api.nvim_buf_get_name(0)), vim.api.nvim_win_get_cursor(0)[1]
+    end
+
+    it("goes to the first line of the next comment by path, then first line", function()
+      three_comments()
+      vim.api.nvim_win_set_cursor(0, { 2, 3 })
+
+      reviewing.next()
+      assert.same({ "a.lua", 4 }, { where() })
+      assert.equal(0, vim.api.nvim_win_get_cursor(0)[2])
+      assert.equal("review comment 2 of 3", echoed[1])
+
+      reviewing.next()
+      assert.same({ "b.lua", 3 }, { where() })
+    end)
+
+    it("goes to the previous comment, wrapping past the first and saying so", function()
+      three_comments()
+      vim.api.nvim_win_set_cursor(0, { 4, 0 })
+
+      reviewing.prev()
+      assert.same({ "a.lua", 2 }, { where() })
+      reviewing.prev()
+      assert.same({ "b.lua", 3 }, { where() })
+      assert.matches("review comment 3 of 3.*wrapped", echoed[2])
+    end)
+
+    it("wraps past the last comment to the first", function()
+      three_comments()
+      vim.cmd.edit(dir .. "/b.lua")
+      vim.api.nvim_win_set_cursor(0, { 3, 0 })
+
+      reviewing.next()
+
+      assert.same({ "a.lua", 2 }, { where() })
+      assert.matches("wrapped", echoed[1])
+    end)
+
+    it("skips a comment whose file is gone", function()
+      three_comments()
+      comment_store.keep(dir, comment({ path = "gone.lua", line = 1 }))
+      vim.cmd.edit(dir .. "/b.lua")
+      vim.api.nvim_win_set_cursor(0, { 3, 0 })
+
+      reviewing.next()
+
+      assert.same({ "a.lua", 2 }, { where() })
+    end)
+
+    it("jumps through the sidebar's window from the sidebar", function()
+      three_comments()
+      focused, tree = true, { root = dir }
+      local committed = {}
+      package.loaded["changeset.window"].commit = function(...)
+        table.insert(committed, { ... })
+        return true
+      end
+
+      reviewing.next()
+
+      assert.same({ { dir .. "/a.lua", 2, "reuse" } }, committed)
+    end)
+
+    it("says when there are no comments", function()
+      edit_file()
+
+      reviewing.next()
+
+      assert.same({ { msg = "Changeset: no review comments in " .. dir, level = vim.log.levels.INFO } }, notes)
+    end)
+  end)
+
+  describe("list", function()
+    after_each(function()
+      vim.cmd("silent! cclose")
+      vim.fn.setqflist({}, "f")
+    end)
+
+    it("fills the quickfix list in order, each item's lines and the body's first line", function()
+      edit_file()
+      comment_store.keep(dir, comment({ line = 6, body = "second\nmore" }))
+      comment_store.keep(dir, comment({ start_line = 2, line = 3, body = "first" }))
+
+      reviewing.list()
+
+      local qf = vim.fn.getqflist({ title = 0, items = 0 })
+      assert.equal("Changeset review comments", qf.title)
+      local items = vim.tbl_map(function(item)
+        return { item.lnum, item.end_lnum, item.text }
+      end, qf.items)
+      assert.same({ { 2, 3, "first" }, { 6, 6, "second …" } }, items)
+      assert.equal(dir .. "/a.lua", vim.fs.normalize(vim.api.nvim_buf_get_name(qf.items[1].bufnr)))
+    end)
+
+    it("replaces its own list on a rerun rather than adding one", function()
+      edit_file()
+      comment_store.keep(dir, comment())
+      vim.fn.setqflist({}, " ", { title = "other" })
+
+      reviewing.list()
+      reviewing.list()
+
+      assert.equal(2, vim.fn.getqflist({ nr = "$" }).nr)
+    end)
+
+    it("says when there are no comments", function()
+      edit_file()
+
+      reviewing.list()
+
+      assert.equal(vim.log.levels.INFO, notes[1].level)
+    end)
+  end)
+
+  describe("yank", function()
+    it("copies the review text and keeps the comments", function()
+      edit_file()
+      comment_store.keep(dir, comment())
+      vim.fn.setreg("+", "")
+
+      reviewing.yank()
+
+      assert.equal(
+        reviewing._review_text({ comment() }, function()
+          return { "x" }
+        end),
+        vim.fn.getreg("+")
+      )
+      assert.same({ comment() }, comment_store.list(dir))
+      assert.same({ msg = "Changeset: copied the review's 1 comment", level = vim.log.levels.INFO }, notes[1])
+    end)
+
+    it("says when there is nothing to copy", function()
+      edit_file()
+
+      reviewing.yank()
+
+      assert.equal(vim.log.levels.INFO, notes[1].level)
+    end)
+  end)
 end)

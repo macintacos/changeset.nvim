@@ -1,6 +1,7 @@
----`:Changeset comment`, `delete`, `abandon` and `submit`, which write, delete, clear and send to an agent the review
----comments kept on this machine, and the Comments rows' open and delete.
+---`:Changeset comment`, `delete`, `abandon`, `submit`, `next`, `prev`, `list` and `yank`, which write, delete, clear,
+---send to an agent, walk, list and copy the review comments kept on this machine, and the Comments rows' open and delete.
 local Paths = require("changeset.paths")
+local buffers = require("changeset.buffers")
 local build = require("changeset.build")
 local comment_store = require("changeset.comment_store")
 local config = require("changeset.config")
@@ -343,6 +344,140 @@ function M.submit()
     end
     say(vim.log.levels.INFO, "sent the review's %s to %s", count, agent)
   end)
+end
+
+---@param comment changeset.ReviewComment
+---@return integer
+local function first_line(comment)
+  return comment.start_line or comment.line
+end
+
+---`comments` by path, then first line, the order the Comments section lists them in.
+---@param comments changeset.ReviewComment[]
+---@return changeset.ReviewComment[]
+local function in_order(comments)
+  local sorted = vim.list_slice(comments)
+  table.sort(sorted, function(a, b)
+    if a.path ~= b.path then
+      return a.path < b.path
+    end
+    return first_line(a) < first_line(b)
+  end)
+  return sorted
+end
+
+---Where `comment` starts against line `lnum` of `path`, in the order of `in_order`: 1 after, -1 before, 0 there.
+---@param comment changeset.ReviewComment
+---@param path string
+---@param lnum integer
+---@return integer
+local function side(comment, path, lnum)
+  if comment.path ~= path then
+    return comment.path > path and 1 or -1
+  end
+  local first = first_line(comment)
+  return first > lnum and 1 or first < lnum and -1 or 0
+end
+
+---Index of the comment `step` away from the cursor in `comments`, and whether it wrapped. From no file, the first
+---or last.
+---@param comments changeset.ReviewComment[]
+---@param path string?
+---@param lnum integer
+---@param step 1|-1
+---@return integer index, boolean wrapped
+local function neighbour(comments, path, lnum, step)
+  local from, to = 1, #comments
+  if step == -1 then
+    from, to = to, from
+  end
+  if not path then
+    return from, false
+  end
+  for i = from, to, step do
+    if side(comments[i], path, lnum) == step then
+      return i, false
+    end
+  end
+  return from, true
+end
+
+---Jumps to the review comment `step` away from the cursor, wrapping at either end.
+---@param step 1|-1
+local function jump(step)
+  local repository = root()
+  local comments = vim.tbl_filter(function(comment)
+    return vim.uv.fs_stat(vim.fs.joinpath(repository, comment.path)) ~= nil
+  end, in_order(comment_store.list(repository)))
+  if #comments == 0 then
+    return say(vim.log.levels.INFO, "no review comments in %s", repository)
+  end
+  local from_sidebar = window.is_focused()
+  local path = not from_sidebar and file_path(repository) or nil
+  local i, wrapped = neighbour(comments, path, vim.api.nvim_win_get_cursor(0)[1], step)
+  local full = vim.fs.joinpath(repository, comments[i].path)
+  local lnum = first_line(comments[i])
+  if from_sidebar then
+    if not window.commit(full, lnum, "reuse") then
+      return
+    end
+  else
+    local buf = buffers.load(full)
+    if not buf then
+      return say(vim.log.levels.WARN, "can't open %s", full)
+    end
+    vim.bo[buf].buflisted = true
+    vim.cmd("normal! m'")
+    vim.api.nvim_win_set_buf(0, buf)
+    vim.api.nvim_win_set_cursor(0, { lnum, 0 })
+  end
+  -- Echoed like a search count, not notified, so notifier plugins don't toast every jump.
+  local text = ("review comment %d of %d"):format(i, #comments)
+  vim.api.nvim_echo({ { wrapped and text .. ", wrapped" or text } }, false, {})
+end
+
+---Jumps to the next review comment of the repository.
+function M.next()
+  jump(1)
+end
+
+---Jumps to the previous review comment of the repository.
+function M.prev()
+  jump(-1)
+end
+
+local QF_TITLE = "Changeset review comments"
+
+---Puts the repository's review comments in the quickfix list, replacing the one this made last if still current.
+function M.list()
+  local repository = root()
+  local comments = in_order(comment_store.list(repository))
+  if #comments == 0 then
+    return say(vim.log.levels.INFO, "no review comments in %s", repository)
+  end
+  local items = vim.tbl_map(function(comment)
+    local body = vim.split(comment.body, "\n")
+    return {
+      filename = vim.fs.joinpath(repository, comment.path),
+      lnum = first_line(comment),
+      end_lnum = comment.line,
+      text = #body > 1 and body[1] .. " …" or body[1],
+    }
+  end, comments)
+  local action = vim.fn.getqflist({ title = 0 }).title == QF_TITLE and "r" or " "
+  vim.fn.setqflist({}, action, { title = QF_TITLE, items = items })
+  vim.cmd.copen()
+end
+
+---Copies the review, as `submit` would send it, to the `+` register, keeping the comments.
+function M.yank()
+  local repository = root()
+  local comments = comment_store.list(repository)
+  if #comments == 0 then
+    return say(vim.log.levels.INFO, "no review comments to copy")
+  end
+  vim.fn.setreg("+", M._review_text(comments, reader(repository)))
+  say(vim.log.levels.INFO, "copied the review's %s", #comments == 1 and "1 comment" or #comments .. " comments")
 end
 
 return M
