@@ -79,28 +79,20 @@ Symbol kinds the tree leaves out, saved for this branch, this repository or ever
 narrowest first.
 _Avoid_: kind filter
 
-### PR reviews
-
-**Pending review**:
-The viewer's unsubmitted GitHub review on the branch's PR, holding review comments until
-it is submitted or deleted. GitHub allows one per viewer per PR.
-_Avoid_: bare "review", which is PR Review Mode (`lua/changeset/review.lua`); draft review
+### Review comments
 
 **Review comment**:
-A comment in a pending review, on one line or a range of lines of a file in the PR.
-_Avoid_: bare "comment", which is a source-code comment (`changeset.comments`)
+A note on one line or a range of lines of a file, kept on this machine for the repository's
+root until it is deleted or the review is abandoned.
+_Avoid_: bare "comment", which is a source-code comment (`changeset.comments`); draft
 
-**Review body**:
-The text a pending review is submitted with, apart from its review comments.
-_Avoid_: bare "body" where a review comment's could be meant
-
-**Draft**:
-A new review comment's text kept on this machine when GitHub refuses its save, or when its
-window goes without a save GitHub took. Editing a saved review comment never keeps one. It
-never reaches GitHub.
-_Avoid_: draft review, which is the pending review
+**Review**:
+Every review comment of a repository. The first one written starts it, and
+`:Changeset abandon` ends it.
+_Avoid_: pending review; bare "review" where PR Review Mode (`lua/changeset/review.lua`)
+could be meant
 
 **Comments section**:
-The sidebar's first section, listing the pending review's review comments and the PR's
-drafts, one comment row each. It classifies no file.
+The sidebar's first section, listing the repository's review comments, one comment row
+each. It classifies no file.
 _Avoid_: comment list, comments panel

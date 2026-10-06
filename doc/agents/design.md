@@ -320,7 +320,7 @@ local function greet(name)
 │                                                                        │
 │                                                                        │
 │                                                                        │
-╰ pending review on #412 ─────────────────────────────────── <C-CR> save ╯
+╰ kept until :Changeset submit ────────────────────────────── <C-CR> save ╯
   return "hello " .. name
 end
 ```
@@ -329,9 +329,8 @@ Neovim has no window inside a buffer's text, so blank virtual lines (`virt_lines
 as the float and its border make the room, and the float lies on them. It is attached to
 the window (`relative = "win"`, `bufpos`), so it moves with its line as the source
 scrolls, and `row` counts past every screen row of a wrapped line. Opening scrolls the
-source the least that shows the line with the room under it. A floating source, the submit
-preview, has nothing to scroll past, so it grows by the room instead and shrinks back
-afterwards. While the row under the line is scrolled out of the source the float hides,
+source the least that shows the line with the room under it. A floating source has nothing
+to scroll past, so it grows by the room instead and shrinks back afterwards. While the row under the line is scrolled out of the source the float hides,
 and entering it scrolls the line back into view. Edits to the source never move the room
 off the line: it stays on the line number, as the float does.
 
@@ -339,7 +338,7 @@ Its width is the room right of the source window's gutter, less the border, betw
 and 72 columns, re-fitted as the source is resized: a review comment is prose, and prose
 reads at a short measure, while 20 keeps a cramped split usable. Six rows are room for a
 paragraph without pushing the code after it far away; a longer review comment scrolls.
-The buffer is `markdown`, so what GitHub will render is highlighted as it is typed, and it
+The buffer is `markdown`, so the formatting is highlighted as it is typed, and it
 wraps at word boundaries. `style = "minimal"` drops the number column and sign column,
 which describe a file this buffer is not. The filetype is set once the float is open, so a
 user's markdown `FileType` settings, such as `spell`, reach it and win over the style.
@@ -350,60 +349,14 @@ key in Neovim's own notation (`<C-CR> save`), since every review comment ends wi
 and it is the one nobody should have to look up. A float takes one `footer_pos`, so both
 share a left footer padded with border to the window's width; a window too narrow for both
 drops the key. The other keys stay off the border: `?` lists them all. However a new
-review comment's text goes, except the close a taken save makes, it is kept as a local
-draft: `q` in normal mode, `<S-Esc>` in either mode where the terminal sends it, `:q`,
+review comment's text goes, except the close a taken save makes, it is kept: `q` in
+normal mode, `<S-Esc>` in either mode where the terminal sends it, `:q`,
 `<C-w>c`, an `:e` in the float, quitting Neovim. One `BufUnload` hook on the window's buffer catches
 them all, since the buffer goes with the window (`bufhidden=wipe`), and takes the room
 under the line with it. Plain `<Esc>` still
 only leaves insert mode, so a habitual `<Esc>` on the way to normal mode never closes it.
 A save of only whitespace is no save: it closes the window like `q`, so the blank text
-reaches the same hook and the caller discards it, never GitHub.
-
-### The submit preview shows what goes out before it goes
-
-`:Changeset pr submit` opens the pending review as GitHub would receive it:
-
-```text
-╭ Submit review · #412 ───────────────────────────────╮
-│  Comment   Approve   Request changes                │
-│                                                     │
-│ No body. b to write one.                            │
-│                                                     │
-│ ● lua/changeset/pr.lua:42      say which ref failed │
-│ ● lua/changeset/pr.lua:50-55   cache this per root? │
-│ ● README.md  outdated, was 12  fix the typo         │
-│ ● doc/x.md  outdated           gone                 │
-│ ● doc/notes.md  file           move this section    │
-│                                                     │
-│ ○ lua/changeset/view.lua:7  draft, not included     │
-╰ comment on #412 ────────────────────────────────────╯
-```
-
-It follows the kind menu's float, with two divergences. It is centred in the editor
-rather than docked, because `pr` verbs work with the sidebar closed and nothing behind it
-redraws. The event is chosen inside it, one key each (`c`, `a`, `r`), rather than in a
-picker, so checking what goes out and choosing how stay in one window. The chosen event
-is lit in `ChangesetSelected`, the sidebar's "this is the one" tint, so no new group is
-needed. On your own PR only Comment is offered, and the event row is left out rather
-than drawn with one choice.
-
-Every glyph is borrowed: `●` in `ChangesetReviewComment` for what is sent, `○` in
-`ChangesetReviewDraft` for drafts, bodies in `ChangesetReviewCommentBody`. What is not
-content is `ChangesetMeta`: `outdated, was 12`, plain `outdated` when GitHub gave no
-original line, `file` for a file-level review comment, `draft, not included`, and the two
-empty states. Places are padded to one column so the bodies line up. Those empty states
-direct, as § Empty and failed states do: `No body. b to write one.`, and `No review
-comments. Only the body is sent.` for the review `pr start` creates. Only drafts at the
-PR's current head are listed; older-head drafts aren't drawn anywhere, so they aren't
-named here either.
-
-The title names the PR; the footer says what `<CR>` sends — `comment on #412`,
-`approve #412`, `request changes on #412` — and changes with the choice. `b` opens the
-review comment window under the body row, titled `Review body`, the preview growing to
-hold it; a save key or `q` both
-keep what was written, and a body of only whitespace is sent as none. The width fits the
-widest row between 44 and 96 columns, re-fitted as the body changes, and the height fits
-the rows.
+reaches the same hook and the caller discards it, never storing it.
 
 ### Stats
 
@@ -422,7 +375,7 @@ copy the rest. Removed lines have no position in the new file to split on, so a 
 ### Header
 
 ```text
-  origin/jt/exc-1200-stacked-parent…  ●  #412
+  origin/jt/exc-1200-stacked-parent…     #412
   4 files            2 commits  +142 -38
 
  󰴉  Implementation      2 files      +12 -3
@@ -439,19 +392,6 @@ A ref too long for the width loses its tail, never its head: stacked branches ar
 by how their names start, which is why the cut is made here rather than by the statusline's
 `%<`, which keeps the tail. The branch's open PR sits at the right edge, one blank cell in,
 while the tree is measured against the branch that PR merges into.
-
-A circle leads the PR to say whether you have a pending review on it: gray, the PR's own
-dim, with none, and green with one. `●` is the config's own current-item mark. The green
-is `DiagnosticOk`'s, a deliberate divergence from § Visual system's vocabulary rule: the
-config has no "all is well" green, and `GitSignsAdd`, the green it does use, already means
-added lines on this strip. The circle sits before the number so the number keeps its
-column when the circle arrives. It is absent whenever the number is, and until GitHub
-first answers. A later failed ask keeps the last answer, because blanking it would read as
-"the pending review is gone". It is fetched when the tree lands on a new branch or PR,
-when Neovim regains focus, and after `:Changeset pr start`, `pr submit`, `pr abandon` and
-`pr delete`, and after a review comment is saved, never on writes, since every write would
-ask GitHub.
-An answer for a PR that is no longer the tree's is dropped.
 
 The second row counts what the branch holds, the numbers lit and their nouns dimmed: files
 on the left, commits at the right beside the line totals, which end in the column the
@@ -475,19 +415,26 @@ rather than claiming that nothing changed.
  10 󰍩 end                              ● ok here ● and simplify
 ```
 
-Each review comment of the pending review is marked in its file's buffer by three things.
-Its line numbers, every line of a range, turn `ChangesetReviewComment`: the header
-circle's `DiagnosticOk` green, bold. The number column is the one margin gitsigns leaves
-alone, so the numbers sit beside the `▎` without competing for its cell, and lighting every
-number of a range shows how far the cursor can be and still reach that review comment.
-With `'number'` and `'relativenumber'` both off there is no such column, and a range shows
-only its first line's bubble and circle. At the end of its first line sits the header's `●`
-in the same green, followed by the body's first line in `ChangesetReviewCommentBody`,
-`Comment` and italic: the § Three levels "not content" idiom, since the body is not the
-file's text. Two review comments on one line show as two circles, each with its own body,
-in the order GitHub lists them; their ranges' number colours merge. The marks are drawn
-from the header circle's answer, so they appear, update and disappear when it does, and
-for the same tree.
+Each review comment is marked in its file's buffer by three things. Its line numbers, every
+line of a range, turn `ChangesetReviewComment`: `DiagnosticOk`'s green, bold, a deliberate
+divergence from § Visual system's vocabulary rule, since the config has no "all is well"
+green and `GitSignsAdd`, the green it does use, already means added lines. The number
+column is the one margin gitsigns leaves alone, so the numbers sit beside the `▎` without
+competing for its cell, and lighting every number of a range shows how far the cursor can
+be and still reach that review comment. With `'number'` and `'relativenumber'` both off
+there is no such column, and a range shows only its first line's bubble and circle. At the
+end of its first line sits `●`, the config's own current-item mark, in the same green,
+followed by the body's first line in `ChangesetReviewCommentBody`, `Comment` and italic:
+the § Three levels "not content" idiom, since the body is not the file's text. Two review
+comments on one line show as two circles, each with its own body, in the order the store
+lists them; their ranges' number colours merge.
+
+The marks are drawn in every loaded buffer of a repository with review comments, sidebar
+or not, once changeset is loaded: `plugin/changeset.lua` requires nothing, so a session
+that never uses changeset marks nothing. They are redrawn after every write to the store
+and as a file is read, and a redraw reads the store once for every buffer it draws. Stored
+line numbers never move with edits, so a file changed since a review comment was written
+shows its marks on whatever lines now hold those numbers.
 
 The third mark, a comment bubble `󰍩` in the same group, takes the sign column on the first
 line, and it is the one that does compete for a cell. It is left at the default extmark
@@ -495,36 +442,27 @@ priority, 4096, far above gitsigns' 6 and a diagnostic's 10 and up, so it covers
 sign the line had: while a review comment is open, that is what the line is about. It goes
 on the first line only. The lit numbers already show how far a range reaches, and a
 statuscolumn that draws the bubble in its fold column would lose every fold marker down a
-long range. A line gets one bubble however many review comments start on it, and a review
-comment's wins over a draft's, so the bubbles never stack. Under `'signcolumn'` `auto` they
-never widen the column, but the first bubble in a buffer with no other sign opens the
-column and shifts the text two cells. `auto:2` and wider still widen by one where a bubble
-shares its line with another sign. `yes` holds the text still.
+long range. A line gets one bubble however many review comments start on it, so the
+bubbles never stack. Under `'signcolumn'` `auto` they never widen the column, but the first
+bubble in a buffer with no other sign opens the column and shifts the text two cells.
+`auto:2` and wider still widen by one where a bubble shares its line with another sign.
+`yes` holds the text still.
 
 A statuscolumn that draws the bubble elsewhere, such as in its fold column, can't leave it
 out of `%s`, which draws every plugin's signs or none, so the bubble would show twice and
 the second copy would hide the line's `▎`. `review_comment.sign = false` keeps it out of
 the sign column. The mark stays, with `sign_hl_group` but no `sign_text`, which takes no
-cell and draws nothing. `require("changeset").bubble()` reads that group back to tell a
-review comment's bubble from a draft's, so it answers whatever the option is, and from the
-buffer's marks alone, since a statuscolumn asks on every screen row of every redraw. The
-bubbles live in a namespace of their own, `changeset.review_comment_signs`, so it finds a
-line's with one lookup. `README.md` states the function as the contract rather than the
-namespace's fields, which leaves how a mark carries its bubble free to change.
+cell and draws nothing. `require("changeset").bubble()` answers from that mark, so it
+answers whatever the option is, and from the buffer's marks alone, since a statuscolumn
+asks on every screen row of every redraw. The bubbles live in a namespace of their own,
+`changeset.review_comment_signs`, so it finds a line's with one lookup. `README.md` states
+the function as the contract rather than the namespace's fields, which leaves how a mark
+carries its bubble free to change.
 
 No icon plugin has a category to ask for a comment, so, like the header's branch glyph,
 the bubble is borrowed rather than looked up: `󰍩` is nerd-font Material `message-text`, the
 glyph the config's which-key spec gives its messages entry. Without a nerd font it draws
 as a missing-glyph box, as the header's glyphs do.
-
-A draft is marked the same way, with `󰍪`, `○` and its numbers in `ChangesetReviewDraft`,
-and its body in the same `ChangesetReviewCommentBody`. `○` is the `●`'s hollow twin and
-`󰍪` the bubble's outline twin, and the `DiagnosticInfo` blue a deliberate divergence like
-the `●`'s green: hollow and blue against the saved review comment's solid green says "only
-on this machine" at a glance, and blue because yellow already means "on loan". Drafts need
-the PR's identity and head from the header circle's answer, so they appear with it, but
-whether a pending review exists doesn't matter. A draft written against an older head
-isn't drawn, since its lines may have moved.
 
 ### Hover answers with the review comments on a line
 
@@ -535,7 +473,7 @@ cache this per root?
 
 ---
 
-**Draft · line 9 · only on this machine**
+**Review comment · line 9**
 
 and say which ref failed
 ```
@@ -548,16 +486,14 @@ server has hover for. Where its answer lands among other servers' is the hover U
 business: stock hover stacks each server's answer under a `# <name>` header. The name is
 what `README.md` gives a hover UI to sort on, so it is part of the contract.
 
-The answer is every review comment, then every draft, whose lines take in the cursor's
-line, in the order the marks draw them, each a bold heading in the review comment window's
+The answer is every review comment whose lines take in the cursor's line, in the order the
+marks draw them, each a bold heading in the review comment window's
 title vocabulary and the body as written, with `---` between them, the separator stock hover
-puts between servers. A line with none gets `nil`. It is read at request time from the same
-answer the marks draw from, so it follows them without re-attaching, and its lines are the
-PR head's, with the same caveat as the marks.
+puts between servers. A line with none gets `nil`. It is read from the store at request time, so it
+follows the marks without re-attaching, with the same caveat about edited files.
 
 A buffer is attached whenever a redraw marks it, and detached by the redraw that leaves it
-unmarked: its last review comment or draft going, the tree moving to another PR or to none,
-or GitHub's answer going away. So only a file with something to say has the client, for as
+unmarked: its last review comment going, or the review abandoned. So only a file with something to say has the client, for as
 long as its bubble shows: a file buffer only, never a `buftype` one, and one client per
 repository root. Neovim keeps a client with no buffer running, still listed by
 `:checkhealth vim.lsp`, so the detach that leaves none stops it, and the next mark starts a
@@ -577,7 +513,7 @@ Attaching is visible to the rest of Neovim:
   `didOpen` or `didChange`, and formatting, diagnostics, code actions, completion,
   symbols, inlay hints and semantic tokens pass it over. The symbol walk's wait for a server
   ends only on a client that lists symbols, so `changeset` attaching first, as it does when
-  GitHub answers mid-wait, never marks a file as having no server.
+  a review comment is written mid-wait, never marks a file as having no server.
 - In a file no other server attaches to, Neovim maps `K` to `vim.lsp.buf.hover()` unless
   `'keywordprg'` or a `K` mapping is set, so while it is attached `K` on a line with
   nothing says `No information available` instead of running `'keywordprg'`, and `grr`
@@ -590,9 +526,9 @@ Attaching is visible to the rest of Neovim:
 
 ```text
  󰍩  Comments            3 comments
- ● 󰢱 pr.lua:42  say which ref failed
- ● 󰂺 README.md  outdated, was 12  fix the typo
- ○ 󰢱 view.lua:7  cache this?
+ ● 󰢱 reviewing.lua:42  say which ref failed
+ ● 󰂺 README.md:12  fix the typo
+ ● 󰢱 view.lua:7-9  cache this?
 
  󰴉  Implementation      2 files      +12 -3
 ```
@@ -601,29 +537,23 @@ The marks in the files show a review comment where you read, but finding the one
 wrote means visiting every file. So the sidebar lists them in a section of their own, first,
 above Implementation: they are what you come back to. It is a section of another kind. It
 classifies no file, so its rows are not file rows, and it holds every review comment of the
-pending review and every draft of the PR at its current head, one row each, by path and
-then line, a review comment ahead of a draft on its line.
+tree's repository, one row each, by path and then line.
 
 Its header follows § Sections: an icon, the label, and a count of its rows in the meta
 colour, taken before any filter. The icon is the marks' bubble, `󰍩`, borrowed as they
 borrow it and drawn in `ChangesetReviewComment`. It carries no `+N -N`: a review comment
 changes no line, so a stat there would mean nothing.
 
-A row speaks the marks' language. Their circle stands in the rail's column, `●` in
-`ChangesetReviewComment` for a review comment and `○` in `ChangesetReviewDraft` for a draft,
-so solid green still means "on GitHub" and hollow blue "only on this machine". The file's
-icon follows, then its name and the line or range. The directory is left out, as the
-preview band and `y` both carry the whole path. The body's first line comes last, in
-`ChangesetReviewCommentBody` like the marks' body, clipped to fit. An outdated review
-comment, whose line GitHub no longer knows, still gets a row, with `outdated, was 12` in
-the meta colour in place of a line, and a file-level one reads `file`, as the submit
-preview says it.
+A row speaks the marks' language. Their circle, `●` in `ChangesetReviewComment`, stands in
+the rail's column. The file's icon follows, then its name and the line or range. The
+directory is left out, as the preview band and `y` both carry the whole path. The body's
+first line comes last, in `ChangesetReviewCommentBody` like the marks' body, clipped to fit.
 
-The section draws from the same answer the marks do, `pending_state` for the tree's PR and
-`drafts.list`, so it shows only while the tree is measured against an open PR, and is left
-out while it lists nothing. It follows that answer and every draft kept or dropped by
+The section is read from the store each time the sidebar draws, so it needs no PR and no
+wait, and is left out while it lists nothing. It follows every write to the store by
 redrawing alone; the diff is never read again for it. A redraw keeps what each row was last
-drawn from, so moving the cursor reads no drafts from disk.
+drawn from, so moving the cursor reads nothing from disk. A row's id is its path and range,
+so a restored session lands on it as soon as the diff is in.
 
 Being no file, its rows stay out of what counts files. The footer names no file on one,
 "you are here" never lands on one, `H` and `L` leave its rows and its fold alone, and the
@@ -633,19 +563,9 @@ stop on its header, a filter matches a row by its path, moving onto one previews
 `y` copies its `path:line`, and opening one marks it as the pick.
 
 A row is for finding what you wrote, so its keys act on that. `<CR>` and the split and tab
-keys jump to its line, then open it in the review comment window. A draft reopens as
-`:Changeset pr comment` reopens one, the exact draft the row lists even when a narrower one
-ends on its line. A review comment opens editable, its title, keys' descriptions and
-footer saying edit and update, and a save sends GitHub the new body. `d` asks through the
-same No/Yes question `pr abandon` uses, then deletes; a review comment goes through the
-same progress and refetch as `pr delete`, which shares the deletion. A draft lives only on
-this machine, so it is dropped under the PR of GitHub's last answer, the one the section
-was drawn from, without asking gh again.
-
-An outdated or file-level review comment opens no window. The window lies under a line
-the review comment is about, and GitHub knows none for it: an outdated one's `original_line`
-counts lines of a commit the file has moved on from, so a window there would sit under
-some other text. Its row jumps to the file and says why; `d` still deletes it.
+keys jump to its line, then open it editable in the review comment window, its title and
+keys' descriptions saying edit and update. `d` asks through the same No/Yes question
+`:Changeset abandon` uses, then deletes it.
 
 ### Footer
 
@@ -763,13 +683,11 @@ own.
 
 The PR stays on the tree only while its target is the parent, or while HEAD forks from
 its target at the parent's fork point, as it does once the parent is merged into the
-target with a merge commit, or while the parent has no commits of its own. A review
-comment can only go on lines in the PR's diff, and `commentable` checks the tree's hunks,
-which match the PR's only when both are measured from the same commit. A branch whose PR
-targets a branch forking elsewhere keeps its parent and loses the PR's number, circle,
-marks and `pr comment`. Showing
-the PR there would offer lines GitHub refuses and hide lines it accepts. Retargeting the
-PR, or deleting a parent that has merged, brings them back.
+target with a merge commit, or while the parent has no commits of its own. The header
+names the PR as the diff the sidebar shows, and the two match only when both are measured
+from the same commit. A branch whose PR targets a branch forking elsewhere keeps its
+parent and loses the PR's number. Retargeting the PR, or deleting a parent that has
+merged, brings it back.
 
 A parent guessed from the refs, such as the branch whose tip is nearest, isn't tried. It
 costs a merge-base per branch on every build, and any branch sharing that history can
@@ -799,8 +717,7 @@ per-buffer `GitSignsUpdate` is not one of them. It fires on every attach and eve
 change while typing, none of which moves a diff git reads from disk, and the symbol walk's
 own buffer loads would fire it too, restarting the walk they came from. Any of these that
 finds HEAD on another branch with a fork point rebuilds the tree for that branch instead,
-so the header, its circle and the review comment marks follow a switch made outside the
-sidebar. A detached HEAD, as in a stopped rebase or a bisect, only refreshes.
+so the header follows a switch made outside the sidebar. A detached HEAD, as in a stopped rebase or a bisect, only refreshes.
 
 Asking a language server about every changed file is what makes a cold build slow: 28
 files took about nine seconds in the config the plugin was extracted from, and the tree
@@ -838,36 +755,14 @@ repository's deliberate choice is none of that save's business.
 
 ## Behaviour that is easy to get wrong
 
-- **A refused review comment keeps the window and its text.** Only a save GitHub accepted
-  closes it, so a refusal can be fixed and saved again rather than retyped.
-- **An edit closed without a save keeps no draft.** A draft is keyed by path, lines and
-  head, and reopens through `pr comment` as a new review comment, so keeping one would
-  turn the edit into a duplicate. The review comment keeps its saved text on GitHub, so
-  only the edit is lost, and a changed one says so. Closing it with only whitespace, by a
-  save key or any other close, asks to delete it instead, since an empty body is never
-  sent.
+- **An edit closed without a save drops the edit.** The review comment keeps its saved
+  text, and a changed one says so. Closing it with only whitespace, by a save key or any
+  other close, asks to delete it instead, since an empty review comment is never kept.
 - **A saved review comment leaves insert mode before the window closes.** The save keys
   are pressed while typing and the answer comes later. `stopinsert` only takes effect on
   the next loop iteration, so the window closes on the float's own `InsertLeave`; closing
   sooner ends insert mode in the user's file, nudging its cursor left and firing its
   `InsertLeave`.
-- **Opening the review comment window asks GitHub nothing once it has answered.** It reads
-  the PR's head and pending review from GitHub's last answer, so right after a push made
-  inside Neovim it can refuse the file as differing from the head until
-  `:Changeset pr start` or regaining focus refetches. Only before GitHub's first answer for
-  the PR does it ask. After any wait, on GitHub or on the question that starts a pending
-  review, it opens only if the cursor is still in that file.
-- **A review comment can be written while its pending review starts.** Starting one from
-  `pr comment` opens the window at once rather than after GitHub answers, so typing never
-  waits on the network; only the save does. GitHub refuses a second pending review, so a
-  refused start finds the PR's pending review again and saves into the one it finds.
-- **Closing the submit preview from inside it returns focus to where it opened from.**
-  Closing the body float leaves `prevwin` on the preview, so once the preview closes too
-  Neovim would fall back to the first window. A close while focus is elsewhere leaves it
-  there.
-- **Closing the submit preview closes its body float.** By any route, and the float's
-  callbacks are ignored from then on: a `relative = "win"` float outlives its anchor, and
-  its keep would redraw a wiped buffer.
 - **`<C-s>` saves alongside `<C-CR>`** because many terminals never send `<C-CR>`.
 - **A float is never clipped to the window it is anchored to.** Scrolled off its line, the
   review comment window would sit at the source's edge over other text, or past it over
@@ -878,13 +773,9 @@ repository's deliberate choice is none of that save's business.
 - **`WinScrolled` names only the first window that changed.** The review comment window
   re-places itself on every one, whichever window it names, or a resize that changed
   another window first would leave it misplaced.
-- **Replacing every line of a buffer carries its extmarks to the end.** The submit preview
-  redraws that way, so the review comment window puts its room back under its line after
-  every change to the source.
-- **Progress runs only while gh is asked.** A `pr` verb's progress message ends as soon as
-  GitHub answers the find, before the verb decides anything, and each change gets one of
-  its own. So a verb that answers without asking more leaves none running, and none spins
-  under a question or the submit preview, where the wait is the user's.
+- **Replacing every line of a buffer carries its extmarks to the end.** A source redrawn
+  that way would carry the review comment window's room with it, so the window puts its
+  room back under its line after every change to the source.
 - **A file cached before its parser was installed keeps just the name rules** until it
   next changes: its entry was read without the syntax layer, and its stamp still matches.
   Its comment lines are missing too, so its comment-only changes stay out of Docs. A moved

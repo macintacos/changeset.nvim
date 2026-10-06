@@ -20,7 +20,7 @@ which the type check cannot follow.
 
 `bubble()` in `lua/changeset/init.lua` is public for a user's `'statuscolumn'`, which calls
 it on every screen row of every redraw. It answers from the buffer's extmarks alone, never
-from the drafts file, GitHub or the tree.
+from the comments file or the tree.
 
 ## Adding an option
 
@@ -38,7 +38,7 @@ later `setup()` call reaches it.
 
 ## Documenting a name
 
-`tests/docs_spec.lua` fails until every option, `:Changeset` subcommand and verb
-(`:Changeset pr start`), `<Plug>` map and highlight group appears in the vimdoc. The
+`tests/docs_spec.lua` fails until every option, `:Changeset` subcommand, `<Plug>` map and
+highlight group appears in the vimdoc. The
 highlight groups are the `Changeset*` names in `lua/changeset/render.lua`. Add each new
 name to the README, then run `mise run docs`.
