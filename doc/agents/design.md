@@ -728,8 +728,9 @@ moment that window takes focus or a buffer.
 ### `<C-g>n` opens where `]h` previews
 
 `keymaps.next` / `keymaps.prev` (`]h` / `[h`) and `<C-g>n` / `<C-g>p` step over the same
-rows, but they answer different questions. `]h` asks "what's next?" and only previews, so
-the window wears a band and `q` takes it back. `<C-g>n` means "take me there". It opens the
+rows, in the sidebar's order, which isn't always line order: a file's "Other changes" sort
+after its symbols. They answer different questions. `]h` asks "what's next?" and only
+previews, so the window wears a band and `q` takes it back. `<C-g>n` means "take me there". It opens the
 row as `<CR>` does, adding a jumplist entry, so walking a branch feels like moving through
 your own window rather than through a preview. It keeps focus where you pressed it. It
 skips a Comments row's review comment window, because a float on every step would break

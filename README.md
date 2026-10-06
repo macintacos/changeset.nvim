@@ -139,7 +139,8 @@ subcommand:
 A key you have already mapped in that mode is left alone. Set
 `vim.g.changeset_no_default_maps = true` anywhere in your config to map none of them. With
 them mapped, `<C-g>` on its own (`:file`) and visual mode's `<C-g>` (Select mode) wait
-`'timeoutlen'` for a second key. `<C-g>c` followed by a pause comments, as `<C-g>cc` does.
+`'timeoutlen'` for a second key. Unless you map a key of your own under `<C-g>c`, changeset
+maps `<C-g>c` itself too, so `<C-g>c` followed by a pause comments, as `<C-g>cc` does.
 
 `<C-g>n` and `<C-g>p` move the sidebar's selected row to the next or previous place and
 open it as `<CR>` does, without opening a Comments row's review comment. Section headers
@@ -150,7 +151,9 @@ file you stay in its window, which now shows the next place. From the sidebar, t
 opens in the window it opens changes in, and focus stays on the sidebar. From a window
 that holds no file, such as the quickfix list, help or a float, the row opens in the
 window before it, and focus goes there. A count moves that many places. When no row that
-way opens anywhere new, they stay put and say so, rather than wrapping.
+way opens anywhere new, they stay put and say so, rather than wrapping. They follow the
+sidebar's order of rows, which isn't always the order of lines in a file: a file's "Other
+changes" come after its symbols.
 
 With the sidebar closed, they open it without focusing it, on the row for where you are.
 Until the changes and your file's symbols are read, the step waits and is taken once they
