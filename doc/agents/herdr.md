@@ -19,12 +19,13 @@ call.
 | `herdr agent focus <pane_id>`          | nothing                                                   |
 
 An agent entry carries `agent`, `agent_status`, `pane_id`, `tab_id`, `workspace_id`,
-`title`, `cwd` and `focused`. herdr leaves `name`, `display_agent` and `state_labels`, a
+`title`, `cwd` and `focused`. `agent_status` is `idle`, `working`, `blocked`, `done` or
+`unknown`; `idle` and `done` both mean the agent is ready for input. herdr leaves `name`, `display_agent` and `state_labels`, a
 `{status = label}` map, out of an entry until something sets them, so changeset reads each
 as optional.
 
 `tab list` runs only when the user must pick between several agents, and only for the tab
-labels in the picker rows. A failed one leaves the rows without a tab.
+labels the agent picker shows. A failed one leaves the picker's tab column blank.
 
 ## Workspace scoping
 
@@ -45,7 +46,8 @@ truthy.
 herdr has no atomic send-if-ready, and a pick can be minutes old, so changeset reads
 `agent list` again right before writing. A pane that is gone means the agent closed. An
 `agent_status` of `blocked` means the agent is at a permission prompt, which silently
-drops a paste, so changeset refuses until the user answers it. Every other status sends:
+drops a paste, so changeset refuses until the user answers it. The picker already won't
+pick a blocked agent, but the check still runs, since the list it drew can be minutes old. Every other status sends:
 a paste during a `working` turn waits in the input.
 
 ## The paste

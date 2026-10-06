@@ -358,6 +358,67 @@ only leaves insert mode, so a habitual `<Esc>` on the way to normal mode never c
 A save of only whitespace is no save: it closes the window like `q`, so the blank text
 reaches the same hook and the caller discards it, never storing it.
 
+### Dialogs ask in floats of changeset's own
+
+```text
+╭ Delete the review comment ──────────────╮
+│                                         │
+│  lua/changeset/git.lua:12-13            │
+│  ▎ Why read the reflog rather than the  │
+│  ▎ config?                              │
+│                                         │
+│                     Keep      Delete    │
+│                                         │
+╰─────────────────────────────────────────╯
+
+╭ Send the review ───────────────────────────────────────╮
+│▌ 1  ● claude   idle     󰎤 parser  Fix the parser       │
+│  2  ● codex    working  󰎧 tests   run the suite        │
+│  3  ● claude   blocked  answer its prompt first        │
+╰ <CR> or 1-3 send  q cancel ────────────────────────────╯
+```
+
+The question before a deletion and the choice of agent for `:Changeset submit` are floats
+`changeset.dialog` draws, not `vim.ui.select`: a picker such as mini.pick turns a question
+into a fuzzy list under a prompt, which reads as a search rather than a decision. Neovim
+0.12's experimental `ui2` gives plugins no dialog to build on, as it only redraws
+`confirm()`, `input()` and messages, so the dialogs use plain float features and look the
+same with it on or off. Their `zindex`, 150, is above other floats and the popup menu and
+below the command line and `ui2`'s message windows, so a message raised while one is open
+still shows.
+
+Both are centred on the editor, sized to their content and modal, in `NormalFloat` with a
+rounded border, as the kind menu and the review comment window are. The border does the
+labelling: the title names the action in the words its button and the notification after
+it use, as in "Delete the review comment", Delete, "deleted the review comment".
+
+The question names what goes rather than asking yes or no, so the user recognises it before
+it goes. Deleting a review comment quotes it: its place as the Comments row writes it, cut
+from the front in a narrow editor since the file name matters most, then up to four lines
+of its body behind the marks' `▎` in their green. Abandoning counts what goes. Two buttons
+sit bottom right, safe first: Keep, then the verb in `DiagnosticError`'s colour. Each is a
+padded pill cut from the editor's own background, where the theme keeps text and its error
+colour legible; where the float shares that background, the float's is shaded toward its
+text instead. The focused one is reversed and bold, the only bold in a dialog, in the
+accent the sidebar's selection uses, or in the error colour for the verb. Focus starts on
+Keep, so an Enter typed ahead keeps. Each label's first letter is underlined and presses
+it. Delete's is `d`, the sidebar's default delete key too, so `dd` on a Comments row deletes
+without a look: the question catches a stray `d`, not a deliberate one.
+
+The picker lines its rows up in columns, a row's last cell running free. Each row leads with
+its number, which a digit presses, and a `●` in its status's colour: idle and done in
+`DiagnosticOk`, working in `DiagnosticWarn`, blocked in `DiagnosticError`, anything else in
+the meta colour. The focused row wears the sidebar's selection tint, mixed over the float's
+background rather than Normal's, since no colorscheme checked paints the two alike, and a
+`▌` in the accent at its left edge, where a list is read from. An agent at a permission
+prompt is listed dimmed, saying why, and can't be picked.
+
+The cursor is hidden while a dialog has focus: the focus is drawn, and the cursor would only
+cover it. It hides through a `'guicursor'` entry of its own, `n:ChangesetNoCursor`, apart
+from the sidebar's `n-v` one, so neither removes the other's. Leaving the window any other
+way cancels. Every close gives focus back to the window the dialog opened from before the
+answer runs, so whatever the answer opens or focuses is not undone by the close.
+
 ### Stats
 
 Right-aligned virtual text, `+N` in `GitSignsAdd`, `-N` in `GitSignsDelete`. Numbers, not
@@ -538,13 +599,16 @@ and body and drops the fence rather than quoting the wrong lines.
 The paste is left unsent and the agent's pane focused. The review is the start of a
 conversation, not all of it: the user adds what the comments don't say, such as what to
 fix first, and presses Enter. With one agent in the workspace it goes there; with several,
-`vim.ui.select` picks, so the user never routes a review to an agent they can't see.
+the agent picker of § Dialogs asks, so the user never routes a review to an agent they can't
+see.
 
 The review comments are deleted once the paste lands, because the agent now holds them and
 a later submit would paste them twice. Only the ones sent go: one written, or edited, while
 the picker was open stays for the next review. A refusal keeps them all. An agent at a
 permission prompt refuses, since herdr would drop the paste there without a word, and a
-review that vanished into a prompt would read as delivered. A cancelled pick says nothing.
+review that vanished into a prompt would read as delivered. The picker lists one but won't
+pick it, and delivery checks again, since a pick can be minutes old. A cancelled pick says
+nothing.
 
 ### The Comments section lists what you wrote
 
@@ -588,8 +652,8 @@ stop on its header, a filter matches a row by its path, moving onto one previews
 
 A row is for finding what you wrote, so its keys act on that. `<CR>` and the split and tab
 keys jump to its line, then open it editable in the review comment window, its title and
-keys' descriptions saying edit and update. `d` asks through the same No/Yes question
-`:Changeset abandon` uses, then deletes it.
+keys' descriptions saying edit and update. `d` asks first, in the question of § Dialogs that
+`:Changeset abandon` uses too, then deletes it.
 
 ### Footer
 

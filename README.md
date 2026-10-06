@@ -201,16 +201,24 @@ sidebar, a PR or `gh`.
   When several take in that line, it deletes the narrowest; run it again for the next.
   When the line has none, it says so. In a modified buffer it asks you to save first:
   marks move with unsaved edits, while delete goes by line number.
-- `:Changeset abandon` asks you to confirm, then deletes every review comment of the
-  repository. The question goes through `vim.ui.select`, so mini.pick or another picker
-  that replaces it shows it. With none, it says so.
+- `:Changeset abandon` asks first, then deletes every review comment of the repository.
+  With none, it says so.
 - `:Changeset submit` needs Neovim running in a herdr pane. It sends
-  the review straight to the only AI agent in the workspace, and with several offers a
-  picker through `vim.ui.select`, which mini.pick draws. It pastes the review into that
-  agent's prompt without sending it, so you can add context before pressing Enter, and
-  focuses the agent. The review comments are deleted once they are sent; one written while
-  the picker is open stays. An agent waiting at a permission prompt refuses the paste until
-  you answer it, and the review comments stay. With none, it says so.
+  the review straight to the only AI agent in the workspace, and with several asks which,
+  listing each with its status, tab and title. It pastes the review into that agent's
+  prompt without sending it, so you can add context before pressing Enter, and focuses the
+  agent. The review comments are deleted once they are sent; one written while the picker
+  is open stays. An agent waiting at a permission prompt can't be picked, and one that
+  reaches a prompt after the pick refuses the paste until you answer it; the review
+  comments stay. With none, it says so.
+
+These questions are changeset's own floats, centred on the editor. One before deleting names
+what goes and offers two buttons, Keep and the verb: focus starts on Keep, so an Enter typed
+ahead deletes nothing. `<Tab>`, `<S-Tab>`, `h` and `l` move between them, `<CR>` or
+`<Space>` presses the focused one, its underlined letter presses it directly, and so does a
+click; `q` or `<Esc>` keeps. The agent picker numbers its rows: `j` and `k` move, `<CR>` or a
+row's number sends, and `q` or `<Esc>` cancels without a word. Leaving either window any
+other way cancels it.
 
 The pasted review holds a block per review comment, by file and then line, each naming
 its place, quoting its lines as they are now, unsaved edits included, and ending with its
