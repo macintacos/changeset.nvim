@@ -127,7 +127,8 @@ sidebar closes it. It takes one optional subcommand:
 - `:Changeset next` / `:Changeset prev` jump to the next / previous
     review comment |changeset.nvim-review-comments|.
 - `:Changeset list` puts the |changeset.nvim-review-comments| in the quickfix list.
-- `:Changeset yank` copies the review to the clipboard as text.
+- `:Changeset yank` copies the review to the clipboard as text, or to the unnamed register
+    when Neovim has no clipboard provider.
 
 The sidebar opens on the right of the editor. When the editor is too narrow to
 leave the files `layout.min_file_width` columns (80 by default) beside it, the
@@ -154,7 +155,7 @@ runs its subcommand:
 
   <C-g>y     normal     <Plug>(changeset-yank)      copy the review as text
 
-  <C-g>s     normal     <Plug>(changeset-submit)    send the review to an agent
+  <C-g>s     normal     <Plug>(changeset-submit)    submit the review to an agent
 
   <C-g>a     normal     <Plug>(changeset-abandon)   abandon the review
 
@@ -341,10 +342,19 @@ move, `<CR>` or a row’s number submits, and `q` or `<Esc>` cancels without a
 word. Leaving either window any other way cancels it.
 
 `:Changeset next` and `:Changeset prev` walk the review comments by file and
-then line, from the cursor, wrapping at either end, and skip any whose file is
-gone. `:Changeset list` puts them in the quickfix list, replacing the list it
-made last time. `:Changeset yank` copies the review, as `:Changeset submit`
-would paste it, and keeps the review comments.
+then line, wrapping at either end, and skip any whose file is gone. From a file
+they start at the cursor; from the sidebar, at the first or last review
+comment; from a window that holds no file, such as the quickfix list, in the
+window before it. Like the other verbs, they refuse while the file you are in,
+or the one they would open, has unsaved edits.
+
+`:Changeset list` puts every review comment in the quickfix list, those whose
+file is gone included. Run again while that list is still the current one, it
+replaces it; otherwise it adds a new list.
+
+`:Changeset yank` copies the review, as `:Changeset submit` would paste it, and
+keeps the review comments. Without a clipboard provider it copies to the
+unnamed register and says so.
 
 The pasted review holds a block per review comment, by file and then line, each
 naming its place, quoting its lines as they are now, unsaved edits included,

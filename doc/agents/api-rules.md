@@ -10,8 +10,8 @@ it is a breaking change.
 
 `plugin/changeset.lua` requires no `changeset.*` module when it loads, because those
 modules create their autocmds as they load, and a session that never opens the sidebar
-should create none. Its maps run `<Cmd>Changeset …<CR>` rather than a function for the
-same reason.
+should create none. Its maps run `<Cmd>Changeset …<CR>`, so a map and the command take
+one route through `:Changeset`, with its range.
 
 Every subcommand has a `<Plug>(changeset-<subcommand>)` map. The global keys are defaults
 under `<C-g>`, mapped once startup is done. Each one is skipped when its key is already
