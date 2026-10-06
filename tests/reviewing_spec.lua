@@ -113,6 +113,64 @@ describe("changeset.reviewing", function()
       assert.equal("old", window().body)
     end)
 
+    it("opens a new comment on a selected range whose last line another comment covers", function()
+      edit_file()
+      comment_store.keep(dir, comment({ line = 5 }))
+
+      reviewing.comment(3, 5)
+
+      assert.is_nil(window().body)
+      window().save("range", function() end)
+      assert.equal(2, #comment_store.list(dir))
+    end)
+
+    it("reopens the comment on exactly the selected range", function()
+      edit_file()
+      comment_store.keep(dir, comment({ line = 5 }))
+      comment_store.keep(dir, comment({ start_line = 3, line = 5, body = "range" }))
+
+      reviewing.comment(3, 5)
+
+      assert.equal("range", window().body)
+    end)
+
+    it("refuses in a modified buffer", function()
+      edit_file()
+      vim.api.nvim_buf_set_lines(0, 0, 0, false, { "new" })
+
+      reviewing.comment(4, 4)
+
+      assert.same({}, windows)
+      assert.equal(vim.log.levels.WARN, notes[1].level)
+    end)
+
+    it("keeps the window open when the comment can't be stored", function()
+      edit_file()
+      vim.fn.mkdir(vim.fs.dirname(comment_store.path()), "p")
+      vim.fn.writefile({ "[1,2]" }, comment_store.path())
+
+      reviewing.comment(4, 4)
+      local err
+      window().save("lost?", function(e)
+        err = e
+      end)
+
+      os.remove(comment_store.path())
+      assert.is_not_nil(err)
+      assert.equal(vim.log.levels.ERROR, notes[1].level)
+    end)
+
+    it("keeps a comment saved on the range meanwhile when closed blank", function()
+      edit_file()
+      reviewing.comment(4, 4)
+      local first = window()
+      comment_store.keep(dir, comment({ body = "saved meanwhile" }))
+
+      first.keep("")
+
+      assert.same({ comment({ body = "saved meanwhile" }) }, comment_store.list(dir))
+    end)
+
     it("refuses a buffer that isn't a file, naming the repository", function()
       edit_file()
       vim.cmd.enew()
@@ -151,6 +209,21 @@ describe("changeset.reviewing", function()
 
       assert.equal(1, #prompts)
       assert.same({}, comment_store.list(dir))
+    end)
+
+    it("keeps the edit window open when the comment can't be stored", function()
+      edit_file()
+      comment_store.keep(dir, comment())
+      reviewing.open(comment())
+      vim.fn.writefile({ "[1,2]" }, comment_store.path())
+
+      local err
+      window().save("new", function(e)
+        err = e
+      end)
+
+      os.remove(comment_store.path())
+      assert.is_not_nil(err)
     end)
 
     it("drops an edit closed without saving, and says so", function()
@@ -303,6 +376,14 @@ describe("changeset.reviewing", function()
       )
     end)
 
+    it("fences lines holding a fence with one more backtick than their longest run", function()
+      local text = reviewing._review_text({ { path = "a.md", line = 2, start_line = 1, body = "b" } }, function()
+        return { "````lua", "x" }
+      end)
+
+      assert.equal("a.md:1-2\n`````markdown\n````lua\nx\n`````\nb", text)
+    end)
+
     it("leaves the fence's language empty for a file type it can't tell", function()
       local text = reviewing._review_text({ { path = "notes.zzqq", line = 1, body = "b" } }, read)
 
@@ -335,6 +416,32 @@ describe("changeset.reviewing", function()
       reviewing.submit()
 
       assert.equal("a.lua:4\n```lua\nunsaved\n```\nhi", sent[1])
+    end)
+
+    it("quotes an unloaded file from disk beside a loaded file whose name it prefixes", function()
+      edit_file()
+      vim.fn.writefile({ "js 1", "js 2", "js 3", "js 4" }, dir .. "/index.js")
+      vim.fn.writefile({ "json 1", "json 2", "json 3", "json 4" }, dir .. "/index.json")
+      vim.cmd.edit(dir .. "/index.json")
+      comment_store.keep(dir, comment({ path = "index.js" }))
+
+      reviewing.submit()
+
+      assert.equal("index.js:4\n```javascript\njs 4\n```\nhi", sent[1])
+    end)
+
+    it("warns that the sent comments are still listed when they can't be removed", function()
+      edit_file()
+      comment_store.keep(dir, comment())
+      package.loaded["changeset.herdr"].send = function(_, cb)
+        vim.fn.writefile({ "[1,2]" }, comment_store.path())
+        cb(nil, "claude")
+      end
+
+      reviewing.submit()
+
+      os.remove(comment_store.path())
+      assert.equal(vim.log.levels.WARN, notes[#notes].level)
     end)
 
     it("drops the fence for a file that is gone", function()

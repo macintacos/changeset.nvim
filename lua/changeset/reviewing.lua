@@ -56,11 +56,16 @@ end
 
 ---@param repository string
 ---@param comment changeset.ReviewComment
+---@return string? err Why it wasn't kept, already reported.
 local function keep(repository, comment)
   if not comment_store.keep(repository, comment) then
     say(vim.log.levels.ERROR, "can't keep the review comment in %s", comment_store.path())
+    return "not kept"
   end
 end
+
+-- Extmarks move with edits while stored lines don't, so in a modified buffer a verb could act on the wrong line.
+local UNSAVED = "save the file first: marks move with unsaved edits, review comments don't"
 
 ---Asks, then deletes `comment` of the current buffer's repository.
 ---@param comment changeset.ReviewComment
@@ -102,8 +107,7 @@ function M.open(comment)
       end
     end,
     save = function(body, done)
-      keep(repository, vim.tbl_extend("force", comment, { body = body }))
-      done()
+      done(keep(repository, vim.tbl_extend("force", comment, { body = body })))
     end,
   })
 end
@@ -126,8 +130,9 @@ local function file_path(repository)
   return vim.bo.buftype == "" and name ~= "" and vim.fs.relpath(repository, vim.fs.normalize(name)) or nil
 end
 
----Opens the review comment window under line `last` of the current buffer, for lines `first` to `last`, or the
----comment already covering line `last` to edit it. Closing a new one keeps its text, so nothing typed is lost.
+---Opens the review comment window under line `last` of the current buffer, for lines `first` to `last`, or an
+---existing comment to edit: for a range, the one on exactly that range; for one line, the narrowest covering it.
+---Closing a new one keeps its text, so nothing typed is lost.
 ---@param first integer
 ---@param last integer
 function M.comment(first, last)
@@ -136,7 +141,17 @@ function M.comment(first, last)
   if not path then
     return say(vim.log.levels.WARN, "run `:Changeset comment` from a file in %s", repository)
   end
-  local existing = at(repository, path, last)
+  if vim.bo.modified then
+    return say(vim.log.levels.WARN, UNSAVED)
+  end
+  local existing
+  if first < last then
+    existing = vim.iter(comment_store.list(repository)):find(function(comment)
+      return comment.path == path and comment.start_line == first and comment.line == last
+    end)
+  else
+    existing = at(repository, path, last)
+  end
   if existing then
     return M.open(existing)
   end
@@ -153,20 +168,21 @@ function M.comment(first, last)
     footer = FOOTER,
     keys = config.get().review_comment.save,
     keep = function(body)
-      keep(repository, comment_of(body))
+      -- A blank keep would drop whatever was saved on this range meanwhile.
+      if body:find("%S") then
+        keep(repository, comment_of(body))
+      end
     end,
     save = function(body, done)
-      keep(repository, comment_of(body))
-      done()
+      done(keep(repository, comment_of(body)))
     end,
   })
 end
 
 ---Deletes the review comment on the cursor's line, the narrowest of those covering it.
 function M.delete()
-  -- Extmarks move with edits while stored lines don't, so a modified buffer could delete the wrong one.
   if vim.bo.modified then
-    return say(vim.log.levels.WARN, "save the file first: marks move with unsaved edits, review comments don't")
+    return say(vim.log.levels.WARN, UNSAVED)
   end
   local repository = Paths.root(0)
   local path = file_path(repository)
@@ -197,6 +213,19 @@ end
 ---Lines `first` to `last` of a file; nil when they can't all be read.
 ---@alias changeset.reviewing.ReadLines fun(path: string, first: integer, last: integer): string[]?
 
+---The longest run of backticks in `lines`, at least 2, so a fence one longer is at least 3.
+---@param lines string[]
+---@return integer
+local function longest_backticks(lines)
+  local longest = 2
+  for _, line in ipairs(lines) do
+    for run in line:gmatch("`+") do
+      longest = math.max(longest, #run)
+    end
+  end
+  return longest
+end
+
 ---One comment's block: its place, its lines fenced in the file's language, and its body.
 ---@param comment changeset.ReviewComment
 ---@param read changeset.reviewing.ReadLines
@@ -208,9 +237,10 @@ local function block(comment, read)
   local parts = { location }
   local lines = read(comment.path, first, comment.line)
   if lines then
-    parts[#parts + 1] = "```" .. (vim.filetype.match({ filename = comment.path }) or "")
+    local fence = ("`"):rep(longest_backticks(lines) + 1)
+    parts[#parts + 1] = fence .. (vim.filetype.match({ filename = comment.path }) or "")
     vim.list_extend(parts, lines)
-    parts[#parts + 1] = "```"
+    parts[#parts + 1] = fence
   end
   parts[#parts + 1] = (comment.body:gsub("%s+$", ""))
   return table.concat(parts, "\n")
@@ -242,9 +272,12 @@ end
 local function reader(repository)
   return function(path, first, last)
     local full = vim.fs.joinpath(repository, path)
-    local buf = vim.fn.bufnr(full)
+    -- Not `bufnr(full)`: it takes a pattern, and settles for another file whose name `full` prefixes.
+    local buf = vim.iter(vim.api.nvim_list_bufs()):find(function(b)
+      return vim.api.nvim_buf_is_loaded(b) and vim.fs.normalize(vim.api.nvim_buf_get_name(b)) == full
+    end)
     local lines
-    if buf ~= -1 and vim.api.nvim_buf_is_loaded(buf) then
+    if buf then
       lines = vim.api.nvim_buf_get_lines(buf, first - 1, last, false)
     else
       local ok, read = pcall(vim.fn.readfile, full, "", last)
@@ -270,17 +303,17 @@ function M.submit()
     if not agent then
       return
     end
-    local sent = {}
-    for _, comment in ipairs(comments) do
-      sent[vim.json.encode(comment)] = true
-    end
-    -- Only what went: a comment written or edited while the pick was open stays.
-    for _, comment in ipairs(comment_store.list(repository)) do
-      if sent[vim.json.encode(comment)] then
-        comment_store.drop(repository, comment)
-      end
-    end
     local count = #comments == 1 and "1 comment" or ("%d comments"):format(#comments)
+    -- Only what went: a comment written or edited while the pick was open stays.
+    if not comment_store.drop_each(repository, comments) then
+      return say(
+        vim.log.levels.WARN,
+        "sent the review's %s to %s, but they are still listed: can't remove them from %s",
+        count,
+        agent,
+        comment_store.path()
+      )
+    end
     say(vim.log.levels.INFO, "sent the review's %s to %s", count, agent)
   end)
 end

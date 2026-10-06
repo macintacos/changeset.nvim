@@ -275,7 +275,9 @@ or `:Changeset abandon` ends it. None of this needs the sidebar, a PR or `gh`.
     selection and comments on the selected lines. The keys in `review_comment.save`,
     `<C-CR>` or `<C-s>` by default, keep it and close the window. Closing it with `q`,
     `<S-Esc>` or `:q`, or quitting Neovim with it open, keeps its text too; empty text keeps
-    nothing. On a line a review comment already covers, it opens that one to edit instead.
+    nothing. It opens a review comment already there to edit instead: on one line, the
+    narrowest that covers it; on a selection, only one on exactly the selected lines. In a
+    modified buffer it asks you to save first, as `:Changeset delete` does.
 - `:Changeset delete` deletes the review comment on the cursor’s line, without asking.
     When several take in that line, it deletes the narrowest; run it again for the next.
     When the line has none, it says so. In a modified buffer it asks you to save first:
