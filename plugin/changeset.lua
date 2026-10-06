@@ -33,10 +33,16 @@ local subcommands = {
     require("changeset.reviewing").submit()
   end,
   next = function()
-    require("changeset.reviewing").next()
+    require("changeset").step(1)
   end,
   prev = function()
-    require("changeset.reviewing").prev()
+    require("changeset").step(-1)
+  end,
+  ["next-comment"] = function()
+    require("changeset.reviewing").next_comment(1)
+  end,
+  ["prev-comment"] = function()
+    require("changeset.reviewing").prev_comment(1)
   end,
   list = function()
     require("changeset.reviewing").list()
@@ -56,7 +62,7 @@ end, {
   nargs = "?",
   range = true,
   bar = true,
-  desc = "Toggle the changeset sidebar, rebuild it, toggle PR Review Mode, or write, delete, walk, list, copy, abandon or submit review comments",
+  desc = "Toggle the changeset sidebar, rebuild it, toggle PR Review Mode, step through and open its changes, or write, delete, walk, list, copy, abandon or submit review comments",
   complete = function(lead)
     local names = vim.tbl_filter(function(name)
       return vim.startswith(name, lead)
@@ -68,10 +74,12 @@ end, {
 
 ---Each subcommand's default key under `<C-g>`, and what it does.
 local keys = {
-  { "c", "comment", "Comment on this line, or the selection, or edit the comment there", { "n", "x" } },
+  { "cc", "comment", "Comment on this line, or the selection, or edit the comment there", { "n", "x" } },
+  { "cn", "next-comment", "Next review comment" },
+  { "cp", "prev-comment", "Previous review comment" },
   { "d", "delete", "Delete the review comment on this line" },
-  { "n", "next", "Next review comment" },
-  { "p", "prev", "Previous review comment" },
+  { "n", "next", "Open the next change" },
+  { "p", "prev", "Open the previous change" },
   { "l", "list", "List the review comments in the quickfix list" },
   { "y", "yank", "Copy the review as text" },
   { "s", "submit", "Submit the review to an agent" },
@@ -81,10 +89,29 @@ local keys = {
   { "m", "review", "Toggle PR Review Mode" },
 }
 
+---The steps `.` repeats: each one's `'operatorfunc'` call, `%d` standing for the count.
+local repeatable = {
+  next = "v:lua.require'changeset'.step(%d)",
+  prev = "v:lua.require'changeset'.step(-%d)",
+  ["next-comment"] = "v:lua.require'changeset.reviewing'.next_comment(%d)",
+  ["prev-comment"] = "v:lua.require'changeset.reviewing'.prev_comment(%d)",
+}
+
 for _, key in ipairs(keys) do
   local name, desc = key[2], key[3]
-  -- Through `:Changeset`, so a map takes the same route as the command, range and all.
-  vim.keymap.set("n", ("<Plug>(changeset-%s)"):format(name), ("<Cmd>Changeset %s<CR>"):format(name), { desc = desc })
+  local lhs = ("<Plug>(changeset-%s)"):format(name)
+  local call = repeatable[name]
+  if call then
+    -- A g@ operator is what `.` repeats; the count is baked into the lambda, since the <Esc> drops it so the `l`
+    -- motion can't fail on it at the end of a line.
+    vim.keymap.set("n", lhs, function()
+      vim.o.operatorfunc = ("{_ -> %s}"):format(call:format(vim.v.count1))
+      return "<Esc>g@l"
+    end, { expr = true, desc = desc })
+  else
+    -- Through `:Changeset`, so a map takes the same route as the command, range and all.
+    vim.keymap.set("n", lhs, ("<Cmd>Changeset %s<CR>"):format(name), { desc = desc })
+  end
 end
 -- `:`, not <Cmd>, so the selection arrives as the '<,'> range.
 vim.keymap.set("x", "<Plug>(changeset-comment)", ":Changeset comment<CR>", { silent = true, desc = keys[1][3] })

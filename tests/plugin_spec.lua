@@ -100,10 +100,21 @@ describe("plugin/changeset.lua", function()
   end)
 
   it("completes the subcommands that match the argument", function()
-    assert.same(
-      { "abandon", "comment", "delete", "list", "next", "prev", "refresh", "review", "submit", "toggle", "yank" },
-      vim.fn.getcompletion("Changeset ", "cmdline")
-    )
+    assert.same({
+      "abandon",
+      "comment",
+      "delete",
+      "list",
+      "next",
+      "next-comment",
+      "prev",
+      "prev-comment",
+      "refresh",
+      "review",
+      "submit",
+      "toggle",
+      "yank",
+    }, vim.fn.getcompletion("Changeset ", "cmdline"))
     assert.same({ "refresh", "review" }, vim.fn.getcompletion("Changeset re", "cmdline"))
   end)
 
@@ -236,7 +247,7 @@ describe("plugin/changeset.lua", function()
 
   it("routes each <Plug> map to its subcommand", function()
     local calls = {}
-    local names = { "comment", "delete", "next", "prev", "list", "yank", "submit", "abandon" }
+    local names = { "comment", "delete", "list", "yank", "submit", "abandon" }
     local reviewing = {}
     for _, name in ipairs(names) do
       reviewing[name] = counter(calls, name)
@@ -259,6 +270,61 @@ describe("plugin/changeset.lua", function()
     end
   end)
 
+  describe("the stepping maps", function()
+    local steps, buf
+
+    ---Stubs the stepping functions to record `{ name, count }` and switch to a fresh buffer, as a jump does.
+    before_each(function()
+      steps = {}
+      local function record(name)
+        return function(count)
+          table.insert(steps, { name, count })
+          vim.api.nvim_set_current_buf(vim.api.nvim_create_buf(false, true))
+        end
+      end
+      package.loaded.changeset = { step = record("step") }
+      package.loaded["changeset.reviewing"] = {
+        next_comment = record("next_comment"),
+        prev_comment = record("prev_comment"),
+      }
+      buf = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(buf)
+    end)
+
+    after_each(function()
+      package.loaded.changeset = nil
+      package.loaded["changeset.reviewing"] = nil
+    end)
+
+    it("step by their count, and . repeats them after the jump switched buffers", function()
+      vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-next)") .. "..", "x", false)
+      vim.api.nvim_feedkeys("3" .. vim.keycode("<Plug>(changeset-prev)") .. ".", "x", false)
+      vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-next-comment)") .. ".", "x", false)
+      vim.api.nvim_feedkeys("2" .. vim.keycode("<Plug>(changeset-prev-comment)") .. ".", "x", false)
+
+      assert.same({
+        { "step", 1 },
+        { "step", 1 },
+        { "step", 1 },
+        { "step", -3 },
+        { "step", -3 },
+        { "next_comment", 1 },
+        { "next_comment", 1 },
+        { "prev_comment", 2 },
+        { "prev_comment", 2 },
+      }, steps)
+    end)
+
+    it("leave the buffer alone", function()
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "keep" })
+      vim.api.nvim_set_current_buf(buf)
+
+      vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-next)") .. ".", "x", false)
+
+      assert.same({ "keep" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+    end)
+  end)
+
   it("routes the visual <Plug>(changeset-comment) the selected lines", function()
     local ranges = {}
     package.loaded["changeset.reviewing"] = {
@@ -278,11 +344,12 @@ describe("plugin/changeset.lua", function()
   end)
 
   it("maps the default <C-g> keys once startup is done", function()
-    local probe =
-      "io.write(vim.fn.maparg('<C-g>c', 'n'), ' ', vim.fn.maparg('<C-g>c', 'x'), ' ', vim.fn.maparg('<C-g>m', 'n'))"
+    local probe = "for _, lhs in ipairs({ 'cc', 'cn', 'cp', 'n', 'p', 'm' }) do io.write(vim.fn.maparg('<C-g>' .. lhs, 'n'), ' ') end"
+      .. " io.write(vim.fn.maparg('<C-g>cc', 'x'))"
 
     assert.equal(
-      "<Plug>(changeset-comment) <Plug>(changeset-comment) <Plug>(changeset-review)",
+      "<Plug>(changeset-comment) <Plug>(changeset-next-comment) <Plug>(changeset-prev-comment)"
+        .. " <Plug>(changeset-next) <Plug>(changeset-prev) <Plug>(changeset-review) <Plug>(changeset-comment)",
       after_startup({}, probe)
     )
   end)
@@ -301,16 +368,16 @@ describe("plugin/changeset.lua", function()
   end)
 
   it("leaves a default key alone under a user's shorter or longer map", function()
-    local probe = "io.write(vim.fn.maparg('<C-g>c', 'n'), '|', vim.fn.maparg('<C-g>c', 'x'))"
+    local probe = "io.write(vim.fn.maparg('<C-g>cc', 'n'), '|', vim.fn.maparg('<C-g>cc', 'x'))"
 
     assert.equal(
       "|",
-      after_startup({ "-c", "nnoremap <C-g> :echo 1<CR>", "-c", "xnoremap <C-g>cx :echo 1<CR>" }, probe)
+      after_startup({ "-c", "nnoremap <C-g> :echo 1<CR>", "-c", "xnoremap <C-g>ccx :echo 1<CR>" }, probe)
     )
   end)
 
   it("maps no default keys when vim.g.changeset_no_default_maps is set", function()
-    local probe = "io.write(vim.fn.maparg('<C-g>c', 'n'), vim.fn.maparg('<C-g>c', 'x'))"
+    local probe = "io.write(vim.fn.maparg('<C-g>cc', 'n'), vim.fn.maparg('<C-g>cc', 'x'))"
 
     assert.equal("", after_startup({ "-c", "let g:changeset_no_default_maps = 1" }, probe))
   end)
