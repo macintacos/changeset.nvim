@@ -242,6 +242,18 @@ describe("changeset.dialog", function()
       vim.o.columns = columns
       assert.is_true(config.col >= 0 and config.col + config.width + 2 <= 30)
     end)
+
+    it("fits and centres itself again when the editor is resized", function()
+      local columns = vim.o.columns
+      ask({ title = "Abandon the review", body = { { text = ("word "):rep(40) } }, action = "Abandon" })
+
+      vim.o.columns = 30
+      local config = vim.api.nvim_win_get_config((assert(Dialog.win())))
+      vim.o.columns = columns
+
+      assert.is_true(config.col + config.width + 2 <= 30)
+      assert.equal(math.floor((30 - config.width - 2) / 2), config.col)
+    end)
   end)
 
   describe("choose", function()

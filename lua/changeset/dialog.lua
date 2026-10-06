@@ -219,6 +219,22 @@ local function line_cells(line)
   end, line)))
 end
 
+---Where a dialog `width` by `height` cells inside its border goes: cut to the editor, and centred on it.
+---@param width integer
+---@param height integer
+---@return vim.api.keyset.win_config
+local function place(width, height)
+  width = math.min(width, vim.o.columns - 2)
+  height = math.min(height, math.max(vim.o.lines - vim.o.cmdheight - 4, 1))
+  return {
+    relative = "editor",
+    width = width,
+    height = height,
+    row = math.max(math.floor((vim.o.lines - vim.o.cmdheight - height - 2) / 2), 0),
+    col = math.max(math.floor((vim.o.columns - width - 2) / 2), 0),
+  }
+end
+
 ---Opens and enters a float holding `lines`, centred on the editor; or, while another dialog is open, answers nil
 ---and opens nothing.
 ---@param lines changeset.DialogLine[]
@@ -235,8 +251,7 @@ local function open(lines, frame, answer)
     return nil
   end
   local title, footer = " " .. frame.title .. " ", frame.footer and " " .. frame.footer .. " "
-  local width = math.min(math.max(frame.width, cells(title), footer and cells(footer) or 0), vim.o.columns - 2)
-  local height = math.min(#lines, math.max(vim.o.lines - vim.o.cmdheight - 4, 1))
+  local width = math.max(frame.width, cells(title), footer and cells(footer) or 0)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = "wipe"
   paint(buf, lines)
@@ -246,20 +261,19 @@ local function open(lines, frame, answer)
     done = false,
     answer = answer,
   }
-  state.win = vim.api.nvim_open_win(buf, true, {
-    relative = "editor",
-    width = width,
-    height = height,
-    row = math.max(math.floor((vim.o.lines - vim.o.cmdheight - height - 2) / 2), 0),
-    col = math.max(math.floor((vim.o.columns - width - 2) / 2), 0),
-    style = "minimal",
-    border = "rounded",
-    title = { { title, "FloatTitle" } },
-    title_pos = "left",
-    footer = footer and { { footer, "FloatFooter" } },
-    footer_pos = footer and "left",
-    zindex = ZINDEX,
-  })
+  state.win = vim.api.nvim_open_win(
+    buf,
+    true,
+    vim.tbl_extend("force", place(width, #lines), {
+      style = "minimal",
+      border = "rounded",
+      title = { { title, "FloatTitle" } },
+      title_pos = "left",
+      footer = footer and { { footer, "FloatFooter" } },
+      footer_pos = footer and "left",
+      zindex = ZINDEX,
+    })
+  )
   active = state
   vim.opt.guicursor:append(NO_CURSOR)
   -- A row wider than the editor is cut at the border, not wrapped onto the next.
@@ -280,6 +294,15 @@ local function open(lines, frame, answer)
       vim.schedule(function()
         finish(state, nil)
       end)
+    end,
+  })
+  -- Fires: the editor resized under the dialog, which would leave it off centre or past the edge. Buffer-local, as
+  -- the dialog's buffer is current for as long as it is open.
+  vim.api.nvim_create_autocmd("VimResized", {
+    buffer = buf,
+    desc = "changeset: fit and centre a dialog in the resized editor",
+    callback = function()
+      vim.api.nvim_win_set_config(state.win, place(width, #lines))
     end,
   })
   return state
