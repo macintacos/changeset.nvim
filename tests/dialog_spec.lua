@@ -181,6 +181,26 @@ describe("changeset.dialog", function()
       assert.equal(opener, vim.api.nvim_get_current_win())
     end)
 
+    it("refuses a second dialog while it is open, staying up to be answered", function()
+      ask()
+      local first = Dialog.win()
+      local second
+
+      dialog.choose(
+        { title = "Submit the review", items = { { cells = { { "alpha" } } } }, action = "submit" },
+        function(i)
+          second = { i }
+        end
+      )
+      settle(function()
+        return second ~= nil
+      end)
+
+      assert.same({}, second)
+      assert.equal(first, vim.api.nvim_get_current_win())
+      assert.is_true(answer("A"))
+    end)
+
     it("returns focus to where it opened, and closes, before calling back", function()
       local seen
       dialog.confirm({ title = "Abandon the review", body = {}, action = "Abandon" }, function()

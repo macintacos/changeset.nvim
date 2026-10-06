@@ -62,6 +62,10 @@ local NO_CURSOR = "n:" .. render.NO_CURSOR_HL
 ---@field done boolean
 ---@field answer fun(value: any)
 
+---The dialog open now, until focus leaves it.
+---@type changeset.DialogState?
+local active
+
 ---@param text string
 ---@return integer
 local function cells(text)
@@ -192,6 +196,9 @@ local function finish(state, value)
     return
   end
   state.done = true
+  if active == state then
+    active = nil
+  end
   if vim.api.nvim_win_is_valid(state.opener) then
     vim.api.nvim_set_current_win(state.opener)
   end
@@ -212,12 +219,21 @@ local function line_cells(line)
   end, line)))
 end
 
----Opens and enters a float holding `lines`, centred on the editor.
+---Opens and enters a float holding `lines`, centred on the editor; or, while another dialog is open, answers nil
+---and opens nothing.
 ---@param lines changeset.DialogLine[]
 ---@param frame changeset.DialogFrame
 ---@param answer fun(value: any) Called once, with nil on a cancel.
----@return changeset.DialogState
+---@return changeset.DialogState?
 local function open(lines, frame, answer)
+  -- A second dialog, opened from the first by a global key or arriving late from herdr, would take focus, and the
+  -- first's leave would then cancel both.
+  if active then
+    vim.schedule(function()
+      answer(nil)
+    end)
+    return nil
+  end
   local title, footer = " " .. frame.title .. " ", frame.footer and " " .. frame.footer .. " "
   local width = math.min(math.max(frame.width, cells(title), footer and cells(footer) or 0), vim.o.columns - 2)
   local height = math.min(#lines, math.max(vim.o.lines - vim.o.cmdheight - 4, 1))
@@ -244,6 +260,7 @@ local function open(lines, frame, answer)
     footer_pos = footer and "left",
     zindex = ZINDEX,
   })
+  active = state
   vim.opt.guicursor:append(NO_CURSOR)
   -- A row wider than the editor is cut at the border, not wrapped onto the next.
   vim.wo[state.win].wrap = false
@@ -255,6 +272,9 @@ local function open(lines, frame, answer)
     buffer = buf,
     desc = "changeset: cancel a dialog whose window or buffer is left",
     callback = function()
+      if active == state then
+        active = nil
+      end
       vim.opt.guicursor:remove(NO_CURSOR)
       -- Closing a window is not allowed while focus is leaving it.
       vim.schedule(function()
@@ -338,6 +358,9 @@ function M.confirm(opts, yes)
       yes()
     end
   end)
+  if not state then
+    return
+  end
   local buttons_line = #body + 3
 
   ---@param to integer
@@ -494,6 +517,9 @@ function M.choose(opts, cb)
     footer = ("<CR> or %s %s  q cancel"):format(digits, opts.action),
     width = width,
   }, cb)
+  if not state then
+    return
+  end
 
   ---@param to integer?
   local function move(to)
