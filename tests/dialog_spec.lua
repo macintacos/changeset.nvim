@@ -192,6 +192,25 @@ describe("changeset.dialog", function()
       assert.equal(before, vim.o.guicursor)
     end)
 
+    it("stays open when a dialog cancelled in the same keys closes behind it", function()
+      ask()
+      vim.cmd.close()
+      local second = false
+
+      dialog.confirm({ title = "Delete the review comment", body = {}, action = "Delete" }, function()
+        second = true
+      end)
+      settle(function()
+        return false
+      end)
+      Dialog.press("D")
+      settle(function()
+        return second
+      end)
+
+      assert.is_true(second)
+    end)
+
     it("refuses a second dialog while it is open, staying up to be answered", function()
       ask()
       local first = Dialog.win()

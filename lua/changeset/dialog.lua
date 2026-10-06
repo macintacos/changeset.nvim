@@ -199,7 +199,8 @@ local function finish(state, value)
   if active == state then
     active = nil
   end
-  if vim.api.nvim_win_is_valid(state.opener) then
+  -- A dialog opened since, in the same keys as this one's cancel, has focus now; taking it would cancel that one.
+  if not active and vim.api.nvim_win_is_valid(state.opener) then
     vim.api.nvim_set_current_win(state.opener)
   end
   if vim.api.nvim_win_is_valid(state.win) then
