@@ -56,7 +56,7 @@ end, {
   nargs = "?",
   range = true,
   bar = true,
-  desc = "Toggle the changeset sidebar, rebuild it, toggle PR Review Mode, or write, delete, abandon or submit review comments",
+  desc = "Toggle the changeset sidebar, rebuild it, toggle PR Review Mode, or write, delete, walk, list, copy, abandon or submit review comments",
   complete = function(lead)
     local names = vim.tbl_filter(function(name)
       return vim.startswith(name, lead)
@@ -74,7 +74,7 @@ local keys = {
   { "p", "prev", "Previous review comment" },
   { "l", "list", "List the review comments in the quickfix list" },
   { "y", "yank", "Copy the review as text" },
-  { "s", "submit", "Send the review to an agent" },
+  { "s", "submit", "Submit the review to an agent" },
   { "a", "abandon", "Abandon the review" },
   { "t", "toggle", "Toggle the changeset sidebar" },
   { "r", "refresh", "Rebuild the changeset sidebar" },
@@ -83,11 +83,24 @@ local keys = {
 
 for _, key in ipairs(keys) do
   local name, desc = key[2], key[3]
-  -- <Cmd>, not a function, so a map loads no changeset module until it's used.
+  -- Through `:Changeset`, so a map takes the same route as the command, range and all.
   vim.keymap.set("n", ("<Plug>(changeset-%s)"):format(name), ("<Cmd>Changeset %s<CR>"):format(name), { desc = desc })
 end
 -- `:`, not <Cmd>, so the selection arrives as the '<,'> range.
 vim.keymap.set("x", "<Plug>(changeset-comment)", ":Changeset comment<CR>", { silent = true, desc = keys[1][3] })
+
+---Whether a global map in `mode` has `lhs`, or starts it, or starts with it: either way `lhs` would clash with it.
+---Buffer-local maps don't count, being only the buffer current at startup's.
+---@param lhs string
+---@param mode string
+---@return boolean
+local function taken(lhs, mode)
+  -- Compared as keytrans spells them, as `lhs` reads in nvim_get_keymap: `lhsraw` holds <C-g> in another form.
+  local spelled = vim.fn.keytrans(vim.keycode(lhs))
+  return vim.iter(vim.api.nvim_get_keymap(mode)):any(function(map)
+    return vim.startswith(map.lhs, spelled) or vim.startswith(spelled, map.lhs)
+  end)
+end
 
 ---Maps each default `<C-g>` key not already taken, unless `vim.g.changeset_no_default_maps` is set.
 local function map_defaults()
@@ -97,7 +110,7 @@ local function map_defaults()
   for _, key in ipairs(keys) do
     local lhs = "<C-g>" .. key[1]
     for _, mode in ipairs(key[4] or { "n" }) do
-      if vim.fn.maparg(lhs, mode) == "" then
+      if not taken(lhs, mode) then
         vim.keymap.set(mode, lhs, ("<Plug>(changeset-%s)"):format(key[2]), { desc = key[3] })
       end
     end

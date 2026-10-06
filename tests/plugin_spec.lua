@@ -293,6 +293,22 @@ describe("plugin/changeset.lua", function()
     assert.equal(":echo 1<CR> <Plug>(changeset-next)", after_startup({ "-c", "nnoremap <C-g>d :echo 1<CR>" }, probe))
   end)
 
+  it("maps a default key that only the startup buffer maps for itself", function()
+    local probe = "for _, map in ipairs(vim.api.nvim_get_keymap('n')) do"
+      .. " if map.lhs == '<C-G>n' then io.write(map.rhs) end end"
+
+    assert.equal("<Plug>(changeset-next)", after_startup({ "-c", "nnoremap <buffer> <C-g>n :echo 1<CR>" }, probe))
+  end)
+
+  it("leaves a default key alone under a user's shorter or longer map", function()
+    local probe = "io.write(vim.fn.maparg('<C-g>c', 'n'), '|', vim.fn.maparg('<C-g>c', 'x'))"
+
+    assert.equal(
+      "|",
+      after_startup({ "-c", "nnoremap <C-g> :echo 1<CR>", "-c", "xnoremap <C-g>cx :echo 1<CR>" }, probe)
+    )
+  end)
+
   it("maps no default keys when vim.g.changeset_no_default_maps is set", function()
     local probe = "io.write(vim.fn.maparg('<C-g>c', 'n'), vim.fn.maparg('<C-g>c', 'x'))"
 
