@@ -127,6 +127,48 @@ describe("changeset.dialog", function()
       )
     end)
 
+    ---Whether any float is open.
+    ---@return boolean
+    local function floating()
+      return vim.iter(vim.api.nvim_list_wins()):any(function(win)
+        return vim.api.nvim_win_get_config(win).relative ~= ""
+      end)
+    end
+
+    -- `%s` stands for a file the opener showed before, which the float's jumplist and alternate file hold.
+    for _, keys in ipairs({ "<C-o>", "<C-^>", ":edit %s<CR>", ":buffer %s<CR>" }) do
+      it(("keeps its own buffer on %s, so it stays to be answered"):format(keys), function()
+        local file = vim.fn.tempname()
+        vim.fn.writefile({ "x" }, file)
+        vim.cmd.edit(file)
+        vim.cmd.enew()
+        ask()
+        local buf = vim.api.nvim_get_current_buf()
+
+        pcall(Dialog.press, keys:format(file))
+
+        assert.equal(buf, vim.api.nvim_win_get_buf((assert(Dialog.win()))))
+        assert.is_true(answer("a"))
+        vim.fn.delete(file)
+      end)
+    end
+
+    it("keeps, giving the cursor back, when its buffer is swapped for another anyway", function()
+      local before = vim.o.guicursor
+      local other = vim.api.nvim_get_current_buf()
+      ask()
+
+      vim.cmd("buffer! " .. other)
+      settle(function()
+        return not floating()
+      end)
+
+      assert.is_false(floating())
+      assert.is_false(confirmed)
+      assert.equal(before, vim.o.guicursor)
+      assert.equal(opener, vim.api.nvim_get_current_win())
+    end)
+
     it("returns focus to where it opened, and closes, before calling back", function()
       local seen
       dialog.confirm({ title = "Abandon the review", body = {}, action = "Abandon" }, function()

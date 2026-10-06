@@ -247,10 +247,13 @@ local function open(lines, frame, answer)
   vim.opt.guicursor:append(NO_CURSOR)
   -- A row wider than the editor is cut at the border, not wrapped onto the next.
   vim.wo[state.win].wrap = false
-  -- Fires: focus leaving the dialog other than through its keys, which cancels it: it is modal while open.
-  vim.api.nvim_create_autocmd("WinLeave", {
+  -- The float takes its opener's jumplist, so <C-o> would otherwise put a file in it, open and unanswerable.
+  vim.wo[state.win].winfixbuf = true
+  -- Fires: focus leaving the dialog other than through its keys, or its buffer swapped out anyway, as `:b!` can.
+  -- Either cancels it: it is modal while open.
+  vim.api.nvim_create_autocmd({ "BufLeave", "WinLeave" }, {
     buffer = buf,
-    desc = "changeset: cancel a dialog whose window is left",
+    desc = "changeset: cancel a dialog whose window or buffer is left",
     callback = function()
       vim.opt.guicursor:remove(NO_CURSOR)
       -- Closing a window is not allowed while focus is leaving it.
