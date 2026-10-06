@@ -735,6 +735,13 @@ your own window rather than through a preview. It keeps focus where you pressed 
 skips a Comments row's review comment window, because a float on every step would break
 the walk. It stops at the ends rather than wrapping, so a run of `.` can't loop.
 
+Every press has to move you, or it reads as a dropped key. So `<C-g>n` counts places, not
+rows: it steps on past any row that would open the path and line the target window
+already stands on. A file's row, its group row and the group's first change often all do.
+A press made before the diff is read isn't dropped either. The latest one waits, with its
+count, and is taken when the diff lands, on the same `diff` event that redraws the
+sidebar. Closing the sidebar drops it, so a reopened sidebar never takes a stale step.
+
 The four walking keys are dot-repeatable because they are exactly the motion you press
 again and again. `.` after them repeats the step and not your last edit, which only works
 because they leave nothing for `.` to repeat otherwise. The operator is `g@l` after an

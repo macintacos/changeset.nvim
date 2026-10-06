@@ -176,14 +176,19 @@ A key you have already mapped in that mode is left alone. Set
 them. With them mapped, `<C-g>` on its own (`:file`) and visual mode’s
 `<C-g>` (Select mode) wait `'timeoutlen'` for a second key.
 
-`<C-g>n` and `<C-g>p` step the sidebar’s selected row, skipping section
-headers, and open the row as `<CR>` does, without opening a Comments row’s
-review comment. Focus stays where you pressed the key: from a file you stay in
-its window, which now shows the next place, and from the sidebar the row opens
-in the window it opens changes in. A count steps that many rows. At the last or
-first row they stay put and say so, rather than wrapping. With the sidebar
-closed, they open it without focusing it, on the row for where you are, and
-then step; while the changes are still being read, they say so instead.
+`<C-g>n` and `<C-g>p` move the sidebar’s selected row to the next or previous
+place and open it as `<CR>` does, without opening a Comments row’s review
+comment. Section headers are skipped, and so is any row that would open where
+the window already stands, such as a file’s row, its "Other changes" row and
+that group’s first change, which can all open the same line. So every press
+moves you. Focus stays where you pressed the key: from a file you stay in its
+window, which now shows the next place, and from the sidebar the row opens in
+the window it opens changes in. A count moves that many places. When no row
+that way opens anywhere new, they stay put and say so, rather than wrapping.
+With the sidebar closed, they open it without focusing it, on the row for where
+you are. If the changes are still being read, the step waits and is taken once
+they are. A later press, or `.`, replaces the waiting step, and closing the
+sidebar drops it.
 
 `<C-g>n`, `<C-g>p`, `<C-g>cn` and `<C-g>cp` are dot-repeatable: `<C-g>n...`
 steps four times, and `3<C-g>n.` steps three rows, then three more. So `.`
