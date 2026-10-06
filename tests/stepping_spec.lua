@@ -198,6 +198,23 @@ describe("changeset.step", function()
       assert.same({ "other.lua", 3 }, { shown(win) })
     end)
 
+    it("goes back up the tree from above a file's first change, past its review comment's row", function()
+      local win = stand("L3", "other.lua", 1)
+
+      changeset.step(-1)
+
+      assert.same({ "mod.lua", 8 }, { shown(win) })
+    end)
+
+    it("goes on to a file's first change from above it, though a review comment's row comes first", function()
+      local win = stand("L3", "other.lua", 1)
+
+      changeset.step(1)
+      changeset.step(1)
+
+      assert.same({ "other.lua", 3 }, { shown(win) })
+    end)
+
     it("starts from your file, not the sidebar's row in another", function()
       local win = stand("L3", "mod.lua", 1)
 

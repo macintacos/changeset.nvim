@@ -111,7 +111,7 @@ local function start_row(state, lnum, path, line, delta)
   end
   local first, found
   for i, each in ipairs(state.view:visible()) do
-    if each.path == path and each.kind ~= "section" then
+    if each.path == path and each.kind ~= "section" and each.kind ~= "comment" then
       first = first or i
       if (each.lnum or 1) <= line then
         found = i
