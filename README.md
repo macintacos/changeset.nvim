@@ -105,7 +105,9 @@ closes it. It takes one optional subcommand:
 - `:Changeset abandon` deletes every [review comment](#review-comments) of the repository.
 - `:Changeset submit` pastes the [review comments](#review-comments) into an AI agent's
   prompt through herdr.
-- `:Changeset next` / `:Changeset prev` jump to the next / previous
+- `:Changeset next` / `:Changeset prev` move the sidebar's selected row to the next /
+  previous change and open it in the window you are editing in, as described below.
+- `:Changeset next-comment` / `:Changeset prev-comment` jump to the next / previous
   [review comment](#review-comments).
 - `:Changeset list` puts the [review comments](#review-comments) in the quickfix list.
 - `:Changeset yank` copies the review to the clipboard as text, or to the unnamed register
@@ -120,10 +122,12 @@ subcommand:
 
 | Key | Mode | `<Plug>` map | Does |
 | --- | --- | --- | ------------ |
-| `<C-g>c` | normal, visual | `<Plug>(changeset-comment)` | comment on this line, or the selection, or edit the comment there |
+| `<C-g>n` | normal | `<Plug>(changeset-next)` | open the next change |
+| `<C-g>p` | normal | `<Plug>(changeset-prev)` | open the previous change |
+| `<C-g>cc` | normal, visual | `<Plug>(changeset-comment)` | comment on this line, or the selection, or edit the comment there |
+| `<C-g>cn` | normal | `<Plug>(changeset-next-comment)` | jump to the next review comment |
+| `<C-g>cp` | normal | `<Plug>(changeset-prev-comment)` | jump to the previous review comment |
 | `<C-g>d` | normal | `<Plug>(changeset-delete)` | delete the review comment on this line |
-| `<C-g>n` | normal | `<Plug>(changeset-next)` | jump to the next review comment |
-| `<C-g>p` | normal | `<Plug>(changeset-prev)` | jump to the previous review comment |
 | `<C-g>l` | normal | `<Plug>(changeset-list)` | list the review comments in the quickfix list |
 | `<C-g>y` | normal | `<Plug>(changeset-yank)` | copy the review as text |
 | `<C-g>s` | normal | `<Plug>(changeset-submit)` | submit the review to an agent |
@@ -136,6 +140,19 @@ A key you have already mapped in that mode is left alone. Set
 `vim.g.changeset_no_default_maps = true` anywhere in your config to map none of them. With
 them mapped, `<C-g>` on its own (`:file`) and visual mode's `<C-g>` (Select mode) wait
 `'timeoutlen'` for a second key.
+
+`<C-g>n` and `<C-g>p` step the sidebar's selected row, skipping section headers, and
+open the row as `<CR>` does, without opening a Comments row's review comment. Focus stays
+where you pressed the key: from a file you stay in its window, which now shows the next
+place, and from the sidebar the row opens in the window it opens changes in. A count steps
+that many rows. At the last or first row they stay put and say so, rather than wrapping.
+With the sidebar closed, they open it without focusing it, on the row for where you are,
+and then step; while the changes are still being read, they say so instead.
+
+`<C-g>n`, `<C-g>p`, `<C-g>cn` and `<C-g>cp` are dot-repeatable: `<C-g>n...` steps four
+times, and `3<C-g>n.` steps three rows, then three more. So `.` after one of them repeats
+the step, not your last edit. A count given to `.` itself is ignored: `.` repeats with the
+first count.
 
 To use other keys, map them onto the `<Plug>` maps. For example:
 
@@ -180,7 +197,7 @@ comment window with `review_comment.save`, in [Options](#options).
 | `d` | sidebar | on a Comments row, ask, then delete its review comment; nothing on any other row |
 | `/` `-` `<C-t>` | sidebar | open the change in a vsplit / split / new tab instead, opening a Comments row's review comment as `<CR>` does |
 | `?` | sidebar | list the keys the sidebar bound, `keymaps.next` / `keymaps.prev` included when set: which-key's popup where it is installed, a float where it is not |
-| `]h` / `[h` | anywhere, while open | off unless set as `keymaps.next` / `keymaps.prev`; move the sidebar's selection to the next / previous row, previewing it and skipping section headers, so you can review without focusing the sidebar |
+| `]h` / `[h` | anywhere, while open | off unless set as `keymaps.next` / `keymaps.prev`; move the sidebar's selection to the next / previous row, previewing it and skipping section headers, so you can review without focusing the sidebar; `<C-g>n` / `<C-g>p` open the row instead |
 
 Opening a change adds a jumplist entry, so `<C-o>` returns to where that window was before
 the sidebar opened. Previewing adds none.
@@ -246,8 +263,8 @@ stops at the question. `q` or `<Esc>` keeps. The agent picker numbers its rows: 
 move, `<CR>` or a row's number submits, and `q` or `<Esc>` cancels without a word. Leaving
 either window any other way cancels it.
 
-`:Changeset next` and `:Changeset prev` walk the review comments by file and then line,
-wrapping at either end, and skip any whose file is gone. From a file they start at the
+`:Changeset next-comment` and `:Changeset prev-comment` walk the review comments by file
+and then line, `<C-g>cn` / `<C-g>cp` that many comments for a count, wrapping at either end, and skip any whose file is gone. From a file they start at the
 cursor; from the sidebar, at the first or last review comment; from a window that holds
 no file, such as the quickfix list, in the window before it. Like the other verbs, they
 refuse while the file you are in, or the one they would open, has unsaved edits.

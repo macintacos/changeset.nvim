@@ -11,7 +11,11 @@ it is a breaking change.
 `plugin/changeset.lua` requires no `changeset.*` module when it loads, because those
 modules create their autocmds as they load, and a session that never opens the sidebar
 should create none. Its maps run `<Cmd>Changeset …<CR>`, so a map and the command take
-one route through `:Changeset`, with its range.
+one route through `:Changeset`, with its range. The exceptions are the walking maps,
+`next`, `prev`, `next-comment` and `prev-comment`. They are `g@` operators so that `.`
+repeats them, and their `'operatorfunc'` calls `step()` in `lua/changeset/init.lua` and
+`next_comment()` / `prev_comment()` in `lua/changeset/reviewing.lua` with the count. So
+those functions stay public, and the expr map's callback requires nothing.
 
 Every subcommand has a `<Plug>(changeset-<subcommand>)` map. The global keys are defaults
 under `<C-g>`, mapped once startup is done. Each one is skipped when its key is already

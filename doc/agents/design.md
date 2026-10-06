@@ -725,6 +725,23 @@ is not on loan. The window the cursor is in never wears it at all: a `]h` presse
 previews without a band, and one that came along with a buffer or a split comes off the
 moment that window takes focus or a buffer.
 
+### `<C-g>n` opens where `]h` previews
+
+`keymaps.next` / `keymaps.prev` (`]h` / `[h`) and `<C-g>n` / `<C-g>p` step over the same
+rows, but they answer different questions. `]h` asks "what's next?" and only previews, so
+the window wears a band and `q` takes it back. `<C-g>n` means "take me there". It opens the
+row as `<CR>` does, adding a jumplist entry, so walking a branch feels like moving through
+your own window rather than through a preview. It keeps focus where you pressed it. It
+skips a Comments row's review comment window, because a float on every step would break
+the walk. It stops at the ends rather than wrapping, so a run of `.` can't loop.
+
+The four walking keys are dot-repeatable because they are exactly the motion you press
+again and again. `.` after them repeats the step and not your last edit, which only works
+because they leave nothing for `.` to repeat otherwise. The operator is `g@l` after an
+`<Esc>`, because the `<Esc>` drops the typed count, which would otherwise reach the `l`
+and fail at the end of a line. The count goes into the `'operatorfunc'` lambda instead, so
+`.` repeats it, and a count given to `.` itself is lost.
+
 ### Empty and failed states direct, never apologise
 
 | Situation | Text |
