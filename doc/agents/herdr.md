@@ -20,9 +20,9 @@ call.
 
 An agent entry carries `agent`, `agent_status`, `pane_id`, `tab_id`, `workspace_id`,
 `title`, `cwd` and `focused`. `agent_status` is `idle`, `working`, `blocked`, `done` or
-`unknown`; `idle` and `done` both mean the agent is ready for input. herdr leaves `name`, `display_agent` and `state_labels`, a
-`{status = label}` map, out of an entry until something sets them, so changeset reads each
-as optional.
+`unknown`; `idle` and `done` both mean the agent is ready for input. herdr leaves `name`,
+`display_agent` and `state_labels`, a `{status = label}` map, out of an entry until
+something sets them, so changeset reads each as optional.
 
 `tab list` runs only when the user must pick between several agents, and only for the tab
 labels the agent picker shows. A failed one leaves the picker's tab column blank.
@@ -43,12 +43,12 @@ truthy.
 
 ## The ready check
 
-herdr has no atomic send-if-ready, and a pick can be minutes old, so changeset reads
+herdr has no atomic paste-if-ready, and a pick can be minutes old, so changeset reads
 `agent list` again right before writing. A pane that is gone means the agent closed. An
 `agent_status` of `blocked` means the agent is at a permission prompt, which silently
 drops a paste, so changeset refuses until the user answers it. The picker already won't
-pick a blocked agent, but the check still runs, since the list it drew can be minutes old. Every other status sends:
-a paste during a `working` turn waits in the input.
+pick a blocked agent, but the check still runs, since the list it drew can be minutes
+old. Every other status takes the paste: one during a `working` turn waits in the input.
 
 ## The paste
 
@@ -68,9 +68,9 @@ A failed call exits non-zero and writes an envelope to stderr:
 ```
 
 `pane_not_found` from `send-text` reads as the agent having closed. Any other code reads as
-herdr refusing the send. Never show herdr's raw JSON or a pane id to the user.
+herdr refusing the paste. Never show herdr's raw JSON or a pane id to the user.
 
 ## Focus
 
 Focus runs after a delivered paste and is best effort: a failed focus still reports the
-send as done, since the text is already in the agent's input.
+paste as done, since the text is already in the agent's input.

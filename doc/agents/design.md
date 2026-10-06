@@ -371,11 +371,11 @@ reaches the same hook and the caller discards it, never storing it.
 │                                         │
 ╰─────────────────────────────────────────╯
 
-╭ Send the review ───────────────────────────────────────╮
+╭ Submit the review ─────────────────────────────────────╮
 │▌ 1  ● claude   idle     󰎤 parser  Fix the parser       │
 │  2  ● codex    working  󰎧 tests   run the suite        │
 │  3  ● claude   blocked  answer its prompt first        │
-╰ <CR> or 1-3 send  q cancel ────────────────────────────╯
+╰ <CR> or 1-3 submit  q cancel ──────────────────────────╯
 ```
 
 The question before a deletion and the choice of agent for `:Changeset submit` are floats
@@ -605,7 +605,7 @@ the agent picker of § Dialogs asks, so the user never routes a review to an age
 see.
 
 The review comments are deleted once the paste lands, because the agent now holds them and
-a later submit would paste them twice. Only the ones sent go: one written, or edited, while
+a later submit would paste them twice. Only the ones pasted go: one written, or edited, while
 the picker was open stays for the next review. A refusal keeps them all. An agent at a
 permission prompt refuses, since herdr would drop the paste there without a word, and a
 review that vanished into a prompt would read as delivered. The picker lists one but won't
