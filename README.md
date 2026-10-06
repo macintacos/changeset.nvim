@@ -103,6 +103,8 @@ closes it. It takes one optional subcommand, and `pr` takes a verb:
   or on the selected lines, or opens the one already there to edit it.
 - `:Changeset delete` deletes the [review comment](#review-comments) on the cursor's line.
 - `:Changeset abandon` deletes every [review comment](#review-comments) of the repository.
+- `:Changeset submit` pastes the [review comments](#review-comments) into an AI agent's
+  prompt through herdr.
 
 `<Plug>(changeset-toggle)` does what `:Changeset toggle` does.
 
@@ -181,10 +183,11 @@ It works without the sidebar, and the sidebar works without it.
 ## Review comments
 
 Review comments are notes on lines of the repository's files, kept on this machine in
-`stdpath("state")/changeset/comments.json` and never sent anywhere. They belong to the
-repository's root, so every branch checked out there shares them, and they keep their line
-numbers when the file changes. The first one written starts the review, and
-`:Changeset abandon` ends it. None of this needs the sidebar, a PR or `gh`.
+`stdpath("state")/changeset/comments.json` until `:Changeset submit` hands them to an AI
+agent. They belong to the repository's root, so every branch checked out there shares
+them, and they keep their line numbers when the file changes. The first one written starts
+the review, and `:Changeset submit` or `:Changeset abandon` ends it. None of this needs the
+sidebar, a PR or `gh`.
 
 - `:Changeset comment` opens a markdown window under the cursor's line, moving the lines
   below down, in any file of the repository. `:'<,'>Changeset comment` opens it under the
@@ -199,6 +202,34 @@ numbers when the file changes. The first one written starts the review, and
 - `:Changeset abandon` asks you to confirm, then deletes every review comment of the
   repository. The question goes through `vim.ui.select`, so mini.pick or another picker
   that replaces it shows it. With none, it says so.
+- `:Changeset submit` needs Neovim running in a herdr pane. It sends
+  the review straight to the only AI agent in the workspace, and with several offers a
+  picker through `vim.ui.select`, which mini.pick draws. It pastes the review into that
+  agent's prompt without sending it, so you can add context before pressing Enter, and
+  focuses the agent. The review comments are deleted once they are sent; one written while
+  the picker is open stays. An agent waiting at a permission prompt refuses the paste until
+  you answer it, and the review comments stay. With none, it says so.
+
+The pasted review holds a block per review comment, by file and then line, each naming
+its place, quoting its lines as they are now, unsaved edits included, and ending with its
+text:
+
+````text
+lua/changeset/git.lua:12-13
+```lua
+local function parent(cwd, branch)
+  local log = M.lines({ "git", "reflog" }, cwd)
+```
+Why read the reflog rather than the config?
+
+README.md:4
+```markdown
+A sidebar for the branch.
+```
+Say what it maps.
+````
+
+A block whose lines can't be read, as when its file is gone, leaves the quote out.
 
 A review comment opened to edit, titled `Edit review comment`, is replaced by a save key.
 Saving or closing it with only whitespace asks whether to delete it. Closing it any other

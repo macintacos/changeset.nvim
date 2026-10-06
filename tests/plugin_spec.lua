@@ -85,7 +85,7 @@ describe("plugin/changeset.lua", function()
 
   it("completes the subcommands that match the argument", function()
     assert.same(
-      { "abandon", "comment", "delete", "refresh", "review", "toggle" },
+      { "abandon", "comment", "delete", "refresh", "review", "submit", "toggle" },
       vim.fn.getcompletion("Changeset ", "cmdline")
     )
     assert.same({ "refresh", "review" }, vim.fn.getcompletion("Changeset re", "cmdline"))

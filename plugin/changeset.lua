@@ -29,6 +29,9 @@ local subcommands = {
   abandon = function()
     require("changeset.reviewing").abandon()
   end,
+  submit = function()
+    require("changeset.reviewing").submit()
+  end,
 }
 
 vim.api.nvim_create_user_command("Changeset", function(opts)
@@ -41,7 +44,7 @@ end, {
   nargs = "?",
   range = true,
   bar = true,
-  desc = "Toggle the changeset sidebar, rebuild it, toggle PR Review Mode, or write, delete or abandon review comments",
+  desc = "Toggle the changeset sidebar, rebuild it, toggle PR Review Mode, or write, delete, abandon or submit review comments",
   complete = function(lead)
     local names = vim.tbl_filter(function(name)
       return vim.startswith(name, lead)
