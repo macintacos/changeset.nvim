@@ -31,13 +31,8 @@ local SEP = " › "
 ---@field files integer?      Section rows only: how many files the section holds, before any filter.
 ---@field icon string?        Section rows only: the directory name its section header's icon is looked up by.
 ---@field comments integer?   The Comments section's row only: how many rows it lists, before any filter.
----@field listed changeset.Listed? Comment rows only: what the row lists.
+---@field review_comment changeset.ReviewComment? Comment rows only: the comment the row lists.
 ---@field children changeset.Row[]
-
----What a comment row lists: a review comment of the pending review, or a draft of its PR.
----@class changeset.Listed
----@field review_comment changeset.ReviewComment?
----@field draft changeset.Draft? Set when `review_comment` isn't.
 
 ---A line of a file, repo-relative.
 ---@class changeset.Spot
@@ -662,51 +657,24 @@ function M.build(files, symbols_by_path, lines)
     :totable()
 end
 
----@param listed changeset.Listed
----@return changeset.Spanned
-local function spanned(listed)
-  return listed.review_comment or listed.draft --[[@as changeset.Spanned]]
-end
-
----A comment row's id: a review comment's own, or a draft's path and lines.
----@param listed changeset.Listed
----@return string
-local function comment_id(listed)
-  if listed.review_comment then
-    return COMMENTS_ID .. "\0" .. listed.review_comment.id
-  end
-  local draft = listed.draft --[[@as changeset.Draft]]
-  return ("%s\0#draft:%s:%d-%d"):format(COMMENTS_ID, draft.path, draft.start_line or draft.line, draft.line)
-end
-
----The Comments section: a row per review comment of the pending review and per draft of its PR, by path, then
----line, a review comment ahead of a draft on its line. A row goes to its line; an outdated or file-level review
----comment has none. The header counts the rows, and carries no stat: a review comment changes no line.
+---The Comments section: a row per review comment, by path, then line, then as listed. A row goes to its line.
+---The header counts the rows, and carries no stat: a review comment changes no line.
 ---@param review_comments changeset.ReviewComment[]
----@param drafts changeset.Draft[]
 ---@return changeset.Row? section nil when there is nothing to list.
-function M.comments(review_comments, drafts)
-  local listed = {}
-  for _, review_comment in ipairs(review_comments) do
-    listed[#listed + 1] = { review_comment = review_comment }
-  end
-  for _, draft in ipairs(drafts) do
-    listed[#listed + 1] = { draft = draft }
-  end
-  if #listed == 0 then
+function M.comments(review_comments)
+  if #review_comments == 0 then
     return nil
   end
-  local arrival = {}
-  for i, entry in ipairs(listed) do
-    arrival[entry] = i
+  local arrival, sorted = {}, {}
+  for i, comment in ipairs(review_comments) do
+    arrival[comment], sorted[i] = i, comment
   end
-  table.sort(listed, function(a, b)
-    local x, y = spanned(a), spanned(b)
-    if x.path ~= y.path then
-      return x.path < y.path
+  table.sort(sorted, function(a, b)
+    if a.path ~= b.path then
+      return a.path < b.path
     end
-    if (x.line or 0) ~= (y.line or 0) then
-      return (x.line or 0) < (y.line or 0)
+    if a.line ~= b.line then
+      return a.line < b.line
     end
     return arrival[a] < arrival[b]
   end)
@@ -716,22 +684,21 @@ function M.comments(review_comments, drafts)
     depth = 0,
     name = "Comments",
     path = "",
-    comments = #listed,
+    comments = #sorted,
     ancestor = false,
-    children = vim.tbl_map(function(entry)
-      local spot = spanned(entry)
+    children = vim.tbl_map(function(comment)
       return {
-        id = comment_id(entry),
+        id = ("%s\0%s:%d-%d"):format(COMMENTS_ID, comment.path, comment.start_line or comment.line, comment.line),
         kind = "comment",
         depth = 1,
-        name = spot.path,
-        path = spot.path,
-        lnum = spot.line,
+        name = comment.path,
+        path = comment.path,
+        lnum = comment.line,
         ancestor = false,
-        listed = entry,
+        review_comment = comment,
         children = {},
       }
-    end, listed),
+    end, sorted),
   }
 end
 

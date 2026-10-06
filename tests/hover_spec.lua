@@ -1,28 +1,6 @@
-local tree, found, on_tree, on_answer
-
-package.loaded["changeset.build"] = {
-  current = function()
-    return tree
-  end,
-  subscribe = function(fn)
-    on_tree = fn
-  end,
-}
-package.loaded["changeset.pending_state"] = {
-  get = function(root, number)
-    if tree and root == tree.root and number == tree.pr and number == 1 then
-      return found
-    end
-  end,
-  subscribe = function(fn)
-    on_answer = fn
-  end,
-}
-
+local Fixture = require("support.git")
+local comment_store = require("changeset.comment_store")
 require("changeset.review_comments")
-local drafts = require("changeset.drafts")
-
-local PR = { id = "PR_1", number = 1, host = "github.com", owner = "o", name = "n", head = "h" }
 
 ---@param count integer
 ---@param name string
@@ -55,31 +33,34 @@ end
 describe("hover", function()
   local dir, alpha
 
+  ---Replaces the repository's review comments with `comments`.
+  ---@param comments changeset.ReviewComment[]
+  local function set(comments)
+    comment_store.drop_all(dir)
+    for _, comment in ipairs(comments) do
+      comment_store.keep(dir, comment)
+    end
+  end
+
+  local RANGE = { path = "alpha.txt", line = 10, start_line = 8, body = "range body" }
+  local SINGLE = { path = "alpha.txt", line = 20, body = "saved body" }
+  local BETA = { path = "beta.txt", line = 5, body = "beta body" }
+
   before_each(function()
     dir = vim.fn.tempname()
     vim.fn.mkdir(dir, "p")
     dir = vim.fs.normalize(assert(vim.uv.fs_realpath(dir)))
+    Fixture.init_repo("main", dir)
+    os.remove(comment_store.path())
     vim.fn.writefile(lines(40, "alpha"), dir .. "/alpha.txt")
     vim.fn.writefile(lines(20, "beta"), dir .. "/beta.txt")
-    tree = { root = dir, branch = "b", pr = 1 }
-    found = {
-      pr = PR,
-      review = {
-        id = "R1",
-        comments = {
-          { id = "PRRC_1", path = "alpha.txt", line = 10, start_line = 8, body = "range body" },
-          { id = "PRRC_2", path = "alpha.txt", line = 20, body = "saved body" },
-          { id = "PRRC_3", path = "beta.txt", line = 5, body = "beta body" },
-        },
-      },
-    }
     vim.cmd.edit(dir .. "/alpha.txt")
     alpha = vim.api.nvim_get_current_buf()
   end)
 
   after_each(function()
     vim.cmd("silent! %bwipeout!")
-    os.remove(drafts.path())
+    os.remove(comment_store.path())
     for _, client in ipairs(vim.lsp.get_clients({ name = "changeset" })) do
       client:stop(true)
     end
@@ -87,81 +68,70 @@ describe("hover", function()
   end)
 
   it("attaches a client named changeset to a file with a review comment", function()
-    on_answer()
+    set({ RANGE, SINGLE, BETA })
     assert.are.equal(1, #clients(alpha))
   end)
 
   it("shares one client among a repository's files", function()
     vim.cmd.edit(dir .. "/beta.txt")
     local beta = vim.api.nvim_get_current_buf()
-    on_answer()
+    set({ RANGE, SINGLE, BETA })
     assert.are.equal(assert(clients(alpha)[1]).id, assert(clients(beta)[1]).id)
   end)
 
   it("answers hover with a review comment's lines and body on every line of its range", function()
-    on_answer()
+    set({ RANGE, SINGLE, BETA })
     assert.are.equal("**Review comment · lines 8-10**\n\nrange body", hover(alpha, 8))
     assert.are.equal("**Review comment · lines 8-10**\n\nrange body", hover(alpha, 9))
   end)
 
-  it("says a draft is only on this machine", function()
-    drafts.keep(PR, { path = "alpha.txt", line = 31, start_line = 30, head = "h", body = "draft body" })
-    assert.are.equal("**Draft · lines 30-31 · only on this machine**\n\ndraft body", hover(alpha, 31))
-  end)
-
-  it("puts a line's review comments before its drafts", function()
-    drafts.keep(PR, { path = "alpha.txt", line = 20, head = "h", body = "draft body" })
+  it("answers hover with every review comment covering the line", function()
+    set({ RANGE, { path = "alpha.txt", line = 9, body = "inner" } })
     assert.are.equal(
-      "**Review comment · line 20**\n\nsaved body\n\n---\n\n**Draft · line 20 · only on this machine**\n\ndraft body",
-      hover(alpha, 20)
+      "**Review comment · lines 8-10**\n\nrange body\n\n---\n\n**Review comment · line 9**\n\ninner",
+      hover(alpha, 9)
     )
   end)
 
-  it("answers nothing on a line without a review comment or draft", function()
-    on_answer()
+  it("marks a file read after its comments were kept", function()
+    set({ BETA })
+    vim.cmd.edit(dir .. "/beta.txt")
+    assert.are.equal("**Review comment · line 5**\n\nbeta body", hover(vim.api.nvim_get_current_buf(), 5))
+  end)
+
+  it("answers nothing on a line without a review comment", function()
+    set({ RANGE, SINGLE, BETA })
     assert.is_nil(hover(alpha, 1))
   end)
 
   it("drops the carriage returns of a CRLF body", function()
-    found.review.comments[2].body = "first\r\nsecond"
-    on_answer()
+    set({ vim.tbl_extend("force", SINGLE, { body = "first\r\nsecond" }) })
     assert.are.equal("**Review comment · line 20**\n\nfirst\nsecond", hover(alpha, 20))
   end)
 
-  it("detaches a buffer once the tree is on a PR GitHub hasn't answered for", function()
-    on_answer()
-    tree = { root = dir, branch = "c", pr = 2 }
-    on_tree("pr")
-    assert.are.same({}, clients(alpha))
-  end)
-
   it("detaches a buffer whose last review comment is deleted", function()
-    on_answer()
-    found.review.comments = { found.review.comments[3] }
-    on_answer()
+    set({ RANGE, BETA })
+    set({ BETA })
     assert.are.same({}, clients(alpha))
   end)
 
   it("keeps a buffer attached while it has a review comment", function()
-    on_answer()
-    table.remove(found.review.comments, 1)
-    on_answer()
+    set({ RANGE, SINGLE })
+    comment_store.drop(dir, RANGE)
     assert.are.equal(1, #clients(alpha))
   end)
 
   it("stops the client once no buffer is attached to it", function()
-    on_answer()
-    found.review.comments = {}
-    on_answer()
+    set({ RANGE })
+    set({})
     assert.is_true(vim.wait(1000, function()
       return #vim.lsp.get_clients({ name = "changeset" }) == 0
     end, 10))
   end)
 
   it("gives K back to 'keywordprg' on a detached buffer no other server has hover for", function()
-    on_answer()
-    found.review.comments = {}
-    on_answer()
+    set({ RANGE })
+    set({})
     assert.are.same({}, vim.fn.maparg("K", "n", false, true))
   end)
 
@@ -188,9 +158,8 @@ describe("hover", function()
         }
       end,
     }, { bufnr = alpha })
-    on_answer()
-    found.review.comments = {}
-    on_answer()
+    set({ RANGE })
+    set({})
     assert.are.equal("vim.lsp.buf.hover()", vim.fn.maparg("K", "n", false, true).desc)
     for _, client in ipairs(vim.lsp.get_clients({ name = "other" })) do
       client:stop()
@@ -201,21 +170,13 @@ describe("hover", function()
     local scratch = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_name(scratch, dir .. "/beta.txt")
     vim.api.nvim_buf_set_lines(scratch, 0, -1, false, lines(20, "beta"))
-    on_answer()
+    set({ RANGE, SINGLE, BETA })
     assert.are.same({}, clients(scratch))
-  end)
-
-  it("attaches no client while the tree has no PR", function()
-    vim.cmd("%bwipeout!")
-    tree = { root = dir, branch = "c" }
-    on_tree("pr")
-    vim.cmd.edit(dir .. "/alpha.txt")
-    assert.are.same({}, clients(vim.api.nvim_get_current_buf()))
   end)
 
   for _, force in ipairs({ false, true }) do
     it(("leaves no client behind once stopped%s"):format(force and " by force" or ""), function()
-      on_answer()
+      set({ RANGE, SINGLE, BETA })
       local client = assert(clients(alpha)[1])
       client:stop(force)
       assert.is_true(vim.wait(1000, function()

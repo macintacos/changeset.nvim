@@ -1,4 +1,4 @@
----The markdown window a review comment, or a review's body, is written in, under the line it is about.
+---The markdown window a review comment is written in, under the line it is about.
 
 local help = require("changeset.help")
 
@@ -21,7 +21,7 @@ end
 ---@class changeset.ReviewCommentWindowOpts
 ---@field line integer The current window's buffer line it opens under, 1-based.
 ---@field title string The whole title, e.g. "Review comment · line 42".
----@field footer string Names where a save goes, e.g. "pending review on #412".
+---@field footer string Names where a save goes, e.g. "kept until :Changeset submit".
 ---@field keys string[] Keys that save, in insert and normal mode.
 ---@field save_desc string The save keys' `desc`, which `?` lists.
 ---@field close_desc string The `desc` of the keys that close without saving, which `?` lists.

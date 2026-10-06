@@ -739,52 +739,35 @@ describe("changeset.rows", function()
   end)
 
   describe("comments", function()
-    ---@param id string
-    ---@param path string
-    ---@param line integer?
-    ---@return changeset.ReviewComment
-    local function review_comment(id, path, line)
-      return { id = id, path = path, line = line, outdated = line == nil, body = id .. " body\nmore" }
-    end
-
     ---@param path string
     ---@param line integer
-    ---@return changeset.Draft
-    local function draft(path, line)
-      return { path = path, line = line, head = "abc", body = "draft at " .. line }
+    ---@param start_line integer?
+    ---@return changeset.ReviewComment
+    local function review_comment(path, line, start_line)
+      return { path = path, line = line, start_line = start_line, body = path .. ":" .. line .. " body\nmore" }
     end
 
     ---@param section changeset.Row
     ---@return string[]
     local function listed(section)
       return vim.tbl_map(function(row)
-        return row.listed.review_comment and row.listed.review_comment.id or row.listed.draft.body
+        return row.review_comment.body:match("^%S+")
       end, section.children)
     end
 
-    it("lists the review comments and drafts by path, then line", function()
-      local section = assert(
-        Rows.comments(
-          { review_comment("PRRC_b3", "b.ts", 3), review_comment("PRRC_a9", "a.ts", 9) },
-          { draft("a.ts", 2) }
-        )
-      )
+    it("lists the review comments by path, then line", function()
+      local section =
+        assert(Rows.comments({ review_comment("b.ts", 3), review_comment("a.ts", 9), review_comment("a.ts", 2) }))
 
-      assert.same({ "draft at 2", "PRRC_a9", "PRRC_b3" }, listed(section))
-    end)
-
-    it("puts a review comment before a draft on its line", function()
-      local section = assert(Rows.comments({ review_comment("PRRC_a2", "a.ts", 2) }, { draft("a.ts", 2) }))
-
-      assert.same({ "PRRC_a2", "draft at 2" }, listed(section))
+      assert.same({ "a.ts:2", "a.ts:9", "b.ts:3" }, listed(section))
     end)
 
     it("is nothing when there is nothing to list", function()
-      assert.is_nil(Rows.comments({}, {}))
+      assert.is_nil(Rows.comments({}))
     end)
 
     it("counts what it lists on its header, which carries no stat", function()
-      local section = assert(Rows.comments({ review_comment("PRRC_a9", "a.ts", 9) }, { draft("a.ts", 2) }))
+      local section = assert(Rows.comments({ review_comment("a.ts", 9), review_comment("a.ts", 2) }))
 
       assert.equal("section", section.kind)
       assert.equal(2, section.comments)
@@ -792,7 +775,7 @@ describe("changeset.rows", function()
     end)
 
     it("goes to each listed line", function()
-      local section = assert(Rows.comments({ review_comment("PRRC_a9", "a.ts", 9) }, { draft("a.ts", 2) }))
+      local section = assert(Rows.comments({ review_comment("a.ts", 9), review_comment("a.ts", 2) }))
 
       assert.same({ 2, 9 }, {
         section.children[1].lnum,
@@ -800,33 +783,21 @@ describe("changeset.rows", function()
       })
     end)
 
-    it("lists an outdated review comment with no line to go to", function()
-      local section = assert(Rows.comments({ review_comment("PRRC_old", "a.ts", nil) }, {}))
-
-      assert.equal("PRRC_old", section.children[1].listed.review_comment.id)
-      assert.is_nil(section.children[1].lnum)
-    end)
-
     it("gives every row its own id, apart from every file section's", function()
-      local section = assert(
-        Rows.comments(
-          { review_comment("PRRC_a2", "a.ts", 2), review_comment("PRRC_b2", "a.ts", 2) },
-          { draft("a.ts", 2) }
-        )
-      )
+      local section = assert(Rows.comments({ review_comment("a.ts", 2), review_comment("a.ts", 2, 1) }))
       local distinct = { [section.id] = true }
       for _, row in ipairs(section.children) do
         distinct[row.id] = true
       end
 
-      assert.equal(4, vim.tbl_count(distinct))
+      assert.equal(3, vim.tbl_count(distinct))
       assert.is_false(vim.list_contains(Rows.section_ids(), section.children[1].id))
       assert.is_true(vim.list_contains(Rows.section_ids(), section.id))
     end)
 
     it("is never where a line of its file is located", function()
       local rows = Rows.build({ file(PATH, { hunk(5, 1) }) }, { [PATH] = {} })
-      table.insert(rows, 1, (assert(Rows.comments({ review_comment("PRRC_5", PATH, 5) }, {}))))
+      table.insert(rows, 1, (assert(Rows.comments({ review_comment(PATH, 5) }))))
 
       assert.equal(FILE_ID .. "\0#orphans", Rows.locate(rows, PATH, 5).id)
       assert.same(

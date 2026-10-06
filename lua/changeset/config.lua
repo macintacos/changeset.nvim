@@ -23,7 +23,7 @@ local M = {}
 ---@field prev_section? string|false Previous section. Default `[[`.
 ---@field refresh? string|false Rebuild the tree. Default `R`.
 ---@field yank? string|false Yank path:line. Default `y`.
----@field delete_comment? string|false Delete the review comment or draft a Comments row lists. Default `d`.
+---@field delete_comment? string|false Delete the review comment a Comments row lists. Default `d`.
 ---@field help? string|false Show these keymaps. Default `?`.
 ---@field filter_kinds? string|false Filter by symbol kind. Default `F`.
 ---@field filter? string|false Filter the tree. Default `f`.
@@ -37,8 +37,8 @@ local M = {}
 ---@field enabled? boolean Turn PR Review Mode on for every branch but the default. Only a restart turns it off again. Default false.
 
 ---@class changeset.Config.ReviewComment
----@field save? string[] Keys that save a review comment into the pending review, and close the submit preview's body window keeping the body, in insert and normal mode. Default { "<C-CR>", "<C-s>" }.
----@field sign? boolean Put a comment bubble in the sign column on each review comment's and draft's first line; `false` leaves it to a statuscolumn that draws `require("changeset").bubble()`. Default true.
+---@field save? string[] Keys that save a review comment and close its window, in insert and normal mode. Default { "<C-CR>", "<C-s>" }.
+---@field sign? boolean Put a comment bubble in the sign column on each review comment's first line; `false` leaves it to a statuscolumn that draws `require("changeset").bubble()`. Default true.
 
 ---The options in force: every top-level field set.
 ---@class changeset.Options : changeset.Config

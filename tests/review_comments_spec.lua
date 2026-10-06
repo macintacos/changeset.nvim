@@ -1,50 +1,23 @@
-local tree, found, on_tree, on_answer
-
-package.loaded["changeset.build"] = {
-  current = function()
-    return tree
-  end,
-  subscribe = function(fn)
-    on_tree = fn
-  end,
-}
-package.loaded["changeset.pending_state"] = {
-  get = function(root, number)
-    if tree and root == tree.root and number == tree.pr and number == 1 then
-      return found
-    end
-  end,
-  subscribe = function(fn)
-    on_answer = fn
-  end,
-}
-
+local Fixture = require("support.git")
+local comment_store = require("changeset.comment_store")
 local review_comments = require("changeset.review_comments")
 local config = require("changeset.config")
-local drafts = require("changeset.drafts")
 local render = require("changeset.render")
 
 ---@param path string
----@param line integer?
+---@param line integer
 ---@param start_line integer?
 local function comment(path, line, start_line)
-  return { id = "PRRC_" .. path .. tostring(line), path = path, line = line, start_line = start_line, body = "b" }
+  return { path = path, line = line, start_line = start_line, body = "b" }
 end
 
-local function full_answer()
+local function all()
   return {
-    pr = { id = "PR_1", number = 1 },
-    review = {
-      id = "R1",
-      comments = {
-        comment("alpha.txt", 31),
-        comment("alpha.txt", 13),
-        comment("alpha.txt", 10, 8),
-        comment("alpha.txt", 31, 10),
-        comment("beta.txt", 16),
-        comment("alpha.txt", nil),
-      },
-    },
+    comment("alpha.txt", 31),
+    comment("alpha.txt", 13),
+    comment("alpha.txt", 10, 8),
+    comment("alpha.txt", 31, 10),
+    comment("beta.txt", 16),
   }
 end
 
@@ -84,8 +57,6 @@ local function sign_texts(buf)
     :totable()
 end
 
-local PR = { id = "PR_1", number = 1, host = "github.com", owner = "o", name = "n", head = "h" }
-
 ---@param count integer
 ---@param name string
 local function lines(count, name)
@@ -99,14 +70,23 @@ end
 describe("review_comments", function()
   local dir, other, alpha, beta
 
+  ---Replaces the repository's review comments with `comments`.
+  ---@param comments changeset.ReviewComment[]
+  local function set(comments)
+    comment_store.drop_all(dir)
+    for _, c in ipairs(comments) do
+      comment_store.keep(dir, c)
+    end
+  end
+
   before_each(function()
     dir = vim.fn.tempname()
     vim.fn.mkdir(dir, "p")
     dir = vim.fs.normalize(assert(vim.uv.fs_realpath(dir)))
+    Fixture.init_repo("main", dir)
+    os.remove(comment_store.path())
     vim.fn.writefile(lines(40, "alpha"), dir .. "/alpha.txt")
     vim.fn.writefile(lines(20, "beta"), dir .. "/beta.txt")
-    tree = { root = dir, branch = "b", pr = 1 }
-    found = nil
     vim.cmd.edit(dir .. "/alpha.txt")
     alpha = vim.api.nvim_get_current_buf()
     vim.cmd.edit(dir .. "/beta.txt")
@@ -116,7 +96,7 @@ describe("review_comments", function()
   after_each(function()
     config.setup()
     vim.cmd("silent! %bwipeout!")
-    os.remove(drafts.path())
+    os.remove(comment_store.path())
     vim.fn.delete(dir, "rf")
     if other then
       vim.fn.delete(other, "rf")
@@ -124,56 +104,34 @@ describe("review_comments", function()
     end
   end)
 
-  it("marks open buffers once an answer is kept", function()
-    found = full_answer()
-    on_answer()
+  it("marks open buffers once a comment is kept", function()
+    set(all())
     assert.are.same({ { 7, 9 }, { 9, 30 }, { 12, 12 }, { 30, 30 } }, rows(alpha))
     assert.are.same({ { 15, 15 } }, rows(beta))
   end)
 
-  it("marks a buffer opened after the answer from the kept answer", function()
-    found = full_answer()
-    on_answer()
+  it("marks a buffer opened after its comments were kept", function()
+    set(all())
     vim.cmd("%bwipeout!")
     vim.cmd.edit(dir .. "/beta.txt")
     assert.are.same({ { 15, 15 } }, rows(vim.api.nvim_get_current_buf()))
   end)
 
-  it("clears every buffer when the review is gone", function()
-    found = full_answer()
-    on_answer()
-    found = { pr = found.pr }
-    on_answer()
+  it("clears every buffer when the review is abandoned", function()
+    set(all())
+    comment_store.drop_all(dir)
     assert.are.same({}, rows(alpha))
     assert.are.same({}, rows(beta))
   end)
 
   it("drops the mark of a deleted review comment", function()
-    found = full_answer()
-    on_answer()
-    table.remove(found.review.comments, 2)
-    on_answer()
+    set(all())
+    comment_store.drop(dir, comment("alpha.txt", 13))
     assert.are.same({ { 7, 9 }, { 9, 30 }, { 30, 30 } }, rows(alpha))
   end)
 
-  it("clears on a branch with no PR, and redraws back on the PR", function()
-    found = full_answer()
-    on_answer()
-    tree = { root = dir, branch = "c" }
-    on_tree("pr")
-    assert.are.same({}, rows(alpha))
-    tree = { root = dir, branch = "d", pr = 2 }
-    on_tree("pr")
-    assert.are.same({}, rows(alpha))
-    tree = { root = dir, branch = "b", pr = 1 }
-    on_tree("pr")
-    assert.are.same({ { 15, 15 } }, rows(beta))
-  end)
-
   it("skips a review comment past the buffer's last line", function()
-    found = full_answer()
-    table.insert(found.review.comments, comment("beta.txt", 99))
-    on_answer()
+    set(vim.list_extend(all(), { comment("beta.txt", 99) }))
     assert.are.same({ { 15, 15 } }, rows(beta))
   end)
 
@@ -185,39 +143,23 @@ describe("review_comments", function()
     local outside = vim.api.nvim_get_current_buf()
     local scratch = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_lines(scratch, 0, -1, false, lines(20, "beta"))
-    found = full_answer()
-    on_answer()
+    set(all())
     assert.are.same({}, rows(outside))
     assert.are.same({}, rows(scratch))
   end)
 
   it("colours the range's numbers and ends the line with the body", function()
-    found = full_answer()
-    on_answer()
+    set(all())
     local details = assert(marks(beta)[1][4])
     assert.are.equal(render.REVIEW_COMMENT_HL, details.number_hl_group)
     assert.are.same({ { "● ", render.REVIEW_COMMENT_HL }, { "b", render.REVIEW_COMMENT_BODY_HL } }, details.virt_text)
   end)
 
   it("puts a bubble in the sign column on each review comment's first line", function()
-    found = full_answer()
-    on_answer()
+    set(all())
     local bubble, hl = "󰍩 ", render.REVIEW_COMMENT_HL
     assert.are.same({ { 7, bubble, hl }, { 9, bubble, hl }, { 12, bubble, hl }, { 30, bubble, hl } }, signs(alpha))
     assert.are.same({ { 15, bubble, hl } }, signs(beta))
-  end)
-
-  it("puts a hollow bubble on a draft's first line", function()
-    found = { pr = PR }
-    drafts.keep(PR, { path = "beta.txt", line = 6, start_line = 5, head = "h", body = "d" })
-    assert.are.same({ { 4, "󰍪 ", render.REVIEW_DRAFT_HL } }, signs(beta))
-  end)
-
-  it("gives a line one bubble, a review comment's over a draft's", function()
-    found = full_answer()
-    found.pr = PR
-    drafts.keep(PR, { path = "beta.txt", line = 16, head = "h", body = "d" })
-    assert.are.same({ { 15, "󰍩 ", render.REVIEW_COMMENT_HL } }, signs(beta))
   end)
 
   it("draws the bubble over gitsigns' and diagnostics' signs on its line", function()
@@ -230,72 +172,47 @@ describe("review_comments", function()
     vim.diagnostic.set(vim.api.nvim_create_namespace("spec.diagnostics"), beta, {
       { lnum = 15, col = 0, severity = vim.diagnostic.severity.ERROR, message = "x" },
     })
-    found = full_answer()
-    on_answer()
+    set(all())
     assert.are.equal("󰍩 ", vim.api.nvim_eval_statusline("%s", { use_statuscol_lnum = 16 }).str)
   end)
 
   it("keeps the bubble out of the sign column when review_comment.sign is false", function()
     config.setup({ review_comment = { sign = false } })
-    found = full_answer()
-    on_answer()
+    set(all())
     assert.are.same({}, sign_texts(beta))
   end)
 
   it("answers a review comment's bubble and group on its first line only", function()
-    found = full_answer()
-    on_answer()
+    set(all())
     assert.are.same({ "󰍩", render.REVIEW_COMMENT_HL }, { review_comments.bubble(alpha, 8) })
     assert.are.same({}, { review_comments.bubble(alpha, 9) })
   end)
 
-  it("answers a draft's outline bubble", function()
-    found = { pr = PR }
-    drafts.keep(PR, { path = "beta.txt", line = 6, start_line = 5, head = "h", body = "d" })
-    assert.are.same({ "󰍪", render.REVIEW_DRAFT_HL }, { review_comments.bubble(beta, 5) })
-  end)
-
-  it("answers the review comment's bubble on a line it shares with a draft", function()
-    found = full_answer()
-    found.pr = PR
-    drafts.keep(PR, { path = "beta.txt", line = 16, head = "h", body = "d" })
-    assert.are.same({ "󰍩", render.REVIEW_COMMENT_HL }, { review_comments.bubble(beta, 16) })
-  end)
-
   it("answers each line's bubble when review_comment.sign is false", function()
     config.setup({ review_comment = { sign = false } })
-    found = full_answer()
-    found.pr = PR
-    drafts.keep(PR, { path = "beta.txt", line = 6, head = "h", body = "d" })
+    set(all())
     assert.are.same({ "󰍩", render.REVIEW_COMMENT_HL }, { review_comments.bubble(beta, 16) })
-    assert.are.same({ "󰍪", render.REVIEW_DRAFT_HL }, { review_comments.bubble(beta, 6) })
   end)
 
   it("answers a line's bubble after text is typed at its start", function()
-    found = full_answer()
-    on_answer()
+    set(all())
     vim.api.nvim_buf_set_text(beta, 15, 0, 15, 0, { "typed " })
     assert.are.same({ "󰍩", render.REVIEW_COMMENT_HL }, { review_comments.bubble(beta, 16) })
   end)
 
   it("clears its bubbles with its marks", function()
-    found = full_answer()
-    on_answer()
-    found = { pr = found.pr }
-    on_answer()
+    set(all())
+    comment_store.drop_all(dir)
     assert.are.same({}, signs(beta))
   end)
 
   it("ends the line with only the first line of a CRLF body", function()
-    found = full_answer()
-    found.review.comments[5].body = "first\r\nsecond"
-    on_answer()
+    set({ { path = "beta.txt", line = 16, body = "first\r\nsecond" } })
     assert.are.equal("first", marks(beta)[1][4].virt_text[2][1])
   end)
 
   it("marks a file the sidebar loads from a CursorMoved callback", function()
-    found = full_answer()
-    on_answer()
+    set(all())
     vim.cmd("%bwipeout!")
     local buf
     vim.api.nvim_create_autocmd("CursorMoved", {

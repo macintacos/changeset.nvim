@@ -11,10 +11,14 @@ local M = {}
 ---@field pr integer? The open PR's number, while `base` is measured against its target.
 ---@field skipped string? The open PR's target when HEAD shares no fork point with it, so `base` stayed on the default branch's.
 
----Each open PR, by `root .. "\n" .. branch`, kept for the session.
+---@class changeset.fork_point.PrTarget
+---@field target string
+---@field number integer
+
+---Each open PR's target and number, by `root .. "\n" .. branch`, kept for the session.
 ---An answer of no PR is not kept, so a PR opened since is found.
----@type table<string, changeset.Pr>
-local prs = {}
+---@type table<string, changeset.fork_point.PrTarget>
+local targets = {}
 
 ---The point measured when gh was asked, by the same key, while it is being asked.
 ---@type table<string, changeset.ForkPoint>
@@ -37,7 +41,7 @@ end
 ---`pr`'s target, taking each only when HEAD shares a fork point with it, else from the default branch.
 ---@param root string
 ---@param branch string
----@param pr changeset.Pr?
+---@param pr changeset.fork_point.PrTarget?
 ---@return changeset.ForkPoint?
 local function measure(root, branch, pr)
   local default_branch = Git.default_base(root)
@@ -46,8 +50,8 @@ local function measure(root, branch, pr)
   if parent and parent ~= default_branch then
     local parent_base, parent_ref = Git.merge_base(root, parent)
     if parent_base and not outgrown(root, parent_base, base) then
-      -- A review comment needs the tree's hunks to be the PR's, so the PR counts only while its target forks
-      -- from HEAD where `parent` does.
+      -- The header names the PR only while its target forks from HEAD where `parent` does, so the PR it
+      -- names is the one this diff is.
       local number = pr and (pr.target == parent or Git.merge_base(root, pr.target) == parent_base) and pr.number or nil
       return { base = parent_base, ref = parent_ref, against = parent, default_branch = default_branch, pr = number }
     end
@@ -74,35 +78,27 @@ end
 ---@return boolean asking Whether gh is still being asked, so subscribers will hear its answer.
 function M.get(root, branch)
   local key = root .. "\n" .. branch
-  local point = measure(root, branch, prs[key])
+  local point = measure(root, branch, targets[key])
   if not point then
     return nil, false
   end
-  if prs[key] or asking[key] then
+  if targets[key] or asking[key] then
     return point, asking[key] ~= nil
   end
   asking[key] = point
-  Git.pr(root, function(_, pr)
+  Git.pr_target(root, function(target, number)
     local heard = asking[key]
     asking[key] = nil
-    if pr then
-      prs[key] = pr
+    if target then
+      targets[key] = { target = target, number = number }
       -- HEAD can have moved by the time gh answers; subscribers still need a point.
-      heard = measure(root, branch, prs[key]) or heard
+      heard = measure(root, branch, targets[key]) or heard
     end
     for fn in pairs(subscribers) do
       fn(root, branch, heard)
     end
   end)
   return point, true
-end
-
----Whether gh is being asked about the PR of `branch` at `root`.
----@param root string
----@param branch string
----@return boolean
-function M.asking(root, branch)
-  return asking[root .. "\n" .. branch] ~= nil
 end
 
 ---Hear every gh answer, for any repository and branch. Subscribing `fn` again does nothing.

@@ -328,8 +328,8 @@ describe("changeset.view", function()
     end)
 
     it("keeps the Comments section folded under unfold_files", function()
-      local review_comment = { id = "PRRC_1", path = "mod.lua", line = 5, outdated = false, body = "why?" }
-      local with_comments = { assert(Rows.comments({ review_comment }, {})), unpack(ROWS) }
+      local review_comment = { path = "mod.lua", line = 5, body = "why?" }
+      local with_comments = { assert(Rows.comments({ review_comment })), unpack(ROWS) }
       local v = fresh()
       show(v, with_comments)
       v:step_out(1)

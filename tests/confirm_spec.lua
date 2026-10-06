@@ -32,7 +32,7 @@ describe("changeset.confirm", function()
   ---@return boolean confirmed
   local function ask()
     local confirmed = false
-    confirm.ask("Abandon the pending review on #412?", function()
+    confirm.ask("Abandon the review and its 3 review comments?", function()
       confirmed = true
     end)
     vim.wait(100, function()
@@ -46,7 +46,7 @@ describe("changeset.confirm", function()
 
     ask()
 
-    assert.truthy(asked[1]:find("Abandon the pending review on #412?", 1, true))
+    assert.truthy(asked[1]:find("Abandon the review and its 3 review comments?", 1, true))
   end)
 
   it("confirms when yes is chosen", function()
@@ -80,7 +80,7 @@ describe("changeset.confirm", function()
     ---@type boolean?
     local said_while_open
 
-    confirm.ask("Abandon the pending review on #412?", function()
+    confirm.ask("Abandon the review and its 3 review comments?", function()
       said_while_open = open
     end)
     vim.wait(100, function()

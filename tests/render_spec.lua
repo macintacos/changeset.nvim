@@ -203,33 +203,27 @@ describe("changeset.render", function()
   end)
 
   describe("the Comments section", function()
-    ---@param listed changeset.Listed
-    ---@param lnum integer?
+    ---@param review_comment changeset.ReviewComment
     ---@return changeset.Row
-    local function comment_row(listed, lnum)
-      local path = (listed.review_comment or listed.draft).path
+    local function comment_row(review_comment)
+      local path = review_comment.path
       return {
         id = "#comments\0" .. path,
         kind = "comment",
         depth = 1,
         name = path,
         path = path,
-        lnum = lnum,
+        lnum = review_comment.line,
         ancestor = false,
         children = {},
-        listed = listed,
+        review_comment = review_comment,
       }
     end
 
     ---@param fields table?
     ---@return changeset.Row
     local function saved(fields)
-      local review_comment = vim.tbl_extend(
-        "force",
-        { id = "c", path = "src/a.lua", line = 42, outdated = false, body = "note\nmore" },
-        fields or {}
-      )
-      return comment_row({ review_comment = review_comment }, review_comment.line)
+      return comment_row(vim.tbl_extend("force", { path = "src/a.lua", line = 42, body = "note\nmore" }, fields or {}))
     end
 
     ---@param children changeset.Row[]
@@ -249,7 +243,7 @@ describe("changeset.render", function()
 
     it("counts what it lists on its header, with no stat", function()
       local one = render.lines({ comments({ saved() }) }, opts())[1]
-      local two = render.lines({ comments({ saved(), saved({ id = "d" }) }) }, opts())[1]
+      local two = render.lines({ comments({ saved(), saved({ line = 43 }) }) }, opts())[1]
 
       assert.truthy(one.text:find("Comments", 1, true))
       assert.truthy(one.text:find("1 comment$"))
@@ -264,14 +258,6 @@ describe("changeset.render", function()
       assert.equal(render.REVIEW_COMMENT_HL, mark_over(line, "●").hl)
     end)
 
-    it("leads a draft's row with a hollow circle in its group", function()
-      local draft = { path = "src/a.lua", line = 7, head = "h", body = "later" }
-      local line = render.lines({ comments({ comment_row({ draft = draft }, 7) }) }, opts())[2]
-
-      assert.equal(" ○ ", line.text:sub(1, #" ○ "))
-      assert.equal(render.REVIEW_DRAFT_HL, mark_over(line, "○").hl)
-    end)
-
     it("names the file and the line or range, then the body's first line, quiet", function()
       local one = render.lines({ comments({ saved() }) }, opts())[2]
       local range = render.lines({ comments({ saved({ start_line = 40 }) }) }, opts())[2]
@@ -279,13 +265,6 @@ describe("changeset.render", function()
       assert.is_true(vim.endswith(one.text, "a.lua:42  note"))
       assert.is_true(vim.endswith(range.text, "a.lua:40-42  note"))
       assert.equal(render.REVIEW_COMMENT_BODY_HL, mark_over(one, "note").hl)
-    end)
-
-    it("says, quietly, that an outdated review comment has no line", function()
-      local line = render.lines({ comments({ saved({ line = nil, outdated = true, original_line = 12 }) }) }, opts())[2]
-
-      assert.is_true(vim.endswith(line.text, "a.lua  outdated, was 12  note"))
-      assert.equal(render.META_HL, mark_over(line, "outdated, was 12").hl)
     end)
 
     it("clips the body to the width", function()
@@ -296,15 +275,9 @@ describe("changeset.render", function()
     end)
 
     for _, width in ipairs({ 44, 30 }) do
-      it(("fits an outdated review comment on a long file name to width %d"):format(width), function()
-        local outdated = saved({
-          path = "lua/changeset/review_comment_window.lua",
-          line = nil,
-          outdated = true,
-          original_line = 120,
-          original_start_line = 112,
-        })
-        local line = render.lines({ comments({ outdated }) }, opts({ width = width }))[2]
+      it(("fits a range on a long file name to width %d"):format(width), function()
+        local long = saved({ path = "lua/changeset/review_comment_window.lua", line = 120, start_line = 112 })
+        local line = render.lines({ comments({ long }) }, opts({ width = width }))[2]
 
         assert.is_true(vim.fn.strdisplaywidth(line.text) <= width - 2, line.text)
         assert.truthy(line.text:find("review_comment_", 1, true))
@@ -789,37 +762,6 @@ describe("changeset.render", function()
       assert.equal(render.HEADER_REF_HL, group_at(shown, "trunk"))
     end)
 
-    it("marks a pending review with a circle ahead of the PR, the PR keeping its edge", function()
-      render.define_highlights()
-      local shown = eval({ ref = "origin/trunk", pr = 412, pending_review = true }, 44, true)
-
-      assert.equal(render.HEADER_PENDING_HL, group_at(shown, "●"))
-      assert.truthy(shown.str:find("●.*#412"))
-      assert.equal(" #412 ", shown.str:sub(-6))
-    end)
-
-    it("draws the circle in the PR's own dim when there is no pending review", function()
-      render.define_highlights()
-      local shown = eval({ ref = "origin/trunk", pr = 412, pending_review = false }, 44, true)
-
-      assert.equal(render.HEADER_NOT_PENDING_HL, group_at(shown, "●"))
-    end)
-
-    it("draws no circle before GitHub has answered", function()
-      assert.falsy(eval({ ref = "origin/trunk", pr = 412 }).str:find("●", 1, true))
-    end)
-
-    it("draws no circle without a PR", function()
-      assert.falsy(eval({ ref = "origin/trunk", pending_review = true }).str:find("●", 1, true))
-    end)
-
-    it("clips a long ref to leave room for the circle", function()
-      local text = eval({ ref = LONG, pr = 412, pending_review = true }, 30).str
-
-      assert.equal(30, vim.fn.strdisplaywidth(text))
-      assert.truthy(text:find("●", 1, true))
-    end)
-
     it("reads a local ref whole, with nothing dimmed", function()
       render.define_highlights()
       local shown = eval({ ref = "jt/parent" }, 44, true)
@@ -1210,21 +1152,6 @@ describe("changeset.render", function()
       assert.is_true(group(render.HEADER_REF_HL).bold)
     end)
 
-    it("paints the pending-review circle in the theme's OK green on the header's strip", function()
-      vim.api.nvim_set_hl(0, "TabLine", { bg = 0x654321 })
-      vim.api.nvim_set_hl(0, "DiagnosticOk", { fg = 0x22aa44 })
-
-      render.define_highlights()
-
-      assert.same({ 0x22aa44, 0x654321 }, { group(render.HEADER_PENDING_HL).fg, group(render.HEADER_PENDING_HL).bg })
-    end)
-
-    it("dims the circle like the PR when there is no pending review", function()
-      render.define_highlights()
-
-      assert.equal(render.HEADER_DIM_HL, vim.api.nvim_get_hl(0, { name = render.HEADER_NOT_PENDING_HL }).link)
-    end)
-
     it("paints the footer on the statusline's own background", function()
       vim.api.nvim_set_hl(0, "StatusLine", { fg = 0xeeeeee, bg = 0x222222 })
       vim.api.nvim_set_hl(0, "Comment", { fg = 0x336699 })
@@ -1416,88 +1343,6 @@ describe("changeset.render", function()
 
     it("ends at the kinds when the kind menu has no key", function()
       assert.truthy(vim.endswith(assert(render.hidden_note({ "Variable" }, 44, false)), "variables."))
-    end)
-  end)
-
-  describe("submit_lines", function()
-    ---@param overrides table?
-    local function lines(overrides)
-      return render.submit_lines(vim.tbl_extend("force", {
-        events = { "COMMENT" },
-        event = "COMMENT",
-        comments = {},
-        drafts = {},
-      }, overrides or {}))
-    end
-
-    local function find(out, needle)
-      return vim.iter(out):find(function(line)
-        return line.text:find(needle, 1, true) ~= nil
-      end)
-    end
-
-    local function comment(fields)
-      return vim.tbl_extend("force", { id = "c", path = "a.lua", outdated = false, body = "note" }, fields)
-    end
-
-    it("shows each comment's path with its line or range", function()
-      local out = lines({
-        comments = { comment({ line = 42 }), comment({ path = "b.lua", start_line = 50, line = 55 }) },
-      })
-      assert.truthy(find(out, "● a.lua:42"))
-      assert.truthy(find(out, "● b.lua:50-55"))
-    end)
-
-    it("marks an outdated comment with the line it was made on", function()
-      local out = lines({ comments = { comment({ outdated = true, original_line = 12 }) } })
-      assert.truthy(find(out, "a.lua  outdated, was 12"))
-    end)
-
-    it("marks an outdated comment without an original line as plain outdated", function()
-      local line = find(lines({ comments = { comment({ outdated = true }) } }), "a.lua")
-      assert.truthy(line.text:find("a.lua  outdated  ", 1, true))
-      assert.is_nil(line.text:find("was", 1, true))
-    end)
-
-    it("marks a file-level comment", function()
-      assert.truthy(find(lines({ comments = { comment({}) } }), "a.lua  file"))
-    end)
-
-    it("shows only a CRLF body's first line, without its carriage return", function()
-      local line = find(lines({ comments = { comment({ line = 4, body = "first\r\nsecond" }) } }), "a.lua")
-      assert.are.equal("first", line.text:match("(%S+)$"))
-    end)
-
-    it("says when the review has no comments", function()
-      assert.truthy(find(lines(), "No review comments"))
-    end)
-
-    it("names each draft as not included", function()
-      local out = lines({ drafts = { { path = "v.lua", line = 7, head = "h", body = "x" } } })
-      assert.truthy(find(out, "○ v.lua:7  draft, not included"))
-    end)
-
-    it("draws no event row for one event, the body row first", function()
-      local out, body_row = lines()
-      assert.is_nil(find(out, "Comment"))
-      assert.equal(1, body_row)
-      assert.truthy(out[1].text:find("No body", 1, true))
-    end)
-
-    it("draws three events, lighting the chosen one", function()
-      local out, body_row = lines({ events = { "COMMENT", "APPROVE", "REQUEST_CHANGES" }, event = "APPROVE" })
-      assert.equal("  Comment   Approve   Request changes ", out[1].text)
-      assert.equal(3, body_row)
-      local lit = vim.tbl_filter(function(mark)
-        return mark.hl == render.SELECTED_HL
-      end, out[1].marks)
-      assert.equal(1, #lit)
-      assert.equal(" Approve ", out[1].text:sub(lit[1].col + 1, lit[1].end_col))
-    end)
-
-    it("shows the body's first line", function()
-      local out, body_row = lines({ body = "looks good\nmore" })
-      assert.equal(" looks good …", out[body_row].text)
     end)
   end)
 end)

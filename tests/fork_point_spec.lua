@@ -53,20 +53,20 @@ local function stacked_repo(source)
 end
 
 describe("fork_point", function()
-  local real_pr, asks
+  local real_pr_target, asks
   local roots = {}
 
   before_each(function()
     asks = 0
-    real_pr = Git.pr
-    Git.pr = function(...)
+    real_pr_target = Git.pr_target
+    Git.pr_target = function(...)
       asks = asks + 1
-      return real_pr(...)
+      return real_pr_target(...)
     end
   end)
 
   after_each(function()
-    Git.pr = real_pr
+    Git.pr_target = real_pr_target
     vim.env.FAKE_GH_PR = nil
     vim.env.FAKE_GH_DELAY = nil
     for _, root in ipairs(roots) do

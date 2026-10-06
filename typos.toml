@@ -1,9 +1,3 @@
 [default.extend-words]
-enew  = "enew"  # :enew
-noet  = "noet"  # vim modeline: noexpandtab
-noice = "noice" # noice.nvim
-
-[files]
-extend-exclude = [
-  "tests/fixtures/**",
-] # recorded gh responses: base64 cursors and node IDs
+enew = "enew" # :enew
+noet = "noet" # vim modeline: noexpandtab

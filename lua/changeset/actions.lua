@@ -7,7 +7,7 @@ local build = require("changeset.build")
 local draw = require("changeset.draw")
 local help = require("changeset.help")
 local icons = require("changeset.icons")
-local pr = require("changeset.pr")
+local reviewing = require("changeset.reviewing")
 local sidebar_state = require("changeset.sidebar_state")
 local view = require("changeset.view")
 local window = require("changeset.window")
@@ -55,9 +55,9 @@ end
 
 ---Open what a comment row lists in the window a commit left focused.
 ---@param row changeset.Row?
-local function open_listed(row)
-  if row and row.listed then
-    pr.open_listed(row.listed)
+local function open_comment(row)
+  if row and row.review_comment then
+    reviewing.open(row.review_comment)
   end
 end
 
@@ -202,30 +202,30 @@ function M.set_keymaps(buf, keys, hooks)
   end
 
   map(keys.jump, function()
-    open_listed(commit("reuse", hooks))
+    open_comment(commit("reuse", hooks))
   end, "Go to this change")
   -- The commit leaves the cursor in the window it jumped to, and `close` keeps
   -- focus where it already is, so the sidebar goes without taking the jump back.
   map(keys.jump_close, function()
     local row = commit("reuse", hooks)
     hooks.close()
-    open_listed(row)
+    open_comment(row)
   end, "Go to this change and close the tree")
   map(keys.jump_vsplit, function()
-    open_listed(commit("vsplit", hooks))
+    open_comment(commit("vsplit", hooks))
   end, "Go to this change in a vertical split")
   map(keys.jump_split, function()
-    open_listed(commit("split", hooks))
+    open_comment(commit("split", hooks))
   end, "Go to this change in a split")
   map(keys.jump_tab, function()
-    open_listed(commit("tab", hooks))
+    open_comment(commit("tab", hooks))
   end, "Go to this change in a new tab")
   map(keys.delete_comment, function()
     local row = draw.row_at_cursor()
-    if row and row.listed then
-      pr.delete_listed(row.listed)
+    if row and row.review_comment then
+      reviewing.ask_delete(row.review_comment)
     end
-  end, "Delete this review comment or draft")
+  end, "Delete this review comment")
   map(keys.close, hooks.close, "Close the tree")
   map(keys.expand, function(state)
     local lnum = cursor()

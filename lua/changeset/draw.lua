@@ -2,9 +2,8 @@
 ---marks, header and row states. The sidebar state's View decides what is on each line; `band_for` builds a row's
 ---preview band.
 
-local drafts = require("changeset.drafts")
+local comment_store = require("changeset.comment_store")
 local icons = require("changeset.icons")
-local pending_state = require("changeset.pending_state")
 local render = require("changeset.render")
 local Rows = require("changeset.rows")
 local sidebar_state = require("changeset.sidebar_state")
@@ -20,7 +19,7 @@ local ns = vim.api.nvim_create_namespace("changeset")
 -- Separate from `ns` so the tracker can repaint row backgrounds without redrawing the tree.
 local rows_ns = vim.api.nvim_create_namespace("changeset.rows")
 
----The Comments section as last drawn, kept so a repaint reads no drafts from disk.
+---The Comments section as last drawn, kept so a repaint reads no comments from disk.
 ---@type changeset.Row?
 local comments_section
 
@@ -70,12 +69,11 @@ function M.band_for(row, jump)
   }
 end
 
----The Comments section for `tree`'s PR, from GitHub's last answer and the drafts on disk.
+---The Comments section for `tree`'s repository, from the comments on disk.
 ---@param tree changeset.Tree
 ---@return changeset.Row?
 local function comments_for(tree)
-  local found = tree.pr and pending_state.get(tree.root, tree.pr)
-  return found and Rows.comments(found.review and found.review.comments or {}, drafts.list(found.pr))
+  return Rows.comments(comment_store.list(tree.root))
 end
 
 ---The tree as the sidebar lays it out: the Comments section, while it lists anything, over `rows`.
@@ -174,11 +172,9 @@ local function summary()
       pending = pending + (Rows.read_status(file, state.tree.symbols) == "reading" and 1 or 0)
     end
   end
-  local found = state.tree.pr and pending_state.get(state.tree.root, state.tree.pr)
   return {
     ref = state.tree.ref,
     pr = state.tree.pr,
-    pending_review = found and found.review ~= nil,
     files = #state.tree.files,
     commits = state.tree.commits,
     added = added,

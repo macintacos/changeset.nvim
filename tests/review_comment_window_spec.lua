@@ -31,7 +31,7 @@ describe("review_comment_window", function()
     local win = review_comment_window.open(vim.tbl_extend("force", {
       line = 5,
       title = "line 5",
-      footer = "pending review on #412",
+      footer = "kept until review sent",
       save_desc = "Save",
       close_desc = "Close",
       keys = SAVE_KEYS,
@@ -76,13 +76,13 @@ describe("review_comment_window", function()
   end
 
   it("holds editable markdown and labels itself", function()
-    local win, buf = open({ title = "lines 4-5", footer = "pending review on #7" })
+    local win, buf = open({ title = "lines 4-5", footer = "kept on this machine" })
     local config = vim.api.nvim_win_get_config(win)
 
     assert.equal("markdown", vim.bo[buf].filetype)
     assert.is_true(vim.bo[buf].modifiable)
     assert.equal(" lines 4-5 ", config.title[1][1])
-    assert.truthy(config.footer[1][1]:find("pending review on #7", 1, true))
+    assert.truthy(config.footer[1][1]:find("kept on this machine", 1, true))
   end)
 
   ---The footer's text, its chunks joined.
@@ -93,9 +93,9 @@ describe("review_comment_window", function()
   end
 
   it("names its first save key at the right of the footer, across the border from where a save goes", function()
-    local win = open({ footer = "pending review on #412", keys = { "<C-CR>", "<C-s>" } })
+    local win = open({ footer = "kept until review sent", keys = { "<C-CR>", "<C-s>" } })
     assert.equal(72, vim.api.nvim_win_get_width(win))
-    assert.equal(" pending review on #412 " .. ("─"):rep(35) .. " <C-CR> save ", footer(win))
+    assert.equal(" kept until review sent " .. ("─"):rep(35) .. " <C-CR> save ", footer(win))
   end)
 
   it("writes the save key in Neovim's own notation", function()
@@ -106,11 +106,11 @@ describe("review_comment_window", function()
   it("drops the save key from a footer too narrow for both", function()
     vim.cmd("vsplit")
     vim.cmd("vertical resize 30")
-    local win = open({ footer = "pending review on #412" })
+    local win = open({ footer = "kept until review sent" })
     local text = footer(win)
     vim.api.nvim_win_close(win, true)
     vim.cmd.close()
-    assert.equal(" pending review on #412 ", text)
+    assert.equal(" kept until review sent ", text)
   end)
 
   it("describes its keys with the descriptions it is given", function()

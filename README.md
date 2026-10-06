@@ -99,15 +99,10 @@ closes it. It takes one optional subcommand, and `pr` takes a verb:
 - `:Changeset refresh` rebuilds the tree.
 - `:Changeset review` turns [PR Review Mode](#pr-review-mode) off, or back on, for the
   current branch. It raises an error unless `pr_review.enabled` is set.
-- `:Changeset pr start` starts a [pending review](#pr-reviews) on the branch's open PR.
-- `:Changeset pr submit` previews the branch's [pending review](#pr-reviews), then submits
-  it.
-- `:Changeset pr abandon` deletes the branch's [pending review](#pr-reviews) and the PR's
-  drafts.
-- `:Changeset pr comment` writes a review comment into the [pending review](#pr-reviews),
-  or reopens the draft on the cursor's line.
-- `:Changeset pr delete` deletes the draft on the cursor's line, else the review comment
-  there in the branch's [pending review](#pr-reviews).
+- `:Changeset comment` writes a [review comment](#review-comments) on the cursor's line,
+  or on the selected lines, or opens the one already there to edit it.
+- `:Changeset delete` deletes the [review comment](#review-comments) on the cursor's line.
+- `:Changeset abandon` deletes every [review comment](#review-comments) of the repository.
 
 `<Plug>(changeset-toggle)` does what `:Changeset toggle` does.
 
@@ -131,15 +126,14 @@ across the top of that window. `<CR>`, or a split or tab key, opens the change t
 
 The table lists the default keys, plus `]h` / `[h`, which the [Usage](#usage) example
 binds. Rename a sidebar key with its `keymaps` option, and the save keys of the review
-comment window and the submit preview's body window with `review_comment.save`, in
-[Options](#options).
+comment window with `review_comment.save`, in [Options](#options).
 
 <!-- The separator rows' dash counts set the vimdoc's column widths; keep their ratios. -->
 
 | Key | Where | Does |
 | --- | --- | ------------ |
 | `j` / `k` | sidebar | move, previewing into the window you were last in without leaving the sidebar |
-| `<CR>` | sidebar | open the change there, focusing that window at the row's line; on a Comments row, then open its review comment or draft under that line; nothing on a section header |
+| `<CR>` | sidebar | open the change there, focusing that window at the row's line; on a Comments row, then open its review comment under that line; nothing on a section header |
 | `<S-CR>` | sidebar | open the change, then close the sidebar |
 | `q` | sidebar | close, return you to your window and put back what each previewed window showed |
 | `h` | sidebar | collapse; on a section header, fold its section; with nothing left to collapse, step out to the parent, so repeated `h` walks up to the file and then its section header |
@@ -150,21 +144,14 @@ comment window and the submit preview's body window with `review_comment.save`, 
 | `x` | kind menu | hide or show the kind under the cursor, redrawing the tree at once |
 | `<CR>` / `r` / `b` | kind menu | remember this set everywhere / for this repository / for this branch, then close |
 | `q` / `<Esc>` | kind menu | close, putting the tree back to the saved set |
-| `<C-CR>` / `<C-s>` | review comment window | save into the pending review, or update the review comment being edited, and close; when GitHub refuses, the window and its text stay |
-| `q` / `<S-Esc>` | review comment window | close, keeping the text as a local draft; editing a review comment, drop the edit |
+| `<C-CR>` / `<C-s>` | review comment window | keep the review comment and close |
+| `q` / `<S-Esc>` | review comment window | close, keeping a new review comment's text; editing one, drop the edit |
 | `?` | review comment window | list its keys |
-| `<CR>` | submit preview | submit the review; when it is refused, the preview stays |
-| `c` / `a` / `r` | submit preview | choose Comment / Approve / Request changes; only on someone else's PR |
-| `b` | submit preview | write the review's body in a window below |
-| `q` / `<Esc>` | submit preview | close without submitting |
-| `?` | submit preview | list its keys |
-| `<C-CR>` / `<C-s>` | body window | keep the body and close |
-| `q` / `<S-Esc>` | body window | keep the body and close |
 | `f` | sidebar | filter as you type, keeping ancestors so matches stay in place and highlighting every match until you clear the filter; `<Esc>` cancels and keeps the previous filter |
 | `R` | sidebar | rebuild now |
 | `y` | sidebar | copy the row's `path:line` to the clipboard; nothing on a section header |
-| `d` | sidebar | on a Comments row, ask, then delete its review comment or draft; nothing on any other row |
-| `/` `-` `<C-t>` | sidebar | open the change in a vsplit / split / new tab instead, opening a Comments row's review comment or draft as `<CR>` does |
+| `d` | sidebar | on a Comments row, ask, then delete its review comment; nothing on any other row |
+| `/` `-` `<C-t>` | sidebar | open the change in a vsplit / split / new tab instead, opening a Comments row's review comment as `<CR>` does |
 | `?` | sidebar | list the keys the sidebar bound, `keymaps.next` / `keymaps.prev` included when set: which-key's popup where it is installed, a float where it is not |
 | `]h` / `[h` | anywhere, while open | off unless set as `keymaps.next` / `keymaps.prev`; move the sidebar's selection to the next / previous row, previewing it and skipping section headers, so you can review without focusing the sidebar |
 
@@ -191,116 +178,57 @@ or back on, for the current branch until Neovim exits.
 
 It works without the sidebar, and the sidebar works without it.
 
-## PR reviews
+## Review comments
 
-A pending review is where GitHub holds your review comments on a PR until you submit or
-delete it. You have at most one per PR. `pr start`, `pr submit`, `pr abandon` and
-`pr delete` work with the sidebar closed. While one waits on GitHub it shows a Neovim
-progress message, which the message area draws as `Changeset: asking GitHub …` and
-progress UIs such as fidget, noice and snacks pick up; none runs while a question or the
-submit preview waits on you.
+Review comments are notes on lines of the repository's files, kept on this machine in
+`stdpath("state")/changeset/comments.json` and never sent anywhere. They belong to the
+repository's root, so every branch checked out there shares them, and they keep their line
+numbers when the file changes. The first one written starts the review, and
+`:Changeset abandon` ends it. None of this needs the sidebar, a PR or `gh`.
 
-A branch created from a branch other than its PR's target is compared against the branch
-it was created from. When the branch forks from the PR's target somewhere else, the
-sidebar then leaves the PR out: its header shows no PR number
-or circle, its review comments and drafts aren't marked, and `pr comment` refuses, since
-the lines it would offer are not the PR's.
+- `:Changeset comment` opens a markdown window under the cursor's line, moving the lines
+  below down, in any file of the repository. `:'<,'>Changeset comment` opens it under the
+  selection and comments on the selected lines. The keys in `review_comment.save`,
+  `<C-CR>` or `<C-s>` by default, keep it and close the window. Closing it with `q`,
+  `<S-Esc>` or `:q`, or quitting Neovim with it open, keeps its text too; empty text keeps
+  nothing. On a line a review comment already covers, it opens that one to edit instead.
+- `:Changeset delete` deletes the review comment on the cursor's line, without asking.
+  When several take in that line, it deletes the narrowest; run it again for the next.
+  When the line has none, it says so. In a modified buffer it asks you to save first:
+  marks move with unsaved edits, while delete goes by line number.
+- `:Changeset abandon` asks you to confirm, then deletes every review comment of the
+  repository. The question goes through `vim.ui.select`, so mini.pick or another picker
+  that replaces it shows it. With none, it says so.
 
-- `:Changeset pr start` starts a pending review on the branch's open PR. It needs an open
-  PR and `gh` signed in. When a pending review is already under way, including one started
-  on github.com, it says so instead.
-- `:Changeset pr submit` opens a preview of the pending review: each review comment with
-  its file and line or lines, outdated ones marked, and the PR's drafts at its current head
-  named as not included. On someone else's PR, `c`, `a` and `r` choose Comment, Approve or
-  Request changes, Comment preselected; on your own PR it submits as Comment, since
-  GitHub refuses the other two there. `b` writes an optional markdown body. `<CR>`
-  submits, and `q` or `<Esc>` close without submitting. A Comment with no review comments
-  and no body is refused before asking GitHub; a submit GitHub refuses shows its reason,
-  and the preview and the pending review stay as they were. Drafts stay after a submit.
-- `:Changeset pr abandon` asks you to confirm, then deletes the pending review, every
-  review comment in it, and the PR's drafts. A failed delete keeps the drafts. The question
-  goes through `vim.ui.select`, so mini.pick or another picker that replaces it shows it.
-  No comes first, so `<CR>` alone keeps the review.
-- `:Changeset pr comment` opens a markdown window under the cursor's line, moving the
-  lines after it down rather than covering them; from visual mode,
-  `:'<,'>Changeset pr comment` opens it under the selection and comments on the selected
-  lines. It needs a sidebar opened on the repository so the PR's diff is read (you can
-  close it again), the PR's head commit fetched, and lines inside the PR's diff in a saved
-  file that matches that head. With no pending review, it asks whether to start one, the
-  way `pr abandon` asks; yes opens the window at once and starts the review in the
-  background, and a save waits for it. If the review can't start, a save is kept as a
-  draft. The keys in
-  `review_comment.save`, `<C-CR>` or `<C-s>` by default, save it into the pending review
-  and close the window, whose border names the first of them; with only whitespace
-  written, they close it and save nothing.
-  `q`, `<S-Esc>` (where the terminal sends it) and `:q` close it and keep its text as a
-  draft on this machine, as does quitting Neovim with it open; empty text keeps nothing.
-  A save GitHub rejects keeps the draft too. Running `pr comment` anywhere on a draft's
-  lines reopens it on its own lines, asking to start a pending review like a new one when
-  there is none. Drafts never reach GitHub.
-- `:Changeset pr delete` deletes the draft on the cursor's line, else the review comment
-  there, without asking; a draft needs no pending review. When several take in that line,
-  it deletes the narrowest; run it again for the next. When the line has none, it says so.
-  In a modified buffer it asks you to save first: marks move with unsaved edits, while
-  delete goes by line number.
+A review comment opened to edit, titled `Edit review comment`, is replaced by a save key.
+Saving or closing it with only whitespace asks whether to delete it. Closing it any other
+way drops the edit, and it keeps its saved text.
 
-With the sidebar open, a circle beside the PR number in its header shows whether you have
-a pending review on that PR: gray with none, green with one, including one started on
-github.com, drawn in `ChangesetHeaderNotPending` and `ChangesetHeaderPending` (see
-[Highlight groups](#highlight-groups)). It is checked when the sidebar's tree lands on a
-new branch or PR, when Neovim regains focus, and after `:Changeset pr start`, `pr submit`,
-`pr abandon` and `pr delete`, and after a review comment is saved. It is absent whenever
-the PR number is (no open PR, `gh` missing or signed out) and until GitHub first answers.
-
-Each review comment in your pending review, including ones added on github.com, is marked
-in its file's buffer: a green comment bubble, `󰍩`, fills the sign column on its first line
-over any other sign there, the line numbers it covers turn green, and its first line ends
-with a green circle and the first line of its body, drawn in `ChangesetReviewComment` and
-`ChangesetReviewCommentBody`. The marks appear once the sidebar or the picker has built
-the tree for the repository, and stay with the sidebar closed. Outdated and file-level
-review comments have no line, so they aren't drawn. The marks update with the circle: when
-the branch or its PR changes, including a branch switch made outside the sidebar, when
-Neovim regains focus, and after `:Changeset pr start`, `pr submit`, `pr abandon` and
-`pr delete`, and after a review comment is saved. A file you open later is marked from the
-last answer, without asking GitHub again. The bubble needs a Nerd Font.
-
-Each draft of the PR is marked the same way with an outline bubble, `󰍪`, and a hollow
-circle, drawn in `ChangesetReviewDraft`, whether or not a pending review exists. Its mark
-appears and goes as the draft is kept or deleted. A draft written against an older head of
-the PR isn't drawn or reopened; it stays in the file until `pr abandon`, and drafts of
-closed or merged PRs stay too. A line shows one bubble, a review comment's over a draft's.
+Each review comment is marked in its file's buffer: a green comment bubble, `󰍩`, fills the
+sign column on its first line over any other sign there, the line numbers it covers turn
+green, and its first line ends with a green circle and the first line of its body, drawn in
+`ChangesetReviewComment` and `ChangesetReviewCommentBody`. The marks appear in every
+loaded buffer once changeset is loaded, follow each review comment written, edited or
+deleted, and mark a file as it is read. The bubble needs a Nerd Font.
 
 Hover shows them too. A file with a mark gets a language server client named `changeset`,
-which answers hover on a line with each review comment and then each draft whose lines take
-it in, under a heading naming its lines, a draft's adding `only on this machine`. So `K`,
-`vim.lsp.buf.hover()` and hover plugins that ask LSP show them beside other servers'
-answers; a hover UI can sort on the name to put them first. The client offers only hover,
-but `LspAttach` fires for it, so your `LspAttach` keymaps and statusline LSP lists reach
-those files too.
+which answers hover on a line with each review comment whose lines take it in, under a
+heading naming its lines. So `K`, `vim.lsp.buf.hover()` and hover plugins that ask LSP show
+them beside other servers' answers; a hover UI can sort on the name to put them first. The
+client offers only hover, but `LspAttach` fires for it, so your `LspAttach` keymaps and
+statusline LSP lists reach those files too.
 
-With the sidebar open on a branch measured against its open PR, a Comments section above Implementation
-lists your pending review's review comments and the PR's drafts at its current head, one
-row each, by file and then line: a green `●` for a review comment or a blue `○` for a
-draft, the file's name and line, and the first line of the body. Outdated and file-level
-review comments get a row too, saying so in place of a line. The section follows the marks,
-and is left out while it has nothing to list.
-
-`<CR>` on a row, or a split or tab key, goes to its line and opens it there. A draft
-reopens as `pr comment` reopens one. A review comment opens editable, titled
-`Edit review comment`: a save key updates it on GitHub, and saving or closing it with only
-whitespace asks whether to delete it rather than send an empty body. Closing it any other
-way drops the edit and keeps no draft, since a draft on those lines would reopen as a
-second review comment; the review comment keeps its saved text. An outdated or file-level
-review comment has no line, so its row opens its file and says so. `d` on a row asks, the
-way `pr abandon` does, then deletes the review comment or draft; a draft goes without
-asking GitHub.
+With the sidebar open, a Comments section above Implementation lists the repository's
+review comments, one row each, by file and then line: a green `●`, the file's name and line,
+and the first line of the body. It is left out while it has nothing to list. `<CR>` on a
+row, or a split or tab key, goes to its line and opens it to edit there. `d` on a row asks,
+the way `:Changeset abandon` does, then deletes the review comment.
 
 A `'statuscolumn'` can draw the bubbles somewhere else. `%s` draws every plugin's signs or
 none, so set `review_comment.sign` to `false` to keep the bubbles out of the sign column, or
 a line shows its bubble twice. `require("changeset").bubble(buf, lnum)` returns the bubble
 on line `lnum` (1-based, as `v:lnum`) of buffer `buf` (0 for the current one) and its
-highlight group: `"󰍩", "ChangesetReviewComment"` for a review comment, `"󰍪",
-"ChangesetReviewDraft"` for a draft, or nil on a line without one. It answers from the marks
+highlight group: `"󰍩", "ChangesetReviewComment"`, or nil on a line without one. It answers from the marks
 already in the buffer, so it is cheap enough for every screen row, and it answers whatever
 `review_comment.sign` is.
 
@@ -365,7 +293,7 @@ Any `keymaps` entry can be `false` to leave that key unbound.
 | `keymaps.prev_section` | `[[` | Previous section header |
 | `keymaps.refresh` | `R` | Rebuild the tree |
 | `keymaps.yank` | `y` | Copy `path:line` |
-| `keymaps.delete_comment` | `d` | Delete the review comment or draft on a Comments row |
+| `keymaps.delete_comment` | `d` | Delete the review comment on a Comments row |
 | `keymaps.help` | `?` | List the sidebar's keys |
 | `keymaps.filter_kinds` | `F` | Open the symbol-kind menu |
 | `keymaps.filter` | `f` | Filter the tree |
@@ -373,8 +301,8 @@ Any `keymaps` entry can be `false` to leave that key unbound.
 | `keymaps.prev` | `false` | Previous row, from any window |
 | `layout.min_file_width` | `80` | Narrowest the files get beside the sidebar before it moves below them |
 | `pr_review.enabled` | `false` | PR Review Mode on every branch but the default |
-| `review_comment.save` | `<C-CR>`, `<C-s>` | List of keys that save a review comment, or keep the submit preview's body, in insert and normal mode |
-| `review_comment.sign` | `true` | Put each review comment's and draft's bubble in the sign column; `false` leaves it to a `'statuscolumn'` (see [PR reviews](#pr-reviews)) |
+| `review_comment.save` | `<C-CR>`, `<C-s>` | List of keys that save a review comment, in insert and normal mode |
+| `review_comment.sign` | `true` | Put each review comment's bubble in the sign column; `false` leaves it to a `'statuscolumn'` (see [Review comments](#review-comments)) |
 
 The step keys, `keymaps.next` and `keymaps.prev`, are off by default. Once set, they work
 from any window, but only while the sidebar is open. Whatever they replaced comes back
@@ -399,11 +327,8 @@ The sidebar derives each group's default from your colorscheme, and derives it a
 | `ChangesetHeaderIcon` | The branch glyph on the header | `Directory`'s colour on the header |
 | `ChangesetHeaderDim` | The remote, nouns and PR on the header | `Comment`'s colour on the header |
 | `ChangesetHeaderRef` | The ref the tree is compared against | `Normal`'s colour on the header, bold |
-| `ChangesetHeaderPending` | The circle beside the PR while you have a pending review on it | `DiagnosticOk`'s colour on the header |
-| `ChangesetHeaderNotPending` | The circle while you have none | links to `ChangesetHeaderDim` |
 | `ChangesetReviewComment` | A review comment's bubble, its circle and the line numbers it covers in its file | `DiagnosticOk`'s colour, bold |
 | `ChangesetReviewCommentBody` | A review comment's body after its circle | links to `ChangesetMeta` |
-| `ChangesetReviewDraft` | A draft's outline bubble, its hollow circle and the line numbers it covers in its file | `DiagnosticInfo`'s colour, bold |
 | `ChangesetBadge` | The badge in the footer | `Directory`'s colour, reversed, bold |
 | `ChangesetFooter` | The footer's text | `Comment`'s colour on `StatusLine` |
 | `ChangesetFooterKey` | Keys and the filter in the footer | `StatusLine`, bold |
@@ -441,15 +366,14 @@ glyph one colour. The status rail beside each file uses gitsigns' `GitSignsAdd`,
 does without, and the options in force.
 
 It loads plugins the way the sidebar does, so it may load one your plugin manager
-deferred. It installs nothing and starts no language server. Its one network request is
-`gh auth status --active`, to report whether `gh` is authenticated.
+deferred. It installs nothing, starts no language server and makes no network request.
 
 ## Where state is stored
 
 - The symbol cache: one JSON file per repository under `stdpath("cache")/changeset/`. You
   can delete it; the next build is slow once.
 - Hidden symbol kinds: `stdpath("state")/changeset/filters.json`.
-- Review comment drafts: `stdpath("state")/changeset/drafts.json`.
+- Review comments: `stdpath("state")/changeset/comments.json`.
 - Sessions: `:mksession` restores the sidebar when `'sessionoptions'` contains `blank`
   (the default), and its cursor row too when it also contains `globals`.
 - Folds: kept in memory per repository until Neovim exits.

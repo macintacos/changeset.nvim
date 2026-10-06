@@ -30,7 +30,6 @@ local symbols = require("changeset.symbols")
 ---@class changeset.Summary
 ---@field ref string        What the branch is compared against, e.g. "origin/trunk".
 ---@field pr integer?       Number of the branch's open PR, when it merges into `ref`.
----@field pending_review boolean? Whether you have a pending review on `pr`; nil until GitHub answers.
 ---@field files integer
 ---@field commits integer?  Commits on the branch since it forked from `ref`.
 ---@field added integer
@@ -100,14 +99,6 @@ M.HEADER_DIM_HL = "ChangesetHeaderDim"
 ---@type string
 M.HEADER_REF_HL = "ChangesetHeaderRef"
 
----Group for the circle beside the PR while you have a pending review on it. Created by `define_highlights`.
----@type string
-M.HEADER_PENDING_HL = "ChangesetHeaderPending"
-
----Group for the circle beside the PR while you have none. Created by `define_highlights`.
----@type string
-M.HEADER_NOT_PENDING_HL = "ChangesetHeaderNotPending"
-
 ---Group for a review comment's circle and the line numbers it covers in its file. Created by `define_highlights`.
 ---@type string
 M.REVIEW_COMMENT_HL = "ChangesetReviewComment"
@@ -115,10 +106,6 @@ M.REVIEW_COMMENT_HL = "ChangesetReviewComment"
 ---Group for a review comment's body at the end of its first line. Created by `define_highlights`.
 ---@type string
 M.REVIEW_COMMENT_BODY_HL = "ChangesetReviewCommentBody"
-
----Group for a draft's circle and the line numbers it covers in its file. Created by `define_highlights`.
----@type string
-M.REVIEW_DRAFT_HL = "ChangesetReviewDraft"
 
 ---Group for the badge naming the sidebar in its footer. Created by `define_highlights`.
 ---@type string
@@ -223,7 +210,6 @@ local MARGIN = " "
 local BRANCH_ICON = ""
 local PR_ICON = ""
 local PENDING_ICON = "●"
-local DRAFT_ICON = "○"
 local FILES_ICON = ""
 local COMMIT_ICON = ""
 local FILTER_ICON = "󰈲"
@@ -457,53 +443,29 @@ local function span(spanned)
   return tostring(spanned.line)
 end
 
----Where a review comment or draft sits, its file named `name`: its line or range, else why it has none.
----@param name string
----@param spanned changeset.ReviewComment|changeset.Draft
----@return string where
----@return string? note
-local function comment_place(name, spanned)
-  if spanned.outdated then
-    local was = spanned.original_line
-      and span({ line = spanned.original_line, start_line = spanned.original_start_line })
-    return name, was and "outdated, was " .. was or "outdated"
-  end
-  if not spanned.line then
-    return name, "file"
-  end
-  return name .. ":" .. span(spanned)
-end
-
 ---A comment row: the file marks' circle in the rail's column, the file's icon, its name and line, and the body's
 ---first line, quiet like the marks' and clipped to fit.
 ---@param row changeset.Row
 ---@param opts changeset.RenderOpts
 ---@return changeset.Line
 local function comment_line(row, opts)
-  local listed = assert(row.listed, "changeset: a comment row lists nothing")
-  local spanned = listed.review_comment or listed.draft --[[@as changeset.Draft]]
+  local comment = assert(row.review_comment, "changeset: a comment row lists nothing")
   local glyph, icon_hl = opts.icon(row)
-  local where, note = comment_place(vim.fs.basename(row.path), spanned)
+  local where = vim.fs.basename(row.path) .. ":" .. span(comment)
   local room = opts.width - vim.fn.strdisplaywidth(MARGIN .. PENDING_ICON .. " " .. glyph .. " ") - stat_cells(nil)
   where = clip_right(where, room)
   local chunks = {
     { MARGIN },
-    listed.draft and { DRAFT_ICON, M.REVIEW_DRAFT_HL } or { PENDING_ICON, M.REVIEW_COMMENT_HL },
+    { PENDING_ICON, M.REVIEW_COMMENT_HL },
     { " " },
     { glyph, icon_hl },
     { " " .. where },
   }
   room = room - vim.fn.strdisplaywidth(where)
-  -- Each of the note and the body needs its two-cell gap and a cell to show anything.
-  for _, part in ipairs({
-    { note, M.META_HL },
-    { spanned.body:match("^[^\r\n]*"), M.REVIEW_COMMENT_BODY_HL },
-  }) do
-    if part[1] and room >= 3 then
-      local text = clip_right(part[1], room - 2)
-      vim.list_extend(chunks, { { "  " }, { text, part[2] } })
-      room = room - 2 - vim.fn.strdisplaywidth(text)
-    end
+  -- The body needs its two-cell gap and a cell to show anything.
+  if room >= 3 then
+    local text = clip_right(comment.body:match("^[^\r\n]*"), room - 2)
+    vim.list_extend(chunks, { { "  " }, { text, M.REVIEW_COMMENT_BODY_HL } })
   end
   return compose(row, chunks)
 end
@@ -631,86 +593,6 @@ function M.kind_lines(rows, opts)
   return out
 end
 
----@class changeset.SubmitInfo
----@field events changeset.pending_review.Event[] The events offered; one draws no event row.
----@field event changeset.pending_review.Event The chosen one.
----@field body string?
----@field comments changeset.ReviewComment[]
----@field drafts changeset.Draft[]
-
-local EVENT_LABEL = { COMMENT = "Comment", APPROVE = "Approve", REQUEST_CHANGES = "Request changes" }
-
----@param info changeset.SubmitInfo
----@return changeset.Line
-local function event_line(info)
-  local chunks = { { " " } }
-  for i, event in ipairs(info.events) do
-    chunks[#chunks + 1] = { " " .. EVENT_LABEL[event] .. " ", event == info.event and M.SELECTED_HL or nil }
-    chunks[#chunks + 1] = { i < #info.events and " " or "" }
-  end
-  return compose(nil, chunks)
-end
-
----@param body string?
----@return changeset.Line
-local function body_line(body)
-  if not body or not body:find("%S") then
-    return compose(nil, { { " " }, { "No body. b to write one.", M.META_HL } })
-  end
-  local first, rest = body:match("^([^\n]*)\n?(.*)$")
-  return compose(nil, { { " " .. first .. (rest:find("%S") and " …" or "") } })
-end
-
----The submit preview: the event row, the body row, what is sent, and the drafts that are not.
----@param info changeset.SubmitInfo
----@return changeset.Line[] lines
----@return integer body_row The 1-based row the body is drawn on.
-function M.submit_lines(info)
-  local out = {}
-  if #info.events > 1 then
-    vim.list_extend(out, { event_line(info), compose(nil, {}) })
-  end
-  out[#out + 1] = body_line(info.body)
-  local body_row = #out
-  out[#out + 1] = compose(nil, {})
-
-  local places, width = {}, 0
-  for i, comment in ipairs(info.comments) do
-    local where, note = comment_place(comment.path, comment)
-    places[i] = { where, note }
-    width = math.max(width, vim.fn.strdisplaywidth(where .. (note and "  " .. note or "")))
-  end
-  for i, comment in ipairs(info.comments) do
-    local where, note = places[i][1], places[i][2]
-    local shown = where .. (note and "  " .. note or "")
-    out[#out + 1] = compose(nil, {
-      { " " },
-      { PENDING_ICON, M.REVIEW_COMMENT_HL },
-      { " " .. where },
-      { note and "  " or "" },
-      { note or "", note and M.META_HL or nil },
-      { (" "):rep(width - vim.fn.strdisplaywidth(shown) + 2) },
-      { (comment.body:match("^[^\r\n]*")), M.REVIEW_COMMENT_BODY_HL },
-    })
-  end
-  if #info.comments == 0 then
-    out[#out + 1] = compose(nil, { { " " }, { "No review comments. Only the body is sent.", M.META_HL } })
-  end
-
-  if #info.drafts > 0 then
-    out[#out + 1] = compose(nil, {})
-  end
-  for _, draft in ipairs(info.drafts) do
-    out[#out + 1] = compose(nil, {
-      { " " },
-      { DRAFT_ICON, M.REVIEW_DRAFT_HL },
-      { " " .. draft.path .. ":" .. span(draft) .. "  " },
-      { "draft, not included", M.META_HL },
-    })
-  end
-  return out, body_row
-end
-
 ---Hidden kind names as prose: pluralised, lowercased, joined for a sentence.
 ---@param kinds string[]
 ---@return string
@@ -740,24 +622,19 @@ function M.hidden_note(kinds, width, key)
 end
 
 ---The header's first row, for the sidebar's winbar: the ref the tree is compared
----against, and the branch's PR at the right edge, led by its pending-review circle once
----GitHub has answered.
+---against, and the branch's PR at the right edge.
 ---
 ---A ref too long for the width loses its tail, not its head: a stacked branch is
 ---told apart by the start of its name. The statusline's own `%<` would cut the
 ---other way.
----@param summary { ref: string, pr: integer?, pending_review: boolean? }
+---@param summary { ref: string, pr: integer? }
 ---@param width integer Cells the winbar spans.
 ---@return string
 function M.header(summary, width)
   local pr = summary.pr and ("%s #%d"):format(PR_ICON, summary.pr)
-  local circle_hl = pr
-    and summary.pending_review ~= nil
-    and (summary.pending_review and M.HEADER_PENDING_HL or M.HEADER_NOT_PENDING_HL)
   local room = width
     - vim.fn.strdisplaywidth((" %s "):format(BRANCH_ICON))
     - (pr and vim.fn.strdisplaywidth(pr) + 2 or 0)
-    - (circle_hl and vim.fn.strdisplaywidth(PENDING_ICON) + 1 or 0)
   local ref = clip_right(summary.ref, room)
   local remote = ref:match("^origin/") or ""
   return table.concat({
@@ -765,7 +642,6 @@ function M.header(summary, width)
     ("%%#%s#%s"):format(M.HEADER_DIM_HL, remote),
     ("%%#%s#%s"):format(M.HEADER_REF_HL, escaped(ref:sub(#remote + 1))),
     ("%%#%s#%%="):format(M.HEADER_HL),
-    circle_hl and ("%%#%s#%s "):format(circle_hl, PENDING_ICON) or "",
     pr and ("%%#%s#%s "):format(M.HEADER_DIM_HL, pr) or "",
   })
 end
@@ -990,15 +866,10 @@ function M.define_highlights()
   set_default(M.HEADER_DIM_HL, { fg = comment.fg, bg = chrome })
   local normal = vim.api.nvim_get_hl(0, { name = "Normal", link = false })
   set_default(M.HEADER_REF_HL, { fg = normal.fg, bg = chrome, bold = true })
-  -- The config has no "all is well" green, and GitSignsAdd already means added lines on this strip.
+  -- The config has no "all is well" green, and GitSignsAdd already means added lines.
   local ok = vim.api.nvim_get_hl(0, { name = "DiagnosticOk", link = false }).fg
-  set_default(M.HEADER_PENDING_HL, { fg = ok, bg = chrome })
-  set_default(M.HEADER_NOT_PENDING_HL, { link = M.HEADER_DIM_HL })
   set_default(M.REVIEW_COMMENT_HL, { fg = ok, bold = true })
   set_default(M.REVIEW_COMMENT_BODY_HL, { link = M.META_HL })
-  -- Blue, as yellow already means "on loan" and a draft is the saved green's hollow twin.
-  local info = vim.api.nvim_get_hl(0, { name = "DiagnosticInfo", link = false }).fg
-  set_default(M.REVIEW_DRAFT_HL, { fg = info or comment.fg, bold = true })
   set_default(M.BADGE_HL, { fg = directory, reverse = true, bold = true })
   local statusline = vim.api.nvim_get_hl(0, { name = "StatusLine", link = false })
   set_default(M.FOOTER_HL, { fg = comment.fg, bg = statusline.bg })

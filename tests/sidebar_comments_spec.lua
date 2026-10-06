@@ -1,15 +1,11 @@
 local build = require("changeset.build")
 local render = require("changeset.render")
 local changeset = require("changeset")
-local drafts = require("changeset.drafts")
-local pending_state = require("changeset.pending_state")
+local comment_store = require("changeset.comment_store")
 local window = require("changeset.window")
 local Fixture = require("support.git")
 local Sidebar = require("support.sidebar")
-local gh = require("support.gh")
 
--- A file of its own: a find still in flight from an earlier case would take the answers a
--- later one queues.
 describe("the sidebar's Comments section", function()
   local tmp, previous_dir, select
   ---@type string[] Every question `vim.ui.select` was asked.
@@ -30,8 +26,7 @@ describe("the sidebar's Comments section", function()
     vim.fn.writefile(lines, "alpha.txt")
     vim.fn.writefile({ "local M = {}", "M.x = 1", "return M" }, "other.lua")
     Fixture.commit("alpha", tmp)
-    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "trunk", number = 1 })
-    os.remove(drafts.path())
+    os.remove(comment_store.path())
     select, asked, choice = vim.ui.select, {}, nil
     vim.ui.select = function(_, opts, on_choice)
       table.insert(asked, opts.prompt)
@@ -46,25 +41,30 @@ describe("the sidebar's Comments section", function()
     vim.cmd("silent! %bwipeout!")
     vim.fn.chdir(previous_dir)
     vim.fn.delete(tmp, "rf")
-    vim.env.FAKE_GH_PR = nil
-    gh.reset()
+    os.remove(comment_store.path())
   end)
 
-  ---Opens the sidebar on alpha.txt with the sandbox's six review comments, waiting for GitHub's answer.
-  ---@return changeset.pending_review.Pr pr
+  local COMMENTS = {
+    { path = "alpha.txt", line = 13, body = "check this\nmore" },
+    { path = "alpha.txt", line = 6, start_line = 5, body = "a range" },
+    { path = "alpha.txt", line = 30, body = "why x" },
+  }
+
+  ---Keeps `COMMENTS` and opens the sidebar on alpha.txt.
+  ---@return string root
   local function open_with_review_comments()
-    gh.fixture("find-pending-review")
-    gh.fixture("review-comments-paginate-slurp")
     vim.cmd.edit("alpha.txt")
+    local root = require("changeset.paths").root(0)
+    for _, comment in ipairs(COMMENTS) do
+      comment_store.keep(root, comment)
+    end
     changeset.open()
-    local found
     assert.is_true(vim.wait(10000, function()
       local tree = build.current()
-      found = tree and tree.pr and pending_state.get(tree.root, tree.pr)
-      return found ~= nil
+      return tree ~= nil and tree.collected
     end, 25))
     Sidebar.settle()
-    return found.pr
+    return root
   end
 
   ---The first sidebar line containing `text`.
@@ -78,45 +78,39 @@ describe("the sidebar's Comments section", function()
     end
   end
 
-  it("lists the review comments and drafts in a section above Implementation", function()
-    local pr = open_with_review_comments()
-    drafts.keep(pr, { path = "alpha.txt", line = 6, start_line = 5, head = pr.head, body = "a draft" })
+  it("lists the review comments in a section above Implementation", function()
+    open_with_review_comments()
 
     local comments, implementation = line_of("Comments"), line_of("Implementation")
     assert.equal(1, comments)
-    assert.truthy(Sidebar.lines()[1]:find("7 comments", 1, true))
-    assert.equal(comments + 1, line_of("File-level review comment"))
-    assert.equal(comments + 2, line_of("○"))
-    assert.truthy(line_of("alpha.txt:5-6  a draft"))
-    assert.truthy(line_of("beta.txt:16  Added line in a second file"))
-    assert.is_true(implementation > line_of("beta.txt:16"))
+    assert.truthy(Sidebar.lines()[1]:find("3 comments", 1, true))
+    assert.equal(comments + 1, line_of("alpha.txt:5-6  a range"))
+    assert.equal(comments + 2, line_of("alpha.txt:13  check this"))
+    assert.is_true(implementation > line_of("alpha.txt:30"))
   end)
 
-  it("follows a dropped draft without rebuilding the tree", function()
-    local pr = open_with_review_comments()
-    local draft = { path = "alpha.txt", line = 6, start_line = 5, head = pr.head, body = "a draft" }
-    drafts.keep(pr, draft)
+  it("follows a dropped comment without rebuilding the tree", function()
+    local root = open_with_review_comments()
     local refreshed = 0
     local refresh = build.refresh
     build.refresh = function()
       refreshed = refreshed + 1
     end
 
-    drafts.drop(pr, draft)
+    comment_store.drop(root, COMMENTS[2])
 
     build.refresh = refresh
-    assert.is_nil(line_of("a draft"))
-    assert.truthy(Sidebar.lines()[1]:find("6 comments", 1, true))
+    assert.is_nil(line_of("a range"))
+    assert.truthy(Sidebar.lines()[1]:find("2 comments", 1, true))
     assert.equal(0, refreshed)
   end)
 
   it("is left out while there is nothing to list", function()
-    gh.fixture("find-pending-review-empty")
     vim.cmd.edit("alpha.txt")
     changeset.open()
     assert.is_true(vim.wait(10000, function()
       local tree = build.current()
-      return tree ~= nil and tree.pr ~= nil and pending_state.get(tree.root, tree.pr) ~= nil
+      return tree ~= nil and tree.collected
     end, 25))
     Sidebar.settle()
 
@@ -194,17 +188,6 @@ describe("the sidebar's Comments section", function()
       .callback()
   end
 
-  ---The arguments of each gh call running `mutation`.
-  ---@param mutation string
-  ---@return string[][]
-  local function calls_to(mutation)
-    return vim.tbl_filter(function(args)
-      return vim.iter(args):any(function(arg)
-        return arg:find(mutation, 1, true) ~= nil
-      end)
-    end, gh.calls())
-  end
-
   it("opens a review comment's window on its line, holding its text, with <CR>", function()
     open_with_review_comments()
 
@@ -212,20 +195,19 @@ describe("the sidebar's Comments section", function()
 
     local win = assert(comment_window())
     local config = vim.api.nvim_win_get_config(win)
-    assert.equal("Unchanged context line inside a hunk (last context line)", text_of(win))
+    assert.equal("check this\nmore", text_of(win))
     assert.same({ 12, 0 }, config.bufpos)
     assert.equal("alpha.txt", vim.fs.basename(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(config.win))))
   end)
 
-  it("reopens a draft's window, holding its text, after a split's jump", function()
-    local pr = open_with_review_comments()
-    drafts.keep(pr, { path = "alpha.txt", line = 6, start_line = 5, head = pr.head, body = "a draft" })
+  it("opens a range's window, holding its text, after a split's jump", function()
+    open_with_review_comments()
     local before = #vim.api.nvim_tabpage_list_wins(0)
 
     press_on("alpha.txt:5-6", "-")
 
     local win = assert(comment_window())
-    assert.equal("a draft", text_of(win))
+    assert.equal("a range", text_of(win))
     assert.equal(before + 2, #vim.api.nvim_tabpage_list_wins(0))
   end)
 
@@ -247,27 +229,22 @@ describe("the sidebar's Comments section", function()
     assert.truthy(Sidebar.line_with(render.PICKED_HL):find("alpha.txt:13", 1, true))
   end)
 
-  it("updates the review comment on GitHub when its window saves", function()
-    open_with_review_comments()
+  it("replaces the review comment's text when its window saves", function()
+    local root = open_with_review_comments()
     press_on("alpha.txt:13", "<CR>")
     local win = assert(comment_window())
     vim.api.nvim_buf_set_lines(vim.api.nvim_win_get_buf(win), 0, -1, false, { "update: after", "second line" })
-    gh.fixture("update-review-comment")
-    gh.fixture("find-pending-review")
-    gh.fixture("review-comments-paginate-slurp")
 
     save(win)
 
-    assert.is_true(vim.wait(5000, function()
-      return #calls_to("updatePullRequestReviewComment") == 1
-    end, 25))
-    local update = calls_to("updatePullRequestReviewComment")[1]
-    assert.is_true(vim.list_contains(update, "id=PRRC_kwDOU6Rmbc74w1gd"))
-    assert.is_true(vim.list_contains(update, "body=update: after\nsecond line"))
+    assert.equal(
+      "update: after\nsecond line",
+      require("changeset.review_comments").at(comment_store.list(root), "alpha.txt", 13).body
+    )
   end)
 
-  it("asks to delete the review comment when its window saves blank, sending GitHub no body", function()
-    open_with_review_comments()
+  it("asks to delete the review comment when its window saves blank", function()
+    local root = open_with_review_comments()
     press_on("alpha.txt:13", "<CR>")
     local win = assert(comment_window())
     vim.api.nvim_buf_set_lines(vim.api.nvim_win_get_buf(win), 0, -1, false, { "" })
@@ -278,46 +255,20 @@ describe("the sidebar's Comments section", function()
       return #asked > 0
     end, 25))
     assert.same({ "Delete the review comment on line 13 of alpha.txt?" }, asked)
-    assert.same({}, calls_to("updatePullRequestReviewComment"))
+    assert.equal(3, #comment_store.list(root))
   end)
 
   it("asks, then deletes the review comment on a row with d", function()
-    open_with_review_comments()
+    local root = open_with_review_comments()
     choice = "Yes"
-    gh.fixture("find-pending-review")
-    gh.fixture("review-comments-paginate-slurp")
-    gh.fixture("delete-review-comment")
-    gh.fixture("find-pending-review")
-    gh.fixture("review-comments-after-delete")
 
     press_on("alpha.txt:13", "d")
 
     assert.same({ "Delete the review comment on line 13 of alpha.txt?" }, asked)
     assert.is_true(vim.wait(5000, function()
-      return #calls_to("deletePullRequestReviewComment") == 1
+      return #comment_store.list(root) == 2
     end, 25))
-    assert.is_true(vim.list_contains(calls_to("deletePullRequestReviewComment")[1], "id=PRRC_kwDOU6Rmbc74w1gd"))
-    assert.is_true(vim.wait(5000, function()
-      return Sidebar.lines()[1]:find("5 comments", 1, true) ~= nil
-    end, 25))
-  end)
-
-  it("asks, then deletes the draft on a row with d while gh fails", function()
-    local pr = open_with_review_comments()
-    drafts.keep(pr, { path = "alpha.txt", line = 6, start_line = 5, head = pr.head, body = "a draft" })
-    choice = "Yes"
-    gh.answer({ stderr = "gh: offline", code = 1 })
-    gh.answer({ stderr = "gh: offline", code = 1 })
-    local calls = #gh.calls()
-
-    press_on("alpha.txt:5-6", "d")
-
-    assert.is_true(vim.wait(5000, function()
-      return #drafts.list(pr) == 0
-    end, 25))
-    assert.same({ "Delete the draft on lines 5-6 of alpha.txt?" }, asked)
-    assert.is_nil(line_of("a draft"))
-    assert.equal(calls, #gh.calls())
+    assert.truthy(Sidebar.lines()[1]:find("2 comments", 1, true))
   end)
 
   it("deletes nothing with d on a row that lists no comment", function()

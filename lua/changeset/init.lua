@@ -8,11 +8,9 @@
 
 local actions = require("changeset.actions")
 local build = require("changeset.build")
+local comment_store = require("changeset.comment_store")
 local config = require("changeset.config")
 local draw = require("changeset.draw")
-local drafts = require("changeset.drafts")
-local fork_point = require("changeset.fork_point")
-local pending_state = require("changeset.pending_state")
 local render = require("changeset.render")
 local Rows = require("changeset.rows")
 local sidebar_state = require("changeset.sidebar_state")
@@ -146,29 +144,14 @@ local function line_text(path, lnum)
   return ok and lines[lnum] or nil
 end
 
----Whether the Comments section is done growing: gh has said whether the branch has a PR, and GitHub has
----answered for it.
----@param tree changeset.Tree
----@return boolean
-local function comments_decided(tree)
-  if fork_point.asking(tree.root, tree.branch) then
-    return false
-  end
-  return not tree.pr or pending_state.answered(tree.root, tree.pr)
-end
-
 ---Whether the tree is done growing under `path`: its diff is in, and so are its
----symbols unless the diff does not hold it. Row `id` in the Comments section also waits on GitHub.
+---symbols unless the diff does not hold it.
 ---@param path string
----@param id string?
 ---@return boolean
-local function decided(path, id)
+local function decided(path)
   local tree = build.current()
   assert(tree, "changeset: no tree built yet")
   if not tree.collected then
-    return false
-  end
-  if id and vim.startswith(id, "#comments\0") and not comments_decided(tree) then
     return false
   end
   return not vim.iter(tree.files):any(function(file)
@@ -202,28 +185,10 @@ build.subscribe(function(event)
   on_tree_event[event]()
 end)
 
----Redraw on GitHub's answer, and settle a restored Comments row waiting on it.
-local function answered()
-  local state = sidebar_state.current()
-  redraw()
-  if state and window.is_visible() then
-    apply(state.position:answered(draw.view(), decided))
-  end
-end
+-- Fires: a review comment kept, dropped or cleared, so the Comments section follows it.
+comment_store.subscribe(redraw)
 
--- Fires: GitHub's answer on the PR's pending review being kept or refused, so the header's circle and the Comments
--- section follow it.
-pending_state.subscribe(answered)
-
--- Fires: gh answering whether a branch has a PR. Scheduled so the tree takes up the answer first.
-fork_point.subscribe(function()
-  vim.schedule(answered)
-end)
-
--- Fires: a draft kept or dropped, so the Comments section follows it without asking GitHub.
-drafts.subscribe(redraw)
-
--- Loaded here because every tree is built through this module, so the marks exist whenever a tree can.
+-- Loaded here so that using changeset at all draws the marks.
 local review_comments = require("changeset.review_comments")
 
 ---The sidebar's footer, which its statusline evaluates on every redraw.
@@ -274,8 +239,8 @@ end
 ---`review_comment.sign` is.
 ---@param buf integer
 ---@param lnum integer 1-based, as `v:lnum`.
----@return string? glyph `󰍩` for a review comment, `󰍪` for a draft.
----@return string? hl `ChangesetReviewComment` or `ChangesetReviewDraft`.
+---@return string? glyph `󰍩`.
+---@return string? hl `ChangesetReviewComment`.
 function M.bubble(buf, lnum)
   return review_comments.bubble(buf, lnum)
 end

@@ -96,7 +96,7 @@ end
 ---then note the row the cursor ends on.
 ---@private
 ---@param view changeset.position.View
----@param decided fun(path: string, id: string?): boolean
+---@param decided fun(path: string): boolean
 ---@param lnum integer? Where the cursor is already going.
 ---@return integer? lnum
 function Position:settle(view, decided, lnum)
@@ -107,7 +107,7 @@ function Position:settle(view, decided, lnum)
     end
     self:release("here")
   end
-  if wanted and wanted.row and decided(wanted.row.path, wanted.row.id) then
+  if wanted and wanted.row and decided(wanted.row.path) then
     local restored = view.cursor and Rows.find(view.rows, wanted.row.id) and nearest(view.visible, wanted.row.id)
     if restored then
       lnum = restored
@@ -147,7 +147,7 @@ end
 ---file is now decided is applied over it, unless the cursor moved off them since or focus left the sidebar.
 ---@param view changeset.position.View As drawn from the rebuilt rows.
 ---@param before string? Id of the row under the sidebar's cursor before the rows changed.
----@param decided fun(path: string, id: string?): boolean Whether the tree is done growing under `path` or row `id`.
+---@param decided fun(path: string): boolean Whether the tree is done growing under `path`.
 ---@return integer? lnum The line to put the sidebar's cursor on; nil leaves it.
 function Position:rebuilt(view, before, decided)
   -- Before the first diff the landing and the row under the cursor are both nil, which is still "not moved".
@@ -182,18 +182,10 @@ end
 ---Take up the position a saved session recorded, applying each half once the tree has decided its file.
 ---@param value any The recorded position, decoded; anything not shaped as `saved` writes it is ignored.
 ---@param view changeset.position.View
----@param decided fun(path: string, id: string?): boolean Whether the tree is done growing under `path` or row `id`.
+---@param decided fun(path: string): boolean Whether the tree is done growing under `path`.
 ---@return integer? lnum The line to put the sidebar's cursor on; nil leaves it.
 function Position:restore(value, view, decided)
   self.restoring = recorded(value)
-  return self:settle(view, decided)
-end
-
----GitHub answered about the tree's PR, which can decide a restored Comments row.
----@param view changeset.position.View
----@param decided fun(path: string, id: string?): boolean Whether the tree is done growing under `path` or row `id`.
----@return integer? lnum The line to put the sidebar's cursor on; nil leaves it.
-function Position:answered(view, decided)
   return self:settle(view, decided)
 end
 

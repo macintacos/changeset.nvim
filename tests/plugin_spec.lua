@@ -84,7 +84,10 @@ describe("plugin/changeset.lua", function()
   end)
 
   it("completes the subcommands that match the argument", function()
-    assert.same({ "pr", "refresh", "review", "toggle" }, vim.fn.getcompletion("Changeset ", "cmdline"))
+    assert.same(
+      { "abandon", "comment", "delete", "refresh", "review", "toggle" },
+      vim.fn.getcompletion("Changeset ", "cmdline")
+    )
     assert.same({ "refresh", "review" }, vim.fn.getcompletion("Changeset re", "cmdline"))
   end)
 
@@ -166,81 +169,38 @@ describe("plugin/changeset.lua", function()
     assert.equal(1, calls.restore)
   end)
 
-  it("completes pr's verbs that match the argument", function()
-    assert.same({ "abandon", "comment", "delete", "start", "submit" }, vim.fn.getcompletion("Changeset pr ", "cmdline"))
-    assert.same({ "start", "submit" }, vim.fn.getcompletion("Changeset pr s", "cmdline"))
-    assert.same({ "start", "submit" }, vim.fn.getcompletion("silent Changeset pr s", "cmdline"))
-    assert.same({}, vim.fn.getcompletion("Changeset toggle ", "cmdline"))
-    assert.same(
-      { "abandon", "comment", "delete", "start", "submit" },
-      vim.fn.getcompletion("redraw | Changeset pr ", "cmdline")
-    )
-    assert.same({ "pr", "refresh", "review", "toggle" }, vim.fn.getcompletion("1,2Changeset ", "cmdline"))
-  end)
-
-  it("routes each pr verb to the pr module", function()
+  it("routes delete and abandon to the reviewing module", function()
     local calls = {}
-    package.loaded["changeset.pr"] = {
-      start = counter(calls, "start"),
-      abandon = counter(calls, "abandon"),
-      delete = counter(calls, "delete"),
-      submit = counter(calls, "submit"),
-    }
+    package.loaded["changeset.reviewing"] = { delete = counter(calls, "delete"), abandon = counter(calls, "abandon") }
 
-    vim.cmd("Changeset pr start")
-    vim.cmd("Changeset pr abandon")
-    vim.cmd("Changeset pr delete")
-    vim.cmd("Changeset pr submit")
-    vim.cmd("Changeset pr start | let g:changeset_pr_after = 1")
+    vim.cmd("Changeset delete")
+    vim.cmd("Changeset abandon | let g:changeset_after = 1")
 
-    package.loaded["changeset.pr"] = nil
-    assert.same({ start = 2, abandon = 1, delete = 1, submit = 1 }, calls)
-    assert.equal(1, vim.g.changeset_pr_after)
+    package.loaded["changeset.reviewing"] = nil
+    assert.same({ delete = 1, abandon = 1 }, calls)
+    assert.equal(1, vim.g.changeset_after)
   end)
 
-  it("routes pr comment the lines it is given", function()
-    local ranges, calls = {}, {}
-    package.loaded["changeset.pr"] = {
+  it("routes comment the lines it is given", function()
+    local ranges = {}
+    package.loaded["changeset.reviewing"] = {
       comment = function(first, last)
         table.insert(ranges, { first, last })
       end,
-      start = counter(calls, "start"),
     }
     local buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_set_current_buf(buf)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(("x"):rep(10, "\n"), "\n"))
     vim.api.nvim_win_set_cursor(0, { 3, 0 })
 
-    vim.cmd("Changeset pr comment")
-    vim.cmd("2,4Changeset pr comment")
+    vim.cmd("Changeset comment")
+    vim.cmd("2,4Changeset comment")
     vim.cmd("normal! 2GVj\27")
-    vim.cmd("'<,'>Changeset pr comment")
-    vim.cmd("1Changeset pr start")
+    vim.cmd("'<,'>Changeset comment")
 
     vim.api.nvim_buf_delete(buf, { force = true })
-    package.loaded["changeset.pr"] = nil
+    package.loaded["changeset.reviewing"] = nil
     assert.same({ { 3, 3 }, { 2, 4 }, { 2, 3 } }, ranges)
-    assert.same({ start = 1 }, calls)
-  end)
-
-  it("reports an unknown pr verb as an unknown subcommand", function()
-    vim.cmd("Changeset pr bogus")
-
-    assert.equal(1, #notes)
-    assert.equal(vim.log.levels.ERROR, notes[1].level)
-    assert.truthy(notes[1].msg:find("unknown subcommand pr bogus", 1, true))
-  end)
-
-  it("names pr's verbs when it is given none", function()
-    vim.cmd("Changeset pr")
-
-    assert.equal(1, #notes)
-    assert.equal(vim.log.levels.ERROR, notes[1].level)
-    assert.truthy(
-      notes[1].msg:find("abandon", 1, true)
-        and notes[1].msg:find("delete", 1, true)
-        and notes[1].msg:find("start", 1, true)
-    )
   end)
 
   it("reports words past a subcommand as an error", function()
