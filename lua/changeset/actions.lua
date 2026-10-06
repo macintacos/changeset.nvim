@@ -94,25 +94,35 @@ local function standing(root)
   return path, vim.api.nvim_win_get_cursor(win)[1]
 end
 
----The row a step starts from: the cursor's when it opens where the window stands, else the last row of that file
----opening at or above its line. The sidebar can be on a shallower row, such as the file's, than where you are.
+---The row a step `delta` starts from: the cursor's when it opens where the window stands. Else, among that file's
+---rows, the last at or above its line, or the row just below that for a step back from past it, so the row is the
+---first place; above the file's first row, just before it for a step on and at it for a step back. The sidebar can
+---be on a shallower row, such as the file's, or another file's, than where you are.
 ---@param state changeset.SidebarState
 ---@param lnum integer The cursor's row.
 ---@param path string?
 ---@param line integer
+---@param delta integer
 ---@return integer
-local function start_row(state, lnum, path, line)
+local function start_row(state, lnum, path, line, delta)
   local row = state.view:row(lnum)
   if not path or (row and place_of(row) == ("%s:%d"):format(path, line)) then
     return lnum
   end
-  local found
+  local first, found
   for i, each in ipairs(state.view:visible()) do
-    if each.path == path and each.kind ~= "section" and (each.lnum or 1) <= line then
-      found = i
+    if each.path == path and each.kind ~= "section" then
+      first = first or i
+      if (each.lnum or 1) <= line then
+        found = i
+      end
     end
   end
-  return found or lnum
+  if not found then
+    return first and (delta > 0 and first - 1 or first) or lnum
+  end
+  local found_line = assert(state.view:row(found)).lnum or 1
+  return delta < 0 and found_line < line and found + 1 or found
 end
 
 ---The row `count` places past the sidebar's cursor, down for a positive `count`: each place a row that opens
@@ -152,7 +162,7 @@ function M.open_step(count, hooks)
     return
   end
   local path, line = standing(state.tree.root)
-  local from = start_row(state, lnum, path, line)
+  local from = start_row(state, lnum, path, line, count > 0 and 1 or -1)
   local to = placed(state, from, count, path and ("%s:%d"):format(path, line))
   if to == from then
     -- Not wrapped, so a run of `.` stops here rather than looping.
@@ -161,7 +171,7 @@ function M.open_step(count, hooks)
   local focus = vim.api.nvim_get_current_win()
   move(to)
   local row = commit("reuse", hooks)
-  if focus == window.win() then
+  if focus == window.win() and row then
     if hooks.back then
       hooks.back(row)
     end

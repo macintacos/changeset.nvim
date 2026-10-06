@@ -95,7 +95,6 @@ describe("changeset.step", function()
     changeset.step(1)
     vim.cmd.edit("other.lua")
     settle()
-    print("ECHO", vim.inspect(echoed), Sidebar.cursor_line())
 
     assert.same({ "other.lua", 1 }, { shown(win) })
   end)
@@ -155,6 +154,95 @@ describe("changeset.step", function()
     assert.equal(win, vim.api.nvim_get_current_win())
     assert.same({ "other.lua", 3 }, { shown(win) })
     assert.truthy(Sidebar.cursor_line():find("other.lua", 1, true))
+  end)
+
+  describe("from a line between the sidebar's rows", function()
+    ---Opens the sidebar on `row`, then puts your window on `file`, line `lnum`, the sidebar left where it was.
+    ---@param row string
+    ---@param file string
+    ---@param lnum integer
+    ---@return integer win
+    local function stand(row, file, lnum)
+      local win = edit(2)
+      changeset.open()
+      settle()
+      Sidebar.cursor_to(row)
+      vim.api.nvim_set_current_win(win)
+      vim.cmd("buffer " .. file)
+      vim.api.nvim_win_set_cursor(win, { lnum, 0 })
+      return win
+    end
+
+    it("goes back to the change above, not past it", function()
+      local win = stand("L8", "mod.lua", 10)
+
+      changeset.step(-1)
+
+      assert.same({ "mod.lua", 8 }, { shown(win) })
+    end)
+
+    it("goes on to the file's first change from above it", function()
+      local win = stand("L2", "mod.lua", 1)
+      vim.api.nvim_win_set_cursor(win, { 1, 0 })
+
+      changeset.step(1)
+
+      assert.same({ "mod.lua", 2 }, { shown(win) })
+    end)
+
+    it("goes back past the file from above its first change, never down", function()
+      local win = stand("L2", "mod.lua", 1)
+
+      changeset.step(-1)
+
+      assert.same({ "other.lua", 3 }, { shown(win) })
+    end)
+
+    it("starts from your file, not the sidebar's row in another", function()
+      local win = stand("L3", "mod.lua", 1)
+
+      changeset.step(1)
+
+      assert.same({ "mod.lua", 2 }, { shown(win) })
+    end)
+  end)
+
+  it("lands on your row next time you enter the sidebar, after a step from it opened nothing", function()
+    local win = edit(8)
+    changeset.toggle()
+    settle()
+    Sidebar.cursor_to("L8")
+    -- Gone from disk before the tree hears of it, so the step onto its row can't open it.
+    os.remove("other.lua")
+    local notify = vim.notify
+    vim.notify = function() end
+
+    changeset.step(1)
+    vim.notify = notify
+    vim.api.nvim_set_current_win(win)
+    vim.api.nvim_win_set_cursor(win, { 2, 0 })
+    local sidebar = window.win() or 0
+    vim.api.nvim_set_current_win(sidebar)
+
+    -- Off the row the failed step left it on, onto mod.lua's own.
+    assert.is_nil(Sidebar.cursor_line():find("other.lua", 1, true))
+  end)
+
+  it("drops a waiting step taken while the sidebar is on another tabpage", function()
+    local win = edit(2)
+
+    changeset.step(1)
+    vim.cmd.tabnew()
+    assert(vim.wait(5000, function()
+      local tree = require("changeset.build").current()
+      return tree ~= nil and tree.collected and not Sidebar.text():find("reading", 1, true)
+    end))
+    vim.cmd.tabprevious()
+    vim.api.nvim_win_set_cursor(win, { 5, 0 })
+    require("changeset.build").refresh()
+    settle()
+
+    assert.same({ "mod.lua", 5 }, { shown(win) })
   end)
 
   it("steps over section headers onto a Comments row, opening its line but not the review comment", function()

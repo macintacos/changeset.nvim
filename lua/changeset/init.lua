@@ -217,7 +217,7 @@ end
 ---Take the waiting step once the tree is ready, if you're still where you pressed it; else drop it unsaid.
 local function take_waiting()
   local tree = build.current()
-  if not (waiting and window.is_visible() and tree and ready(tree)) then
+  if not (waiting and tree and ready(tree)) then
     return
   end
   local step = waiting
@@ -477,6 +477,7 @@ end
 ---Dismiss the sidebar and its step keys, putting back what they replaced. The tree stays, and keeps refreshing.
 function M.close()
   waiting = nil
+  opened_id, stepping_back = nil, false
   require("changeset.menu").close()
   actions.unbind_step_keys()
   vim.api.nvim_clear_autocmds({ group = augroup })
