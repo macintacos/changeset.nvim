@@ -196,7 +196,7 @@ describe("changeset.herdr", function()
   it("reports any other failed send as refused", function()
     fake.set("agent list", fake.agents({ alpha }))
     fake.set("pane send-text", fake.error("internal"))
-    assert.equal("herdr refused the send", (send("hi")))
+    assert.equal("herdr refused the paste", (send("hi")))
   end)
 
   it("strips paste terminators from the text, including one that stripping forms", function()

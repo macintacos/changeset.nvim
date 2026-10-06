@@ -145,7 +145,7 @@ local function deliver(text, agent, cb)
     end
     herdr({ "pane", "send-text", agent.pane_id, M._bracket(text) }, function(_, code)
       if code then
-        return cb(code == "pane_not_found" and name .. " closed" or "herdr refused the send")
+        return cb(code == "pane_not_found" and name .. " closed" or "herdr refused the paste")
       end
       herdr({ "agent", "focus", agent.pane_id }, function()
         cb(nil, name)
@@ -164,11 +164,11 @@ local function pick(workspace, candidates, cb)
       labels[tab.tab_id] = tab.label
     end
     dialog.choose({
-      title = "Send the review",
+      title = "Submit the review",
       items = vim.tbl_map(function(a)
         return M._row(a, labels)
       end, candidates),
-      action = "send",
+      action = "submit",
     }, function(index)
       cb(index and candidates[index])
     end)
@@ -189,10 +189,10 @@ function M.send(text, cb)
   end
   local workspace = present(vim.env.HERDR_WORKSPACE_ID)
   if not workspace then
-    return refuse("not inside a herdr pane, so there's no agent to send to")
+    return refuse("not inside a herdr pane, so there's no agent to paste it into")
   end
   if vim.fn.executable("herdr") ~= 1 then
-    return refuse("herdr isn't on PATH, so there's no agent to send to")
+    return refuse("herdr isn't on PATH, so there's no agent to paste it into")
   end
   list_agents(function(agents)
     if not agents then

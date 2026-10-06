@@ -243,7 +243,7 @@ describe("changeset.dialog", function()
       -- Its own table, which a dialog closed by an earlier case can't answer into.
       local mine = { answered = false }
       result = mine
-      dialog.choose({ title = "Send the review", items = items or ITEMS, action = "send" }, function(index)
+      dialog.choose({ title = "Submit the review", items = items or ITEMS, action = "submit" }, function(index)
         mine.chosen, mine.answered = index, true
       end)
       assert(Dialog.win(), "no dialog opened")
