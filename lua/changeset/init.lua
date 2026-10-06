@@ -169,10 +169,24 @@ local function rebuild()
   apply(state.position:rebuilt(draw.view(), before, decided))
 end
 
+---The step pressed while the diff is read, taken once it lands; a later press replaces it.
+---@type integer?
+local waiting_step
+
 ---What the sidebar does as the tree changes.
 ---@type table<changeset.TreeEvent, fun()>
 local on_tree_event = {
-  diff = rebuild,
+  diff = function()
+    rebuild()
+    if waiting_step and window.is_visible() then
+      local count = waiting_step
+      waiting_step = nil
+      local state = assert(sidebar_state.current(), "changeset: no tree built yet")
+      -- Landed again: the rows the sidebar opened on held no row for where you are.
+      apply(state.position:entered(draw.view()))
+      M.step(count)
+    end
+  end,
   symbols = rebuild,
   pr = redraw,
   failed = function()
@@ -400,11 +414,10 @@ function M.open()
 end
 
 ---Whether `step` opened the sidebar and has yet to put its cursor on your row, waiting for the diff.
-local unlanded = false
 
 ---Dismiss the sidebar and its step keys, putting back what they replaced. The tree stays, and keeps refreshing.
 function M.close()
-  unlanded = false
+  waiting_step = nil
   require("changeset.menu").close()
   actions.unbind_step_keys()
   vim.api.nvim_clear_autocmds({ group = augroup })
@@ -443,8 +456,9 @@ local function next_action(st)
   return st.focused and "close" or "focus"
 end
 
----Steps the sidebar's selected row `count` rows and opens it in the window you are editing in, focus staying put.
----A closed sidebar opens first, unfocused, on the row for where you are.
+---Steps the sidebar's selected row `count` places and opens it in the window you are editing in, focus staying put.
+---A closed sidebar opens first, unfocused, on the row for where you are; a step pressed before the diff is read
+---waits for it.
 ---@param count integer Down for positive.
 function M.step(count)
   if not window.is_visible() then
@@ -452,15 +466,13 @@ function M.step(count)
     if not window.is_visible() then
       return
     end
-    unlanded = true
-  end
-  local state, tree = sidebar_state.current(), build.current()
-  if not (state and tree and tree.collected) then
-    return vim.notify("Changeset: still reading the changes", vim.log.levels.INFO)
-  end
-  if unlanded then
-    unlanded = false
+    local state = assert(sidebar_state.current(), "changeset: no tree built yet")
     apply(state.position:entered(draw.view()))
+  end
+  local tree = build.current()
+  if not (tree and tree.collected) then
+    waiting_step = count
+    return vim.api.nvim_echo({ { "reading the changes…" } }, false, {})
   end
   actions.open_step(count, { pick = pick, close = M.close })
 end

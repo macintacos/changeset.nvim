@@ -61,42 +61,70 @@ local function open_comment(row)
   end
 end
 
----The row `count` rows past the sidebar's cursor, down for a positive `count`, skipping section headers and stopping
----at the last row either way.
----@param count integer
----@return integer? lnum nil while the sidebar has no tree.
----@return integer from The cursor's own row.
-local function stepped(count)
-  local state, lnum = sidebar_state.current(), cursor()
-  if not (state and lnum) then
-    return nil, 0
-  end
-  local to = lnum
-  for _ = 1, math.abs(count) do
-    to = state.view:step(to, count > 0 and 1 or -1)
-  end
-  return to, lnum
-end
-
 ---@param delta integer
 ---@param preview fun()
 local function step(delta, preview)
-  local to = stepped(delta)
-  if to then
-    move(to)
-    preview()
+  local state, lnum = sidebar_state.current(), cursor()
+  if not (state and lnum) then
+    return
   end
+  move(state.view:step(lnum, delta))
+  preview()
 end
 
----Steps the sidebar's cursor `count` rows, then opens that row as `<CR>` does, without its review comment, in the
----window the sidebar opens changes in. Focus stays where it was.
+---Where a row opens, as `commit` opens it.
+---@param row changeset.Row
+---@return string
+local function place_of(row)
+  return ("%s:%d"):format(row.path, row.lnum or 1)
+end
+
+---Where the window a commit opens into stands, as `place_of` spells it; nil when it holds no file of the tree.
+---@param root string
+---@return string?
+local function current_place(root)
+  local win = window.peek_target()
+  if not win then
+    return nil
+  end
+  local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win))
+  local path = name ~= "" and vim.fs.relpath(root, vim.fs.normalize(name))
+  return path and ("%s:%d"):format(path, vim.api.nvim_win_get_cursor(win)[1]) or nil
+end
+
+---The row `count` places past the sidebar's cursor, down for a positive `count`: each place a row that opens
+---somewhere other than the last, starting from where the window it opens into stands. Stops at the last such row.
+---@param state changeset.SidebarState
+---@param lnum integer
+---@param count integer
+---@return integer
+local function placed(state, lnum, count)
+  local delta = count > 0 and 1 or -1
+  local here, to = current_place(state.tree.root), lnum
+  for _ = 1, math.abs(count) do
+    local at = to
+    repeat
+      local next_lnum = state.view:step(at, delta)
+      if next_lnum == at then
+        return to
+      end
+      at = next_lnum
+    until place_of(assert(state.view:row(at))) ~= here
+    to, here = at, place_of(assert(state.view:row(at)))
+  end
+  return to
+end
+
+---Steps the sidebar's cursor `count` places, then opens that row as `<CR>` does, without its review comment, in
+---the window the sidebar opens changes in. Focus stays where it was.
 ---@param count integer Down for positive.
 ---@param hooks changeset.ActionHooks
 function M.open_step(count, hooks)
-  local to, from = stepped(count)
-  if not to then
+  local state, from = sidebar_state.current(), cursor()
+  if not (state and from) then
     return
   end
+  local to = placed(state, from, count)
   if to == from then
     -- Not wrapped, so a run of `.` stops here rather than looping.
     return vim.api.nvim_echo({ { count > 0 and "no next change" or "no previous change" } }, false, {})

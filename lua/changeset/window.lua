@@ -161,6 +161,12 @@ local function target()
   end)
 end
 
+---The window a commit would open into, without splitting for one; nil when there is none.
+---@return integer?
+function M.peek_target()
+  return M._pick_target(reachable(), usable)
+end
+
 ---Show `buf` in `win` without recording a jumplist entry.
 ---
 ---It is swapping the buffer, not moving the cursor, that records one — hence
