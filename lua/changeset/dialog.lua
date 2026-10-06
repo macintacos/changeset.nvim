@@ -46,9 +46,9 @@ local NO_CURSOR = "n:" .. render.NO_CURSOR_HL
 ---@field unavailable? string Why it can't be chosen, drawn after its dimmed cells.
 
 ---@class changeset.ChooseOpts
----@field title string What choosing does, e.g. "Send the review".
+---@field title string What choosing does, e.g. "Submit the review".
 ---@field items changeset.DialogItem[]
----@field action string The verb for choosing, which the footer names: "send".
+---@field action string The verb for choosing, which the footer names: "submit".
 
 ---@class changeset.DialogFrame
 ---@field title string
