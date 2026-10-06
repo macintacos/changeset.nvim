@@ -174,26 +174,34 @@ runs its subcommand:
 A key you have already mapped in that mode is left alone. Set
 `vim.g.changeset_no_default_maps = true` anywhere in your config to map none of
 them. With them mapped, `<C-g>` on its own (`:file`) and visual mode’s
-`<C-g>` (Select mode) wait `'timeoutlen'` for a second key.
+`<C-g>` (Select mode) wait `'timeoutlen'` for a second key. `<C-g>c` followed
+by a pause comments, as `<C-g>cc` does.
 
 `<C-g>n` and `<C-g>p` move the sidebar’s selected row to the next or previous
 place and open it as `<CR>` does, without opening a Comments row’s review
-comment. Section headers are skipped, and so is any row that would open where
-the window already stands, such as a file’s row, its "Other changes" row and
-that group’s first change, which can all open the same line. So every press
-moves you. Focus stays where you pressed the key: from a file you stay in its
-window, which now shows the next place, and from the sidebar the row opens in
-the window it opens changes in. A count moves that many places. When no row
-that way opens anywhere new, they stay put and say so, rather than wrapping.
+comment. Section headers are skipped. So is a deleted file’s row, which opens
+nowhere, and any row that would open where the window already stands, such as a
+file’s row, its "Other changes" row and that group’s first change, which
+can all open the same line. So every press moves you. From a file you stay in
+its window, which now shows the next place. From the sidebar, the row opens in
+the window it opens changes in, and focus stays on the sidebar. From a window
+that holds no file, such as the quickfix list, help or a float, the row opens
+in the window before it, and focus goes there. A count moves that many places.
+When no row that way opens anywhere new, they stay put and say so, rather than
+wrapping.
+
 With the sidebar closed, they open it without focusing it, on the row for where
-you are. If the changes are still being read, the step waits and is taken once
-they are. A later press, or `.`, replaces the waiting step, and closing the
-sidebar drops it.
+you are. Until the changes and your file’s symbols are read, the step waits
+and is taken once they are. Presses made meanwhile add up, a press the other
+way taking one off, so `<C-g>n..` takes three steps. The waiting step is
+dropped when you close the sidebar, when the changes fail to read, or when you
+have moved to another window or buffer by the time they are read.
 
 `<C-g>n`, `<C-g>p`, `<C-g>cn` and `<C-g>cp` are dot-repeatable: `<C-g>n...`
-steps four times, and `3<C-g>n.` steps three rows, then three more. So `.`
+steps four times, and `3<C-g>n.` steps three places, then three more. So `.`
 after one of them repeats the step, not your last edit. A count given to `.`
-itself is ignored: `.` repeats with the first count.
+itself is ignored: `.` repeats with the first count. Like any `g@` operator,
+they set the `'[` and `']` marks.
 
 To use other keys, map them onto the `<Plug>` maps. For example:
 
@@ -368,9 +376,9 @@ move, `<CR>` or a row’s number submits, and `q` or `<Esc>` cancels without a
 word. Leaving either window any other way cancels it.
 
 `:Changeset next-comment` and `:Changeset prev-comment` walk the review
-comments by file and then line, `<C-g>cn` / `<C-g>cp` that many comments for a
-count, wrapping at either end, and skip any whose file is gone. From a file
-they start at the cursor; from the sidebar, at the first or last review
+comments by file and then line, wrapping at either end, and skip any whose file
+is gone. With a count, `<C-g>cn` and `<C-g>cp` move that many comments. From a
+file they start at the cursor; from the sidebar, at the first or last review
 comment; from a window that holds no file, such as the quickfix list, in the
 window before it. Like the other verbs, they refuse while the file you are in,
 or the one they would open, has unsaved edits.

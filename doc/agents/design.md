@@ -738,16 +738,29 @@ the walk. It stops at the ends rather than wrapping, so a run of `.` can't loop.
 Every press has to move you, or it reads as a dropped key. So `<C-g>n` counts places, not
 rows: it steps on past any row that would open the path and line the target window
 already stands on. A file's row, its group row and the group's first change often all do.
-A press made before the diff is read isn't dropped either. The latest one waits, with its
-count, and is taken when the diff lands, on the same `diff` event that redraws the
-sidebar. Closing the sidebar drops it, so a reopened sidebar never takes a stale step.
+A press made before the tree is ready isn't dropped either. It waits, and presses made
+meanwhile add up. It is taken on the `diff` or `symbols` event that redraws the sidebar,
+once the file you are in is decided. Before that, the file's rows are placeholders, and a
+step among them can go backwards. It is dropped when the sidebar closes, when the diff
+fails, or when you are no longer in the window and buffer you pressed it in, so it never
+pulls you back from where you went.
+
+A step from the sidebar hands focus back to it. That return skips two things once: the
+landing on your row, which would undo the step, and the preview of the row just opened,
+which would put a band over the opened line. A one-shot skip of each, rather than
+`'eventignore'`, lets the file window's leave events and other plugins' handlers fire as
+usual.
 
 The four walking keys are dot-repeatable because they are exactly the motion you press
 again and again. `.` after them repeats the step and not your last edit, which only works
 because they leave nothing for `.` to repeat otherwise. The operator is `g@l` after an
-`<Esc>`, because the `<Esc>` drops the typed count, which would otherwise reach the `l`
-and fail at the end of a line. The count goes into the `'operatorfunc'` lambda instead, so
-`.` repeats it, and a count given to `.` itself is lost.
+`<Esc>`. The `<Esc>` drops the typed count, and the count goes into the `'operatorfunc'`
+lambda instead. That is a choice: `.` repeats the first count, and a count given to `.`
+itself is lost.
+
+`<C-g>c` is a prefix of `<C-g>cc`, `<C-g>cn` and `<C-g>cp`. On its own, after
+`'timeoutlen'`, it would fall through to Select mode or a pending `c`. So when changeset
+maps `<C-g>cc`, it maps `<C-g>c` to comment too.
 
 ### Empty and failed states direct, never apologise
 
