@@ -25,16 +25,17 @@ end
 ---The stdout of a fresh headless Neovim that loads the plugin, runs `args` and, once startup is done, `probe`.
 ---@param args string[] More arguments, before the probe's.
 ---@param probe string Lua that writes its answer with io.write.
+---@param wait_ms integer? How long the main loop runs, typed keys and all, before the probe.
 ---@return string
-local function after_startup(args, probe)
+local function after_startup(args, probe, wait_ms)
   local root = vim.fn.fnamemodify(vim.api.nvim_get_runtime_file("plugin/changeset.lua", false)[1], ":h:h")
   local cmd = { vim.v.progpath, "--headless", "-u", "NONE", "--cmd", "set rtp^=" .. root }
   vim.list_extend(cmd, { "--cmd", "runtime plugin/changeset.lua" })
   vim.list_extend(cmd, args)
-  vim.list_extend(
-    cmd,
-    { "--cmd", "autocmd VimEnter * ++once lua vim.schedule(function() " .. probe .. "; vim.cmd('qa!') end)" }
-  )
+  vim.list_extend(cmd, {
+    "--cmd",
+    ("autocmd VimEnter * ++once lua vim.defer_fn(function() %s; vim.cmd('qa!') end, %d)"):format(probe, wait_ms or 0),
+  })
   return vim.system(cmd):wait(10000).stdout
 end
 
@@ -374,6 +375,36 @@ describe("plugin/changeset.lua", function()
       "|",
       after_startup({ "-c", "nnoremap <C-g> :echo 1<CR>", "-c", "xnoremap <C-g>ccx :echo 1<CR>" }, probe)
     )
+  end)
+
+  describe("a pause after <C-g>c", function()
+    ---Types `keys` into ten numbered lines with `'timeoutlen'` short, then reports the comment's range, the mode and
+    ---the lines.
+    ---@param keys string
+    ---@return string
+    local function pause_after(keys)
+      local typed = "lua vim.o.timeoutlen = 50;"
+        .. " vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.split(('x'):rep(10, '\\n'), '\\n'));"
+        .. " package.loaded['changeset.reviewing'] = { comment = function(a, b) io.write(a, '-', b, ' ') end };"
+        .. (" vim.api.nvim_input('%s')"):format(keys)
+      local probe =
+        "io.write(vim.api.nvim_get_mode().mode, ' ', table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false)))"
+      return after_startup({ "-c", typed }, probe, 400)
+    end
+
+    it("comments on the cursor's line in normal mode", function()
+      assert.equal("3-3 n xxxxxxxxxx", pause_after("3G<C-g>c"))
+    end)
+
+    it("comments on the selection in visual mode", function()
+      assert.equal("3-4 n xxxxxxxxxx", pause_after("3GVj<C-g>c"))
+    end)
+
+    it("leaves <C-g>c alone when the user maps under it", function()
+      local probe = "io.write(vim.fn.maparg('<C-g>c', 'n'))"
+
+      assert.equal("", after_startup({ "-c", "nnoremap <C-g>cx :echo 1<CR>" }, probe))
+    end)
   end)
 
   it("maps no default keys when vim.g.changeset_no_default_maps is set", function()
