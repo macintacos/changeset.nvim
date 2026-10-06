@@ -1,4 +1,7 @@
 ---Hands text to an AI agent in another pane of the same herdr workspace.
+local dialog = require("changeset.dialog")
+local render = require("changeset.render")
+
 local M = {}
 
 ---@class changeset.HerdrAgent
@@ -14,6 +17,12 @@ local M = {}
 
 local TIMEOUT = 5000
 local START, STOP = "\27[200~", "\27[201~"
+-- The status of an agent at a permission prompt, which silently drops a paste; any other queues it in the input.
+local BLOCKED = "blocked"
+local STATUS = "●"
+-- Each status's colour in the picker; any other, such as unknown, takes the meta colour.
+local STATUS_HL =
+  { idle = "DiagnosticOk", done = "DiagnosticOk", working = "DiagnosticWarn", blocked = "DiagnosticError" }
 
 ---`value` when it is a non-empty string, else nil: herdr writes null, "" or nothing for absent.
 ---@param value any
@@ -40,25 +49,25 @@ function M._name(agent)
   return present(agent.name) or present(agent.display_agent) or present(agent.agent) or agent.pane_id
 end
 
----A picker row: name, status, tab label and title, skipping the empty ones.
+---A picker row: a circle in the status's colour, then name, status, tab label and title. An agent at a permission
+---prompt can't be picked, and its row says so in place of its tab and title.
 ---@param agent changeset.HerdrAgent
 ---@param tab_labels table<string, string> Each tab's label by tab id.
----@return string
+---@return changeset.DialogItem
 function M._row(agent, tab_labels)
   local labels = type(agent.state_labels) == "table" and agent.state_labels or {}
   local status = present(agent.agent_status)
-  local parts = {}
-  for _, part in ipairs({
-    M._name(agent),
-    present(status and labels[status]) or status or "",
-    present(tab_labels[agent.tab_id]) or "",
-    present(agent.title) or "",
-  }) do
-    if part ~= "" then
-      table.insert(parts, part)
-    end
+  ---@type changeset.DialogItem
+  local row = {
+    icon = { STATUS, STATUS_HL[status] or render.META_HL },
+    cells = { { M._name(agent) }, { present(status and labels[status]) or status or "" } },
+  }
+  if status == BLOCKED then
+    row.unavailable = "answer its prompt first"
+  else
+    vim.list_extend(row.cells, { { present(tab_labels[agent.tab_id]) or "" }, { present(agent.title) or "" } })
   end
-  return table.concat(parts, " · ")
+  return row
 end
 
 ---Why `pane` cannot take a paste now, judged from a fresh agent list, or nil when it can.
@@ -69,8 +78,7 @@ end
 function M._unready(agents, pane, name)
   for _, a in ipairs(agents) do
     if a.pane_id == pane then
-      -- A permission prompt silently drops a paste; any other status queues it in the input.
-      return a.agent_status == "blocked" and ("answer %s's prompt first"):format(name) or nil
+      return a.agent_status == BLOCKED and ("answer %s's prompt first"):format(name) or nil
     end
   end
   return name .. " closed"
@@ -155,22 +163,20 @@ local function pick(workspace, candidates, cb)
     for _, tab in ipairs(result and result.tabs or {}) do
       labels[tab.tab_id] = tab.label
     end
-    vim.ui.select(candidates, {
-      prompt = "Send the review to which agent?",
-      format_item = function(a)
+    dialog.choose({
+      title = "Send the review",
+      items = vim.tbl_map(function(a)
         return M._row(a, labels)
-      end,
-    }, function(choice)
-      -- mini.pick calls back inside its window; continue once it has closed.
-      vim.schedule(function()
-        cb(choice)
-      end)
+      end, candidates),
+      action = "send",
+    }, function(index)
+      cb(index and candidates[index])
     end)
   end)
 end
 
----Sends `text` to an AI agent in this herdr workspace: straight to the only one, else to the one picked
----through `vim.ui.select`. Pastes it into the agent's prompt unsent, then focuses the agent's pane.
+---Sends `text` to an AI agent in this herdr workspace: straight to the only one, else to the one picked in a
+---dialog. Pastes it into the agent's prompt unsent, then focuses the agent's pane.
 ---@param text string
 ---@param cb fun(err: string?, agent: string?) On the main loop. `agent` names who got it on success;
 ---`err` is a short sentence for `vim.notify`, without a "Changeset:" prefix; both nil when the pick was cancelled.

@@ -1,9 +1,8 @@
+local Dialog = require("support.dialog")
 local fake = require("support.herdr")
 local herdr = require("changeset.herdr")
 
 describe("changeset.herdr", function()
-  local select = vim.ui.select
-
   ---@param fields table
   ---@return table
   local function agent(fields)
@@ -19,11 +18,15 @@ describe("changeset.herdr", function()
   ---@return string? err
   ---@return string? name
   ---@return boolean called
-  local function send(text)
+  ---@param keys string? Pressed in the agent picker once it opens.
+  local function send(text, keys)
     local done, err, name = false, nil, nil
     herdr.send(text, function(e, n)
       done, err, name = true, e, n
     end)
+    if keys then
+      Dialog.press(keys)
+    end
     vim.wait(5000, function()
       return done
     end)
@@ -45,7 +48,7 @@ describe("changeset.herdr", function()
   end)
 
   after_each(function()
-    vim.ui.select = select
+    vim.cmd("silent! fclose!")
   end)
 
   it("pastes into the only other agent unsent, then focuses its pane", function()
@@ -67,18 +70,18 @@ describe("changeset.herdr", function()
       "tab list",
       { stdout = vim.json.encode({ result = { tabs = { { tab_id = "w1:t1", label = "parser" } } } }) }
     )
-    local rows, prompt
-    vim.ui.select = function(items, opts, on_choice)
-      prompt = opts.prompt
-      rows = vim.tbl_map(opts.format_item, items)
-      on_choice(items[2])
-    end
+    local done, err, name = false, nil, nil
+    herdr.send("hi", function(e, n)
+      done, err, name = true, e, n
+    end)
+    local rows = Dialog.lines()
+    Dialog.press("2")
+    vim.wait(5000, function()
+      return done
+    end)
 
-    local err, name = send("hi")
-
+    assert.same({ "▌ 1  ● alpha  idle     parser  Fix the parser", "  2  ● codex  working" }, rows)
     assert.is_nil(err)
-    assert.equal("Send the review to which agent?", prompt)
-    assert.same({ "alpha · idle · parser · Fix the parser", "codex · working" }, rows)
     assert.equal("codex", name)
     assert.same({ "tab", "list", "--workspace", "w1" }, fake.calls()[2])
     assert.equal("w1:p2", writes()[1][3])
@@ -86,15 +89,24 @@ describe("changeset.herdr", function()
 
   it("sends nothing when the pick is cancelled", function()
     fake.set("agent list", fake.agents({ alpha, beta }))
-    vim.ui.select = function(_, _, on_choice)
-      on_choice(nil)
-    end
 
-    local err, name, called = send("hi")
+    local err, name, called = send("hi", "q")
 
     assert.is_true(called)
     assert.is_nil(err)
     assert.is_nil(name)
+    assert.same({}, writes())
+  end)
+
+  it("offers an agent at a permission prompt without letting it be picked", function()
+    fake.set(
+      "agent list",
+      fake.agents({ alpha, agent({ pane_id = "w1:p5", name = "gamma", agent_status = "blocked" }) })
+    )
+
+    local err, name = send("hi", "2q")
+
+    assert.same({ nil, nil }, { err, name })
     assert.same({}, writes())
   end)
 
@@ -125,10 +137,11 @@ describe("changeset.herdr", function()
   end)
 
   it("labels a status through the agent's state labels", function()
-    assert.equal(
-      "x · Thinking",
-      herdr._row({ pane_id = "p", agent = "x", agent_status = "working", state_labels = { working = "Thinking" } }, {})
+    local row = herdr._row(
+      { pane_id = "p", agent = "x", agent_status = "working", state_labels = { working = "Thinking" } },
+      {}
     )
+    assert.equal("Thinking", row.cells[2][1])
   end)
 
   it("reports that there is no agent when none is left", function()
