@@ -110,7 +110,7 @@ calls `setup()` with them.
 USAGE                                                   *changeset.nvim-usage*
 
 `:Changeset` opens the sidebar and focuses it, and running it again from the
-sidebar closes it. It takes one optional subcommand, and `pr` takes a verb:
+sidebar closes it. It takes one optional subcommand:
 
 - `:Changeset toggle`, the default: from any other window, opens or focuses the sidebar
     on the row for where your cursor is. From the sidebar, closes it and returns you to your
@@ -124,20 +124,57 @@ sidebar closes it. It takes one optional subcommand, and `pr` takes a verb:
 - `:Changeset abandon` deletes every review comment |changeset.nvim-review-comments| of the repository.
 - `:Changeset submit` pastes the |changeset.nvim-review-comments| into an AI agent’s
     prompt through herdr.
-
-`<Plug>(changeset-toggle)` does what `:Changeset toggle` does.
+- `:Changeset next` / `:Changeset prev` jump to the next / previous
+    review comment |changeset.nvim-review-comments|.
+- `:Changeset list` puts the |changeset.nvim-review-comments| in the quickfix list.
+- `:Changeset yank` copies the review to the clipboard as text.
 
 The sidebar opens on the right of the editor. When the editor is too narrow to
 leave the files `layout.min_file_width` columns (80 by default) beside it, the
 sidebar opens as a drawer along the bottom instead. It moves between the two as
 you resize the editor.
 
-The plugin maps no keys outside the sidebar, so map your own. For example:
+Once startup is done, the plugin maps these keys, each to a `<Plug>` map that
+runs its subcommand:
+
+  ------------------------------------------------------------------------------------------
+  Key        Mode       <Plug> map                  Does
+  ---------- ---------- --------------------------- ----------------------------------------
+  <C-g>c     normal,    <Plug>(changeset-comment)   comment on this line, or the selection,
+             visual                                 or edit the comment there
+
+  <C-g>d     normal     <Plug>(changeset-delete)    delete the review comment on this line
+
+  <C-g>n     normal     <Plug>(changeset-next)      jump to the next review comment
+
+  <C-g>p     normal     <Plug>(changeset-prev)      jump to the previous review comment
+
+  <C-g>l     normal     <Plug>(changeset-list)      list the review comments in the quickfix
+                                                    list
+
+  <C-g>y     normal     <Plug>(changeset-yank)      copy the review as text
+
+  <C-g>s     normal     <Plug>(changeset-submit)    send the review to an agent
+
+  <C-g>a     normal     <Plug>(changeset-abandon)   abandon the review
+
+  <C-g>t     normal     <Plug>(changeset-toggle)    toggle the sidebar
+
+  <C-g>r     normal     <Plug>(changeset-refresh)   rebuild the sidebar
+
+  <C-g>m     normal     <Plug>(changeset-review)    toggle PR Review Mode
+  ------------------------------------------------------------------------------------------
+A key you have already mapped in that mode is left alone. Set
+`vim.g.changeset_no_default_maps = true` anywhere in your config to map none of
+them. With them mapped, `<C-g>` on its own (`:file`) and visual mode’s
+`<C-g>` (Select mode) wait `'timeoutlen'` for a second key.
+
+To use other keys, map them onto the `<Plug>` maps. For example:
 
 >lua
+    vim.g.changeset_no_default_maps = true
     vim.keymap.set("n", "<leader>gp", "<Plug>(changeset-toggle)", { desc = "Toggle the changeset sidebar" })
-    -- :Changeset review needs pr_review.enabled = true
-    vim.keymap.set("n", "<leader>gP", "<Cmd>Changeset review<CR>", { desc = "Toggle PR Review Mode" })
+    vim.keymap.set({ "n", "x" }, "<leader>gc", "<Plug>(changeset-comment)", { desc = "Review comment" })
     require("changeset").setup({ keymaps = { next = "]h", prev = "[h" } })
 <
 
@@ -301,6 +338,12 @@ underlined letter presses it directly, and so does a click; `q` or `<Esc>`
 keeps. The agent picker numbers its rows: `j` and `k` move, `<CR>` or a row’s
 number sends, and `q` or `<Esc>` cancels without a word. Leaving either window
 any other way cancels it.
+
+`:Changeset next` and `:Changeset prev` walk the review comments by file and
+then line, from the cursor, wrapping at either end, and skip any whose file is
+gone. `:Changeset list` puts them in the quickfix list, replacing the list it
+made last time. `:Changeset yank` copies the review, as `:Changeset submit`
+would paste it, and keeps the review comments.
 
 The pasted review holds a block per review comment, by file and then line, each
 naming its place, quoting its lines as they are now, unsaved edits included,

@@ -8,11 +8,18 @@ These rules apply to a change to what users call or configure: options, `:Change
 What `README.md` documents is the contract with users' configs. Changing or removing any of
 it is a breaking change.
 
-`plugin/changeset.lua` binds no keys, so users choose their own. It requires no
-`changeset.*` module when it loads, because those modules create their autocmds as they
-load, and a session that never opens the sidebar should create none.
+`plugin/changeset.lua` requires no `changeset.*` module when it loads, because those
+modules create their autocmds as they load, and a session that never opens the sidebar
+should create none. Its maps run `<Cmd>Changeset …<CR>` rather than a function for the
+same reason.
 
-A new command is a `:Changeset` subcommand, never a second user command.
+Every subcommand has a `<Plug>(changeset-<subcommand>)` map. The global keys are defaults
+under `<C-g>`, mapped once startup is done. Each one is skipped when its key is already
+mapped in that mode, and all of them are off when `vim.g.changeset_no_default_maps` is
+set.
+
+A new command is a `:Changeset` subcommand, never a second user command. It gets a
+`<Plug>` map and, when it's a review verb, a mnemonic `<C-g>` default.
 
 `footer()` in `lua/changeset/init.lua` stays public although only the plugin calls it. The
 sidebar's statusline evaluates it from a string, `v:lua.require'changeset'.footer()`,
