@@ -50,8 +50,8 @@ function M._name(agent)
 end
 
 ---A picker row: a circle in the status's colour, then name, status, tab label and title, the title blank when the
----label already holds it. An agent at a permission prompt can't be picked, and its row says so in place of its tab
----and title.
+---label is it, alone or behind herdr's glyph. An agent at a permission prompt can't be picked, and its row says so
+---in place of its tab and title.
 ---@param agent changeset.HerdrAgent
 ---@param tab_labels table<string, string> Each tab's label by tab id.
 ---@return changeset.DialogItem
@@ -68,7 +68,7 @@ function M._row(agent, tab_labels)
   else
     local tab, title = present(tab_labels[agent.tab_id]) or "", present(agent.title) or ""
     -- herdr can label a tab after its agent's title, behind the tab's number glyph; the same words twice are noise.
-    vim.list_extend(row.cells, { { tab }, { tab:find(title, 1, true) and "" or title } })
+    vim.list_extend(row.cells, { { tab }, { (tab == title or vim.endswith(tab, " " .. title)) and "" or title } })
   end
   return row
 end

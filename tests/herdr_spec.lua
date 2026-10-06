@@ -156,6 +156,12 @@ describe("changeset.herdr", function()
     )
   end)
 
+  it("keeps a title the tab's label only contains", function()
+    local row = herdr._row({ pane_id = "p", agent = "x", tab_id = "t", title = "fix" }, { t = "󰎤 fix the parser" })
+
+    assert.equal("fix", row.cells[4][1])
+  end)
+
   it("reports that there is no agent when none is left", function()
     fake.set("agent list", fake.agents({ mine }))
     assert.equal("no agent in this herdr workspace", (send("hi")))
