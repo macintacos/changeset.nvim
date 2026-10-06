@@ -19,12 +19,16 @@ local SAFE = "Keep"
 local BAR = "▌"
 -- Rows a digit chooses directly.
 local NUMBERED = 9
+-- Focus is drawn, so the cursor would only cover it. An entry of its own, apart from the sidebar's "n-v" one, so
+-- neither removes the other's.
+local NO_CURSOR = "n:" .. render.NO_CURSOR_HL
 
 ---@class changeset.DialogBlock A paragraph of a dialog's body.
 ---@field text string
 ---@field hl? string Group for the text; the float's own when absent.
 ---@field quote? string Group of a bar drawn before each of its lines, marking it as quoted.
 ---@field max_lines? integer Lines it may take: past them it is cut, and its last line ends in "…".
+---@field path? boolean Keep it to one line, cutting its head when too wide, as a path's tail matters most.
 
 ---@class changeset.ConfirmOpts
 ---@field title string The action it asks about, e.g. "Abandon the review".
@@ -76,6 +80,18 @@ local function head(text, room)
   return vim.fn.strcharpart(text, 0, n)
 end
 
+---The longest tail of `text` at most `room` cells wide.
+---@param text string
+---@param room integer
+---@return string
+local function tail(text, room)
+  local from = 0
+  while cells(vim.fn.strcharpart(text, from)) > room do
+    from = from + 1
+  end
+  return vim.fn.strcharpart(text, from)
+end
+
 ---`text` in lines at most `width` cells wide, broken between words, and inside a word wider than that.
 ---@param text string
 ---@param width integer
@@ -113,13 +129,19 @@ function M._body(blocks, width)
   for _, block in ipairs(blocks) do
     local bar = block.quote and QUOTE or ""
     local measure = width - cells(bar)
-    local texts = wrap((block.text:gsub("%s+$", "")), measure)
-    if block.max_lines and #texts > block.max_lines then
-      texts = vim.list_slice(texts, 1, block.max_lines)
-      texts[#texts] = head(texts[#texts], measure - cells(ELLIPSIS)) .. ELLIPSIS
+    local text = block.text:gsub("%s+$", "")
+    local texts
+    if block.path then
+      texts = { cells(text) <= measure and text or ELLIPSIS .. tail(text, measure - cells(ELLIPSIS)) }
+    else
+      texts = wrap(text, measure)
+      if block.max_lines and #texts > block.max_lines then
+        texts = vim.list_slice(texts, 1, block.max_lines)
+        texts[#texts] = head(texts[#texts], measure - cells(ELLIPSIS)) .. ELLIPSIS
+      end
     end
-    for _, text in ipairs(texts) do
-      lines[#lines + 1] = block.quote and { { bar, block.quote }, { text, block.hl } } or { { text, block.hl } }
+    for _, line in ipairs(texts) do
+      lines[#lines + 1] = block.quote and { { bar, block.quote }, { line, block.hl } } or { { line, block.hl } }
     end
   end
   return lines
@@ -222,6 +244,7 @@ local function open(lines, frame, answer)
     footer_pos = footer and "left",
     zindex = ZINDEX,
   })
+  vim.opt.guicursor:append(NO_CURSOR)
   -- A row wider than the editor is cut at the border, not wrapped onto the next.
   vim.wo[state.win].wrap = false
   -- Fires: focus leaving the dialog other than through its keys, which cancels it: it is modal while open.
@@ -229,6 +252,7 @@ local function open(lines, frame, answer)
     buffer = buf,
     desc = "changeset: cancel a dialog whose window is left",
     callback = function()
+      vim.opt.guicursor:remove(NO_CURSOR)
       -- Closing a window is not allowed while focus is leaving it.
       vim.schedule(function()
         finish(state, nil)
@@ -439,12 +463,6 @@ function M.choose(opts, cb)
   for _, row in ipairs(rows) do
     width = math.max(width, line_cells(row) + 2)
   end
-  local available = {}
-  for i, item in ipairs(opts.items) do
-    if not item.unavailable then
-      available[#available + 1] = i
-    end
-  end
   local digits = #opts.items == 1 and "1" or ("1-%d"):format(math.min(#opts.items, NUMBERED))
 
   ---@param focus integer?
@@ -459,7 +477,9 @@ function M.choose(opts, cb)
     end, vim.fn.range(1, #rows))
   end
 
-  local focus = available[1]
+  local focus = vim.iter(ipairs(opts.items)):find(function(_, item)
+    return not item.unavailable
+  end)
   local state = open(lines(focus), {
     title = opts.title,
     footer = ("<CR> or %s %s  q cancel"):format(digits, opts.action),

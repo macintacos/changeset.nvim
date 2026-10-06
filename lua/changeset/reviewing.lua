@@ -87,7 +87,7 @@ function M.ask_delete(comment)
   dialog.confirm({
     title = "Delete the review comment",
     body = {
-      { text = location(comment), hl = render.META_HL },
+      { text = location(comment), hl = render.META_HL, path = true },
       { text = comment.body, quote = render.REVIEW_COMMENT_HL, max_lines = QUOTED },
     },
     action = "Delete",

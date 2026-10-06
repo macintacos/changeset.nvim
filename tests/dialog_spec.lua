@@ -141,6 +141,17 @@ describe("changeset.dialog", function()
       assert.same({ win = opener, windows = 1 }, seen)
     end)
 
+    it("hides the cursor while it has focus, and gives it back once closed", function()
+      local before = vim.o.guicursor
+      ask()
+      local hidden = vim.o.guicursor
+
+      answer("q")
+
+      assert.truthy(hidden:find("ChangesetNoCursor", 1, true))
+      assert.equal(before, vim.o.guicursor)
+    end)
+
     it("centres itself on the editor", function()
       ask()
 
@@ -287,6 +298,10 @@ describe("changeset.dialog", function()
 
     it("bars every line of a quote", function()
       assert.same({ "▎ one two", "▎ three" }, texts(dialog._body({ { text = "one two three", quote = "Q" } }, 9)))
+    end)
+
+    it("keeps a path to one line, cutting its head", function()
+      assert.same({ "…/git.lua:12" }, texts(dialog._body({ { text = "lua/changeset/git.lua:12", path = true } }, 12)))
     end)
 
     it("cuts a block past its lines, ending the last in an ellipsis", function()
