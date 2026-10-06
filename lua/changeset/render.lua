@@ -209,7 +209,7 @@ local MARGIN = " "
 -- The branch and diff glyphs are the ones mini.statusline already draws.
 local BRANCH_ICON = ""
 local PR_ICON = ""
-local PENDING_ICON = "●"
+local CIRCLE_ICON = "●"
 local FILES_ICON = ""
 local COMMIT_ICON = ""
 local FILTER_ICON = "󰈲"
@@ -452,11 +452,11 @@ local function comment_line(row, opts)
   local comment = assert(row.review_comment, "changeset: a comment row lists nothing")
   local glyph, icon_hl = opts.icon(row)
   local where = vim.fs.basename(row.path) .. ":" .. span(comment)
-  local room = opts.width - vim.fn.strdisplaywidth(MARGIN .. PENDING_ICON .. " " .. glyph .. " ") - stat_cells(nil)
+  local room = opts.width - vim.fn.strdisplaywidth(MARGIN .. CIRCLE_ICON .. " " .. glyph .. " ") - stat_cells(nil)
   where = clip_right(where, room)
   local chunks = {
     { MARGIN },
-    { PENDING_ICON, M.REVIEW_COMMENT_HL },
+    { CIRCLE_ICON, M.REVIEW_COMMENT_HL },
     { " " },
     { glyph, icon_hl },
     { " " .. where },
