@@ -1,8 +1,9 @@
+local Dialog = require("support.dialog")
 local Fixture = require("support.git")
 local comment_store = require("changeset.comment_store")
 
 describe("changeset.reviewing", function()
-  local reviewing, notify, notes, prompts, confirmed, windows, dir, tree, focused
+  local reviewing, notify, notes, windows, dir, tree, focused
 
   ---The options of the window opened last.
   local function window()
@@ -11,19 +12,11 @@ describe("changeset.reviewing", function()
 
   before_each(function()
     os.remove(comment_store.path())
-    notes, prompts, windows, confirmed, focused, tree = {}, {}, {}, false, false, nil
+    notes, windows, focused, tree = {}, {}, false, nil
     notify = vim.notify
     vim.notify = function(msg, level)
       table.insert(notes, { msg = msg, level = level })
     end
-    package.loaded["changeset.confirm"] = {
-      ask = function(question, yes)
-        table.insert(prompts, question)
-        if confirmed then
-          yes()
-        end
-      end,
-    }
     package.loaded["changeset.review_comment_window"] = {
       open = function(opts)
         table.insert(windows, opts)
@@ -48,7 +41,8 @@ describe("changeset.reviewing", function()
     vim.notify = notify
     vim.cmd("silent! %bwipeout!")
     vim.fn.delete(dir, "rf")
-    for _, name in ipairs({ "changeset.confirm", "changeset.review_comment_window", "changeset.window" }) do
+    vim.cmd("silent! fclose!")
+    for _, name in ipairs({ "changeset.review_comment_window", "changeset.window" }) do
       package.loaded[name] = nil
     end
     package.loaded["changeset.build"] = nil
@@ -63,6 +57,22 @@ describe("changeset.reviewing", function()
     Fixture.init_repo("main", dir)
     vim.fn.writefile(vim.split(("x"):rep(10, "\n"), "\n"), dir .. "/a.lua")
     vim.cmd.edit(dir .. "/a.lua")
+  end
+
+  ---Whether any float is open: a dialog asking.
+  ---@return boolean
+  local function asking()
+    return vim.iter(vim.api.nvim_list_wins()):any(function(win)
+      return vim.api.nvim_win_get_config(win).relative ~= ""
+    end)
+  end
+
+  ---Presses `keys` in the open dialog, then waits for `done`.
+  ---@param keys string
+  ---@param done fun(): boolean
+  local function reply(keys, done)
+    Dialog.press(keys)
+    vim.wait(1000, done, 10)
   end
 
   ---@param fields table?
@@ -198,16 +208,14 @@ describe("changeset.reviewing", function()
     it("asks, once the window has closed, to delete a comment closed blank", function()
       edit_file()
       comment_store.keep(dir, comment())
-      confirmed = true
 
       reviewing.open(comment())
       window().keep("")
-      assert.same({}, prompts)
-      vim.wait(100, function()
-        return #prompts > 0
+      assert.is_false(asking())
+      reply("d", function()
+        return #comment_store.list(dir) == 0
       end)
 
-      assert.equal(1, #prompts)
       assert.same({}, comment_store.list(dir))
     end)
 
@@ -247,7 +255,7 @@ describe("changeset.reviewing", function()
 
       reviewing.delete()
 
-      assert.same({}, prompts)
+      assert.is_false(asking())
       assert.same({ comment({ start_line = 1, line = 6 }) }, comment_store.list(dir))
     end)
 
@@ -274,14 +282,26 @@ describe("changeset.reviewing", function()
   end)
 
   describe("ask_delete", function()
+    it("asks about the comment by its place and its words", function()
+      edit_file()
+      comment_store.keep(dir, comment({ start_line = 3, body = "first\nsecond" }))
+
+      reviewing.ask_delete(comment({ start_line = 3, body = "first\nsecond" }))
+
+      local lines = table.concat(Dialog.lines(), "\n")
+      assert.truthy(lines:find("a.lua:3-4", 1, true))
+      assert.truthy(lines:find("▎ first\n%s*▎ second"))
+    end)
+
     it("deletes the comment once confirmed", function()
       edit_file()
       comment_store.keep(dir, comment())
-      confirmed = true
 
       reviewing.ask_delete(comment())
+      reply("d", function()
+        return #comment_store.list(dir) == 0
+      end)
 
-      assert.equal(1, #prompts)
       assert.same({}, comment_store.list(dir))
     end)
 
@@ -290,6 +310,9 @@ describe("changeset.reviewing", function()
       comment_store.keep(dir, comment())
 
       reviewing.ask_delete(comment())
+      reply("<CR>", function()
+        return not asking()
+      end)
 
       assert.same({ comment() }, comment_store.list(dir))
     end)
@@ -301,7 +324,7 @@ describe("changeset.reviewing", function()
 
       reviewing.abandon()
 
-      assert.same({}, prompts)
+      assert.is_false(asking())
       assert.equal(vim.log.levels.INFO, notes[1].level)
     end)
 
@@ -310,20 +333,25 @@ describe("changeset.reviewing", function()
       comment_store.keep(dir, comment())
       comment_store.keep(dir, comment({ line = 7 }))
       comment_store.keep("/other", comment())
-      confirmed = true
 
       reviewing.abandon()
+      assert.truthy(table.concat(Dialog.lines(), " "):find("2", 1, true))
+      reply("a", function()
+        return #comment_store.list(dir) == 0
+      end)
 
-      assert.truthy(prompts[1]:find("2", 1, true))
       assert.same({}, comment_store.list(dir))
       assert.same({ comment() }, comment_store.list("/other"))
     end)
 
     it("abandons the tree's repository from the sidebar", function()
       comment_store.keep("/tree/root", comment())
-      tree, focused, confirmed = { root = "/tree/root" }, true, true
+      tree, focused = { root = "/tree/root" }, true
 
       reviewing.abandon()
+      reply("a", function()
+        return #comment_store.list("/tree/root") == 0
+      end)
 
       assert.same({}, comment_store.list("/tree/root"))
     end)

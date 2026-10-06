@@ -3,15 +3,12 @@ local render = require("changeset.render")
 local changeset = require("changeset")
 local comment_store = require("changeset.comment_store")
 local window = require("changeset.window")
+local Dialog = require("support.dialog")
 local Fixture = require("support.git")
 local Sidebar = require("support.sidebar")
 
 describe("the sidebar's Comments section", function()
-  local tmp, previous_dir, select
-  ---@type string[] Every question `vim.ui.select` was asked.
-  local asked
-  ---@type string? What each question is answered with; nil dismisses it.
-  local choice
+  local tmp, previous_dir
 
   before_each(function()
     tmp, previous_dir = Fixture.enter_tempdir()
@@ -27,15 +24,10 @@ describe("the sidebar's Comments section", function()
     vim.fn.writefile({ "local M = {}", "M.x = 1", "return M" }, "other.lua")
     Fixture.commit("alpha", tmp)
     os.remove(comment_store.path())
-    select, asked, choice = vim.ui.select, {}, nil
-    vim.ui.select = function(_, opts, on_choice)
-      table.insert(asked, opts.prompt)
-      on_choice(choice)
-    end
   end)
 
   after_each(function()
-    vim.ui.select = select
+    vim.cmd("silent! fclose!")
     vim.cmd.stopinsert()
     changeset.close()
     vim.cmd("silent! %bwipeout!")
@@ -251,20 +243,17 @@ describe("the sidebar's Comments section", function()
 
     save(win)
 
-    assert.is_true(vim.wait(5000, function()
-      return #asked > 0
-    end, 25))
-    assert.same({ "Delete the review comment on line 13 of alpha.txt?" }, asked)
+    assert.truthy(Dialog.lines()[2]:find("alpha.txt:13", 1, true))
     assert.equal(3, #comment_store.list(root))
   end)
 
   it("asks, then deletes the review comment on a row with d", function()
     local root = open_with_review_comments()
-    choice = "Yes"
 
     press_on("alpha.txt:13", "d")
+    assert.truthy(Dialog.lines()[2]:find("alpha.txt:13", 1, true))
+    Dialog.press("d")
 
-    assert.same({ "Delete the review comment on line 13 of alpha.txt?" }, asked)
     assert.is_true(vim.wait(5000, function()
       return #comment_store.list(root) == 2
     end, 25))
@@ -276,6 +265,11 @@ describe("the sidebar's Comments section", function()
 
     press_on("other.lua", "d")
 
-    assert.same({}, asked)
+    assert.same(
+      {},
+      vim.tbl_filter(function(win)
+        return vim.api.nvim_win_get_config(win).relative ~= ""
+      end, vim.api.nvim_list_wins())
+    )
   end)
 end)

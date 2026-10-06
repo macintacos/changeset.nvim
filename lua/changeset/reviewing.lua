@@ -4,7 +4,8 @@ local Paths = require("changeset.paths")
 local build = require("changeset.build")
 local comment_store = require("changeset.comment_store")
 local config = require("changeset.config")
-local confirm = require("changeset.confirm")
+local dialog = require("changeset.dialog")
+local render = require("changeset.render")
 local review_comment_window = require("changeset.review_comment_window")
 local review_comments = require("changeset.review_comments")
 local window = require("changeset.window")
@@ -38,6 +39,15 @@ local function lines_label(first, last)
   return first < last and ("lines %d-%d"):format(first, last) or ("line %d"):format(last)
 end
 
+---Where `comment` sits, as the Comments row and the pasted review name it: "a.lua:4", or "a.lua:3-5" for a range.
+---@param comment changeset.ReviewComment
+---@return string
+local function location(comment)
+  local first = comment.start_line or comment.line
+  return first < comment.line and ("%s:%d-%d"):format(comment.path, first, comment.line)
+    or ("%s:%d"):format(comment.path, comment.line)
+end
+
 ---Where `comment` sits, for a sentence: "line 4 of a.lua".
 ---@param comment changeset.ReviewComment
 ---@return string
@@ -64,6 +74,9 @@ local function keep(repository, comment)
   end
 end
 
+-- Lines of a review comment's body the delete dialog quotes: enough to tell it apart, short of a wall of text.
+local QUOTED = 4
+
 -- Extmarks move with edits while stored lines don't, so in a modified buffer a verb could act on the wrong line.
 local UNSAVED = "save the file first: marks move with unsaved edits, review comments don't"
 
@@ -71,7 +84,14 @@ local UNSAVED = "save the file first: marks move with unsaved edits, review comm
 ---@param comment changeset.ReviewComment
 function M.ask_delete(comment)
   local repository = root()
-  confirm.ask(("Delete the review comment on %s?"):format(place(comment)), function()
+  dialog.confirm({
+    title = "Delete the review comment",
+    body = {
+      { text = location(comment), hl = render.META_HL },
+      { text = comment.body, quote = render.REVIEW_COMMENT_HL, max_lines = QUOTED },
+    },
+    action = "Delete",
+  }, function()
     drop(repository, comment)
   end)
 end
@@ -201,8 +221,17 @@ function M.abandon()
   if count == 0 then
     return say(vim.log.levels.INFO, "no review to abandon in %s", repository)
   end
-  local question = ("Abandon the review and its %d review comment%s?"):format(count, count == 1 and "" or "s")
-  confirm.ask(question, function()
+  local name = vim.fs.basename(repository)
+  dialog.confirm({
+    title = "Abandon the review",
+    body = {
+      {
+        text = count == 1 and ("Deletes the review comment in %s. It can't be brought back."):format(name)
+          or ("Deletes all %d review comments in %s. They can't be brought back."):format(count, name),
+      },
+    },
+    action = "Abandon",
+  }, function()
     if not comment_store.drop_all(repository) then
       return say(vim.log.levels.ERROR, "can't abandon the review in %s", comment_store.path())
     end
@@ -232,9 +261,7 @@ end
 ---@return string
 local function block(comment, read)
   local first = comment.start_line or comment.line
-  local location = first < comment.line and ("%s:%d-%d"):format(comment.path, first, comment.line)
-    or ("%s:%d"):format(comment.path, comment.line)
-  local parts = { location }
+  local parts = { location(comment) }
   local lines = read(comment.path, first, comment.line)
   if lines then
     local fence = ("`"):rep(longest_backticks(lines) + 1)
