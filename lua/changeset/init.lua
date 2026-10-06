@@ -452,14 +452,6 @@ function M.toggle()
   end
 end
 
--- The meta highlight is mixed from Comment's foreground, which a new colorscheme
--- replaces. Same idiom as lua/config/highlights.lua.
-vim.api.nvim_create_autocmd("ColorScheme", {
-  group = vim.api.nvim_create_augroup("changeset.highlights", { clear = true }),
-  desc = "changeset: rebuild the dim label colour against the new palette",
-  callback = render.define_highlights,
-})
-
 -- Fires: every buffer or window switch and cursor move, sidebar open or not, so
 -- "you are here" is current whenever the sidebar shows. Scheduled because a
 -- preview swaps its buffer inside `nvim_win_call`, which fires these with the

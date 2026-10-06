@@ -153,8 +153,15 @@ local function draw_loaded()
   end
 end
 
--- Loaded without the sidebar, which is what otherwise defines the groups.
 render.define_highlights()
+
+-- The meta highlight is mixed from Comment's foreground, which a new colorscheme replaces. Here rather than in
+-- the sidebar's module, since a review verb loads this one without it.
+vim.api.nvim_create_autocmd("ColorScheme", {
+  group = vim.api.nvim_create_augroup("changeset.highlights", { clear = true }),
+  desc = "changeset: rebuild the highlight groups against the new palette",
+  callback = render.define_highlights,
+})
 
 -- Fires: a review comment kept, dropped or cleared, so its marks follow it.
 comment_store.subscribe(draw_loaded)
@@ -163,6 +170,16 @@ comment_store.subscribe(draw_loaded)
 vim.api.nvim_create_autocmd("BufReadPost", {
   group = vim.api.nvim_create_augroup("changeset.review_comments", { clear = true }),
   desc = "changeset: mark the review comments kept for a file as it is read",
+  callback = function(args)
+    draw(args.buf, {})
+  end,
+})
+
+-- Fires: a buffer written. Its marks moved with the edits while the stored lines didn't, so they snap back to
+-- the lines every verb acts on.
+vim.api.nvim_create_autocmd("BufWritePost", {
+  group = "changeset.review_comments",
+  desc = "changeset: put a written file's review comment marks back on their stored lines",
   callback = function(args)
     draw(args.buf, {})
   end,

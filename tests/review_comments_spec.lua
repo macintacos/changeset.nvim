@@ -224,4 +224,22 @@ describe("review_comments", function()
     vim.api.nvim_exec_autocmds("CursorMoved", {})
     assert.are.same({ { 15, 15 } }, rows(assert(buf)))
   end)
+
+  it("puts a buffer's marks back on the stored lines when it is written", function()
+    set({ comment("beta.txt", 16) })
+    vim.api.nvim_buf_set_lines(beta, 0, 0, false, { "new 1", "new 2" })
+    assert.are.same({ { 17, 17 } }, rows(beta))
+
+    vim.api.nvim_buf_call(beta, function()
+      vim.cmd("silent write")
+    end)
+
+    assert.are.same({ { 15, 15 } }, rows(beta))
+  end)
+
+  it("defines its groups again after a colorscheme change", function()
+    vim.cmd("colorscheme default")
+
+    assert.is_true(vim.api.nvim_get_hl(0, { name = render.REVIEW_COMMENT_HL }).bold)
+  end)
 end)

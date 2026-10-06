@@ -431,10 +431,12 @@ lists them; their ranges' number colours merge.
 
 The marks are drawn in every loaded buffer of a repository with review comments, sidebar
 or not, once changeset is loaded: `plugin/changeset.lua` requires nothing, so a session
-that never uses changeset marks nothing. They are redrawn after every write to the store
-and as a file is read, and a redraw reads the store once for every buffer it draws. Stored
-line numbers never move with edits, so a file changed since a review comment was written
-shows its marks on whatever lines now hold those numbers.
+that never uses changeset marks nothing. They are redrawn after every write to the store,
+as a file is read and as it is written, and a redraw reads the store once for each
+repository it draws. Stored line numbers never move with edits. The marks are extmarks, so
+they follow unsaved edits, and writing the file snaps them back to the stored numbers, which
+then sit on whatever lines now hold them. Until then the verbs that act by line refuse in
+the modified buffer, since the marks and the stored lines disagree.
 
 The third mark, a comment bubble `󰍩` in the same group, takes the sign column on the first
 line, and it is the one that does compete for a cell. It is left at the default extmark
