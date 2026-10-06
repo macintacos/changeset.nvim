@@ -399,8 +399,12 @@ function M.open()
   end
 end
 
+---Whether `step` opened the sidebar and has yet to put its cursor on your row, waiting for the diff.
+local unlanded = false
+
 ---Dismiss the sidebar and its step keys, putting back what they replaced. The tree stays, and keeps refreshing.
 function M.close()
+  unlanded = false
   require("changeset.menu").close()
   actions.unbind_step_keys()
   vim.api.nvim_clear_autocmds({ group = augroup })
@@ -437,6 +441,28 @@ local function next_action(st)
     return "open"
   end
   return st.focused and "close" or "focus"
+end
+
+---Steps the sidebar's selected row `count` rows and opens it in the window you are editing in, focus staying put.
+---A closed sidebar opens first, unfocused, on the row for where you are.
+---@param count integer Down for positive.
+function M.step(count)
+  if not window.is_visible() then
+    M.open()
+    if not window.is_visible() then
+      return
+    end
+    unlanded = true
+  end
+  local state, tree = sidebar_state.current(), build.current()
+  if not (state and tree and tree.collected) then
+    return vim.notify("Changeset: still reading the changes", vim.log.levels.INFO)
+  end
+  if unlanded then
+    unlanded = false
+    apply(state.position:entered(draw.view()))
+  end
+  actions.open_step(count, { pick = pick, close = M.close })
 end
 
 ---Open, focus, or dismiss the sidebar, depending on where the cursor is.

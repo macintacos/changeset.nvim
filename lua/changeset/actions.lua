@@ -61,15 +61,58 @@ local function open_comment(row)
   end
 end
 
+---The row `count` rows past the sidebar's cursor, down for a positive `count`, skipping section headers and stopping
+---at the last row either way.
+---@param count integer
+---@return integer? lnum nil while the sidebar has no tree.
+---@return integer from The cursor's own row.
+local function stepped(count)
+  local state, lnum = sidebar_state.current(), cursor()
+  if not (state and lnum) then
+    return nil, 0
+  end
+  local to = lnum
+  for _ = 1, math.abs(count) do
+    to = state.view:step(to, count > 0 and 1 or -1)
+  end
+  return to, lnum
+end
+
 ---@param delta integer
 ---@param preview fun()
 local function step(delta, preview)
-  local state, lnum = sidebar_state.current(), cursor()
-  if not (state and lnum) then
+  local to = stepped(delta)
+  if to then
+    move(to)
+    preview()
+  end
+end
+
+---Steps the sidebar's cursor `count` rows, then opens that row as `<CR>` does, without its review comment, in the
+---window the sidebar opens changes in. Focus stays where it was.
+---@param count integer Down for positive.
+---@param hooks changeset.ActionHooks
+function M.open_step(count, hooks)
+  local to, from = stepped(count)
+  if not to then
     return
   end
-  move(state.view:step(lnum, delta))
-  preview()
+  if to == from then
+    -- Not wrapped, so a run of `.` stops here rather than looping.
+    return vim.api.nvim_echo({ { count > 0 and "no next change" or "no previous change" } }, false, {})
+  end
+  local focus = vim.api.nvim_get_current_win()
+  move(to)
+  commit("reuse", hooks)
+  if focus == window.win() then
+    -- Unannounced, or the sidebar's WinEnter would land its cursor back on the row you are on, undoing the step.
+    local ignore = vim.o.eventignore
+    vim.o.eventignore = "all"
+    vim.api.nvim_set_current_win(focus)
+    vim.o.eventignore = ignore
+    window.sync_cursor()
+    draw.paint()
+  end
 end
 
 ---The step keys bound while the sidebar stands, each with the global mapping it replaced.
