@@ -429,7 +429,10 @@ A dialog is modal, and three things hold it so:
   can, cancels the dialog as leaving does.
 - **One is open at a time.** A second, from a global key pressed inside the first or an
   agent list arriving late, is refused and answers as cancelled: it would take focus, and
-  the first's leave would then cancel both.
+  the first's leave would then cancel both. A dialog whose window is gone holds no claim,
+  as one closed under `noautocmd` never runs its leave. A cancel that closes behind a
+  newer dialog, as when one batch of keys closes one and opens another, leaves focus with
+  the newer one.
 - **A resized editor fits and centres it again**, with the sums it opened with. Its text
   keeps the wrap it opened with.
 
