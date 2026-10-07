@@ -503,6 +503,14 @@ describe("review_comment_window", function()
       assert.equal(row_of(6), bottom + 2)
     end)
 
+    it("shows under a line running past the edge of a window that doesn't wrap", function()
+      vim.wo[source].wrap = false
+      vim.api.nvim_buf_set_lines(0, 4, 5, false, { ("w"):rep(vim.api.nvim_win_get_width(source) * 2) })
+      local hide = vim.api.nvim_win_get_config((open({ line = 5 }))).hide
+      vim.wo[source].wrap = true
+      assert.is_false(hide)
+    end)
+
     it("scrolls a line near the bottom up just far enough to fit the box under it", function()
       local win = open({ line = 20 })
       local top, bottom = borders(win)
@@ -534,6 +542,19 @@ describe("review_comment_window", function()
       scroll_to(30 - vim.api.nvim_win_get_height(source) + 2)
       assert.equal(last - 1, row_of(30))
       assert.is_true(vim.api.nvim_win_get_config(win).hide)
+    end)
+
+    it("shows while its first row fits under its line, past filler scrolled off above the top line", function()
+      local win = open({ line = 30 })
+      local top = 33 - vim.api.nvim_win_get_height(source)
+      local filler = { virt_lines = { { { "a" } }, { { "b" } } }, virt_lines_above = true }
+      local ns = vim.api.nvim_create_namespace("review_comment_window_spec")
+      vim.api.nvim_buf_set_extmark(vim.api.nvim_win_get_buf(source), ns, top - 1, 0, filler)
+      vim.api.nvim_win_call(source, function()
+        vim.fn.winrestview({ topline = top, topfill = 0, lnum = top })
+      end)
+      notify()
+      assert.is_false(vim.api.nvim_win_get_config(win).hide)
     end)
 
     it("keeps its padding under its line when the source's lines are replaced", function()

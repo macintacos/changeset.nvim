@@ -122,9 +122,15 @@ end
 ---@param line integer
 ---@return boolean
 local function under_in_view(win, line)
-  local text = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), line - 1, line, false)[1]
-  local row = vim.fn.screenpos(win, line, math.max(#text, 1)).row
-  return row > 0 and row + GAP < vim.fn.win_screenpos(win)[1] + vim.api.nvim_win_get_height(win) - 1
+  local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+  if line < view.topline then
+    return false
+  end
+  -- Counted in rows rather than read off a screen position: a line running past the edge of a window that doesn't
+  -- wrap has its end off screen. The count takes in the filler above the top line, which shows only `topfill` deep.
+  local through = vim.api.nvim_win_text_height(win, { start_row = view.topline - 1, end_row = line - 1 }).all
+  local filler = vim.api.nvim_win_text_height(win, { start_row = view.topline - 1, end_row = view.topline - 1 }).fill
+  return through - (filler - view.topfill) + GAP < vim.api.nvim_win_get_height(win)
 end
 
 ---Scroll `win` the least that shows `line` with the box under it, moving its cursor to `line` if it must scroll.
