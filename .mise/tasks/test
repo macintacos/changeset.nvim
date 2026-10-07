@@ -10,11 +10,14 @@ set -euo pipefail
 #
 # --noplugin: the flag plenary gives its children, which minimal_init is written for;
 # it sources plenary's plugin/ itself.
+#
+# timeout: plenary kills a spec file at 50 s by default, which the longest specs reach
+# on a loaded machine.
 specs=("$@")
 (($#)) || specs=(tests/)
 status=0
 for spec in "${specs[@]}"; do
 	nvim --headless --noplugin -u tests/minimal_init.lua \
-		-c "PlenaryBustedDirectory $spec {minimal_init = 'tests/minimal_init.lua'}" || status=1
+		-c "PlenaryBustedDirectory $spec {minimal_init = 'tests/minimal_init.lua', timeout = 120000}" || status=1
 done
 exit "$status"
