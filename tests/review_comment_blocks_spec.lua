@@ -27,6 +27,11 @@ describe("review comment blocks", function()
     vim.cmd("silent! only")
     vim.cmd("silent! %bwipeout!")
     vim.cmd("silent! nunmap j")
+    vim.cmd("silent! nunmap Q")
+    vim.o.cursorline = false
+    if not blocks.shown() then
+      blocks.show(true)
+    end
     vim.fn.chdir(previous_dir)
     vim.fn.delete(tmp, "rf")
     os.remove(comment_store.path())
@@ -201,6 +206,133 @@ describe("review comment blocks", function()
 
     press("<Esc>2j")
     assert.are.equal(5, lnum())
+  end)
+
+  ---What `run` returns with blocks hidden and then shown, each from the file as committed.
+  ---@param run fun(): any
+  ---@return any hidden
+  ---@return any shown
+  local function both_ways(run)
+    blocks.toggle()
+    vim.cmd("silent edit!")
+    local hidden = run()
+    blocks.toggle()
+    vim.cmd("silent edit!")
+    return hidden, run()
+  end
+
+  ---@return string[]
+  local function buffer_lines()
+    return vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  end
+
+  it("lets a failing j end a macro, as without blocks", function()
+    keep({ path = "alpha.txt", line = 3, body = "short" })
+    vim.fn.setreg("q", "A;" .. vim.keycode("<Esc>") .. "j")
+
+    local hidden, shown = both_ways(function()
+      go(38)
+      press("20@q")
+      return buffer_lines()
+    end)
+    assert.are.same(hidden, shown)
+  end)
+
+  it("lets a failing j end the mapping that pressed it, as without blocks", function()
+    keep({ path = "alpha.txt", line = 3, body = "short" })
+    vim.cmd("nmap Q jdd")
+
+    local hidden, shown = both_ways(function()
+      go(40)
+      press("Q")
+      return #buffer_lines()
+    end)
+    assert.are.same(hidden, shown)
+  end)
+
+  it("lets a replayed macro move past blocks, as without blocks", function()
+    keep({ path = "alpha.txt", line = 3, body = "short" })
+    vim.fn.setreg("a", "A;" .. vim.keycode("<Esc>") .. "j")
+
+    local hidden, shown = both_ways(function()
+      go(1)
+      press("5@a")
+      return buffer_lines()
+    end)
+    assert.are.same(hidden, shown)
+  end)
+
+  it("parks for a typed j, never for one a mapping sends", function()
+    keep({ path = "alpha.txt", line = 3, body = "short" })
+    vim.cmd("nmap Q j")
+    go(2)
+
+    press("Q")
+    press("Q")
+    assert.are.equal(4, lnum())
+    assert.is_nil(parked())
+  end)
+
+  it("lets <C-o>j from insert mode move past a block", function()
+    keep({ path = "alpha.txt", line = 3, body = "short" })
+    go(3)
+
+    press("i<C-o>jX<Esc>")
+    assert.are.equal("Xalpha 4", vim.api.nvim_buf_get_lines(0, 3, 4, false)[1])
+  end)
+
+  it("runs a global map of j made after the blocks were drawn", function()
+    keep({ path = "alpha.txt", line = 3, body = "short" })
+    vim.keymap.set("n", "j", function()
+      vim.g.changeset_spec_j = true
+      return "j"
+    end, { expr = true })
+    go(10)
+
+    press("j")
+    assert.is_true(vim.g.changeset_spec_j)
+    vim.g.changeset_spec_j = nil
+  end)
+
+  it("leaves a buffer-local map of j made after the blocks were drawn", function()
+    keep({ path = "alpha.txt", line = 3, body = "short" })
+    vim.keymap.set("n", "j", "<Nop>", { buffer = 0, desc = "later" })
+
+    blocks.toggle()
+    assert.are.equal("later", vim.fn.maparg("j", "n", false, true).desc)
+    blocks.toggle()
+  end)
+
+  it("keeps the column a move started from after stepping off a block", function()
+    vim.api.nvim_buf_set_lines(0, 3, 6, false, { ("x"):rep(60), "short", ("y"):rep(60) })
+    vim.cmd("silent write")
+    keep({ path = "alpha.txt", line = 4, body = "short" })
+    vim.api.nvim_win_set_cursor(0, { 4, 40 })
+
+    press("jjj")
+    assert.are.same({ 6, 40 }, vim.api.nvim_win_get_cursor(0))
+  end)
+
+  it("steps off a block parked from a short line to the column the move started at", function()
+    vim.api.nvim_buf_set_lines(0, 3, 6, false, { ("x"):rep(60), "short", ("y"):rep(60) })
+    vim.cmd("silent write")
+    keep({ path = "alpha.txt", line = 5, body = "short" })
+    vim.api.nvim_win_set_cursor(0, { 4, 40 })
+
+    press("jjj")
+    assert.are.same({ 6, 40 }, vim.api.nvim_win_get_cursor(0))
+  end)
+
+  it("gives a window split while parked the cursorline the parked one had", function()
+    keep({ path = "alpha.txt", line = 3, body = "short" })
+    vim.o.cursorline = true
+    go(3)
+    press("j")
+
+    vim.cmd("split")
+    assert.is_true(vim.wo.cursorline)
+    vim.cmd("wincmd p")
+    assert.is_true(vim.wo.cursorline)
   end)
 
   it("gives a buffer its own map of j back when blocks hide", function()

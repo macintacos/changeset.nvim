@@ -15,6 +15,15 @@ local ELLIPSIS = "…"
 local SOLID = { h = "─", v = "│" }
 local DASHED = { h = "┄", v = "┆" }
 
+-- Every map of ours carries one of these, so taking ours out never takes out a map someone set over it.
+local MOVE_DESC = "Move, stopping on review comment blocks"
+local RUN_DESC = "Run what this key does without review comment blocks"
+local PARKED_DESCS = { "Edit the review comment", "Delete the review comment", "Step off the review comment" }
+local OURS = { [MOVE_DESC] = true, [RUN_DESC] = true }
+for _, desc in ipairs(PARKED_DESCS) do
+  OURS[desc] = true
+end
+
 ---@class changeset.BlockMove
 ---@field key string
 ---@field down boolean
@@ -40,6 +49,7 @@ local MOVES = {
 ---@field id integer The extmark holding its stack.
 ---@field index integer Its place in the stack, top first.
 ---@field pos integer[] Where the cursor waits, its column kept for stepping off.
+---@field curswant integer The column the cursor wanted when it parked, which a later `j` or `k` keeps to.
 ---@field cursorline boolean The window's 'cursorline' before parking.
 ---@field maps table<string, table> The buffer's own maps the block's keys stood in for.
 
@@ -56,6 +66,10 @@ local moves = {}
 
 ---@type changeset.ParkedBlock?
 local parked
+
+---The window the last parked block was in and the 'cursorline' it gave back, for a split made as it let go.
+---@type { win: integer, cursorline: boolean }?
+local released
 
 ---@param text string
 ---@return integer
@@ -195,13 +209,17 @@ local function map_of(buf, lhs)
   end)
 end
 
----Takes our maps of `saved`'s keys out of `buf`, putting back the buffer's own maps they stood in for.
+---Takes our maps of `saved`'s keys out of `buf`, putting back the buffer's own maps they stood in for; a map set
+---over ours since stays.
 ---@param buf integer
 ---@param saved table<string, table>
 local function restore(buf, saved)
   for lhs, map in pairs(saved) do
-    pcall(vim.keymap.del, "n", lhs, { buffer = buf })
-    if map.buffer == 1 then
+    local current = map_of(buf, lhs)
+    if current.buffer == 1 and OURS[current.desc] then
+      vim.keymap.del("n", lhs, { buffer = buf })
+    end
+    if map.buffer == 1 and not (current.buffer == 1 and not OURS[current.desc]) then
       vim.api.nvim_buf_call(buf, function()
         vim.fn.mapset("n", false, map)
       end)
@@ -223,6 +241,7 @@ local function unpark()
     restore(state.buf, state.maps)
   end
   dialog.show_cursor()
+  released = { win = state.win, cursorline = state.cursorline }
   if vim.api.nvim_win_is_valid(state.win) then
     vim.api.nvim_set_option_value("cursorline", state.cursorline, { scope = "local", win = state.win })
   end
@@ -307,7 +326,9 @@ end
 ---@param id integer
 ---@param index integer
 ---@param pos integer[]
-local function park(win, buf, id, index, pos)
+---@param curswant integer? Kept from the block this one steps on from; else read off the window.
+local function park(win, buf, id, index, pos, curswant)
+  curswant = curswant or vim.api.nvim_win_call(win, vim.fn.winsaveview).curswant
   unpark()
   ---@type changeset.ParkedBlock
   local state = {
@@ -316,6 +337,7 @@ local function park(win, buf, id, index, pos)
     id = id,
     index = index,
     pos = pos,
+    curswant = curswant,
     cursorline = vim.api.nvim_get_option_value("cursorline", { scope = "local", win = win }),
     maps = {},
   }
@@ -325,7 +347,8 @@ local function park(win, buf, id, index, pos)
   dialog.hide_cursor()
   vim.api.nvim_set_option_value("cursorline", false, { scope = "local", win = win })
   local comment = drawn[buf].anchors[id][index]
-  ---Runs `verb` on the comment once the block lets go, unless the block has moved off the comment's stored line.
+  ---Runs `verb` on the comment once the block lets go; refuses in a modified buffer, where blocks drift off their
+  ---comments' stored lines.
   ---@param verb fun(reviewing: table)
   local function act(verb)
     return function()
@@ -341,16 +364,16 @@ local function park(win, buf, id, index, pos)
     reviewing.open(comment)
   end
   local keys = {
-    { "<CR>", act(edit), "Edit the review comment" },
-    { "c", act(edit), "Edit the review comment" },
+    { "<CR>", act(edit), PARKED_DESCS[1] },
+    { "c", act(edit), PARKED_DESCS[1] },
     {
       "d",
       act(function(reviewing)
         reviewing.ask_delete(comment)
       end),
-      "Delete the review comment",
+      PARKED_DESCS[2],
     },
-    { "<Esc>", unpark, "Step off the review comment" },
+    { "<Esc>", unpark, PARKED_DESCS[3] },
   }
   for _, key in ipairs(keys) do
     state.maps[key[1]] = map_of(buf, key[1])
@@ -359,13 +382,12 @@ local function park(win, buf, id, index, pos)
   reveal(state)
 end
 
----Moves the cursor of `win` to line `line`, held to its buffer, at column `col`.
+---Moves the cursor of `win` to line `line`, held to its buffer.
 ---@param win integer
 ---@param line integer
----@param col integer
-local function put(win, line, col)
+local function put(win, line)
   local count = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
-  vim.api.nvim_win_set_cursor(win, { math.max(math.min(line, count), 1), col })
+  vim.api.nvim_win_set_cursor(win, { math.max(math.min(line, count), 1), 0 })
 end
 
 ---Moves from the parked block to the next in its stack, else off it: down to the line under it, up to its line.
@@ -374,11 +396,23 @@ end
 local function step(state, down)
   local index = state.index + (down and 1 or -1)
   if drawn[state.buf].anchors[state.id][index] then
-    return park(state.win, state.buf, state.id, index, state.pos)
+    return park(state.win, state.buf, state.id, index, state.pos, state.curswant)
   end
   local line = anchor_line(state.buf, state.id)
   unpark()
-  put(state.win, down and line + 1 or line, state.pos[2])
+  put(state.win, down and line + 1 or line)
+  vim.api.nvim_win_call(state.win, function()
+    -- Where a plain move would have landed: the column the cursor wanted, held to the line.
+    local at = vim.api.nvim_win_get_cursor(0)[1]
+    local col = vim.fn.virtcol2col(0, at, math.min(state.curswant + 1, vim.v.maxcol))
+    vim.api.nvim_win_set_cursor(0, { at, math.max(col - 1, 0) })
+    vim.fn.winrestview({ curswant = state.curswant })
+    -- Up lands on the screen row next to the block: a wrapped line's last.
+    local rows = vim.wo.wrap and text_rows(vim.api.nvim_win_get_cursor(0)[1]) or 1
+    if not down and rows > 1 and vim.fn.foldclosed(line) == -1 then
+      vim.cmd.normal({ (rows - 1) .. "gj", bang = true })
+    end
+  end)
 end
 
 ---The first line of the closed fold holding `line`, else `line`.
@@ -397,66 +431,185 @@ local function fold_end(line)
   return last == -1 and line or last
 end
 
----Runs what `move`'s key did before, parking instead on a block it would have crossed.
----@param move changeset.BlockMove
-local function moved(move)
-  local plug = vim.keycode(move.plug)
-  if vim.v.count > 0 then
-    return vim.cmd.normal(vim.v.count .. plug)
+---What a movement key left for the callback that runs after its motion: where it started, and the `on_key` count
+---when it was pressed.
+---@class changeset.PendingMove
+---@field move changeset.BlockMove
+---@field win integer
+---@field buf integer
+---@field before integer[]
+---@field view vim.fn.winsaveview.ret
+---@field seq integer
+
+---@type changeset.PendingMove?
+local pending
+
+---What `vim.on_key` saw typed for each key, by its count, the last few kept.
+---@type table<integer, string>
+local typed_keys = {}
+local seq = 0
+
+---Whether the user typed `move`'s key, rather than a mapping, `:normal` or `feedkeys` sending it. `on_key` reports a
+---mapped key after its map ran, so this is only known once the keys the map returned arrive.
+---@param p changeset.PendingMove
+---@return boolean
+local function typed(p)
+  return typed_keys[p.seq + 1] == vim.keycode(p.move.key)
+end
+
+---Runs `p`'s key as it was mapped before blocks showed, in the real typeahead, so a failing motion still ends the
+---macro or mapping around it.
+---@param p changeset.PendingMove
+local function run_plain(p)
+  vim.api.nvim_feedkeys(vim.keycode(p.move.plug), "im", false)
+end
+
+---After a typed key's motion: parks on a block it crossed, putting the cursor back.
+local function settle()
+  local p = pending
+  pending = nil
+  if not p or not typed(p) or vim.api.nvim_get_current_win() ~= p.win then
+    return
   end
-  local win, buf = vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf()
-  if parked and parked.win == win and parked.buf == buf and drawn[buf] then
-    return step(parked, move.down)
-  end
-  local before = vim.api.nvim_win_get_cursor(win)
-  local view = vim.fn.winsaveview()
-  vim.cmd.normal(plug)
-  local after = vim.api.nvim_win_get_cursor(win)
+  local after = vim.api.nvim_win_get_cursor(p.win)
   local id, index = nil, 1
-  if move.down then
-    local last = fold_end(before[1])
-    id = anchor_at(buf, last)
-    -- Unmoved, the key failed on the last line, which can still have blocks under it; moved within the line, as
-    -- `gj` on a wrapped one does, it hasn't reached them yet.
-    if after[1] <= last and not vim.deep_equal(after, before) then
-      id = nil
+  if p.move.down then
+    if after[1] > fold_end(p.before[1]) then
+      id = anchor_at(p.buf, fold_end(p.before[1]))
     end
   else
-    local top = fold_top(before[1])
+    local top = fold_top(p.before[1])
     if after[1] < top and fold_end(after[1]) == top - 1 then
-      id = anchor_at(buf, top - 1)
-      index = id and #drawn[buf].anchors[id] or 1
+      id = anchor_at(p.buf, top - 1)
+      index = id and #drawn[p.buf].anchors[id] or 1
     end
   end
   if id then
-    vim.fn.winrestview(view)
-    park(win, buf, id, index, before)
+    vim.fn.winrestview(p.view)
+    park(p.win, p.buf, id, index, p.before, p.view.curswant)
   end
 end
 
----Maps the movement keys in `buf`, each running what it did before through a `<Plug>` copy of that.
+---Parks on the first block under the cursor's line, for a typed key going down from its last screen row.
+local function park_below()
+  local p = pending
+  pending = nil
+  if not p then
+    return
+  end
+  local id = typed(p) and anchor_at(p.buf, fold_end(p.before[1]))
+  if not id then
+    return run_plain(p)
+  end
+  park(p.win, p.buf, id, 1, p.before, p.view.curswant)
+end
+
+---Moves on from the parked block for a typed key; another lets go and runs the key's motion.
+local function step_parked()
+  local p = pending
+  pending = nil
+  if not p then
+    return
+  end
+  if not (typed(p) and parked and parked.win == p.win and parked.buf == p.buf) then
+    unpark()
+    return run_plain(p)
+  end
+  step(parked, p.move.down)
+end
+
+local SETTLE = "<Plug>(changeset-block-settle)"
+local PARK = "<Plug>(changeset-block-park)"
+local STEP = "<Plug>(changeset-block-step)"
+vim.keymap.set("n", SETTLE, settle, { desc = "Park on a review comment block the last move crossed" })
+vim.keymap.set("n", PARK, park_below, { desc = "Park on the review comment block under this line" })
+vim.keymap.set("n", STEP, step_parked, { desc = "Step on from the parked review comment block" })
+
+---Whether the cursor is on the last screen row of its line, where a move down leaves it.
+---@return boolean
+local function on_last_row()
+  local line, col = unpack(vim.api.nvim_win_get_cursor(0))
+  if not vim.wo.wrap or vim.fn.foldclosed(line) ~= -1 then
+    return true
+  end
+  local text = vim.api.nvim_get_current_line()
+  local last = vim.fn.screenpos(0, line, math.max(#text, 1)).row
+  return last == 0 or vim.fn.screenpos(0, line, col + 1).row == last
+end
+
+---Points `move`'s `<Plug>` in `buf` at what its key does without us: the buffer's own map from before ours, else the
+---global map as it is now, else the key itself.
+---@param buf integer
+---@param move changeset.BlockMove
+local function point(buf, move)
+  local own = moves[buf][move.key]
+  if not next(own) then
+    local lhs = vim.fn.keytrans(vim.keycode(move.key))
+    own = vim.iter(vim.api.nvim_get_keymap("n")):find(function(map)
+      return map.lhs == lhs
+    end) or {}
+  end
+  if next(own) then
+    -- A copy, not the key: a map whose rhs starts with its own lhs doesn't remap that key, losing the user's.
+    local copy = vim.tbl_extend("force", own, {
+      lhs = move.plug,
+      lhsraw = vim.keycode(move.plug),
+      buffer = 1,
+      desc = RUN_DESC,
+    })
+    copy.lhsrawalt = nil
+    vim.api.nvim_buf_call(buf, function()
+      vim.fn.mapset("n", false, copy)
+    end)
+  else
+    vim.keymap.set("n", move.plug, move.key, { buffer = buf, desc = RUN_DESC })
+  end
+end
+
+---The keys `move`'s map sends: its own motion, wrapped so a typed key parks on the blocks it would cross. A count, a
+---macro, insert mode's `<C-o>` or a key a mapping sent runs the motion untouched.
+---@param move changeset.BlockMove
+---@return string
+local function expr(move)
+  local win, buf = vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf()
+  point(buf, move)
+  local plain = vim.v.count > 0 or vim.fn.reg_executing() ~= "" or vim.api.nvim_get_mode().mode ~= "n"
+  if plain then
+    unpark()
+    return move.plug
+  end
+  pending = {
+    move = move,
+    win = win,
+    buf = buf,
+    before = vim.api.nvim_win_get_cursor(win),
+    view = vim.fn.winsaveview(),
+    seq = seq,
+  }
+  if parked and parked.win == win then
+    return STEP
+  end
+  if move.down and anchor_at(buf, fold_end(pending.before[1])) and on_last_row() then
+    return PARK
+  end
+  return move.plug .. SETTLE
+end
+
+---Maps the movement keys in `buf`, keeping any map of its own they stand in for.
 ---@param buf integer
 local function map_moves(buf)
   local saved = {}
-  for _, move in ipairs(MOVES) do
-    local own = map_of(buf, move.key)
-    saved[move.key] = own
-    saved[move.plug] = {}
-    if next(own) then
-      -- A copy, not the key: a map whose rhs starts with its own lhs doesn't remap that key, losing the user's.
-      local copy = vim.tbl_extend("force", own, { lhs = move.plug, lhsraw = vim.keycode(move.plug), buffer = 1 })
-      copy.lhsrawalt = nil
-      vim.api.nvim_buf_call(buf, function()
-        vim.fn.mapset("n", false, copy)
-      end)
-    else
-      vim.keymap.set("n", move.plug, move.key, { buffer = buf })
-    end
-    vim.keymap.set("n", move.key, function()
-      moved(move)
-    end, { buffer = buf, desc = "Move, stopping on review comment blocks" })
-  end
   moves[buf] = saved
+  for _, move in ipairs(MOVES) do
+    saved[move.key] = map_of(buf, move.key)
+    if saved[move.key].buffer ~= 1 then
+      saved[move.key] = {}
+    end
+    saved[move.plug] = {}
+    vim.keymap.set("n", move.key, function()
+      return expr(move)
+    end, { buffer = buf, expr = true, remap = true, desc = MOVE_DESC })
+  end
 end
 
 ---Takes the movement maps out of `buf`, giving back what they stood in for.
@@ -528,6 +681,19 @@ vim.api.nvim_create_autocmd({ "ModeChanged", "WinLeave", "BufLeave", "TextChange
   end,
 })
 
+-- Fires: a window split off another, which copies its 'cursorline', off while a block is parked there.
+vim.api.nvim_create_autocmd("WinNew", {
+  group = group,
+  desc = "changeset: give a window split off a parked one the cursorline it had before parking",
+  callback = function()
+    local from = vim.fn.win_getid(vim.fn.winnr("#"))
+    local saved = parked and parked.win == from and parked or released and released.win == from and released
+    if saved then
+      vim.api.nvim_set_option_value("cursorline", saved.cursorline, { scope = "local", win = 0 })
+    end
+  end,
+})
+
 -- Fires: windows resized, which may change the narrowest window their buffers' blocks must fit.
 vim.api.nvim_create_autocmd("WinResized", {
   group = group,
@@ -565,19 +731,27 @@ vim.api.nvim_create_autocmd("BufUnload", {
 
 ---The keys a parked block lets through: its own and the movement keys, `g` only as the start of `gj` or `gk`.
 local KEEPS = {}
-for _, lhs in ipairs({ "j", "k", "<Down>", "<Up>", "<CR>", "c", "d", "<Esc>" }) do
+for _, lhs in ipairs({ "j", "k", "gj", "gk", "<Down>", "<Up>", "<CR>", "c", "d", "<Esc>" }) do
   KEEPS[vim.keycode(lhs)] = true
 end
+local MOUSE_MOVE = vim.keycode("<MouseMove>")
 local after_g = false
 
--- Any other key lets go, `zz` and `<C-e>` included, which change neither mode nor text.
-vim.on_key(function(_, typed)
-  if not parked or not typed or typed == "" then
+-- Records what was typed for each key, which tells a typed movement key from one a mapping sent. Any other typed key
+-- lets go of a parked block, `zz` and `<C-e>` included, which change neither mode nor text.
+vim.on_key(function(_, typed_key)
+  if typed_key == MOUSE_MOVE then
+    return
+  end
+  seq = seq + 1
+  typed_keys[seq] = typed_key or ""
+  typed_keys[seq - 20] = nil
+  if not parked or not typed_key or typed_key == "" then
     return
   end
   local was_g = after_g
-  after_g = typed == "g" and not was_g
-  if after_g or (KEEPS[typed] and (not was_g or typed == "j" or typed == "k")) then
+  after_g = typed_key == "g" and not was_g
+  if after_g or (KEEPS[typed_key] and (not was_g or typed_key == "j" or typed_key == "k")) then
     return
   end
   vim.schedule(unpark)

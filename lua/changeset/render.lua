@@ -977,7 +977,7 @@ function M.define_highlights()
   set_default(M.BUTTON_DANGER_FOCUS_HL, { fg = danger, reverse = true, bold = true })
   set_default(M.BUTTON_KEY_HL, { underline = true })
   set_default(M.DIALOG_SELECTED_HL, { bg = mix(float_bg, accent, SELECTED_TINT) })
-  -- A block is the review comment window collapsed, so it wears the float's colours; parked, the dialog's focus.
+  -- A block is the review comment window collapsed, so it wears the float's colours.
   set_default(M.BLOCK_BORDER_HL, { link = "FloatBorder" })
   -- Virtual lines sit on Normal, not NormalFloat, so the title takes the float's background or it shows as a hole.
   local float_title = vim.api.nvim_get_hl(0, { name = "FloatTitle", link = false })
