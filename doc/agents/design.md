@@ -376,7 +376,17 @@ buffer, so from the sidebar its window opens under a row instead: the file's row
 Comments row. The sidebar is the one place every changed file has a line, a deleted one
 included, and the row above names the file the comment is about, as the line above names
 the code. Being any other source window, the sidebar gets the same room, placement and
-closing. Inside a file it opens under the first line: `comment new` with no range there
+closing.
+
+Every other row comments the same way, on what it stands for, so a review read row by row
+from the preview is written without leaving the sidebar: a symbol's row on the line `<CR>`
+opens, a change's row on the change's lines, an "Other changes" row on the line it opens,
+and a Comments row opens its review comment. The title names the line or lines as any line
+comment's does, and a review comment already on exactly those lines opens to edit. A
+section header refuses, saying which rows take one, and so does a row whose file has
+unsaved edits, as the line verbs do. A deleted file is never read, so its row is its only
+one. A subcommand run from a window under a row runs from that row, not from the comment's
+line, which is none of the sidebar's. Inside a file it opens under the first line: `comment new` with no range there
 means the whole file, since a file is read from its top, while a selection of that line
 still means the line, so line 1 keeps its own comments. The title names its reach as a
 line's names its lines, `Review comment · whole file`, and leads with the file's icon from
@@ -544,11 +554,23 @@ lists them; their ranges' number colours merge. Their blocks stack in that order
 The marks are drawn in every loaded buffer of a repository with review comments, sidebar
 or not, once changeset is loaded: `plugin/changeset.lua` requires nothing, so a session
 that never uses changeset marks nothing. They are redrawn after every write to the store,
-as a file is read and as it is written, and a redraw reads the store once for each
-repository it draws. Stored line numbers never move with edits. The marks are extmarks, so
-they follow unsaved edits, and writing the file snaps them back to the stored numbers, which
-then sit on whatever lines now hold them. Until then the verbs that act by line refuse in
-the modified buffer, since the marks and the stored lines disagree.
+as a file is read, and when Neovim regains focus or gitsigns sees HEAD move, since either
+can follow a branch switch, and a redraw reads the store once for each repository it draws.
+
+The marks are extmarks, so they follow edits, and writing the file stores the lines each
+mark has moved to: the review comment stays on the code it was written about, however the
+lines above it changed, by hand or by a formatter on save. A range keeps its first and last
+lines, its end moving down with a line added right above the last. A review comment whose
+lines were all deleted goes to the line that followed them, where its mark collapses, and
+review comments that end up on one range merge into one, their bodies a blank line apart, a
+draft if any was: the store holds one a range, which every verb that finds a review comment
+by its lines relies on. A draft moves as a saved one does; a whole file's has no mark and
+stays. A redraw before the write, such as one for another file's review comment, draws a
+modified buffer's marks where its edits moved them, not back on the stored lines, or the
+write would store those. Writing the buffer to another file moves nothing, its own file
+still holding the stored lines, and an edit made outside Neovim moves nothing either, there
+being no mark to follow it. Until the write the verbs that act by line refuse in the
+modified buffer, since the marks and the stored lines disagree.
 
 The third mark, a comment bubble `󰍩` in the same group, takes the sign column on the first
 line, and it is the one that does compete for a cell. It is left at the default extmark
@@ -591,6 +613,27 @@ No icon plugin has a category to ask for a comment, so, like the header's branch
 the bubble is borrowed rather than looked up: `󰍩` is nerd-font Material `message-text`, the
 glyph the config's which-key spec gives its messages entry. Without a nerd font it draws
 as a missing-glyph box, as the header's glyphs do.
+
+### Review comments belong to the branch they were written on
+
+Each review comment records the branch it was written on, and every reader sees only the
+branch checked out's: the marks, blocks and hover, the Comments section, the walk, the
+quickfix list, yank, submit and abandon. `gh pr checkout` in a shared checkout would
+otherwise show one PR's review comments on another's code, on files it doesn't have, and
+submit them to the wrong agent. Switching back shows them again. One stored before branches
+were recorded has none and shows on every branch, until an edit files it under the branch
+it is edited on; abandon deletes those with the branch's own.
+
+The branch is read from git's own files, `HEAD` in the git directory a worktree's `.git`
+file points to, not by running git: every redraw reads the store, and hover on every
+request. The tree knows the branch only for its own repository and only once a debounced
+refresh has noticed the switch, and gitsigns' head only in buffers it attached.
+
+A detached HEAD in a stopped rebase sees the branch the rebase rewrites, which git names in
+`rebase-merge` or `rebase-apply`: a rebase stopped on a conflict is still that branch under
+review, as § What it remembers treats it. Any other detached HEAD, a bisect or a tag
+checked out, files its review comments under its commit. They stay with the code they were
+written against, show on no branch, and come back when that commit is checked out again.
 
 ### A review comment can show as a block
 
@@ -745,7 +788,7 @@ The marks in the files show a review comment where you read, but finding the one
 wrote means visiting every file. So the sidebar lists them in a section of their own, first,
 above Implementation: they are what you come back to. It is a section of another kind. It
 classifies no file, so its rows are not file rows, and it holds every review comment of the
-tree's repository, one row each, by path and then line.
+tree's repository on the branch checked out, one row each, by path and then line.
 
 Its header follows § Sections: an icon, the label, and a count of its rows in the meta
 colour, taken before any filter, adding the drafts among them when there are any:
@@ -782,8 +825,8 @@ of the file's lines, where line 0 would. Its keys open it under the row itself, 
 keeps the sidebar open, since closing it would take the window's room with it. The steps
 of § `<C-g>nn` pass over the row, as they pass over a deleted file's, and so do
 `:Changeset comment next`, `prev` and `last`: a jump lands on a line, and this comment is
-on none. A row whose file is gone previews the deleted file's notice rather than leaving
-the last preview standing.
+on none. A row whose file is gone previews a notice that the file was deleted rather than
+leaving the last preview standing.
 
 ### Footer
 
@@ -819,7 +862,8 @@ answer the middle one together, under the same glyph the tree files it by. The r
 carries the destination rather than the file, because the file is on the left and the row
 under the cursor is not: a chain is shown the way the tree shows it, joined by ` › `. A
 row that names no destination — a file, an orphan hunk — reads `<CR> to open` instead —
-or whatever `keymaps.jump` is, and nothing when it is `false`. `%<` sits before the path,
+or whatever `keymaps.jump` is, and nothing when it is `false`. A deleted file's row reads
+`deleted on this branch` there, since `<CR>` opens nothing on it. `%<` sits before the path,
 so a window too narrow for all three gives up the part the sidebar is already showing. The
 badge is `reverse`d
 rather than given a looked-up background, so it pairs the theme's warning colour with
@@ -1083,8 +1127,8 @@ touches, so it stays the size of a branch rather than growing with every branch 
 reviewed, and losing it costs one slow build. An entry also records which symbols the
 syntax marked as tests, and each side's comment, directive and blank lines, so a cached file
 is never parsed again and its base is never read again. The file name carries a
-format number, bumped whenever an entry gains a field, because an older entry's stamp would
-otherwise still match. Folds — a section's as well as a file's — are remembered per
+format number, bumped whenever what an entry holds or how it is derived changes, because an
+older entry's stamp would otherwise still match. Folds — a section's as well as a file's — are remembered per
 repository for as long as Neovim is running, so reopening looks like you left it; a restart
 starts expanded, except Generated, which starts folded. Per repository because a row is
 identified by a repo-relative path, which two checkouts can easily both have.
@@ -1210,7 +1254,7 @@ repository's deliberate choice is none of that save's business.
   the tabpage, then a split of its own.
 - **A previewed file is highlighted, not opened.** Its buffer stays unlisted until a
   commit promotes it — `<CR>`, or the cursor arriving in its window by any route (mouse,
-  `<C-w>`, `:wincmd`, another plugin). A deleted row's notice is the exception: it stands
+  `<C-w>`, `:wincmd`, another plugin). A deleted row's preview is the exception: it stands
   in for a file that cannot be opened, so arriving in it chooses nothing. It carries a
   filetype, so treesitter, syntax and any language server attach to it exactly as they
   would to a file you opened. The filetype has to be named explicitly: previews happen in
@@ -1221,6 +1265,15 @@ repository's deliberate choice is none of that save's business.
   the symbol walk loaded — until that buffer is entered, which a preview never does. The
   review comment marks' `BufReadPost` is run explicitly for the same reason, so a
   previewed file shows its marks.
+- **A deleted file previews what it held at the base.** git reads it off the main loop, so
+  passing over the row never waits on git, and an answer that lands after the cursor has
+  left the row is dropped rather than replacing the newer preview. The lines go in a
+  scratch buffer, each tinted `ChangesetDiffDelete` as the unified view tints a deleted
+  line, with the filetype its path names. That is set before the buffer is shown, as
+  `buffers.load` sets a file's, so its `FileType` handlers set nothing on the borrowed
+  window; and the buffer being `nofile`, no language server starts on it. When git can't
+  read the base, a notice that the file was deleted stands in instead. Each stand-in is a
+  new buffer, wiped once no window shows it, so no filetype or highlighter carries over.
 - **`?` documents the sidebar, not its buffer.** A buffer collects mappings from whoever
   wants one — a blanket `FileType` autocmd elsewhere in a user's config is all it takes —
   and those keys are not this sidebar's interface. The keys it sets are recorded as it
@@ -1248,7 +1301,10 @@ repository's deliberate choice is none of that save's business.
   way; when the cursor's file row is gone from screen — its changes all turned out to be
   tests or comments, or a filter kept only one copy — the cursor moves to the first file
   row with that path. The window scrolls by as many lines as the cursor moved, so its row
-  stays where it was on screen while rows arrive or leave above it.
+  stays where it was on screen while rows arrive or leave above it. A window showing the
+  tree's top stays there instead, header rows included, while the row still fits on screen,
+  so a section arriving above it, as Comments does with the first review comment, comes into
+  view rather than scrolling out of it.
 - **Opening the sidebar is an ordinary split.** It takes its width with `winfixwidth`
   (a drawer its height, with `winfixheight`) already set and then lets `'equalalways'`
   settle the rest, so the windows that were already open share out what is left instead
@@ -1292,6 +1348,15 @@ repository's deliberate choice is none of that save's business.
 - **Hiding a kind promotes its children.** Dropping `Class` still shows the methods that
   changed inside one — the kind you hid is not the thing you were looking for. Same rule
   `symbols.flatten` applies to its own kind filter, for the same reason.
+- **A function lists only what it declares.** Servers list a function's locals, parameters
+  and object keys as its children, and a hunk is credited to the deepest symbols it lands
+  in, so the function that changed would show as a bare ancestor over a `+1` per local.
+  Under a function, method or constructor the tree keeps only callables and types —
+  functions, methods, constructors, classes, interfaces, structs, enums, modules and
+  namespaces, each something a change can land in on its own — and promotes those out of
+  anything it drops, so a function declared inside a local still shows. A class declared
+  in a function keeps its members, and a data file, whose keys are its structure, keeps
+  everything.
 - **Counts come off the unfiltered tree.** A hidden kind still has to report its size, or
   the menu could not tell you what putting it back would cost.
 - **A float's border is drawn outside the size it is given.** Anchoring the menu by its
