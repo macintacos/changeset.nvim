@@ -284,10 +284,18 @@ function M.open(opts)
       and vim.api.nvim_win_get_buf(source) == source_buf
   end
 
+  local held = false
   local function place()
-    if attached() then
-      vim.api.nvim_buf_set_extmark(source_buf, ns, line() - 1, 0, { id = mark, virt_lines = PADDING })
-      vim.api.nvim_win_set_config(win, placement())
+    if not attached() then
+      return
+    end
+    vim.api.nvim_buf_set_extmark(source_buf, ns, line() - 1, 0, { id = mark, virt_lines = PADDING })
+    local config = placement()
+    vim.api.nvim_win_set_config(win, config)
+    -- Hidden with focus, as a mouse wheel over the source leaves it, it would take keys with nothing on screen.
+    -- Scheduled: inside WinScrolled, a close would skip the BufUnload that keeps its text, as autocmds don't nest.
+    if config.hide and not held and vim.fn.getcmdwintype() == "" then
+      vim.schedule(close)
     end
   end
 
@@ -310,7 +318,6 @@ function M.open(opts)
     end
   end
 
-  local held = false
   ---Where to pick writing back up on return from a window it held for, if it was writing.
   ---@type integer[]?
   local resume

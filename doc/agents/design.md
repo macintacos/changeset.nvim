@@ -336,7 +336,7 @@ border, make the room, and the float lies on them, a column in from the text for
 reason. It is attached to the window (`relative = "win"`, `bufpos`), so it moves with its
 line as the source scrolls, and `row` counts past every screen row of a wrapped line.
 Opening scrolls the source the least that shows the line with the box under it. A floating
-source has nothing to scroll past, so it grows by the room instead and shrinks back afterwards. While the row the box starts on is scrolled out of the source the float hides.
+source has nothing to scroll past, so it grows by the room instead and shrinks back afterwards. While the row the box starts on is scrolled out of the source the float hides, or, with focus in it, as a mouse wheel over the source leaves it, closes, keeping a draft, since a hidden float still takes keys.
 Focus never returns to it from the source: leaving it closes it, keeping a draft. Edits to the source never move the room
 off the line: it stays on the line number, as the float does.
 
@@ -359,7 +359,7 @@ keycap in `ChangesetKeycap`, which links to the dialogs' button, so it reads as 
 press, not a word of the label. A window too narrow for it drops it: Neovim cuts a footer
 from its left, leaving `<CR> save`, a key that doesn't save. The other keys stay off the border: `?` lists them all. However a
 review comment's text goes, except the close a taken save makes, it is kept as a draft:
-`q` or `<Esc>` in normal mode, focus leaving the float, `<S-Esc>` in either mode where the terminal sends it, `:q`,
+`q` or `<Esc>` in normal mode, focus leaving the float, its line scrolled out of the source, `<S-Esc>` in either mode where the terminal sends it, `:q`,
 `<C-w>c`, quitting Neovim. One `BufUnload` hook on the window's buffer catches them all:
 every close deletes the buffer, which takes with it any other window showing it, such as a
 `:split` made from the float, and the hook takes the room under the line with it. The
@@ -1163,7 +1163,8 @@ repository's deliberate choice is none of that save's business.
 - **`<C-s>` saves alongside `<C-CR>`** because many terminals never send `<C-CR>`.
 - **A float is never clipped to the window it is anchored to.** Scrolled off its line, the
   review comment window would sit at the source's edge over other text, or past it over
-  the status line and the next window, so it hides until the row under its line is back.
+  the status line and the next window, so it hides until the row under its line is back. With
+  focus in it, it closes instead, as a hidden float still takes keys.
 - **Neovim scrolls any window back to its cursor, current or not.** Scrolling the source
   to show the review comment window's line moves the source's cursor to that line too, or
   the old view comes straight back.

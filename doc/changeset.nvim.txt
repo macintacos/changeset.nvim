@@ -406,7 +406,7 @@ None of this needs the sidebar, a PR or `gh`.
     and its bottom border shows the keys that end it. The keys in `review_comment.save`,
     `<C-CR>` or `<C-s>` by default, or `<C-g>cc`, save it and close the window. Any other
     close keeps its text as a draft: `q`, `<Esc>` in normal mode, `<S-Esc>`, `:q`, focus leaving the
-    window for any other, or quitting Neovim with it open. Empty text keeps nothing. It opens a review comment already there to edit instead: on one line, the
+    window for any other, scrolling its line out of view, or quitting Neovim with it open. Empty text keeps nothing. It opens a review comment already there to edit instead: on one line, the
     narrowest that covers it; on a selection, only one on exactly the selected lines. In a
     modified buffer it asks you to save first, as `:Changeset comment del` does.
 - `:Changeset comment del` deletes the review comment on the cursor’s line, without asking.
