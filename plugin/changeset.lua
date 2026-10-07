@@ -118,52 +118,107 @@ end, {
   end,
 })
 
----Each subcommand's default key under `<C-g>`, and what it does.
+---A subcommand's default key.
+---@class changeset.DefaultKey
+---@field lhs string
+---@field name string The subcommand, as typed after `:Changeset`.
+---@field desc string
+---@field modes? string[] Default `{ "n" }`.
+---@field icon { cat: string, name: string } Its which-key icon: a category and name which-key asks mini.icons for, so it is drawn from the user's icon set.
+---@field operatorfunc? string For a step `.` repeats, its `'operatorfunc'` call, `%d` standing for the count.
+
+---@type changeset.DefaultKey[]
 local keys = {
-  { "cc", "comment new", "Comment on this line, or the selection, or edit the comment there", { "n", "x" } },
-  { "cd", "comment del", "Delete the review comment on this line" },
-  { "cn", "comment next", "Next review comment" },
-  { "cp", "comment prev", "Previous review comment" },
-  { "cl", "comment last", "Edit the review comment you saved last" },
-  { "cq", "comment list", "List the review comments in the quickfix list" },
-  { "ct", "comment toggle", "Show or hide the review comments' whole text in blocks" },
-  { "n", "next", "Open the next change" },
-  { "p", "prev", "Open the previous change" },
-  { "y", "review yank", "Copy the review as text" },
-  { "s", "review submit", "Submit the review to an agent" },
-  { "a", "review abandon", "Abandon the review" },
-  { "t", "toggle", "Toggle the changeset sidebar" },
-  { "r", "refresh", "Rebuild the changeset sidebar" },
-  { "m", "review mode", "Toggle PR Review Mode" },
+  {
+    lhs = "<C-g>cc",
+    name = "comment new",
+    desc = "Comment on this line, or the selection, or edit the comment there",
+    modes = { "n", "x" },
+    icon = { cat = "filetype", name = "messages" },
+  },
+  {
+    lhs = "<C-g>cd",
+    name = "comment del",
+    desc = "Delete the review comment on this line",
+    icon = { cat = "directory", name = "Trash" },
+  },
+  {
+    lhs = "<C-g>cn",
+    name = "comment next",
+    desc = "Next review comment",
+    icon = { cat = "filetype", name = "messages" },
+    operatorfunc = "v:lua.require'changeset.reviewing'.next_comment(%d)",
+  },
+  {
+    lhs = "<C-g>cp",
+    name = "comment prev",
+    desc = "Previous review comment",
+    icon = { cat = "filetype", name = "messages" },
+    operatorfunc = "v:lua.require'changeset.reviewing'.prev_comment(%d)",
+  },
+  {
+    lhs = "<C-g>cl",
+    name = "comment last",
+    desc = "Edit the review comment you saved last",
+    icon = { cat = "filetype", name = "messages" },
+  },
+  {
+    lhs = "<C-g>cq",
+    name = "comment list",
+    desc = "List the review comments in the quickfix list",
+    icon = { cat = "filetype", name = "qf" },
+  },
+  {
+    lhs = "<C-g>ct",
+    name = "comment toggle",
+    desc = "Show or hide the review comments' whole text in blocks",
+    icon = { cat = "filetype", name = "text" },
+  },
+  {
+    lhs = "<C-g>n",
+    name = "next",
+    desc = "Open the next change",
+    icon = { cat = "filetype", name = "diff" },
+    operatorfunc = "v:lua.require'changeset'.step(%d)",
+  },
+  {
+    lhs = "<C-g>p",
+    name = "prev",
+    desc = "Open the previous change",
+    icon = { cat = "filetype", name = "diff" },
+    operatorfunc = "v:lua.require'changeset'.step(-%d)",
+  },
+  { lhs = "<C-g>y", name = "review yank", desc = "Copy the review as text", icon = { cat = "lsp", name = "Text" } },
+  {
+    lhs = "<C-g>s",
+    name = "review submit",
+    desc = "Submit the review to an agent",
+    icon = { cat = "filetype", name = "robots" },
+  },
+  {
+    lhs = "<C-g>a",
+    name = "review abandon",
+    desc = "Abandon the review",
+    icon = { cat = "directory", name = "Trash" },
+  },
+  { lhs = "<C-g>t", name = "toggle", desc = "Toggle the changeset sidebar", icon = { cat = "filetype", name = "git" } },
+  {
+    lhs = "<C-g>r",
+    name = "refresh",
+    desc = "Rebuild the changeset sidebar",
+    icon = { cat = "filetype", name = "git" },
+  },
+  {
+    lhs = "<C-g>m",
+    name = "review mode",
+    desc = "Toggle PR Review Mode",
+    icon = { cat = "directory", name = ".github" },
+  },
 }
 
----Each default key's which-key icon, by subcommand: a category and name which-key asks mini.icons for, so it is drawn
----from the user's icon set.
-local icons = {
-  ["comment new"] = { cat = "filetype", name = "messages" },
-  ["comment del"] = { cat = "directory", name = "Trash" },
-  ["comment next"] = { cat = "filetype", name = "messages" },
-  ["comment prev"] = { cat = "filetype", name = "messages" },
-  ["comment last"] = { cat = "filetype", name = "messages" },
-  ["comment list"] = { cat = "filetype", name = "qf" },
-  ["comment toggle"] = { cat = "filetype", name = "text" },
-  next = { cat = "filetype", name = "diff" },
-  prev = { cat = "filetype", name = "diff" },
-  ["review yank"] = { cat = "lsp", name = "Text" },
-  ["review submit"] = { cat = "filetype", name = "robots" },
-  ["review abandon"] = { cat = "directory", name = "Trash" },
-  toggle = { cat = "filetype", name = "git" },
-  refresh = { cat = "filetype", name = "git" },
-  ["review mode"] = { cat = "directory", name = ".github" },
-}
-
----The steps `.` repeats: each one's `'operatorfunc'` call, `%d` standing for the count.
-local repeatable = {
-  next = "v:lua.require'changeset'.step(%d)",
-  prev = "v:lua.require'changeset'.step(-%d)",
-  ["comment next"] = "v:lua.require'changeset.reviewing'.next_comment(%d)",
-  ["comment prev"] = "v:lua.require'changeset.reviewing'.prev_comment(%d)",
-}
+local comment_new = assert(vim.iter(keys):find(function(key)
+  return key.name == "comment new"
+end))
 
 ---The `<Plug>` map of subcommand `name`, its words joined by hyphens.
 ---@param name string
@@ -173,26 +228,24 @@ local function plug(name)
 end
 
 for _, key in ipairs(keys) do
-  local name, desc = key[2], key[3]
-  local lhs = plug(name)
-  local call = repeatable[name]
-  if call then
+  local lhs = plug(key.name)
+  if key.operatorfunc then
     -- A g@ operator is what `.` repeats. The count is baked into the lambda, and <Esc> drops the typed one, so `.`
     -- repeats the first count.
     vim.keymap.set("n", lhs, function()
       if comment_window() then
-        return ("<Cmd>Changeset %s<CR>"):format(name)
+        return ("<Cmd>Changeset %s<CR>"):format(key.name)
       end
-      vim.o.operatorfunc = ("{_ -> %s}"):format(call:format(vim.v.count1))
+      vim.o.operatorfunc = ("{_ -> %s}"):format(key.operatorfunc:format(vim.v.count1))
       return "<Esc>g@l"
-    end, { expr = true, desc = desc })
+    end, { expr = true, desc = key.desc })
   else
     -- Through `:Changeset`, so a map takes the same route as the command, range and all.
-    vim.keymap.set("n", lhs, ("<Cmd>Changeset %s<CR>"):format(name), { desc = desc })
+    vim.keymap.set("n", lhs, ("<Cmd>Changeset %s<CR>"):format(key.name), { desc = key.desc })
   end
 end
 -- `:`, not <Cmd>, so the selection arrives as the '<,'> range.
-vim.keymap.set("x", plug("comment new"), ":Changeset comment new<CR>", { silent = true, desc = keys[1][3] })
+vim.keymap.set("x", plug("comment new"), ":Changeset comment new<CR>", { silent = true, desc = comment_new.desc })
 
 ---Whether a global map in `mode` has `lhs`, or starts it, or starts with it: either way `lhs` would clash with it.
 ---Buffer-local maps don't count, being only the buffer current at startup's.
@@ -221,20 +274,18 @@ local function map_defaults()
   local icon_specs = {}
   ---@param mode string
   ---@param lhs string
-  ---@param name string
-  ---@param desc string
-  local function map(mode, lhs, name, desc)
-    vim.keymap.set(mode, lhs, plug(name), { desc = desc })
-    icon_specs[#icon_specs + 1] = { lhs, mode = mode, icon = icons[name] }
+  ---@param key changeset.DefaultKey
+  local function map(mode, lhs, key)
+    vim.keymap.set(mode, lhs, plug(key.name), { desc = key.desc })
+    icon_specs[#icon_specs + 1] = { lhs, mode = mode, icon = key.icon }
     if mode == "n" then
-      window_keys[#window_keys + 1] = { lhs = lhs, name = name, desc = desc }
+      window_keys[#window_keys + 1] = { lhs = lhs, name = key.name, desc = key.desc }
     end
   end
   for _, key in ipairs(keys) do
-    local lhs = "<C-g>" .. key[1]
-    for _, mode in ipairs(key[4] or { "n" }) do
-      if not taken(lhs, mode) then
-        map(mode, lhs, key[2], key[3])
+    for _, mode in ipairs(key.modes or { "n" }) do
+      if not taken(key.lhs, mode) then
+        map(mode, key.lhs, key)
       end
     end
   end
@@ -242,7 +293,7 @@ local function map_defaults()
   -- `cn` and `cp` would see it as a clash.
   for mode, comments in pairs(pause) do
     if comments then
-      map(mode, "<C-g>c", "comment new", keys[1][3])
+      map(mode, "<C-g>c", comment_new)
     end
   end
   vim.g.changeset_window_keys = window_keys
