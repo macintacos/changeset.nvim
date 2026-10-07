@@ -52,10 +52,13 @@ local function mark(buf, comment)
       { comment.body:match("^[^\r\n]*"), render.REVIEW_COMMENT_BODY_HL },
     },
   })
-  if #vim.api.nvim_buf_get_extmarks(buf, sign_ns, { row, 0 }, { row, 0 }, { limit = 1 }) == 0 then
+  local existing = vim.api.nvim_buf_get_extmarks(buf, sign_ns, { row, 0 }, { row, 0 }, { limit = 1, details = true })[1]
+  -- One bubble a line, and a draft's wins it: unfinished work is what should stand out.
+  if not existing or (comment.draft and existing[4].sign_hl_group ~= render.REVIEW_COMMENT_DRAFT_HL) then
     -- The default priority, 4096, draws it over gitsigns' and diagnostics' signs. Without
     -- `sign_text` the mark takes no cell but keeps its group, which `M.bubble` answers from.
     vim.api.nvim_buf_set_extmark(buf, sign_ns, row, 0, {
+      id = existing and existing[1],
       sign_text = config.get().review_comment.sign and (comment.draft and DRAFT_BUBBLE or BUBBLE) or nil,
       sign_hl_group = hl,
     })

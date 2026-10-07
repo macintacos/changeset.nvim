@@ -164,6 +164,19 @@ describe("review_comments", function()
     assert.are.same({ "󰍪", render.REVIEW_COMMENT_DRAFT_HL }, { review_comments.bubble(beta, 15) })
   end)
 
+  for _, order in ipairs({ "draft first", "draft last" }) do
+    it(
+      ("gives a line where a draft and a saved comment start the draft's bubble, %s in the store"):format(order),
+      function()
+        local draft = { path = "beta.txt", line = 15, body = "d", draft = true }
+        local saved = { path = "beta.txt", line = 16, start_line = 15, body = "s" }
+        set(order == "draft first" and { draft, saved } or { saved, draft })
+        assert.are.same({ { 14, "󰍪 ", render.REVIEW_COMMENT_DRAFT_HL } }, signs(beta))
+        assert.are.same({ "󰍪", render.REVIEW_COMMENT_DRAFT_HL }, { review_comments.bubble(beta, 15) })
+      end
+    )
+  end
+
   it("puts a bubble in the sign column on each review comment's first line", function()
     set(all())
     local bubble, hl = "󰍩 ", render.REVIEW_COMMENT_HL
