@@ -323,6 +323,8 @@ end
 ---@param opts changeset.Config?
 function M.setup(opts)
   config.setup(opts)
+  -- The marks drew before setup(), to the defaults.
+  review_comments.redraw()
   if config.get().pr_review.enabled then
     require("changeset.review").activate()
   end
