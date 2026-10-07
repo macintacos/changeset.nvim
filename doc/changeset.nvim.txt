@@ -130,6 +130,10 @@ each take a verb after them:
     the current branch. It raises an error unless `pr_review.enabled` is set.
 - `:Changeset review submit` pastes the saved |changeset.nvim-review-comments| into an
     AI agent’s prompt through herdr.
+- `:Changeset review restore` brings back the |changeset.nvim-review-comments| the branch
+    submitted last, as saved ones, in case the paste was lost. It leaves out any on lines
+    that hold a review comment written since, and says how many came back. The next submit
+    replaces what it brings back, and `:Changeset review abandon` forgets it.
 - `:Changeset review yank` copies the review’s saved comments to the clipboard as text, or
     to the unnamed register when Neovim has no clipboard provider.
 - `:Changeset review abandon` deletes every review comment |changeset.nvim-review-comments| of the
@@ -205,6 +209,9 @@ runs its subcommand:
 
   [g         normal     <Plug>(changeset-preview-prev)     preview the previous change
   -------------------------------------------------------------------------------------------------
+`<Plug>(changeset-review-restore)` runs `:Changeset review restore` and has no
+default key.
+
 A key you have already mapped in that mode is left alone. Set
 `vim.g.changeset_no_default_maps = true` anywhere in your config to map none of
 them. With them mapped, `<C-g>` on its own (`:file`) and visual mode’s
@@ -338,7 +345,7 @@ option, and the save keys of the review comment window with
   d           sidebar     on a Comments row, ask, then delete its review
                           comment; nothing on any other row
 
-  <C-v> <C-s> sidebar     open the change in a vsplit / split / new tab
+  <C-v> <C-x> sidebar     open the change in a vsplit / split / new tab
   <C-t>                   instead, opening a Comments row’s review
                           comment as <CR> does
 
@@ -670,7 +677,7 @@ Any `keymaps` entry can be `false` to leave that key unbound.
 
   keymaps.jump_vsplit      <C-v>     Go to this change in a vertical split
 
-  keymaps.jump_split       <C-s>     Go to this change in a split
+  keymaps.jump_split       <C-x>     Go to this change in a split
 
   keymaps.jump_tab         <C-t>     Go to this change in a new tab
 

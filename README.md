@@ -110,6 +110,10 @@ after them:
   the current branch. It raises an error unless `pr_review.enabled` is set.
 - `:Changeset review submit` pastes the saved [review comments](#review-comments) into an
   AI agent's prompt through herdr.
+- `:Changeset review restore` brings back the [review comments](#review-comments) the branch
+  submitted last, as saved ones, in case the paste was lost. It leaves out any on lines
+  that hold a review comment written since, and says how many came back. The next submit
+  replaces what it brings back, and `:Changeset review abandon` forgets it.
 - `:Changeset review yank` copies the review's saved comments to the clipboard as text, or
   to the unnamed register when Neovim has no clipboard provider.
 - `:Changeset review abandon` deletes every [review comment](#review-comments) of the
@@ -159,6 +163,8 @@ subcommand:
 | `<C-g>m` | normal | `<Plug>(changeset-review-mode)` | toggle PR Review Mode |
 | `]g` | normal | `<Plug>(changeset-preview-next)` | preview the next change |
 | `[g` | normal | `<Plug>(changeset-preview-prev)` | preview the previous change |
+
+`<Plug>(changeset-review-restore)` runs `:Changeset review restore` and has no default key.
 
 A key you have already mapped in that mode is left alone. Set
 `vim.g.changeset_no_default_maps = true` anywhere in your config to map none of them. With
@@ -240,7 +246,7 @@ comment window with `review_comment.save`, in [Options](#options).
 | `R` | sidebar | rebuild now |
 | `y` | sidebar | copy the row's `path:line` to the clipboard; nothing on a section header |
 | `d` | sidebar | on a Comments row, ask, then delete its review comment; nothing on any other row |
-| `<C-v>` `<C-s>` `<C-t>` | sidebar | open the change in a vsplit / split / new tab instead, opening a Comments row's review comment as `<CR>` does |
+| `<C-v>` `<C-x>` `<C-t>` | sidebar | open the change in a vsplit / split / new tab instead, opening a Comments row's review comment as `<CR>` does |
 | `?` | sidebar | list the keys the sidebar bound: which-key's popup where it is installed, a float where it is not |
 | `]g` / `[g` | anywhere | move the sidebar's selection to the next / previous row, previewing it and skipping section headers, so you can review without focusing the sidebar; a closed sidebar opens first, unfocused, on your row; `<C-g>nn` / `<C-g>np` open the row instead |
 
@@ -526,7 +532,7 @@ Any `keymaps` entry can be `false` to leave that key unbound.
 | `keymaps.jump` | `<CR>` | Go to this change |
 | `keymaps.jump_close` | `<S-CR>` | Go to this change and close the sidebar |
 | `keymaps.jump_vsplit` | `<C-v>` | Go to this change in a vertical split |
-| `keymaps.jump_split` | `<C-s>` | Go to this change in a split |
+| `keymaps.jump_split` | `<C-x>` | Go to this change in a split |
 | `keymaps.jump_tab` | `<C-t>` | Go to this change in a new tab |
 | `keymaps.close` | `q` | Close the sidebar |
 | `keymaps.expand` | `l` | Expand |
