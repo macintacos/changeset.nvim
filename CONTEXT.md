@@ -106,6 +106,16 @@ Pasting the review into an AI agent's prompt in another herdr pane, unsent, then
 the review comments that went.
 _Avoid_: send, post; "submit" never means GitHub here
 
+**Block**:
+A review comment's whole text in a box drawn under its last line in its file, shown in
+place of its first line while `:Changeset toggle-comments` has blocks on.
+_Avoid_: box, card, inline comment
+
+**Parked block**:
+The block a one-line move stopped the cursor on, as if it were a line of the file. Its
+keys edit or delete its review comment.
+_Avoid_: selected block, which **Selected** already means for the sidebar; focused block
+
 **Comments section**:
 The sidebar's first section, listing the repository's review comments, one comment row
 each. It classifies no file.

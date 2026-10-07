@@ -132,6 +132,8 @@ sidebar closes it. It takes one optional subcommand:
     and opens it to edit.
 - `:Changeset list` puts the |changeset.nvim-review-comments| in the quickfix list.
 - `:Changeset yank` copies the review’s saved comments to the clipboard as text, or to the unnamed register
+- `:Changeset toggle-comments` shows every review comment |changeset.nvim-review-comments|’s whole
+    text in a block under its lines, or goes back to the marks alone, in every buffer.
     when Neovim has no clipboard provider.
 
 The sidebar opens on the right of the editor. When the editor is too narrow to
@@ -142,39 +144,42 @@ you resize the editor.
 Once startup is done, the plugin maps these keys, each to a `<Plug>` map that
 runs its subcommand:
 
-  -----------------------------------------------------------------------------------------------
-  Key        Mode       <Plug> map                       Does
-  ---------- ---------- -------------------------------- ----------------------------------------
-  <C-g>n     normal     <Plug>(changeset-next)           open the next change
+  --------------------------------------------------------------------------------------------------
+  Key        Mode       <Plug> map                          Does
+  ---------- ---------- ----------------------------------- ----------------------------------------
+  <C-g>n     normal     <Plug>(changeset-next)              open the next change
 
-  <C-g>p     normal     <Plug>(changeset-prev)           open the previous change
+  <C-g>p     normal     <Plug>(changeset-prev)              open the previous change
 
-  <C-g>cc    normal,    <Plug>(changeset-comment)        comment on this line, or the selection,
-             visual                                      or edit the comment there
+  <C-g>cc    normal,    <Plug>(changeset-comment)           comment on this line, or the selection,
+             visual                                         or edit the comment there
 
-  <C-g>cn    normal     <Plug>(changeset-next-comment)   jump to the next review comment
+  <C-g>cn    normal     <Plug>(changeset-next-comment)      jump to the next review comment
 
-  <C-g>cp    normal     <Plug>(changeset-prev-comment)   jump to the previous review comment
+  <C-g>cp    normal     <Plug>(changeset-prev-comment)      jump to the previous review comment
 
-  <C-g>cl    normal     <Plug>(changeset-last-comment)   edit the review comment you saved last
+  <C-g>cl    normal     <Plug>(changeset-last-comment)      edit the review comment you saved last
 
-  <C-g>d     normal     <Plug>(changeset-delete)         delete the review comment on this line
+  <C-g>ct    normal     <Plug>(changeset-toggle-comments)   show or hide the review comments’ whole
+                                                            text in blocks
 
-  <C-g>l     normal     <Plug>(changeset-list)           list the review comments in the quickfix
-                                                         list
+  <C-g>d     normal     <Plug>(changeset-delete)            delete the review comment on this line
 
-  <C-g>y     normal     <Plug>(changeset-yank)           copy the review as text
+  <C-g>l     normal     <Plug>(changeset-list)              list the review comments in the quickfix
+                                                            list
 
-  <C-g>s     normal     <Plug>(changeset-submit)         submit the review to an agent
+  <C-g>y     normal     <Plug>(changeset-yank)              copy the review as text
 
-  <C-g>a     normal     <Plug>(changeset-abandon)        abandon the review
+  <C-g>s     normal     <Plug>(changeset-submit)            submit the review to an agent
 
-  <C-g>t     normal     <Plug>(changeset-toggle)         toggle the sidebar
+  <C-g>a     normal     <Plug>(changeset-abandon)           abandon the review
 
-  <C-g>r     normal     <Plug>(changeset-refresh)        rebuild the sidebar
+  <C-g>t     normal     <Plug>(changeset-toggle)            toggle the sidebar
 
-  <C-g>m     normal     <Plug>(changeset-review)         toggle PR Review Mode
-  -----------------------------------------------------------------------------------------------
+  <C-g>r     normal     <Plug>(changeset-refresh)           rebuild the sidebar
+
+  <C-g>m     normal     <Plug>(changeset-review)            toggle PR Review Mode
+  --------------------------------------------------------------------------------------------------
 A key you have already mapped in that mode is left alone. Set
 `vim.g.changeset_no_default_maps = true` anywhere in your config to map none of
 them. With them mapped, `<C-g>` on its own (`:file`) and visual mode’s
@@ -447,6 +452,15 @@ marks appear in every loaded buffer once changeset is loaded, follow each
 review comment written, edited or deleted, and mark a file as it is read. The
 bubble needs a Nerd Font.
 
+`:Changeset toggle-comments` (`<C-g>ct`) shows each review comment’s whole
+text instead, in a box under its last line, as tall as the text;
+`review_comment.blocks` sets which the session starts with. The circle and
+first line go while blocks show; the bubble and green numbers stay. A one-line
+move, `j` or `k` however you map them, stops on a block as if it were a line of
+the file. The stopped-on block lights its border and lists its keys: `<CR>` or
+`c` edits the review comment, `d` asks to delete it, and `<Esc>` or any other
+key steps off. A count, a search or `<C-g>cn` moves past blocks.
+
 Hover shows them too. A file with a mark gets a language server client named
 `changeset`, which answers hover on a line with each review comment whose lines
 take it in, under a heading naming its lines and whether it is a draft. So `K`,
@@ -600,6 +614,10 @@ Any `keymaps` entry can be `false` to leave that key unbound.
   review_comment.save      <C-CR>,   List of keys that save a review
                            <C-s>     comment, in insert and normal mode
 
+  review_comment.blocks    false     Start each session showing review
+                                     comments as blocks of their whole text
+                                     (see Review comments)
+
   review_comment.sign      true      Put each review comment’s bubble in the
                                      sign column; false leaves it to a
                                      'statuscolumn' (see Review comments)
@@ -653,6 +671,21 @@ it again on `:colorscheme`.
 
   ChangesetReviewCommentBody    A review comment’s body     links to ChangesetMeta
                                 after its circle
+
+  ChangesetBlockBorder          A review comment block’s    links to FloatBorder
+                                border
+
+  ChangesetBlockTitle           A review comment block’s    links to FloatTitle
+                                title
+
+  ChangesetBlockBody            A review comment block’s    links to NormalFloat
+                                text
+
+  ChangesetBlockParked          The border and title of the Statement’s colour,
+                                block the cursor stopped on bold
+
+  ChangesetBlockHint            The keys that block lists   Comment’s colour,
+                                in its bottom border        italic
 
   ChangesetBadge                The badge in the footer     Directory’s colour,
                                                             reversed, bold

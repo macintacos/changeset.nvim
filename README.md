@@ -113,6 +113,8 @@ closes it. It takes one optional subcommand:
   and opens it to edit.
 - `:Changeset list` puts the [review comments](#review-comments) in the quickfix list.
 - `:Changeset yank` copies the review's saved comments to the clipboard as text, or to the unnamed register
+- `:Changeset toggle-comments` shows every [review comment](#review-comments)'s whole
+  text in a block under its lines, or goes back to the marks alone, in every buffer.
   when Neovim has no clipboard provider.
 
 The sidebar opens on the right of the editor. When the editor is too narrow to leave the
@@ -130,6 +132,7 @@ subcommand:
 | `<C-g>cn` | normal | `<Plug>(changeset-next-comment)` | jump to the next review comment |
 | `<C-g>cp` | normal | `<Plug>(changeset-prev-comment)` | jump to the previous review comment |
 | `<C-g>cl` | normal | `<Plug>(changeset-last-comment)` | edit the review comment you saved last |
+| `<C-g>ct` | normal | `<Plug>(changeset-toggle-comments)` | show or hide the review comments' whole text in blocks |
 | `<C-g>d` | normal | `<Plug>(changeset-delete)` | delete the review comment on this line |
 | `<C-g>l` | normal | `<Plug>(changeset-list)` | list the review comments in the quickfix list |
 | `<C-g>y` | normal | `<Plug>(changeset-yank)` | copy the review as text |
@@ -336,6 +339,14 @@ green, and its first line ends with a green circle and the first line of its bod
 loaded buffer once changeset is loaded, follow each review comment written, edited or
 deleted, and mark a file as it is read. The bubble needs a Nerd Font.
 
+`:Changeset toggle-comments` (`<C-g>ct`) shows each review comment's whole text instead, in
+a box under its last line, as tall as the text; `review_comment.blocks` sets which the
+session starts with. The circle and first line go while blocks show; the bubble and green
+numbers stay. A one-line move, `j` or `k` however you map them, stops on a block as if it
+were a line of the file. The stopped-on block lights its border and lists its keys: `<CR>`
+or `c` edits the review comment, `d` asks to delete it, and `<Esc>` or any other key steps
+off. A count, a search or `<C-g>cn` moves past blocks.
+
 Hover shows them too. A file with a mark gets a language server client named `changeset`,
 which answers hover on a line with each review comment whose lines take it in, under a
 heading naming its lines and whether it is a draft. So `K`, `vim.lsp.buf.hover()` and hover plugins that ask LSP show
@@ -453,6 +464,7 @@ Any `keymaps` entry can be `false` to leave that key unbound.
 | `layout.min_file_width` | `80` | Narrowest the files get beside the sidebar before it moves below them |
 | `pr_review.enabled` | `false` | PR Review Mode on every branch but the default |
 | `review_comment.save` | `<C-CR>`, `<C-s>` | List of keys that save a review comment, in insert and normal mode |
+| `review_comment.blocks` | `false` | Start each session showing review comments as blocks of their whole text (see [Review comments](#review-comments)) |
 | `review_comment.sign` | `true` | Put each review comment's bubble in the sign column; `false` leaves it to a `'statuscolumn'` (see [Review comments](#review-comments)) |
 
 The step keys, `keymaps.next` and `keymaps.prev`, are off by default. Once set, they work
@@ -481,6 +493,11 @@ The sidebar derives each group's default from your colorscheme, and derives it a
 | `ChangesetReviewComment` | A review comment's bubble, its circle and the line numbers it covers in its file | `DiagnosticOk`'s colour, bold |
 | `ChangesetReviewCommentDraft` | A draft review comment's bubble, its circle and the line numbers it covers | `DiagnosticOk`'s colour mixed halfway to `Comment`'s |
 | `ChangesetReviewCommentBody` | A review comment's body after its circle | links to `ChangesetMeta` |
+| `ChangesetBlockBorder` | A review comment block's border | links to `FloatBorder` |
+| `ChangesetBlockTitle` | A review comment block's title | links to `FloatTitle` |
+| `ChangesetBlockBody` | A review comment block's text | links to `NormalFloat` |
+| `ChangesetBlockParked` | The border and title of the block the cursor stopped on | `Statement`'s colour, bold |
+| `ChangesetBlockHint` | The keys that block lists in its bottom border | `Comment`'s colour, italic |
 | `ChangesetBadge` | The badge in the footer | `Directory`'s colour, reversed, bold |
 | `ChangesetFooter` | The footer's text | `Comment`'s colour on `StatusLine` |
 | `ChangesetFooterKey` | Keys and the filter in the footer | `StatusLine`, bold |

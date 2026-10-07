@@ -560,6 +560,44 @@ the bubble is borrowed rather than looked up: `󰍩` is nerd-font Material `mess
 glyph the config's which-key spec gives its messages entry. Without a nerd font it draws
 as a missing-glyph box, as the header's glyphs do.
 
+### A review comment can show as a block
+
+```text
+  3 󰍩 local x = compute()
+     ╭ Review comment · line 3 ─╮
+     │ cache this per root?     │
+     ╰──────────────────────────╯
+  4    return x
+
+  3 󰍩 local x = compute()
+     ╭ Review comment · line 3 ─────╮      parked: border and title in the accent,
+     │ cache this per root?         │      the keys in the bottom border
+     ╰ <CR> edit · d delete ────────╯
+```
+
+`:Changeset toggle-comments` swaps every review comment's circle and first line for a
+block: its whole text in a box drawn as virtual lines under its last line, a range's under
+the range's last. It reads as the review comment window collapsed, so it wears that
+window's clothes: a rounded border in `FloatBorder`, the window's title in `FloatTitle`,
+the text on `NormalFloat` with a cell of padding either side. It is as tall as its text and
+as wide as the longer of its text and its title, wrapped at word boundaries within the
+window's measure, 72 columns at most and 20 at least. The bubble and the lit numbers stay,
+since the sign is where the eye finds a comment. A draft's border is dashed, `┄` and `┆`.
+One switch covers every buffer, now and as files are read later, because a review is read
+whole or not at all; `review_comment.blocks` picks the state a session starts in.
+
+Virtual lines belong to a buffer, not a window, so a buffer in several windows takes the
+measure of the narrowest, recomputed on `WinResized` and `BufWinEnter`. A wider window
+shows the block narrower than it could; the narrow one never shows it cut.
+
+A one-line move parks the cursor on a block, as if it were a line between its comment's
+last line and the next. The parked block lights its border and title in the accent the
+dialogs focus with, bold, and its bottom border lists `<CR> edit · d delete`. `<CR>` and
+`c` open it to edit, `d` asks to delete it, `<Esc>` lets go. The cursor is hidden through
+the dialogs' own `'guicursor'` entry and the window's `'cursorline'` dropped, since the
+block is what the cursor is on and the line it waits on would otherwise read as focused.
+Stacked blocks under one line are a stop each.
+
 ### Hover answers with the review comments on a line
 
 ```markdown
@@ -916,6 +954,17 @@ repository's deliberate choice is none of that save's business.
 
 ## Behaviour that is easy to get wrong
 
+- **Parking watches the cursor, never `j` and `k`.** Users map `j` to `gj` and much else,
+  so a map would miss moves or fight theirs. `CursorMoved` sees every move whatever key
+  made it; a move of exactly one line across a block puts the cursor back where it came
+  from and parks. While parked, the cursor waits on a real line, so the next move is
+  measured from there and corrected to read as stepping off the block: down from a block
+  parked on its line stands, up from it lands back on that line rather than the one above.
+  A count, `G` or a search moves more than one line and passes blocks by. A block under
+  the buffer's last line can't be reached by `j`, which has nowhere to move.
+- **A parked block's keys exist only while it is parked**, buffer-local and `nowait`, and
+  any buffer-local map they stood in for is put back on letting go, so `c`, `d` and `<CR>`
+  are the user's again. Any mode change, window or buffer leave or text change lets go.
 - **An edit closed without a save keeps a draft.** Closing an existing review comment with
   its text unchanged leaves it alone, so a saved one stays saved. Closing it with changed
   text stores that text as a draft, which submit leaves out until it is saved again. It
