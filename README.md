@@ -101,6 +101,11 @@ after them:
 - `:Changeset refresh` rebuilds the tree.
 - `:Changeset next` / `:Changeset prev` move the sidebar's selected row to the next /
   previous change and open it in the window you are editing in, as described below.
+- `:Changeset next symbol` / `:Changeset prev symbol` do the same for the next /
+  previous symbol that changed, and `:Changeset next file` / `:Changeset prev file` for
+  the next / previous file, unfolding the rows over it.
+- `:Changeset preview next` / `:Changeset preview prev` move the sidebar's selected row to
+  the next / previous row and preview it, leaving your cursor where it is.
 - `:Changeset review mode` turns [PR Review Mode](#pr-review-mode) off, or back on, for
   the current branch. It raises an error unless `pr_review.enabled` is set.
 - `:Changeset review submit` pastes the saved [review comments](#review-comments) into an
@@ -133,8 +138,12 @@ subcommand:
 
 | Key | Mode | `<Plug>` map | Does |
 | --- | --- | --- | ------------ |
-| `<C-g>n` | normal | `<Plug>(changeset-next)` | open the next change |
-| `<C-g>p` | normal | `<Plug>(changeset-prev)` | open the previous change |
+| `<C-g>nn` | normal | `<Plug>(changeset-next)` | open the next change |
+| `<C-g>np` | normal | `<Plug>(changeset-prev)` | open the previous change |
+| `<C-g>ns` | normal | `<Plug>(changeset-next-symbol)` | open the next changed symbol |
+| `<C-g>nS` | normal | `<Plug>(changeset-prev-symbol)` | open the previous changed symbol |
+| `<C-g>nf` | normal | `<Plug>(changeset-next-file)` | open the next changed file |
+| `<C-g>nF` | normal | `<Plug>(changeset-prev-file)` | open the previous changed file |
 | `<C-g>cc` | normal, visual | `<Plug>(changeset-comment-new)` | comment on this line, or the selection, or edit the comment there |
 | `<C-g>cd` | normal | `<Plug>(changeset-comment-del)` | delete the review comment on this line |
 | `<C-g>cn` | normal | `<Plug>(changeset-comment-next)` | jump to the next review comment |
@@ -148,14 +157,17 @@ subcommand:
 | `<C-g>t` | normal | `<Plug>(changeset-toggle)` | toggle the sidebar |
 | `<C-g>r` | normal | `<Plug>(changeset-refresh)` | rebuild the sidebar |
 | `<C-g>m` | normal | `<Plug>(changeset-review-mode)` | toggle PR Review Mode |
+| `]g` | normal | `<Plug>(changeset-preview-next)` | preview the next change |
+| `[g` | normal | `<Plug>(changeset-preview-prev)` | preview the previous change |
 
 A key you have already mapped in that mode is left alone. Set
 `vim.g.changeset_no_default_maps = true` anywhere in your config to map none of them. With
 them mapped, `<C-g>` on its own (`:file`) and visual mode's `<C-g>` (Select mode) wait
 `'timeoutlen'` for a second key. Unless you map a key of your own under `<C-g>c`, changeset
 maps `<C-g>c` itself too, so `<C-g>c` followed by a pause comments, as `<C-g>cc` does.
+which-key names the `<C-g>n` keys' group "navigation".
 
-`<C-g>n` and `<C-g>p` move the sidebar's selected row to the next or previous place and
+`<C-g>nn` and `<C-g>np` move the sidebar's selected row to the next or previous place and
 open it as `<CR>` does, without opening a Comments row's review comment. Section headers
 are skipped. So are a deleted file's row and a whole file's Comments row, which open
 nowhere, and any row that would open where the window already stands, such as a file's
@@ -169,15 +181,22 @@ way opens anywhere new, they stay put and say so, rather than wrapping. They fol
 sidebar's order of rows, which isn't always the order of lines in a file: a file's "Other
 changes" come after its symbols.
 
-With the sidebar closed, they open it without focusing it, on the row for where you are.
+`<C-g>ns` / `<C-g>nS` and `<C-g>nf` / `<C-g>nF` step the same way, but count only a
+symbol that changed, or only a file, as places. A symbol listed only because something
+inside it changed isn't one. They find the next place whatever the sidebar has folded,
+and unfold the rows over it so it shows. From below a symbol's first line, the previous
+symbol is the one you are in, and from below a file's first change, so is the previous file.
+
+With the sidebar closed, every `<C-g>n` key, `]g` and `[g` open it without focusing it, on
+the row for where you are.
 Until the changes and your file's symbols are read, the step waits and is taken once they
-are. Presses made meanwhile add up, a press the other way taking one off, so `<C-g>n..`
+are. Presses made meanwhile add up, a press the other way taking one off, so `<C-g>nn..`
 takes three steps. The waiting step is dropped when you close the sidebar, when the
 changes fail to read, or when you have moved to another window or buffer by the time they
 are read.
 
-`<C-g>n`, `<C-g>p`, `<C-g>cn` and `<C-g>cp` are dot-repeatable: `<C-g>n...` steps four
-times, and `3<C-g>n.` steps three places, then three more. So `.` after one of them
+Every `<C-g>n` key, `<C-g>cn` and `<C-g>cp` are dot-repeatable: `<C-g>nn...` steps four
+times, and `3<C-g>ns.` steps three symbols, then three more. So `.` after one of them
 repeats the step, not your last edit. A count given to `.` itself is ignored: `.` repeats
 with the first count. Like any `g@` operator, they set the `'[` and `']` marks.
 
@@ -187,7 +206,7 @@ To use other keys, map them onto the `<Plug>` maps. For example:
 vim.g.changeset_no_default_maps = true
 vim.keymap.set("n", "<leader>gp", "<Plug>(changeset-toggle)", { desc = "Toggle the changeset sidebar" })
 vim.keymap.set({ "n", "x" }, "<leader>gc", "<Plug>(changeset-comment-new)", { desc = "Review comment" })
-require("changeset").setup({ keymaps = { next = "]h", prev = "[h" } })
+vim.keymap.set("n", "]h", "<Plug>(changeset-preview-next)", { desc = "Preview the next change" })
 ```
 
 ## Sidebar keys
@@ -195,8 +214,7 @@ require("changeset").setup({ keymaps = { next = "]h", prev = "[h" } })
 Moving through the tree previews each change in the window you were last in, with a band
 across the top of that window. `<CR>`, or a split or tab key, opens the change there.
 
-The table lists the default keys, plus `]h` / `[h`, which the [Usage](#usage) example
-binds. Rename a sidebar key with its `keymaps` option, and the save keys of the review
+The table lists the default keys. Rename a sidebar key with its `keymaps` option, and the save keys of the review
 comment window with `review_comment.save`, in [Options](#options).
 
 <!-- The separator rows' dash counts set the vimdoc's column widths; keep their ratios. -->
@@ -223,8 +241,8 @@ comment window with `review_comment.save`, in [Options](#options).
 | `y` | sidebar | copy the row's `path:line` to the clipboard; nothing on a section header |
 | `d` | sidebar | on a Comments row, ask, then delete its review comment; nothing on any other row |
 | `/` `-` `<C-t>` | sidebar | open the change in a vsplit / split / new tab instead, opening a Comments row's review comment as `<CR>` does |
-| `?` | sidebar | list the keys the sidebar bound, `keymaps.next` / `keymaps.prev` included when set: which-key's popup where it is installed, a float where it is not |
-| `]h` / `[h` | anywhere, while open | off unless set as `keymaps.next` / `keymaps.prev`; move the sidebar's selection to the next / previous row, previewing it and skipping section headers, so you can review without focusing the sidebar; `<C-g>n` / `<C-g>p` open the row instead |
+| `?` | sidebar | list the keys the sidebar bound: which-key's popup where it is installed, a float where it is not |
+| `]g` / `[g` | anywhere | move the sidebar's selection to the next / previous row, previewing it and skipping section headers, so you can review without focusing the sidebar; a closed sidebar opens first, unfocused, on your row; `<C-g>nn` / `<C-g>np` open the row instead |
 
 Opening a change adds a jumplist entry, so `<C-o>` returns to where that window was before
 the sidebar opened. Previewing adds none.
@@ -386,8 +404,8 @@ previews the file, or, for a file that is gone, says it was deleted.
 
 It marks no line of the file and answers no hover. The pasted review names it by the
 file's absolute path alone, ahead of the comments on its lines, and `:Changeset comment list`
-lists it on no line. `:Changeset comment next`, `prev` and `last` pass over it, as `<C-g>n`
-and `<C-g>p` pass over its row.
+lists it on no line. `:Changeset comment next`, `prev` and `last` pass over it, as `<C-g>nn`
+and `<C-g>np` pass over its row.
 
 ### Where review comments show
 
@@ -523,17 +541,11 @@ Any `keymaps` entry can be `false` to leave that key unbound.
 | `keymaps.help` | `?` | List the sidebar's keys |
 | `keymaps.filter_kinds` | `F` | Open the symbol-kind menu |
 | `keymaps.filter` | `f` | Filter the tree |
-| `keymaps.next` | `false` | Next row, from any window |
-| `keymaps.prev` | `false` | Previous row, from any window |
 | `layout.min_file_width` | `80` | Narrowest the files get beside the sidebar before it moves below them |
 | `pr_review.enabled` | `false` | PR Review Mode on every branch but the default |
 | `review_comment.save` | `<C-CR>`, `<C-s>` | List of keys that save a review comment, in insert and normal mode |
 | `review_comment.blocks` | `false` | Start each session showing review comments as blocks of their whole text (see [Review comments](#review-comments)) |
 | `review_comment.sign` | `true` | Put each review comment's bubble in the sign column; `false` leaves it to a `'statuscolumn'` (see [Review comments](#review-comments)) |
-
-The step keys, `keymaps.next` and `keymaps.prev`, are off by default. Once set, they work
-from any window, but only while the sidebar is open. Whatever they replaced comes back
-when it closes, unless the key was mapped again in the meantime: that map stays.
 
 Each `setup()` call starts from the defaults, not from the previous call. The sidebar
 picks up its options the next time it opens. Turning on `pr_review.enabled` takes effect

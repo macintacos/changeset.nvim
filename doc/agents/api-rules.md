@@ -12,8 +12,9 @@ it is a breaking change.
 modules create their autocmds as they load, and a session that never opens the sidebar
 should create none. Its maps run `<Cmd>Changeset …<CR>`, so a map and the command take
 one route through `:Changeset`, with its range. The exceptions are the walking maps,
-`next`, `prev`, `comment next` and `comment prev`. They are `g@` operators so that `.`
-repeats them, and their `'operatorfunc'` calls `step()` in `lua/changeset/init.lua` and
+`next`, `prev`, `next symbol`, `prev symbol`, `next file`, `prev file`, `comment next` and
+`comment prev`. They are `g@` operators so that `.` repeats them, and their
+`'operatorfunc'` calls `step()` in `lua/changeset/init.lua` and
 `next_comment()` / `prev_comment()` in `lua/changeset/reviewing.lua` with the count. So
 those functions stay public, and the expr map's callback requires nothing. From the review
 comment window the expr map returns `<Cmd>Changeset …<CR>` instead, so it takes the
@@ -31,13 +32,15 @@ only those `mapcheck()` finds no insert-mode map clashing with when the window o
 map the user makes after startup still counts.
 
 Every subcommand has a `<Plug>` map of its words joined by hyphens, such as
-`<Plug>(changeset-comment-new)`. The global keys are defaults
-under `<C-g>`, mapped once startup is done. Each one is skipped when its key is already
+`<Plug>(changeset-comment-new)`. The global keys are defaults under `<C-g>`, plus `]g` and
+`[g` for `preview next` and `preview prev`, mapped once startup is done. Each one is skipped when its key is already
 mapped in that mode, and all of them are off when `vim.g.changeset_no_default_maps` is
 set.
 
 A new command is a `:Changeset` subcommand, never a second user command. It gets a
-`<Plug>` map and, when it's a review verb, a mnemonic `<C-g>` default. A verb that writes, walks,
+`<Plug>` map and, when it's a review or walking verb, a mnemonic `<C-g>` default. A verb
+that walks the tree and opens what it reaches is `next` or `prev`, with what it counts
+after it, its key under `<C-g>n`, which which-key names "navigation". A verb that writes, walks,
 lists or shows review comments goes under `comment`, its key under `<C-g>c`. One that hands
 off or ends the whole review, or toggles PR Review Mode, goes under `review`. `:Changeset comment` and `:Changeset review` alone are
 errors that name their verbs, not defaults.

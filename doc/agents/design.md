@@ -155,7 +155,7 @@ restarts. With mini.icons:
 - Section headers: `MiniIcons.get("directory", …)` with `src`, `tests`, `docs`,
   `.config` and `build`, so each header wears the icon its kind of directory already has.
 - Orphan-hunk groups: the `lsp`/`Text` icon, dimmed. Not a bespoke glyph.
-- The default `<C-g>` keys in which-key's popup: a category and name per subcommand, such
+- The default keys in which-key's popup: a category and name per subcommand, such
   as `filetype`/`qf` for the quickfix list, which which-key asks its own icon provider
   for. Under devicons, which has no `directory` or `lsp` icons, those keys go without.
 
@@ -778,7 +778,7 @@ A whole file's review comment has no line, so its row names the file alone and s
 of the file's lines, where line 0 would. Its keys open it under the row itself, as
 `:Changeset comment new` on the file's row does, without opening the file: `<S-CR>` too
 keeps the sidebar open, since closing it would take the window's room with it. The steps
-of § `<C-g>n` pass over the row, as they pass over a deleted file's, and so do
+of § `<C-g>nn` pass over the row, as they pass over a deleted file's, and so do
 `:Changeset comment next`, `prev` and `last`: a jump lands on a line, and this comment is
 on none. A row whose file is gone previews the deleted file's notice rather than leaving
 the last preview standing.
@@ -832,23 +832,22 @@ through the band.
 
 The band goes the moment the window stops previewing — `q` puts it back with the buffer,
 and a commit clears it — `<CR>`, or simply entering the window — because a file you chose
-is not on loan. The window the cursor is in never wears it at all: a `]h` pressed there
+is not on loan. The window the cursor is in never wears it at all: a `]g` pressed there
 previews without a band, and one that came along with a buffer or a split comes off the
 moment that window takes focus or a buffer.
 
-### `<C-g>n` opens where `]h` previews
+### `<C-g>nn` opens where `]g` previews
 
-`keymaps.next` / `keymaps.prev` (`]h` / `[h`) and `<C-g>n` / `<C-g>p` step over the same
-rows, in the sidebar's order, which isn't always line order: a file's "Other changes" sort
-after its symbols. They answer different questions. `]h` asks "what's next?" and only
-previews, so the window wears a band and `q` takes it back. `<C-g>n` means "take me
-there". It opens the row as `<CR>` does, adding a jumplist entry, so walking a branch
+`]g` / `[g` and `<C-g>nn` / `<C-g>np` step over the same rows, in the sidebar's order,
+which isn't always line order: a file's "Other changes" sort after its symbols. They
+answer different questions. `]g` asks "what's next?" and only previews, so the window
+wears a band and `q` takes it back. `<C-g>nn` means "take me there". It opens the row as `<CR>` does, adding a jumplist entry, so walking a branch
 feels like moving through your own window rather than through a preview. It keeps focus
 where you pressed it. It skips a Comments row's review comment window, because a float on
 every step would break the walk. It stops at the ends rather than wrapping, so a run of
 `.` can't loop.
 
-Every press has to move you, or it reads as a dropped key. So `<C-g>n` counts places, not
+Every press has to move you, or it reads as a dropped key. So `<C-g>nn` counts places, not
 rows: it steps on past any row that would open the path and line the target window
 already stands on. A file's row, its group row and the group's first change often all do.
 A press made before the tree is ready isn't dropped either. It waits, and presses made
@@ -856,7 +855,22 @@ meanwhile add up. It is taken on the `diff` or `symbols` event that redraws the 
 once the file you are in is decided. Before that, the file's rows are placeholders, and a
 step among them can go backwards. It is dropped when the sidebar closes, when the diff
 fails, or when you are no longer in the window and buffer you pressed it in, so it never
-pulls you back from where you went.
+pulls you back from where you went. `]g` opens a closed sidebar and waits the same way, so
+its first press previews a row rather than a placeholder.
+
+From a line between rows, a step on starts just before the file's first row below the
+line, and a step back just after its last row above it. Starting from the last row at or
+above the line would skip symbols: a file's Other changes follow its symbols, so that row
+can be an orphan hunk sorting after every symbol below you. Starting from the nearest
+would tie the file's row with the symbol its first change is in. This way the first press
+always moves you the way you pressed.
+
+`<C-g>ns` and `<C-g>nf` are the same walk with fewer places: a changed symbol, or a file.
+They answer "the next function I touched" and "the next file", which folding the sidebar
+for an overview mustn't hide, so they walk the tree as if every fold were open, and unfold
+only the rows over the place they reach. A symbol listed only because a change sits inside
+it, a class around a changed method, is not a place: it changed nothing, and the method
+follows it.
 
 A step from the sidebar hands focus back to it. That return skips two things once: the
 landing on your row, which would undo the step, and the preview of the row just opened,
@@ -864,7 +878,8 @@ which would put a band over the opened line. A one-shot skip of each, rather tha
 `'eventignore'`, lets the file window's leave events and other plugins' handlers fire as
 usual.
 
-The four walking keys are dot-repeatable because they are exactly the motion you press
+The walking keys, every `<C-g>n` key with `<C-g>cn` and `<C-g>cp`, are dot-repeatable
+because they are exactly the motion you press
 again and again. `.` after them repeats the step and not your last edit, which only works
 because they leave nothing for `.` to repeat otherwise. The operator is `g@l` after an
 `<Esc>`. The `<Esc>` drops the typed count, and the count goes into the `'operatorfunc'`
@@ -1184,7 +1199,7 @@ repository's deliberate choice is none of that save's business.
   previewed window — keeps the file there and writes a jumplist entry, sending `<C-o>`
   back to where the window stood before the sidebar opened rather than to the last preview
   — previewing must not write one, or `<C-o>` becomes one entry per keypress. Entering
-  counts only as an arrival: a preview `]h` made in the window the cursor was already in
+  counts only as an arrival: a preview `]g` made in the window the cursor was already in
   stays a preview however focus leaves and returns, until `<CR>` or `q`.
 - **Previews follow the window you were last in** — the focused one, or, while the cursor
   is in the sidebar, the one it came from. `winnr("#")` answers 0 once that window has
@@ -1209,10 +1224,7 @@ repository's deliberate choice is none of that save's business.
   and those keys are not this sidebar's interface. The keys it sets are recorded as it
   sets them, and which-key is handed a throwaway buffer carrying only those, since it
   describes whatever a buffer maps and takes no say in which. The callbacks travel across
-  with the keys, so pressing one from inside the popup still works. The step keys
-  (`keymaps.next` / `keymaps.prev`, unbound by default) are global rather than
-  buffer-local, so when set they are looked up by name and added to that buffer, or they
-  would be the two keys the reference never mentions.
+  with the keys, so pressing one from inside the popup still works.
 - **The selection is the focused sidebar's cursor.** It moves with the cursor, in step
   rather than a tick behind, and goes when focus leaves the sidebar, for a float opened
   from it too, leaving "you are here". Previews never count as being somewhere: the
