@@ -71,7 +71,11 @@ end
 ---@return string? err Why it wasn't kept, already reported.
 local function keep(repository, comment)
   if not comment_store.keep(repository, comment) then
-    say(vim.log.levels.ERROR, "can't keep the review comment in %s", comment_store.path())
+    -- Scheduled: a save from the window's insert-mode keys picks writing back up first, and its -- INSERT -- would
+    -- clear the error.
+    vim.schedule(function()
+      say(vim.log.levels.ERROR, "can't keep the review comment in %s", comment_store.path())
+    end)
     return "not kept"
   end
 end
@@ -286,8 +290,11 @@ function M.from_window(open, name, run)
       and last.line == open.comment.line
       and last.start_line == open.comment.start_line
     then
-      vim.api.nvim_echo({ { "already editing the review comment saved last" } }, false, {})
-      return open.resume()
+      open.resume()
+      -- After insert mode restarts, whose -- INSERT -- would clear it.
+      return vim.schedule(function()
+        vim.api.nvim_echo({ { "already editing the review comment saved last" } }, false, {})
+      end)
     end
   end
   open.close(function()

@@ -339,4 +339,35 @@ describe(":Changeset from the review comment window", function()
     assert.equal("echo", said[1])
     assert.truthy(vim.tbl_contains(said, "draft"))
   end)
+
+  ---The mode each message arrives in while `keys` are typed, insert mode held open until they have run.
+  ---@param keys string
+  ---@return string[]
+  local function modes_said_in(keys)
+    local modes = {}
+    local function said()
+      table.insert(modes, vim.api.nvim_get_mode().mode)
+    end
+    vim.api.nvim_echo, vim.notify = said, said
+    vim.defer_fn(vim.cmd.stopinsert, 300)
+    vim.api.nvim_feedkeys(vim.keycode(keys), "x!", false)
+    return modes
+  end
+
+  it("says it is already editing the comment saved last once writing has picked back up", function()
+    comment_store.keep(dir, { path = "a.lua", line = 9, body = "last" })
+    vim.api.nvim_win_set_cursor(source, { 9, 0 })
+    vim.cmd("9Changeset comment")
+
+    assert.same({ "i" }, modes_said_in("A<C-g>cl"))
+  end)
+
+  it("reports a failed save once writing has picked back up", function()
+    write(4, "")
+    vim.fn.writefile({ "[1,2]" }, comment_store.path())
+    local modes = modes_said_in("Atext<C-g>cc")
+    os.remove(comment_store.path())
+
+    assert.same({ "i" }, modes)
+  end)
 end)

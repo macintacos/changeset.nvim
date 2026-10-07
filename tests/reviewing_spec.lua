@@ -175,6 +175,9 @@ describe("changeset.reviewing", function()
       end)
 
       os.remove(comment_store.path())
+      vim.wait(100, function()
+        return #notes > 0
+      end, 10)
       assert.truthy(err)
       assert.equal(vim.log.levels.ERROR, notes[1].level)
     end)
@@ -240,6 +243,9 @@ describe("changeset.reviewing", function()
       end)
 
       os.remove(comment_store.path())
+      vim.wait(100, function()
+        return #notes > 0
+      end, 10)
       assert.truthy(err)
     end)
 
