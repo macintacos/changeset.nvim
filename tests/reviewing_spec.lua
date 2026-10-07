@@ -436,8 +436,8 @@ describe("changeset.reviewing", function()
       return out
     end
 
-    it("writes one block per comment by path, then line, with the lines fenced in the file's language", function()
-      local text = reviewing._review_text({
+    it("writes one block per comment by path, then line, at its absolute path, its lines fenced", function()
+      local text = reviewing._review_text("/repo", {
         { path = "b.lua", line = 2, body = "second" },
         { path = "a.lua", line = 9, body = "later" },
         { path = "a.lua", line = 4, start_line = 3, body = "first\n\n" },
@@ -445,20 +445,20 @@ describe("changeset.reviewing", function()
 
       assert.equal(
         table.concat({
-          "a.lua:3-4",
+          "/repo/a.lua:3-4",
           "```lua",
           "a.lua 3",
           "a.lua 4",
           "```",
           "first",
           "",
-          "a.lua:9",
+          "/repo/a.lua:9",
           "```lua",
           "a.lua 9",
           "```",
           "later",
           "",
-          "b.lua:2",
+          "/repo/b.lua:2",
           "```lua",
           "b.lua 2",
           "```",
@@ -469,21 +469,28 @@ describe("changeset.reviewing", function()
     end)
 
     it("fences lines holding a fence with one more backtick than their longest run", function()
-      local text = reviewing._review_text({ { path = "a.md", line = 2, start_line = 1, body = "b" } }, function()
-        return { "````lua", "x" }
-      end)
+      local text = reviewing._review_text(
+        "/repo",
+        { { path = "a.md", line = 2, start_line = 1, body = "b" } },
+        function()
+          return { "````lua", "x" }
+        end
+      )
 
-      assert.equal("a.md:1-2\n`````markdown\n````lua\nx\n`````\nb", text)
+      assert.equal("/repo/a.md:1-2\n`````markdown\n````lua\nx\n`````\nb", text)
     end)
 
     it("leaves the fence's language empty for a file type it can't tell", function()
-      local text = reviewing._review_text({ { path = "notes.zzqq", line = 1, body = "b" } }, read)
+      local text = reviewing._review_text("/repo", { { path = "notes.zzqq", line = 1, body = "b" } }, read)
 
-      assert.equal("notes.zzqq:1\n```\nnotes.zzqq 1\n```\nb", text)
+      assert.equal("/repo/notes.zzqq:1\n```\nnotes.zzqq 1\n```\nb", text)
     end)
 
     it("writes no fence when the lines can't be read", function()
-      assert.equal("gone.lua:5\nwhy", reviewing._review_text({ { path = "gone.lua", line = 5, body = "why" } }, read))
+      assert.equal(
+        "/repo/gone.lua:5\nwhy",
+        reviewing._review_text("/repo", { { path = "gone.lua", line = 5, body = "why" } }, read)
+      )
     end)
   end)
 
@@ -507,7 +514,7 @@ describe("changeset.reviewing", function()
 
       reviewing.submit()
 
-      assert.equal("a.lua:4\n```lua\nunsaved\n```\nhi", sent[1])
+      assert.equal(dir .. "/a.lua:4\n```lua\nunsaved\n```\nhi", sent[1])
     end)
 
     it("quotes an unloaded file from disk beside a loaded file whose name it prefixes", function()
@@ -519,7 +526,7 @@ describe("changeset.reviewing", function()
 
       reviewing.submit()
 
-      assert.equal("index.js:4\n```javascript\njs 4\n```\nhi", sent[1])
+      assert.equal(dir .. "/index.js:4\n```javascript\njs 4\n```\nhi", sent[1])
     end)
 
     it("warns that the sent comments are still listed when they can't be removed", function()
@@ -542,7 +549,7 @@ describe("changeset.reviewing", function()
 
       reviewing.submit()
 
-      assert.equal("gone.lua:4\nhi", sent[1])
+      assert.equal(dir .. "/gone.lua:4\nhi", sent[1])
     end)
 
     it("sends only saved comments, keeping the drafts and saying how many stay", function()
@@ -553,7 +560,7 @@ describe("changeset.reviewing", function()
 
       reviewing.submit()
 
-      assert.equal("a.lua:4\n```lua\nx\n```\nhi", sent[1])
+      assert.equal(dir .. "/a.lua:4\n```lua\nx\n```\nhi", sent[1])
       assert.same({ comment({ line = 7, body = "draft", draft = true }) }, comment_store.list(dir))
       assert.truthy(notes[#notes].msg:find("1 draft stays", 1, true), notes[#notes].msg)
     end)
@@ -920,7 +927,7 @@ describe("changeset.reviewing", function()
         reviewing.yank()
 
         assert.equal(
-          reviewing._review_text({ comment() }, function()
+          reviewing._review_text(dir, { comment() }, function()
             return { "x" }
           end),
           vim.fn.getreg('"')

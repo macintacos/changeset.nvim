@@ -383,13 +383,14 @@ local function longest_backticks(lines)
   return longest
 end
 
----One comment's block: its place, its lines fenced in the file's language, and its body.
+---One comment's block: its place by absolute path, its lines fenced in the file's language, and its body.
+---@param repository string
 ---@param comment changeset.ReviewComment
 ---@param read changeset.reviewing.ReadLines
 ---@return string
-local function block(comment, read)
+local function block(repository, comment, read)
   local first = comment.start_line or comment.line
-  local parts = { location(comment) }
+  local parts = { vim.fs.joinpath(repository, location(comment)) }
   local lines = read(comment.path, first, comment.line)
   if lines then
     local fence = ("`"):rep(longest_backticks(lines) + 1)
@@ -402,10 +403,11 @@ local function block(comment, read)
 end
 
 ---The text a review is pasted as: a block per comment, by path, then line, a blank line between blocks.
+---@param repository string
 ---@param comments changeset.ReviewComment[]
 ---@param read changeset.reviewing.ReadLines
 ---@return string
-function M._review_text(comments, read)
+function M._review_text(repository, comments, read)
   local sorted = vim.list_slice(comments)
   table.sort(sorted, function(a, b)
     if a.path ~= b.path then
@@ -415,7 +417,7 @@ function M._review_text(comments, read)
   end)
   return table.concat(
     vim.tbl_map(function(comment)
-      return block(comment, read)
+      return block(repository, comment, read)
     end, sorted),
     "\n\n"
   )
@@ -463,7 +465,7 @@ function M.submit()
     return say(vim.log.levels.INFO, "no review comments to submit")
   end
   local staying = drafts > 0 and ("; %s %s"):format(drafts_label(drafts), drafts == 1 and "stays" or "stay") or ""
-  require("changeset.herdr").send(M._review_text(comments, reader(repository)), function(err, agent)
+  require("changeset.herdr").send(M._review_text(repository, comments, reader(repository)), function(err, agent)
     if err then
       return say(vim.log.levels.WARN, "can't submit the review: %s", err)
     end
@@ -719,7 +721,7 @@ function M.yank()
     end
     return say(vim.log.levels.INFO, "no review comments to copy")
   end
-  local where = Paths.put(M._review_text(comments, reader(repository)))
+  local where = Paths.put(M._review_text(repository, comments, reader(repository)))
   local count = #comments == 1 and "1 comment" or #comments .. " comments"
   local left_out = drafts > 0 and ("; %s left out"):format(drafts_label(drafts)) or ""
   say(vim.log.levels.INFO, "copied the review's %s%s%s", count, where, left_out)

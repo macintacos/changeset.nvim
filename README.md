@@ -339,18 +339,18 @@ them, keeps the review comments, and says how many drafts it left out. Without a
 so.
 
 The pasted review holds a block per review comment, by file and then line, each naming
-its place, quoting its lines as they are now, unsaved edits included, and ending with its
+its place by absolute path, quoting its lines as they are now, unsaved edits included, and ending with its
 text:
 
 ````text
-lua/changeset/git.lua:12-13
+/home/me/changeset.nvim/lua/changeset/git.lua:12-13
 ```lua
 local function parent(cwd, branch)
   local log = M.lines({ "git", "reflog" }, cwd)
 ```
 Why read the reflog rather than the config?
 
-README.md:4
+/home/me/changeset.nvim/README.md:4
 ```markdown
 A sidebar for the branch.
 ```
