@@ -53,6 +53,9 @@ local subcommands = {
   yank = function()
     require("changeset.reviewing").yank()
   end,
+  ["toggle-comments"] = function()
+    require("changeset.review_comment_blocks").toggle()
+  end,
 }
 
 ---The review comment window, when it is current. Never loads its module: no window is open until it is loaded.
@@ -79,7 +82,7 @@ end, {
   nargs = "?",
   range = true,
   bar = true,
-  desc = "Toggle the changeset sidebar, rebuild it, toggle PR Review Mode, step through and open its changes, or write, delete, walk, reopen, list, copy, abandon or submit review comments",
+  desc = "Toggle the changeset sidebar, rebuild it, toggle PR Review Mode, step through and open its changes, or write, delete, walk, reopen, list, show, copy, abandon or submit review comments",
   complete = function(lead)
     local names = vim.tbl_filter(function(name)
       return vim.startswith(name, lead)
@@ -95,6 +98,7 @@ local keys = {
   { "cn", "next-comment", "Next review comment" },
   { "cp", "prev-comment", "Previous review comment" },
   { "cl", "last-comment", "Edit the review comment you saved last" },
+  { "ct", "toggle-comments", "Show or hide the review comments' whole text in blocks" },
   { "d", "delete", "Delete the review comment on this line" },
   { "n", "next", "Open the next change" },
   { "p", "prev", "Open the previous change" },

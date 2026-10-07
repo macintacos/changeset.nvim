@@ -115,6 +115,7 @@ describe("plugin/changeset.lua", function()
       "review",
       "submit",
       "toggle",
+      "toggle-comments",
       "yank",
     }, vim.fn.getcompletion("Changeset ", "cmdline"))
     assert.same({ "refresh", "review" }, vim.fn.getcompletion("Changeset re", "cmdline"))
@@ -258,14 +259,16 @@ describe("plugin/changeset.lua", function()
     package.loaded["changeset.build"] = { refresh = counter(calls, "refresh") }
     require("changeset.config").setup({ pr_review = { enabled = true } })
     package.loaded["changeset.review"] = { toggle = counter(calls, "review") }
+    package.loaded["changeset.review_comment_blocks"] = { toggle = counter(calls, "toggle-comments") }
 
-    for _, name in ipairs(vim.list_extend({ "refresh", "review" }, names)) do
+    for _, name in ipairs(vim.list_extend({ "refresh", "review", "toggle-comments" }, names)) do
       vim.api.nvim_feedkeys(vim.keycode(("<Plug>(changeset-%s)"):format(name)), "x", false)
     end
 
     package.loaded["changeset.reviewing"] = nil
     package.loaded["changeset.build"] = nil
     package.loaded["changeset.review"] = nil
+    package.loaded["changeset.review_comment_blocks"] = nil
     require("changeset.config").setup()
     for name, count in pairs(calls) do
       assert.equal(1, count, name)
