@@ -85,6 +85,11 @@ describe("hover", function()
     assert.are.equal("**Review comment · lines 8-10**\n\nrange body", hover(alpha, 9))
   end)
 
+  it("heads a draft's hover as a draft", function()
+    set({ { path = "alpha.txt", line = 9, body = "unsure", draft = true } })
+    assert.are.equal("**Draft review comment · line 9**\n\nunsure", hover(alpha, 9))
+  end)
+
   it("answers hover with every review comment covering the line", function()
     set({ RANGE, { path = "alpha.txt", line = 9, body = "inner" } })
     assert.are.equal(

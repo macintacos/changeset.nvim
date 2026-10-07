@@ -103,6 +103,21 @@ M.HEADER_REF_HL = "ChangesetHeaderRef"
 ---@type string
 M.REVIEW_COMMENT_HL = "ChangesetReviewComment"
 
+---Group for a draft review comment's circle, bubble and line numbers. Created by `define_highlights`.
+---@type string
+M.REVIEW_COMMENT_DRAFT_HL = "ChangesetReviewCommentDraft"
+
+---A review comment's circle, and a draft's, dotted as not yet saved.
+M.REVIEW_COMMENT_CIRCLE = "●"
+M.REVIEW_COMMENT_DRAFT_CIRCLE = "◌"
+
+---The review comment's group, or the draft group for a draft.
+---@param comment { draft: true? }
+---@return string
+function M.review_comment_hl(comment)
+  return comment.draft and M.REVIEW_COMMENT_DRAFT_HL or M.REVIEW_COMMENT_HL
+end
+
 ---Group for a review comment's body at the end of its first line. Created by `define_highlights`.
 ---@type string
 M.REVIEW_COMMENT_BODY_HL = "ChangesetReviewCommentBody"
@@ -236,7 +251,6 @@ local MARGIN = " "
 -- The branch and diff glyphs are the ones mini.statusline already draws.
 local BRANCH_ICON = ""
 local PR_ICON = ""
-local CIRCLE_ICON = "●"
 local FILES_ICON = ""
 local COMMIT_ICON = ""
 local FILTER_ICON = "󰈲"
@@ -401,6 +415,9 @@ local function section_line(section, opts)
   local stat = M.stat_chunks(section)
   local n, noun = section.comments or section.files, section.comments and "comment" or "file"
   local count = ("%d %s%s"):format(n, noun, n == 1 and "" or "s")
+  if (section.drafts or 0) > 0 then
+    count = ("%s · %d draft%s"):format(count, section.drafts, section.drafts == 1 and "" or "s")
+  end
   local fixed_cells = vim.fn.strdisplaywidth(MARGIN .. glyph .. "  " .. section.name .. count) + stat_cells(stat)
   local pad = math.max(1, math.min(LABEL_CELLS - vim.fn.strdisplaywidth(section.name), opts.width - fixed_cells))
   return compose(section, {
@@ -479,11 +496,12 @@ local function comment_line(row, opts)
   local comment = assert(row.review_comment, "changeset: a comment row lists nothing")
   local glyph, icon_hl = opts.icon(row)
   local where = vim.fs.basename(row.path) .. ":" .. span(comment)
-  local room = opts.width - vim.fn.strdisplaywidth(MARGIN .. CIRCLE_ICON .. " " .. glyph .. " ") - stat_cells(nil)
+  local circle = comment.draft and M.REVIEW_COMMENT_DRAFT_CIRCLE or M.REVIEW_COMMENT_CIRCLE
+  local room = opts.width - vim.fn.strdisplaywidth(MARGIN .. circle .. " " .. glyph .. " ") - stat_cells(nil)
   where = clip_right(where, room)
   local chunks = {
     { MARGIN },
-    { CIRCLE_ICON, M.REVIEW_COMMENT_HL },
+    { circle, M.review_comment_hl(comment) },
     { " " },
     { glyph, icon_hl },
     { " " .. where },
@@ -896,6 +914,8 @@ function M.define_highlights()
   -- The config has no "all is well" green, and GitSignsAdd already means added lines.
   local ok = vim.api.nvim_get_hl(0, { name = "DiagnosticOk", link = false }).fg
   set_default(M.REVIEW_COMMENT_HL, { fg = ok, bold = true })
+  -- The saved green faded halfway to Comment and unbolded: the same note, not yet committed to.
+  set_default(M.REVIEW_COMMENT_DRAFT_HL, { fg = ok and comment.fg and mix(ok, comment.fg, 0.5) or ok or comment.fg })
   set_default(M.REVIEW_COMMENT_BODY_HL, { link = M.META_HL })
   set_default(M.BADGE_HL, { fg = directory, reverse = true, bold = true })
   local statusline = vim.api.nvim_get_hl(0, { name = "StatusLine", link = false })

@@ -774,6 +774,13 @@ describe("changeset.rows", function()
       assert.is_nil(section.added)
     end)
 
+    it("counts the drafts among what it lists", function()
+      local draft = review_comment("a.ts", 2)
+      draft.draft = true
+
+      assert.equal(1, assert(Rows.comments({ review_comment("a.ts", 9), draft })).drafts)
+    end)
+
     it("goes to each listed line", function()
       local section = assert(Rows.comments({ review_comment("a.ts", 9), review_comment("a.ts", 2) }))
 

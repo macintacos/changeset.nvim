@@ -251,6 +251,20 @@ describe("changeset.render", function()
       assert.is_nil(stat_mark(one))
     end)
 
+    it("counts the drafts it lists on its header", function()
+      local header = comments({ saved(), saved({ line = 43, draft = true }) })
+      header.drafts = 1
+
+      assert.truthy(render.lines({ header }, opts())[1].text:find("2 comments · 1 draft$"))
+    end)
+
+    it("leads a draft's row with a dotted circle in the draft group", function()
+      local line = render.lines({ comments({ saved({ draft = true }) }) }, opts())[2]
+
+      assert.equal(" ◌ ", line.text:sub(1, #" ◌ "))
+      assert.equal(render.REVIEW_COMMENT_DRAFT_HL, mark_over(line, "◌").hl)
+    end)
+
     it("leads a review comment's row with a solid circle in its group", function()
       local line = render.lines({ comments({ saved() }) }, opts())[2]
 

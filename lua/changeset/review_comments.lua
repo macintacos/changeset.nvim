@@ -34,18 +34,21 @@ function M.at(comments, path, lnum)
   return narrowest
 end
 
-local CIRCLE = "● "
 local BUBBLE = "󰍩"
+-- The outline of the saved bubble: the same note, not yet filled in.
+local DRAFT_BUBBLE = "󰍪"
 
 ---@param buf integer
 ---@param comment changeset.ReviewComment
 local function mark(buf, comment)
   local row = (comment.start_line or comment.line) - 1
+  local hl = render.review_comment_hl(comment)
+  local circle = comment.draft and render.REVIEW_COMMENT_DRAFT_CIRCLE or render.REVIEW_COMMENT_CIRCLE
   vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
     end_row = comment.line - 1,
-    number_hl_group = render.REVIEW_COMMENT_HL,
+    number_hl_group = hl,
     virt_text = {
-      { CIRCLE, render.REVIEW_COMMENT_HL },
+      { circle .. " ", hl },
       { comment.body:match("^[^\r\n]*"), render.REVIEW_COMMENT_BODY_HL },
     },
   })
@@ -53,8 +56,8 @@ local function mark(buf, comment)
     -- The default priority, 4096, draws it over gitsigns' and diagnostics' signs. Without
     -- `sign_text` the mark takes no cell but keeps its group, which `M.bubble` answers from.
     vim.api.nvim_buf_set_extmark(buf, sign_ns, row, 0, {
-      sign_text = config.get().review_comment.sign and BUBBLE or nil,
-      sign_hl_group = render.REVIEW_COMMENT_HL,
+      sign_text = config.get().review_comment.sign and (comment.draft and DRAFT_BUBBLE or BUBBLE) or nil,
+      sign_hl_group = hl,
     })
   end
 end
@@ -65,8 +68,16 @@ end
 ---@return string? glyph
 ---@return string? hl
 function M.bubble(buf, lnum)
-  if #vim.api.nvim_buf_get_extmarks(buf, sign_ns, { lnum - 1, 0 }, { lnum - 1, -1 }, { limit = 1 }) > 0 then
-    return BUBBLE, render.REVIEW_COMMENT_HL
+  local found = vim.api.nvim_buf_get_extmarks(
+    buf,
+    sign_ns,
+    { lnum - 1, 0 },
+    { lnum - 1, -1 },
+    { limit = 1, details = true }
+  )
+  if found[1] then
+    local hl = found[1][4].sign_hl_group
+    return hl == render.REVIEW_COMMENT_DRAFT_HL and DRAFT_BUBBLE or BUBBLE, hl
   end
 end
 
@@ -97,7 +108,8 @@ local function hover_text(fname, lnum)
     local first, last = comment.start_line or comment.line, comment.line
     if comment.path == path and first <= lnum and lnum <= last then
       local body = comment.body:gsub("\r\n", "\n")
-      table.insert(entries, ("**Review comment · %s**\n\n%s"):format(lines_label(first, last), body))
+      local heading = comment.draft and "Draft review comment" or "Review comment"
+      table.insert(entries, ("**%s · %s**\n\n%s"):format(heading, lines_label(first, last), body))
     end
   end
   if #entries > 0 then

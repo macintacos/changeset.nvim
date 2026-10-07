@@ -155,6 +155,15 @@ describe("review_comments", function()
     assert.are.same({ { "● ", render.REVIEW_COMMENT_HL }, { "b", render.REVIEW_COMMENT_BODY_HL } }, details.virt_text)
   end)
 
+  it("marks a draft with its own circle, sign and group", function()
+    set({ { path = "beta.txt", line = 15, body = "b", draft = true } })
+    local details = assert(marks(beta)[1][4])
+    assert.are.equal(render.REVIEW_COMMENT_DRAFT_HL, details.number_hl_group)
+    assert.are.same({ "◌ ", render.REVIEW_COMMENT_DRAFT_HL }, details.virt_text[1])
+    assert.are.same({ { 14, "󰍪 ", render.REVIEW_COMMENT_DRAFT_HL } }, signs(beta))
+    assert.are.same({ "󰍪", render.REVIEW_COMMENT_DRAFT_HL }, { review_comments.bubble(beta, 15) })
+  end)
+
   it("puts a bubble in the sign column on each review comment's first line", function()
     set(all())
     local bubble, hl = "󰍩 ", render.REVIEW_COMMENT_HL

@@ -312,8 +312,8 @@ end
 ---`review_comment.sign` is.
 ---@param buf integer
 ---@param lnum integer 1-based, as `v:lnum`.
----@return string? glyph `󰍩`.
----@return string? hl `ChangesetReviewComment`.
+---@return string? glyph `󰍩`, or `󰍪` for a draft.
+---@return string? hl `ChangesetReviewComment`, or `ChangesetReviewCommentDraft` for a draft.
 function M.bubble(buf, lnum)
   return review_comments.bubble(buf, lnum)
 end

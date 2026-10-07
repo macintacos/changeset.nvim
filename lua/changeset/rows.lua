@@ -31,6 +31,7 @@ local SEP = " › "
 ---@field files integer?      Section rows only: how many files the section holds, before any filter.
 ---@field icon string?        Section rows only: the directory name its section header's icon is looked up by.
 ---@field comments integer?   The Comments section's row only: how many rows it lists, before any filter.
+---@field drafts integer?     The Comments section's row only: how many of those are drafts.
 ---@field review_comment changeset.ReviewComment? Comment rows only: the comment the row lists.
 ---@field children changeset.Row[]
 
@@ -685,6 +686,9 @@ function M.comments(review_comments)
     name = "Comments",
     path = "",
     comments = #sorted,
+    drafts = #vim.tbl_filter(function(comment)
+      return comment.draft
+    end, sorted),
     ancestor = false,
     children = vim.tbl_map(function(comment)
       return {
