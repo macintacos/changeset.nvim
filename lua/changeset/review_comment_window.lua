@@ -9,8 +9,9 @@ local HEIGHT = 6
 local MIN_WIDTH = 20
 -- The float's rows and its top and bottom border.
 local BOX = HEIGHT + 2
--- The box and a blank row under it, so the next line's text doesn't butt against the footer.
-local ROOM = BOX + 1
+-- Blank rows above and below the box and a blank column left of it, so no text butts against its border.
+local GAP = 1
+local ROOM = BOX + 2 * GAP
 
 local ns = vim.api.nvim_create_namespace("changeset.review_comment_window")
 
@@ -114,14 +115,14 @@ local function rows(win, line)
   return height.all - height.fill
 end
 
----Whether the row under `line`'s last row, where the box starts, is inside `win`.
+---Whether the row the box starts on, past the gap under `line`'s last row, is inside `win`.
 ---@param win integer
 ---@param line integer
 ---@return boolean
 local function under_in_view(win, line)
   local text = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), line - 1, line, false)[1]
   local row = vim.fn.screenpos(win, line, math.max(#text, 1)).row
-  return row > 0 and row < vim.fn.win_screenpos(win)[1] + vim.api.nvim_win_get_height(win) - 1
+  return row > 0 and row + GAP < vim.fn.win_screenpos(win)[1] + vim.api.nvim_win_get_height(win) - 1
 end
 
 ---Scroll `win` the least that shows `line` with the box under it, moving its cursor to `line` if it must scroll.
@@ -133,7 +134,8 @@ local function reveal(win, line)
     local top = math.min(topline, line)
     local height = vim.api.nvim_win_get_height(0)
     while
-      top < line and vim.api.nvim_win_text_height(0, { start_row = top - 1, end_row = line - 1 }).all + BOX > height
+      top < line
+      and vim.api.nvim_win_text_height(0, { start_row = top - 1, end_row = line - 1 }).all + GAP + BOX > height
     do
       top = top + 1
     end
@@ -179,17 +181,17 @@ function M.open(opts)
 
   ---The float on the padding under its line, as wide as the source now has room for.
   local function placement()
-    -- bufpos anchors at the first text column, so the gutter and the border both come out of
-    -- the window's width.
-    local room = vim.api.nvim_win_get_width(source) - vim.fn.getwininfo(source)[1].textoff - 2
+    -- bufpos anchors at the first text column, so the gutter, the gap and the border all come
+    -- out of the window's width.
+    local room = vim.api.nvim_win_get_width(source) - vim.fn.getwininfo(source)[1].textoff - GAP - 2
     local width = math.max(math.min(MAX_WIDTH, room), MIN_WIDTH)
     return {
       relative = "win",
       win = source,
       bufpos = { line() - 1, 0 },
       -- bufpos is the line's first row; a wrapped line's other rows come before the box.
-      row = rows(source, line()),
-      col = 0,
+      row = rows(source, line()) + GAP,
+      col = GAP,
       width = width,
       -- Neovim cuts a footer too wide from its left, which would name another key.
       footer = vim.fn.strdisplaywidth(hint) <= width and hint or "",

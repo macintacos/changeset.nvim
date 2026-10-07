@@ -311,38 +311,40 @@ another branch can hide things this one never had.
 
 A review comment is written in a float under the buffer line it is about, or the last line
 of a range, laid in line with the code: the lines after it move down to make room, so the
-line being discussed stays directly above the window and the code after it below a blank
-row, all readable while the review comment is drafted:
+line being discussed stays just above the window and the code after it just below, a blank
+row apart on either side, all readable while the review comment is drafted:
 
 ```text
 local function greet(name)
-╭ Review comment · line 3 ───────────────────────────────────────────────╮
-│**bold** and a list:                                                    │
-│- item                                                                  │
-│                                                                        │
-│                                                                        │
-│                                                                        │
-│                                                                        │
-╰───────────────────────────────────────────────── <C-CR> save · q draft ╯
+
+ ╭ Review comment · line 3 ───────────────────────────────────────────────╮
+ │**bold** and a list:                                                    │
+ │- item                                                                  │
+ │                                                                        │
+ │                                                                        │
+ │                                                                        │
+ │                                                                        │
+ ╰───────────────────────────────────────────────── <C-CR> save · q draft ╯
 
   return "hello " .. name
 end
 ```
 
 Neovim has no window inside a buffer's text, so blank virtual lines (`virt_lines`) as tall
-as the float and its border, plus a blank row so the next line doesn't butt against the
-footer, make the room, and the float lies on them. It is attached to the window
-(`relative = "win"`, `bufpos`), so it moves with its line as the source scrolls, and `row`
-counts past every screen row of a wrapped line. Opening scrolls the source the least that
-shows the line with the box under it. A floating source has nothing
-to scroll past, so it grows by the room instead and shrinks back afterwards. While the row under the line is scrolled out of the source the float hides.
+as the float and its border, plus a blank row either side so no text butts against the
+border, make the room, and the float lies on them, a column in from the text for the same
+reason. It is attached to the window (`relative = "win"`, `bufpos`), so it moves with its
+line as the source scrolls, and `row` counts past every screen row of a wrapped line.
+Opening scrolls the source the least that shows the line with the box under it. A floating
+source has nothing to scroll past, so it grows by the room instead and shrinks back afterwards. While the row the box starts on is scrolled out of the source the float hides.
 Focus never returns to it from the source: leaving it closes it, keeping a draft. Edits to the source never move the room
 off the line: it stays on the line number, as the float does.
 
-Its width is the room right of the source window's gutter, less the border, between 20
-and 72 columns, re-fitted as the source is resized: a review comment is prose, and prose
-reads at a short measure, while 20 keeps a cramped split usable. Six rows are room for a
-paragraph without pushing the code after it far away; a longer review comment scrolls.
+Its width is the room right of the source window's gutter, less that column and the
+border, between 20 and 72 columns, re-fitted as the source is resized: a review comment is
+prose, and prose reads at a short measure, while 20 keeps a cramped split usable. Six rows
+are room for a paragraph without pushing the code after it far away; a longer review
+comment scrolls.
 The buffer is `markdown`, so the formatting is highlighted as it is typed, and it
 wraps at word boundaries. `style = "minimal"` drops the number column and sign column,
 which describe a file this buffer is not. The filetype is set once the float is open, so a
