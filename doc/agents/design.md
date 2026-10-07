@@ -589,7 +589,9 @@ are read later, because a review is read whole or not at all; `review_comment.bl
 picks the state a session starts in, read until the first toggle.
 
 Blocks under one line stack top to bottom in the order the store lists them, drawn as one
-extmark, so drawing order and stepping order are the same list.
+extmark, so drawing order and stepping order are the same list. Being virtual lines, a
+parked block looks parked in every window showing its buffer, though only one window's
+cursor is on it.
 
 Virtual lines belong to a buffer, not a window, so a buffer in several windows takes the
 measure of the narrowest, recomputed when one of its windows resizes or it enters one. A
@@ -965,15 +967,25 @@ repository's deliberate choice is none of that save's business.
 - **Parking hangs off the movement keys, never `CursorMoved`.** `CursorMoved` can't tell
   `j` from leaving insert or cmdline mode a line away, `:5`, `gg`, `<C-g>cn`, `<C-e>`, a
   Visual `j`, `p` or `u`, and skips moves made under typeahead. So a buffer showing blocks
-  maps `j`, `k`, `<Down>`, `<Up>`, `gj` and `gk` in Normal mode. A count passes straight
-  through; otherwise the map runs the key's own motion and parks when it crossed a block,
-  or, going down, when it failed on the last line with blocks under it. While parked the
-  keys move the cursor themselves, to the next block of the stack or off it, so folds,
-  wrapped lines and the first and last lines step the same as any other.
-- **The movement maps run a `<Plug>` copy of what the key did before**, the buffer's map
-  or the global one, `expr` and callback included, because users map `j` to `gj` and the
-  like. A copy, not the key: a map whose rhs starts with its own lhs doesn't remap that
-  key, so the user's map would be lost. Hiding blocks puts the buffer's own maps back.
+  maps `j`, `k`, `<Down>`, `<Up>`, `gj` and `gk` in Normal mode, as `expr` maps whose
+  motion runs in the real typeahead: run through `:normal`, a failing `j` would no longer
+  end the macro or mapping that pressed it. Going down from a line's last screen row with
+  blocks under it parks at once, which also reaches a block under the last line, where `j`
+  fails. Otherwise the motion runs, and a callback after it parks if it crossed a block.
+  While parked the keys move the cursor themselves, so folds, wrapped lines and the first
+  and last lines step the same as any other; stepping off restores the column the cursor
+  wanted, so a later `j` or `$` keeps it.
+- **Only a key the user typed parks, in plain Normal mode.** A count, a macro replaying,
+  insert mode's `<C-o>` and a key sent by a mapping, `:normal` or `feedkeys` run the motion
+  untouched, or a macro would stop on every block it passed and `<C-o>j` would never get
+  past one. `vim.on_key` reports a mapped key only after its `expr` ran, so whether it was
+  typed is decided in the callback after the motion, from what `on_key` saw.
+- **The movement maps run a `<Plug>` pointed at what the key does without them**, looked
+  up as the key is pressed: the buffer's own map from before, else the global one now,
+  `expr` and callback included. Looked up then, not once, because LazyVim and the like map
+  `j` to `gj` after the first file is read. A copy, not the key: a map whose rhs starts
+  with its own lhs doesn't remap that key, so the user's map would be lost. Hiding blocks
+  removes only maps still ours and puts the buffer's own back.
 - **Stacked blocks are one extmark.** Neovim draws separate extmarks' virtual lines on one
   line newest first, which would walk a stack in the opposite order to the store's.
 - **A block is where its extmark is, not its stored line.** Unsaved edits move it, so
@@ -981,7 +993,10 @@ repository's deliberate choice is none of that save's business.
 - **A parked block's keys exist only while it is parked**, buffer-local and `nowait`, and
   any buffer-local map they stood in for is put back on letting go, so `c`, `d` and `<CR>`
   are the user's again. Any other key lets go, seen through `vim.on_key`, since `zz`, `mx`
-  or `<C-e>` change neither mode nor text.
+  or `<C-e>` change neither mode nor text. A window split while parked gets back the
+  `'cursorline'` parking took, since a split copies the window's local options.
+- **`J` can join two blocks' lines,** putting two extmarks on one line; that only happens
+  in a modified buffer, where the parked keys refuse anyway.
 - **An edit closed without a save keeps a draft.** Closing an existing review comment with
   its text unchanged leaves it alone, so a saved one stays saved. Closing it with changed
   text stores that text as a draft, which submit leaves out until it is saved again. It
