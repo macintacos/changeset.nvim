@@ -217,6 +217,7 @@ comment window with `review_comment.save`, in [Options](#options).
 | `q` / `<Esc>` | kind menu | close, putting the tree back to the saved set |
 | `<C-CR>` / `<C-s>` / `<C-g>cc` | review comment window | save the review comment and close |
 | `q` / `<S-Esc>` | review comment window | close, keeping a new review comment's text, or an edited one's changed text, as a draft |
+| `<Esc>` | review comment window | in normal mode, close as `q` does, then stop on the review comment's block while blocks show |
 | `?` | review comment window | list its keys |
 | `f` | sidebar | filter as you type, keeping ancestors so matches stay in place and highlighting every match until you clear the filter; `<Esc>` cancels and keeps the previous filter |
 | `R` | sidebar | rebuild now |
@@ -294,7 +295,7 @@ sidebar, a PR or `gh`.
   selection and comments on the selected lines. Its title leads with the comment bubble,
   and its bottom border shows the keys that end it. The keys in `review_comment.save`,
   `<C-CR>` or `<C-s>` by default, or `<C-g>cc`, save it and close the window. Any other
-  close keeps its text as a draft: `q`, `<S-Esc>`, `:q`, focus leaving the
+  close keeps its text as a draft: `q`, `<Esc>` in normal mode, `<S-Esc>`, `:q`, focus leaving the
   window for any other, or quitting Neovim with it open. Empty text keeps nothing. It opens a review comment already there to edit instead: on one line, the
   narrowest that covers it; on a selection, only one on exactly the selected lines. In a
   modified buffer it asks you to save first, as `:Changeset comment del` does.
@@ -409,7 +410,7 @@ stopped-on block lights its border and lists its keys: `<CR>` or `c` edits the r
 comment, or resumes a draft, `d` asks to delete it, and `<Esc>` or any other key steps
 off. A count, a jump, a search, a macro or a mapping moves past blocks. A draft's block
 has a dashed border in the draft colour. A line's blocks step aside while the review
-comment window is open on it.
+comment window is open on it. `<Esc>` in the window's normal mode closes it stopped on its block.
 
 Hover shows them too. A file with a mark gets a language server client named `changeset`,
 which answers hover on a line with each review comment whose lines take it in, under a

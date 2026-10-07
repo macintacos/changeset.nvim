@@ -9,6 +9,7 @@ local config = require("changeset.config")
 local dialog = require("changeset.dialog")
 local icons = require("changeset.icons")
 local render = require("changeset.render")
+local review_comment_blocks = require("changeset.review_comment_blocks")
 local review_comment_window = require("changeset.review_comment_window")
 local review_comments = require("changeset.review_comments")
 local window = require("changeset.window")
@@ -146,6 +147,7 @@ function M.open(comment)
     icon = icon_of(comment),
     save_desc = "Save the review comment",
     close_desc = "Close, keeping the text as a draft",
+    back_desc = "Close, keeping the text as a draft, and select its block",
     keys = config.get().review_comment.save,
     body = comment.body,
     comment = comment,
@@ -162,6 +164,9 @@ function M.open(comment)
     end,
     save = function(body, done)
       done(keep(repository, with_body(comment, body)))
+    end,
+    back = function()
+      review_comment_blocks.select(comment)
     end,
   })
 end
@@ -197,6 +202,7 @@ local function open_new(repository, comment, line)
     icon = icon_of(comment),
     save_desc = "Save the review comment",
     close_desc = "Close, keeping the text as a draft",
+    back_desc = "Close, keeping the text as a draft, and select its block",
     keys = config.get().review_comment.save,
     comment = comment,
     keep = function(body)
@@ -207,6 +213,9 @@ local function open_new(repository, comment, line)
     end,
     save = function(body, done)
       done(keep(repository, with_body(comment, body)))
+    end,
+    back = function()
+      review_comment_blocks.select(comment)
     end,
   })
 end

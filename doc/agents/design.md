@@ -359,12 +359,13 @@ keycap in `ChangesetKeycap`, which links to the dialogs' button, so it reads as 
 press, not a word of the label. A window too narrow for it drops it: Neovim cuts a footer
 from its left, leaving `<CR> save`, a key that doesn't save. The other keys stay off the border: `?` lists them all. However a
 review comment's text goes, except the close a taken save makes, it is kept as a draft:
-`q` in normal mode, focus leaving the float, `<S-Esc>` in either mode where the terminal sends it, `:q`,
+`q` or `<Esc>` in normal mode, focus leaving the float, `<S-Esc>` in either mode where the terminal sends it, `:q`,
 `<C-w>c`, quitting Neovim. One `BufUnload` hook on the window's buffer catches them all:
 every close deletes the buffer, which takes with it any other window showing it, such as a
 `:split` made from the float, and the hook takes the room under the line with it. The
-float is `winfixbuf`, so an `:e` in it is refused rather than leaving it showing a file. Plain `<Esc>` still
-only leaves insert mode, so a habitual `<Esc>` on the way to normal mode never closes it.
+float is `winfixbuf`, so an `:e` in it is refused rather than leaving it showing a file. `<Esc>` in insert mode
+only leaves it; a second, in normal mode, closes the window and, while blocks show, parks the cursor on the
+review comment's block, so the way out lands on what was just written, selected, ready for `<CR>` or `d`.
 A save of only whitespace is no save: it closes the window like `q`, so the blank text
 reaches the same hook and the caller discards it, never storing it.
 

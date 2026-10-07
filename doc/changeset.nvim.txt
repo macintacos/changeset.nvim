@@ -295,6 +295,10 @@ option, and the save keys of the review comment window with
               comment     an edited one’s changed text, as a draft
               window
 
+  <Esc>       review      in normal mode, close as q does, then stop on
+              comment     the review comment’s block while blocks show
+              window
+
   ?           review      list its keys
               comment
               window
@@ -404,7 +408,7 @@ None of this needs the sidebar, a PR or `gh`.
     selection and comments on the selected lines. Its title leads with the comment bubble,
     and its bottom border shows the keys that end it. The keys in `review_comment.save`,
     `<C-CR>` or `<C-s>` by default, or `<C-g>cc`, save it and close the window. Any other
-    close keeps its text as a draft: `q`, `<S-Esc>`, `:q`, focus leaving the
+    close keeps its text as a draft: `q`, `<Esc>` in normal mode, `<S-Esc>`, `:q`, focus leaving the
     window for any other, or quitting Neovim with it open. Empty text keeps nothing. It opens a review comment already there to edit instead: on one line, the
     narrowest that covers it; on a selection, only one on exactly the selected lines. In a
     modified buffer it asks you to save first, as `:Changeset comment del` does.
@@ -533,6 +537,7 @@ the review comment, or resumes a draft, `d` asks to delete it, and `<Esc>` or
 any other key steps off. A count, a jump, a search, a macro or a mapping moves
 past blocks. A draft’s block has a dashed border in the draft colour. A
 line’s blocks step aside while the review comment window is open on it.
+`<Esc>` in the window’s normal mode closes it stopped on its block.
 
 Hover shows them too. A file with a mark gets a language server client named
 `changeset`, which answers hover on a line with each review comment whose lines

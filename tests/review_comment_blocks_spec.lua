@@ -369,7 +369,7 @@ describe("review comment blocks", function()
       )
     )
 
-    press("<Esc>q")
+    press("q")
     assert.are.equal(2, #vim.tbl_filter(function(mark)
       return #mark.text > 0
     end, drawn()))
@@ -382,7 +382,23 @@ describe("review comment blocks", function()
     press("j<CR>")
     assert.are.equal("half done", vim.api.nvim_get_current_line())
     assert.truthy(vim.inspect(vim.api.nvim_win_get_config(0).title):find("draft", 1, true))
-    press("<Esc>q")
+    press("q")
+  end)
+
+  it("parks on the comment's own block when <Esc> in normal mode closes its window", function()
+    keep({ path = "alpha.txt", start_line = 2, line = 3, body = "range" })
+    keep({ path = "alpha.txt", line = 3, body = "short" })
+    local alpha = vim.api.nvim_get_current_buf()
+    go(3)
+    press("jj<CR>")
+
+    press("A more<Esc><Esc>")
+    assert.are.equal(alpha, vim.api.nvim_get_current_buf())
+    assert.are.same({ 3, "short" }, { parked() })
+    assert.truthy(cursor.hidden())
+    assert.truthy(vim.iter(comment_store.list(Paths.root(0))):find(function(comment)
+      return comment.body == "short more" and comment.draft
+    end))
   end)
 
   describe("stepping up onto a wrapped line", function()

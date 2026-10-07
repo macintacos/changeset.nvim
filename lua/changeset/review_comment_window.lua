@@ -29,8 +29,10 @@ end
 ---@field keys string[] Keys that save, in insert and normal mode.
 ---@field save_desc string The save keys' `desc`, which `?` lists.
 ---@field close_desc string The `desc` of the keys that close without saving, which `?` lists.
+---@field back_desc string The `desc` of `<Esc>` in normal mode, which `?` lists.
 ---@field save fun(body: string, done: fun(err: string?)) Called with the buffer's lines joined by "\n", never only whitespace; the window closes once `done` gets no error.
 ---@field keep fun(body: string) Called with the buffer's lines joined by "\n", empty included, whenever the buffer goes (a close, an :e in the float, quitting) except after a taken save.
+---@field back fun() Called once `<Esc>` in normal mode has closed it as `q` does, after `keep`.
 ---@field body string? The text it opens with.
 ---@field comment changeset.ReviewComment The comment it is about, as `current` reports it; a new one's body is "".
 
@@ -412,6 +414,9 @@ function M.open(opts)
   vim.keymap.set("i", "<S-Esc>", close, { buffer = buf, desc = opts.close_desc })
   map("<S-Esc>", close, opts.close_desc)
   map("q", close, opts.close_desc)
+  map("<Esc>", function()
+    close(opts.back)
+  end, opts.back_desc)
   ---@param lhs string
   ---@return boolean
   local function saves(lhs)

@@ -355,9 +355,11 @@ describe("changeset.unified_diff", function()
         title = "line 1",
         save_desc = "Save",
         close_desc = "Close",
+        back_desc = "Back",
         keys = { "<C-s>" },
         save = function() end,
         keep = function() end,
+        back = function() end,
         comment = { path = "a.txt", line = 1, body = "" },
       })
       vim.cmd.redraw()

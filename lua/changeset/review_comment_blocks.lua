@@ -684,6 +684,24 @@ function M.draw(buf, comments)
   end
 end
 
+---Parks the current window's cursor on the block of the comment on `comment`'s lines, when its buffer draws one.
+---@param comment changeset.ReviewComment
+function M.select(comment)
+  local win, buf = vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf()
+  local id = comment.line and anchor_at(buf, comment.line)
+  if not id then
+    return
+  end
+  for index, each in ipairs(drawn[buf].anchors[id]) do
+    if each.start_line == comment.start_line then
+      if vim.api.nvim_win_get_cursor(win)[1] ~= comment.line then
+        put(win, comment.line)
+      end
+      return park(win, buf, id, index, vim.api.nvim_win_get_cursor(win))
+    end
+  end
+end
+
 ---Redraws `buf`'s blocks at its windows' measure when that changed, a parked block staying parked.
 ---@param buf integer
 local function refit(buf)
