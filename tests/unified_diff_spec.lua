@@ -265,7 +265,7 @@ describe("changeset.unified_diff", function()
       local top = vim.api.nvim_win_get_position(float)[1] + 1
       local bottom = top + vim.api.nvim_win_get_height(float) + 1
       assert.equal(vim.fn.screenpos(win, 1, 1).row, top - 1)
-      assert.matches("line 2", screen_rows():totable()[bottom + 1])
+      assert.matches("line 2", screen_rows():totable()[bottom + 2])
       vim.api.nvim_win_close(float, true)
     end)
 

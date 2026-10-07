@@ -9,12 +9,14 @@ local HEIGHT = 6
 local MIN_WIDTH = 20
 -- The float's rows and its top and bottom border.
 local BOX = HEIGHT + 2
+-- The box and a blank row under it, so the next line's text doesn't butt against the footer.
+local ROOM = BOX + 1
 
 local ns = vim.api.nvim_create_namespace("changeset.review_comment_window")
 
----Blank virtual lines, as tall as the box, that the float lies on so it covers no text.
+---Blank virtual lines, as tall as the room, that the float lies on so it covers no text.
 local PADDING = {}
-for i = 1, BOX do
+for i = 1, ROOM do
   PADDING[i] = { { "" } }
 end
 
@@ -158,7 +160,7 @@ local function reveal(win, line)
   end)
 end
 
----Make a floating `win` taller by the box, since it has no neighbours to scroll past.
+---Make a floating `win` taller by the room, since it has no neighbours to scroll past.
 ---@param win integer
 ---@return integer grown The rows it grew, 0 for a split.
 local function grow(win)
@@ -166,7 +168,7 @@ local function grow(win)
     return 0
   end
   local before = vim.api.nvim_win_get_height(win)
-  vim.api.nvim_win_set_config(win, { height = before + BOX })
+  vim.api.nvim_win_set_config(win, { height = before + ROOM })
   return vim.api.nvim_win_get_height(win) - before
 end
 

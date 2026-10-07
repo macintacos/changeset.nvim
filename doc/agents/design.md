@@ -311,8 +311,8 @@ another branch can hide things this one never had.
 
 A review comment is written in a float under the buffer line it is about, or the last line
 of a range, laid in line with the code: the lines after it move down to make room, so the
-line being discussed stays directly above the window and the code after it directly below,
-all readable while the review comment is drafted:
+line being discussed stays directly above the window and the code after it below a blank
+row, all readable while the review comment is drafted:
 
 ```text
 local function greet(name)
@@ -324,15 +324,17 @@ local function greet(name)
 │                                                                        │
 │                                                                        │
 ╰ kept until :Changeset review submit ──────────── <C-CR> save · q draft ╯
+
   return "hello " .. name
 end
 ```
 
 Neovim has no window inside a buffer's text, so blank virtual lines (`virt_lines`) as tall
-as the float and its border make the room, and the float lies on them. It is attached to
-the window (`relative = "win"`, `bufpos`), so it moves with its line as the source
-scrolls, and `row` counts past every screen row of a wrapped line. Opening scrolls the
-source the least that shows the line with the room under it. A floating source has nothing
+as the float and its border, plus a blank row so the next line doesn't butt against the
+footer, make the room, and the float lies on them. It is attached to the window
+(`relative = "win"`, `bufpos`), so it moves with its line as the source scrolls, and `row`
+counts past every screen row of a wrapped line. Opening scrolls the source the least that
+shows the line with the box under it. A floating source has nothing
 to scroll past, so it grows by the room instead and shrinks back afterwards. While the row under the line is scrolled out of the source the float hides.
 Focus never returns to it from the source: leaving it closes it, keeping a draft. Edits to the source never move the room
 off the line: it stays on the line number, as the float does.
