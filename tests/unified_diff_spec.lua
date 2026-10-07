@@ -254,6 +254,56 @@ describe("changeset.unified_diff", function()
       assert.same("1", vim.trim((gutter(row_showing("line 1")))))
     end)
 
+    -- As a preview swaps a file back in: gitsigns signs it at once, while its view waits on its own diff.
+    it("hides gitsigns' signs while the view is on its way", function()
+      vim.wo.number = true
+      vim.cmd.edit("a.txt")
+      row_showing("line 2")
+      vim.cmd.enew()
+
+      vim.cmd.buffer("a.txt")
+
+      local rows = screen_rows():totable()
+      local row = vim.iter(ipairs(rows)):find(function(_, text)
+        return text:find("changed 5", 1, true) ~= nil
+      end)
+      assert.is_nil((view(vim.api.nvim_get_current_win()) or {}).hunks)
+      assert.same("4", vim.trim((gutter(row))))
+      assert.is_true(shows(vim.api.nvim_get_current_win()))
+    end)
+
+    -- As a file loaded out of sight comes into one: gitsigns reads its base and signs it before it says so.
+    it("hides gitsigns' signs before the view has started", function()
+      vim.wo.number = true
+      vim.cmd.edit("a.txt")
+      row_showing("line 2")
+      vim.cmd.enew()
+
+      vim.cmd("noautocmd buffer a.txt")
+
+      local rows = screen_rows():totable()
+      local row = vim.iter(ipairs(rows)):find(function(_, text)
+        return text:find("changed 5", 1, true) ~= nil
+      end)
+      assert.is_nil(view(vim.api.nvim_get_current_win()))
+      assert.same("4", vim.trim((gutter(row))))
+    end)
+
+    -- gitsigns signs the lines its last hunks name as they come into sight, before it or the view diffs the edit.
+    it("hides the sign gitsigns puts on a line added before either diffs it", function()
+      vim.wo.number = true
+      vim.cmd.edit("a.txt")
+      row_showing("line 2")
+
+      vim.api.nvim_buf_set_lines(0, 3, 3, true, { "new 5" })
+
+      local rows = screen_rows():totable()
+      local row = vim.iter(ipairs(rows)):find(function(_, text)
+        return text:find("new 5", 1, true) ~= nil
+      end)
+      assert.same("4", vim.trim((gutter(row))))
+    end)
+
     -- gitsigns' view compares a file new since its base against a base of one blank line, and finds it in the file.
     it("hides the sign gitsigns puts on a new file's blank line, which the view draws unchanged", function()
       vim.fn.writefile({ "first", "", "last" }, "new.txt")

@@ -994,9 +994,17 @@ gitsigns' signs say again what the view already draws, so a blank sign covers ea
 one priority above gitsigns' and so, by default, under diagnostics'. On an added line it carries the line's tint as both sign and number
 highlight, which a 'statuscolumn' takes for its own background, so the tint runs through
 the gutter as it does under gitsigns' deleted lines. A fold column takes no highlight from
-a mark and stays as it was. The marks live in gitsigns' namespace for the view, which
-gitsigns clears whenever it draws the view anew or closes it. It announces neither, but
-redraws the window after, so a decoration provider puts them back on that redraw.
+a mark and stays as it was.
+
+The blank signs follow gitsigns' sign marks, not its hunks. gitsigns signs a file the
+moment it has read the base, a beat before the view has diffed it, and after an edit it
+signs each line its last hunks name as the line comes into sight, before it diffs again.
+Neither comes with an event, but both redraw the window, so on every redraw of a window
+whose view is changeset's, open or still to come, a decoration provider covers each of
+gitsigns' signs in sight. gitsigns' own provider places those first: providers run in the
+order their namespaces were made, and gitsigns' is made as changeset loads it. The marks
+live in a namespace of the window's own, since another window can show the file without a
+view, and go with the view, whether the user closes it or it was never changeset's.
 
 How a hunk's lines pair up is gitsigns' `diff_opts`, left to the user. Neovim's default
 'diffopt', which gitsigns follows, carries `linematch:40`, which interleaves a hunk's

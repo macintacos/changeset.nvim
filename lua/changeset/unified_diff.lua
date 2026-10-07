@@ -24,14 +24,17 @@ local DIFF_HL = {
 ---@type "waiting"|"on"|"off"
 local state = "waiting"
 
----Each window's view this module opened: its buffer, the buffer holding its base, the base's text gitsigns held, and the
----hunks `cover` last drew it with.
----@type table<integer, { buf: integer, base: integer, text: string[], covered: Gitsigns.Hunk.Hunk[]? }>
+---Each window's view this module opened: its buffer, the buffer holding its base, and the base's text gitsigns held.
+---@type table<integer, { buf: integer, base: integer, text: string[] }>
 local opened = {}
 
 ---Each window with a view on its way, and the buffer it is for.
 ---@type table<integer, integer>
 local opening = {}
+
+---Each window's buffer holding the marks `cover` made in it.
+---@type table<integer, integer>
+local covered = {}
 
 -- Reaches into gitsigns internals: its buffer cache, its unified views, and the base buffer `diffthis` makes for them.
 
@@ -71,36 +74,57 @@ local function paint(win)
   end
 end
 
----Hide the signs gitsigns puts beside `view`'s lines, and draw the gutter of each line it draws added on its tint.
----Marked in the view's own namespace, which gitsigns clears as it draws the view anew or closes it.
----@param view Gitsigns.UnifiedView
----@param signed Gitsigns.Hunk.Hunk[] The hunks gitsigns signs, which a file new since its base has more of.
-local function cover(view, signed)
-  -- Above gitsigns' signs, which the sign column then has no room for, and below diagnostics' by default.
-  local priority = require("gitsigns.config").config.sign_priority + 1
-  local last = vim.api.nvim_buf_line_count(view.buf) - 1
-  local tinted = {}
-  local function mark(row, hl)
-    vim.api.nvim_buf_set_extmark(view.buf, view.ns, row, 0, {
-      sign_text = " ",
-      sign_hl_group = hl,
-      number_hl_group = hl,
-      priority = priority,
-    })
-  end
-  for _, hunk in ipairs(view.hunks) do
-    for row = hunk.added.start - 1, hunk.added.start + hunk.added.count - 2 do
-      tinted[row] = true
-      mark(row, render.DIFF_ADD_HL)
-    end
-  end
-  -- A deletion's sign sits on the line before it, or the first.
-  for _, hunk in ipairs(signed) do
-    for row = math.max(hunk.added.start, 1) - 1, math.min(math.max(hunk.vend, 1) - 1, last) do
-      if not tinted[row] then
-        mark(row)
+---Whether gitsigns' signs give way in `win` as it draws `buf`: while the file's view is this module's, open or yet to
+---come, since gitsigns signs a file well before the view can draw.
+---@param win integer
+---@param buf integer
+---@return boolean
+local function covering(win, buf)
+  local mine = opened[win]
+  -- A view open that this module didn't open is the user's own; one of ours gone, the user closed.
+  return state == "on" and vim.bo[buf].buftype == "" and showing(win) == (mine ~= nil and mine.buf == buf)
+end
+
+---Lay a blank sign over each of gitsigns' in rows `top` to `bot` of `buf`, and draw the sign and number of each line
+---`added` names on its tint, keeping the marks in `ns` already right.
+---@param buf integer
+---@param ns integer
+---@param top integer
+---@param bot integer
+---@param added Gitsigns.Hunk.Hunk[] The hunks the view draws.
+local function cover(buf, ns, top, bot, added)
+  local want = {} ---@type table<integer, string|false>
+  -- Read off gitsigns' marks rather than its hunks: it signs each line those name as it comes into sight, after an edit
+  -- moved them and before it diffs again.
+  for _, name in ipairs({ "gitsigns_signs_", "gitsigns_signs_staged" }) do
+    local signs = vim.api.nvim_create_namespace(name)
+    for _, sign in ipairs(vim.api.nvim_buf_get_extmarks(buf, signs, { top, 0 }, { bot, -1 }, { details = true })) do
+      if sign[4].sign_text then
+        want[sign[2]] = false
       end
     end
+  end
+  for _, hunk in ipairs(added) do
+    for row = math.max(hunk.added.start - 1, top), math.min(hunk.added.start + hunk.added.count - 2, bot) do
+      want[row] = render.DIFF_ADD_HL
+    end
+  end
+  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, { top, 0 }, { bot, -1 }, { details = true })) do
+    if want[mark[2]] == (mark[4].sign_hl_group or false) then
+      want[mark[2]] = nil
+    else
+      vim.api.nvim_buf_del_extmark(buf, ns, mark[1])
+    end
+  end
+  -- Above gitsigns' signs, which the sign column then has no room for, and below diagnostics' by default.
+  local priority = require("gitsigns.config").config.sign_priority + 1
+  for row, hl in pairs(want) do
+    vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
+      sign_text = " ",
+      sign_hl_group = hl or nil,
+      number_hl_group = hl or nil,
+      priority = priority,
+    })
   end
 end
 
@@ -226,14 +250,27 @@ function M.activate()
       opened[tonumber(args.match)] = nil
     end,
   })
-  -- gitsigns draws a view's hunks anew with no event to say so, but always redraws the window after.
+  -- gitsigns signs a buffer and draws a view's hunks anew with no event to say so, but always redraws the window after.
+  -- Providers run in the order their namespaces were made, so gitsigns', made as this loaded gitsigns, signs the lines
+  -- coming into sight before this covers them.
   vim.api.nvim_set_decoration_provider(vim.api.nvim_create_namespace(GROUP), {
-    on_win = function(_, win)
-      local mine, view = opened[win], require("gitsigns.unified").get_view(win)
-      if mine and view and view.buf == mine.buf and view.hunks and view.hunks ~= mine.covered then
-        mine.covered = view.hunks
-        local bcache = require("gitsigns.cache").cache[view.buf]
-        cover(view, bcache and bcache.hunks or {})
+    on_win = function(_, win, buf, top, bot)
+      local was, now = covered[win], covering(win, buf) and buf or nil
+      if was == nil and now == nil then
+        return false
+      end
+      -- One per window, which alone draws it: the same buffer may show in a window without a view.
+      local ns = vim.api.nvim_create_namespace(GROUP .. "." .. win)
+      if was and was ~= now and vim.api.nvim_buf_is_valid(was) then
+        vim.api.nvim_buf_clear_namespace(was, ns, 0, -1)
+      end
+      covered[win] = now
+      if now then
+        if was ~= now then
+          vim.api.nvim__ns_set(ns, { wins = { win } })
+        end
+        local view = require("gitsigns.unified").get_view(win)
+        cover(buf, ns, top, math.min(bot, vim.api.nvim_buf_line_count(buf) - 1), view and view.hunks or {})
       end
       return false
     end,

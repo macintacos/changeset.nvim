@@ -32,6 +32,14 @@ describe("the unified diff over a session", function()
     return vim.fn.bufwinid(buf)
   end
 
+  ---The sign column beside the first line of `win`, once drawn.
+  ---@param win integer
+  ---@return string
+  local function sign(win)
+    vim.cmd.redraw()
+    return vim.fn.screenstring(vim.fn.screenpos(win, 1, 1).row, vim.fn.getwininfo(win)[1].wincol)
+  end
+
   it("opens nothing before the sidebar opens", function()
     vim.cmd.edit("mod.lua")
 
@@ -53,10 +61,18 @@ describe("the unified diff over a session", function()
     assert.is_true(shows(file_window("other.lua")))
   end)
 
-  it("turns off everywhere once closed in one window", function()
-    vim.api.nvim_set_current_win(file_window("other.lua"))
+  it("turns off everywhere once closed in one window, giving gitsigns' signs back", function()
+    local win = file_window("other.lua")
+    vim.api.nvim_set_current_win(win)
+    vim.api.nvim_buf_set_lines(0, 0, -1, true, { "return { a = 2 }" })
+    assert.is_true(vim.wait(5000, function()
+      return #(require("gitsigns.cache").cache[vim.api.nvim_get_current_buf()].hunks or {}) > 0
+    end, 20))
+    assert.equal(" ", sign(win))
+
     vim.cmd("Gitsigns diffthis unified=true")
-    assert.is_false(shows(file_window("other.lua")))
+    assert.is_false(shows(win))
+    assert.equal("┃", sign(win))
 
     vim.cmd.edit("plain.lua")
 
