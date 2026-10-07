@@ -1,6 +1,9 @@
 local changeset = require("changeset")
 local build = require("changeset.build")
-changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
+-- The <Plug> maps live in the plugin file, which the spec runner does not load.
+vim.cmd("runtime plugin/changeset.lua")
+-- What `]g` runs: the spec runner starts before startup is done, which maps the default keys.
+local PREVIEW_NEXT = vim.keycode("<Plug>(changeset-preview-next)")
 local render = require("changeset.render")
 local window = require("changeset.window")
 local Fixture = require("support.git")
@@ -181,7 +184,7 @@ describe("changeset row highlights", function()
     vim.api.nvim_set_current_win(win)
 
     for _ = 1, 4 do
-      vim.cmd.normal("]h")
+      vim.cmd.normal(PREVIEW_NEXT)
     end
     -- The main loop's, which `:normal` does not fire.
     vim.api.nvim_exec_autocmds("CursorMoved", { buffer = window.buf() })

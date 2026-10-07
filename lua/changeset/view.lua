@@ -18,6 +18,7 @@ local Rows = require("changeset.rows")
 ---@field private narrowed string The query rows must match; empty for none.
 ---@field private kinds_hidden table<string, true> Symbol kinds left out of the tree.
 ---@field private shown changeset.Row[] The row on each line, as `show` last laid them out.
+---@field private laid changeset.Row[] The tree `show` last laid out, narrowed and compressed, before any fold.
 local View = {}
 View.__index = View
 
@@ -166,7 +167,7 @@ local folds_by_root = {}
 ---@param hidden table<string, true> Symbol kinds to leave out.
 ---@return changeset.View
 function M.new(folds, hidden)
-  return setmetatable({ folds = folds, narrowed = "", kinds_hidden = hidden, shown = {} }, View)
+  return setmetatable({ folds = folds, narrowed = "", kinds_hidden = hidden, shown = {}, laid = {} }, View)
 end
 
 ---A view sharing its folds with every other view of `root`; a root's first view starts with Generated folded.
@@ -218,6 +219,7 @@ function View:show(rows, layout)
   local compressed = Rows.compress(M.by_kind(M.filter(rows, self.narrowed), self.kinds_hidden), function(id)
     return self.folds.chains[id] == true
   end)
+  self.laid = compressed
   -- `render.lines` walks the tree for its guides, so it is the one place that
   -- decides which rows are on screen; each line carries its row back, which is
   -- how a cursor line maps to a row without re-deriving that walk here.
@@ -246,6 +248,34 @@ end
 ---@return changeset.Row[]
 function View:visible()
   return self.shown
+end
+
+---The rows `show` last laid out, in display order, as they would read with every fold open.
+---@return changeset.Row[]
+function View:unfolded()
+  local out = {}
+  local function walk(rows)
+    for _, row in ipairs(rows) do
+      out[#out + 1] = row
+      walk(row.children)
+    end
+  end
+  walk(self.laid)
+  return out
+end
+
+---Unfold every row the row with `id` sits under, so that it shows.
+---@param id string
+---@return boolean unfolded Whether any row was folded.
+function View:reveal(id)
+  local unfolded = false
+  for folded in pairs(self.folds.collapsed) do
+    if vim.startswith(id, folded .. "\0") then
+      self.folds.collapsed[folded] = nil
+      unfolded = true
+    end
+  end
+  return unfolded
 end
 
 ---Show more under the row on `lnum`: a shut chain's rows first, else its children.

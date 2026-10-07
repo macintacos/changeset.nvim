@@ -94,11 +94,8 @@ end
 ---Show the keys the sidebar answers to.
 ---@param buf integer The sidebar's buffer.
 ---@param own string[] The `lhs` of every mapping the sidebar set on it.
----@param global string[]? The sidebar's keys that work from anywhere, which live in
----the global table rather than on the buffer and would otherwise go undocumented.
-function M.show(buf, own, global)
+function M.show(buf, own)
   local mine = M._own(vim.api.nvim_buf_get_keymap(buf, "n"), own)
-  vim.list_extend(mine, M._own(vim.api.nvim_get_keymap("n"), global or {}))
   local ok, wk = pcall(require, "which-key")
   if ok then
     return wk.show({ buf = M._stage(mine), global = false })

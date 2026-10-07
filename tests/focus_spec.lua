@@ -1,5 +1,8 @@
 local changeset = require("changeset")
-changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
+-- The <Plug> maps live in the plugin file, which the spec runner does not load.
+vim.cmd("runtime plugin/changeset.lua")
+-- What `]g` runs: the spec runner starts before startup is done, which maps the default keys.
+local PREVIEW_NEXT = vim.keycode("<Plug>(changeset-preview-next)")
 local window = require("changeset.window")
 local Fixture = require("support.git")
 local Cursor = require("support.cursor")
@@ -76,7 +79,7 @@ describe("changeset sidebar focus", function()
     local parked = vim.api.nvim_win_get_cursor(win)[1]
     vim.cmd.only()
 
-    vim.cmd.normal("]h")
+    vim.cmd.normal(PREVIEW_NEXT)
 
     assert.equal(parked + 1, vim.api.nvim_win_get_cursor(win)[1])
   end)

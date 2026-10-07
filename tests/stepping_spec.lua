@@ -3,6 +3,7 @@ local changeset = require("changeset")
 vim.cmd("runtime plugin/changeset.lua")
 local Fixture = require("support.git")
 local Sidebar = require("support.sidebar")
+local Symbols = require("support.symbols")
 local comment_store = require("changeset.comment_store")
 local window = require("changeset.window")
 
@@ -370,6 +371,153 @@ describe("changeset.step", function()
       -- The mod.lua row previews line 1, so the steps open Other changes, then L8.
       assert.equal(window.win(), vim.api.nvim_get_current_win())
       assert.same({ "mod.lua", 8 }, { shown(win) })
+    end)
+  end)
+
+  describe("through <Plug>(changeset-preview-next)", function()
+    it("opens a closed sidebar without focus, then previews the row after yours once the changes are read", function()
+      local win = edit(8)
+
+      vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-preview-next)"), "x", false)
+      assert.truthy(window.is_visible())
+      settle()
+
+      -- Yours is mod.lua's Other changes, which holds line 8.
+      assert.equal(win, vim.api.nvim_get_current_win())
+      assert.truthy(Sidebar.cursor_line():find("L2", 1, true))
+      assert.same({ "mod.lua", 2 }, { shown(win) })
+    end)
+  end)
+
+  describe("by symbol and by file", function()
+    local source
+
+    before_each(function()
+      source = Symbols.install()
+    end)
+
+    after_each(function()
+      source.restore()
+    end)
+
+    ---@return changeset.Symbol
+    local function symbol(name, kind, depth, first, last)
+      return { name = name, kind = kind, depth = depth, lnum = first, range_lnum = first, range_end_lnum = last }
+    end
+
+    -- `Outer` holds both of mod.lua's changes, one in each method, so it is listed only for them.
+    local NESTED = {
+      symbol("Outer", "Class", 0, 1, 10),
+      symbol("first", "Method", 1, 2, 3),
+      symbol("second", "Method", 1, 7, 9),
+    }
+
+    ---Answers mod.lua's symbols with `mod_symbols` and other.lua's with `tail`, around its change on line 3.
+    ---@param mod_symbols changeset.Symbol[]
+    local function answer(mod_symbols)
+      assert(vim.wait(5000, function()
+        return #source.asks > 0
+      end))
+      source.asks[1].answer("mod.lua", mod_symbols)
+      source.asks[1].answer("other.lua", { symbol("tail", "Function", 0, 3, 3) })
+      Sidebar.settle()
+    end
+
+    ---Opens the sidebar from line `lnum` of mod.lua, answering its symbols with `mod_symbols`, focus staying put.
+    ---@param mod_symbols changeset.Symbol[]
+    ---@param lnum integer
+    ---@return integer win
+    local function open_with(mod_symbols, lnum)
+      vim.cmd.edit("mod.lua")
+      vim.api.nvim_win_set_cursor(0, { lnum, 0 })
+      local win = vim.api.nvim_get_current_win()
+      changeset.open()
+      answer(mod_symbols)
+      return win
+    end
+
+    ---Presses the sidebar's `key` on the line holding `text`, then goes back to `win`.
+    ---@param text string
+    ---@param key string
+    ---@param win integer
+    local function press_on(text, key, win)
+      Sidebar.cursor_to(text)
+      vim.api.nvim_feedkeys(key, "x", false)
+      vim.api.nvim_set_current_win(win)
+    end
+
+    it("steps through the changed symbols, into collapsed files, and stops at the last", function()
+      local win = open_with(NESTED, 1)
+      press_on("mod.lua", "H", win)
+
+      changeset.step(1, "symbol")
+      assert.same({ "mod.lua", 2 }, { shown(win) })
+      assert.truthy(Sidebar.cursor_line():find("first", 1, true))
+      changeset.step(1, "symbol")
+      assert.same({ "mod.lua", 7 }, { shown(win) })
+      changeset.step(1, "symbol")
+      assert.same({ "other.lua", 3 }, { shown(win) })
+      changeset.step(1, "symbol")
+
+      assert.same({ "other.lua", 3 }, { shown(win) })
+      assert.same({ "no next symbol" }, echoed)
+    end)
+
+    it("steps back past a symbol listed only for the changes inside it", function()
+      local win = open_with(NESTED, 7)
+
+      changeset.step(-1, "symbol")
+      assert.same({ "mod.lua", 2 }, { shown(win) })
+      changeset.step(-1, "symbol")
+
+      assert.same({ "mod.lua", 2 }, { shown(win) })
+      assert.same({ "no previous symbol" }, echoed)
+    end)
+
+    it("steps back to the symbol above you though the file's row shares its line", function()
+      local win = open_with(NESTED, 5)
+
+      changeset.step(-1, "symbol")
+
+      assert.same({ "mod.lua", 2 }, { shown(win) })
+    end)
+
+    it("goes on to the symbol below you though the file's Other changes sort after its symbols", function()
+      local win = open_with({ symbol("late", "Function", 0, 7, 9) }, 5)
+
+      changeset.step(1, "symbol")
+
+      assert.same({ "mod.lua", 7 }, { shown(win) })
+    end)
+
+    it("opens the change below you though the file's Other changes sort after its symbols", function()
+      local win = open_with({ symbol("late", "Function", 0, 7, 9) }, 5)
+
+      changeset.step(1)
+
+      assert.same({ "mod.lua", 7 }, { shown(win) })
+    end)
+
+    it("steps from file to file, into a folded section", function()
+      local win = open_with(NESTED, 7)
+      press_on("Implementation", "h", win)
+
+      changeset.step(1, "file")
+      assert.same({ "other.lua", 3 }, { shown(win) })
+      assert.truthy(Sidebar.cursor_line():find("other.lua", 1, true))
+      changeset.step(-1, "file")
+
+      assert.same({ "mod.lua", 2 }, { shown(win) })
+    end)
+
+    it("opens a closed sidebar, then takes a symbol step once the changes are read", function()
+      vim.cmd.edit("mod.lua")
+      local win = vim.api.nvim_get_current_win()
+
+      changeset.step(1, "symbol")
+      answer({ symbol("late", "Function", 0, 7, 9) })
+
+      assert.same({ "mod.lua", 7 }, { shown(win) })
     end)
   end)
 end)

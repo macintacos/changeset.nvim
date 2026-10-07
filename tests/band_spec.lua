@@ -1,5 +1,9 @@
 local changeset = require("changeset")
-changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
+-- The <Plug> maps live in the plugin file, which the spec runner does not load.
+vim.cmd("runtime plugin/changeset.lua")
+-- What `]g` and `[g` run: the spec runner starts before startup is done, which maps the default keys.
+local PREVIEW_NEXT = vim.keycode("<Plug>(changeset-preview-next)")
+local PREVIEW_PREV = vim.keycode("<Plug>(changeset-preview-prev)")
 local draw = require("changeset.draw")
 local render = require("changeset.render")
 local window = require("changeset.window")
@@ -19,7 +23,7 @@ end
 ---@param count integer
 local function step(count)
   for _ = 1, count do
-    vim.cmd.normal("]h")
+    vim.cmd.normal(PREVIEW_NEXT)
   end
 end
 
@@ -60,7 +64,7 @@ describe("changeset preview band", function()
     vim.fn.delete(tmp, "rf")
   end)
 
-  describe("with ]h pressed from the file window", function()
+  describe("with ]g pressed from the file window", function()
     it("stays off another changed file it steps onto", function()
       open_sidebar()
 
@@ -70,11 +74,11 @@ describe("changeset preview band", function()
       assert_unbanded_here()
     end)
 
-    it("stays off after stepping back with [h", function()
+    it("stays off after stepping back with [g", function()
       open_sidebar()
       step(3)
 
-      vim.cmd.normal("[h")
+      vim.cmd.normal(PREVIEW_PREV)
 
       assert_unbanded_here()
     end)
@@ -234,7 +238,7 @@ describe("changeset preview band", function()
       assert_unbanded_here()
     end)
 
-    it("stays off the notice reached with ]h from the file window", function()
+    it("stays off the notice reached with ]g from the file window", function()
       open_sidebar()
 
       for _ = 1, 6 do

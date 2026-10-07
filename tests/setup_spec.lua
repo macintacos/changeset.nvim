@@ -43,13 +43,6 @@ local function buffer_map(buf, lhs)
   end)
 end
 
----The global normal-mode mapping for `lhs`, if any.
-local function global_map(lhs)
-  return vim.iter(vim.api.nvim_get_keymap("n")):find(function(keymap)
-    return vim.keycode(keymap.lhs) == vim.keycode(lhs)
-  end)
-end
-
 ---The text of the float `?` opened, closing it.
 local function help_text()
   local float = assert(vim.iter(vim.api.nvim_list_wins()):find(function(win)
@@ -81,7 +74,6 @@ describe("changeset setup", function()
   after_each(function()
     changeset.close()
     changeset.setup()
-    pcall(vim.keymap.del, "n", "]h")
     vim.cmd("silent! %bwipeout!")
     vim.fn.chdir(previous_dir)
     vim.fn.delete(tmp, "rf")
@@ -95,13 +87,6 @@ describe("changeset setup", function()
         assert.not_nil(buffer_map(buf, lhs), action)
       end
     end
-  end)
-
-  it("binds no global step keys without setup()", function()
-    open_sidebar()
-
-    assert.is_nil(global_map("]h"))
-    assert.is_nil(global_map("[h"))
   end)
 
   it("binds a remapped key in place of the default, and ? lists it", function()
@@ -158,59 +143,6 @@ describe("changeset setup", function()
 
     assert.is_nil(window.win())
     assert.equal("other.lua", vim.fs.basename(vim.api.nvim_buf_get_name(0)))
-  end)
-
-  it("binds next/prev globally while open, and ? lists them", function()
-    changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
-    open_sidebar()
-
-    assert.not_nil(global_map("]h"))
-    assert.not_nil(global_map("[h"))
-    press("?")
-    local listed = help_keys()
-    assert.is_true(vim.list_contains(listed, "]h"))
-    assert.is_true(vim.list_contains(listed, "[h"))
-  end)
-
-  it("puts back the user's mapping and drops its own on close", function()
-    vim.keymap.set("n", "]h", function() end, { desc = "user ]h" })
-    changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
-    open_sidebar()
-
-    changeset.close()
-    changeset.close()
-    assert.equal("user ]h", global_map("]h").desc)
-    assert.is_nil(global_map("[h"))
-  end)
-
-  it("puts back the user's mapping when next and prev share a key", function()
-    vim.keymap.set("n", "]h", function() end, { desc = "user ]h" })
-    changeset.setup({ keymaps = { next = "]h", prev = "]h" } })
-    open_sidebar()
-
-    changeset.close()
-    assert.equal("user ]h", global_map("]h").desc)
-  end)
-
-  it("keeps a mapping made over its key while open, rather than the one it replaced", function()
-    vim.keymap.set("n", "]h", function() end, { desc = "user ]h" })
-    changeset.setup({ keymaps = { next = "]h" } })
-    open_sidebar()
-    vim.keymap.set("n", "]h", function() end, { desc = "later ]h" })
-
-    changeset.close()
-    assert.equal("later ]h", global_map("]h").desc)
-  end)
-
-  it("puts back the user's mapping when the sidebar is closed with :q", function()
-    vim.keymap.set("n", "]h", function() end, { desc = "user ]h" })
-    changeset.setup({ keymaps = { next = "]h" } })
-    open_sidebar()
-
-    vim.api.nvim_win_close(assert(window.win()), true)
-    assert.is_true(vim.wait(1000, function()
-      return global_map("]h").desc == "user ]h"
-    end, 10))
   end)
 
   it("names the bound jump key in the footer", function()

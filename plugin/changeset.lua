@@ -21,6 +21,24 @@ local subcommands = {
   prev = function()
     require("changeset").step(-1)
   end,
+  ["next symbol"] = function()
+    require("changeset").step(1, "symbol")
+  end,
+  ["prev symbol"] = function()
+    require("changeset").step(-1, "symbol")
+  end,
+  ["next file"] = function()
+    require("changeset").step(1, "file")
+  end,
+  ["prev file"] = function()
+    require("changeset").step(-1, "file")
+  end,
+  ["preview next"] = function()
+    require("changeset").preview_step(1)
+  end,
+  ["preview prev"] = function()
+    require("changeset").preview_step(-1)
+  end,
   ["review mode"] = function()
     if not require("changeset.config").get().pr_review.enabled then
       return vim.notify(
@@ -111,7 +129,7 @@ end, {
   nargs = "*",
   range = true,
   bar = true,
-  desc = "Toggle the changeset sidebar, rebuild it, step through and open its changes, toggle PR Review Mode, submit, copy or abandon the review, or write, delete, walk, reopen, list or show review comments",
+  desc = "Toggle the changeset sidebar, rebuild it, step through its changes, symbols or files, open or preview them, toggle PR Review Mode, submit, copy or abandon the review, or write, delete, walk, reopen, list or show review comments",
   complete = function(lead, line)
     -- The words between `Changeset`, with any range before it, and `lead`.
     local typed = vim.trim(line:match("^%S+%s+(.-)%S*$") or "")
@@ -179,18 +197,58 @@ local keys = {
     icon = { cat = "filetype", name = "text" },
   },
   {
-    lhs = "<C-g>n",
+    lhs = "<C-g>nn",
     name = "next",
     desc = "Open the next change",
     icon = { cat = "filetype", name = "diff" },
     operatorfunc = "v:lua.require'changeset'.step(%d)",
   },
   {
-    lhs = "<C-g>p",
+    lhs = "<C-g>np",
     name = "prev",
     desc = "Open the previous change",
     icon = { cat = "filetype", name = "diff" },
     operatorfunc = "v:lua.require'changeset'.step(-%d)",
+  },
+  {
+    lhs = "<C-g>ns",
+    name = "next symbol",
+    desc = "Open the next changed symbol",
+    icon = { cat = "lsp", name = "Function" },
+    operatorfunc = "v:lua.require'changeset'.step(%d, 'symbol')",
+  },
+  {
+    lhs = "<C-g>nS",
+    name = "prev symbol",
+    desc = "Open the previous changed symbol",
+    icon = { cat = "lsp", name = "Function" },
+    operatorfunc = "v:lua.require'changeset'.step(-%d, 'symbol')",
+  },
+  {
+    lhs = "<C-g>nf",
+    name = "next file",
+    desc = "Open the next changed file",
+    icon = { cat = "default", name = "file" },
+    operatorfunc = "v:lua.require'changeset'.step(%d, 'file')",
+  },
+  {
+    lhs = "<C-g>nF",
+    name = "prev file",
+    desc = "Open the previous changed file",
+    icon = { cat = "default", name = "file" },
+    operatorfunc = "v:lua.require'changeset'.step(-%d, 'file')",
+  },
+  {
+    lhs = "]g",
+    name = "preview next",
+    desc = "Preview the next change",
+    icon = { cat = "filetype", name = "diff" },
+  },
+  {
+    lhs = "[g",
+    name = "preview prev",
+    desc = "Preview the previous change",
+    icon = { cat = "filetype", name = "diff" },
   },
   { lhs = "<C-g>y", name = "review yank", desc = "Copy the review as text", icon = { cat = "lsp", name = "Text" } },
   {
@@ -264,7 +322,7 @@ local function taken(lhs, mode)
   end)
 end
 
----Maps each default `<C-g>` key not already taken, unless `vim.g.changeset_no_default_maps` is set.
+---Maps each default key not already taken, unless `vim.g.changeset_no_default_maps` is set.
 local function map_defaults()
   if vim.g.changeset_no_default_maps then
     return
@@ -272,18 +330,24 @@ local function map_defaults()
   -- Decided before any default is mapped, which would all clash with it. A user's map that blocks `<C-g>cc` blocks it
   -- too.
   local pause = { n = not taken("<C-g>c", "n"), x = not taken("<C-g>c", "x") }
-  -- The keys mapped in normal mode, which the review comment window maps again on its own buffer.
+  -- The `<C-g>` keys mapped in normal mode, which the review comment window maps again on its own buffer. Not `]g`,
+  -- which the window would map in insert mode too, where it is text.
   local window_keys = {}
-  -- Every key mapped, as which-key specs that add its icon.
+  -- Every key mapped, as which-key specs that add its icon, and the `<C-g>n` group's name once one of its keys is.
   local icon_specs = {}
+  local navigates = false
   ---@param mode string
   ---@param lhs string
   ---@param key changeset.DefaultKey
   local function map(mode, lhs, key)
     vim.keymap.set(mode, lhs, plug(key.name), { desc = key.desc })
     icon_specs[#icon_specs + 1] = { lhs, mode = mode, icon = key.icon }
-    if mode == "n" then
+    if mode == "n" and vim.startswith(lhs, "<C-g>") then
       window_keys[#window_keys + 1] = { lhs = lhs, name = key.name, desc = key.desc }
+    end
+    if mode == "n" and vim.startswith(lhs, "<C-g>n") and not navigates then
+      navigates = true
+      icon_specs[#icon_specs + 1] = { "<C-g>n", mode = "n", group = "navigation", icon = key.icon }
     end
   end
   for _, key in ipairs(keys) do

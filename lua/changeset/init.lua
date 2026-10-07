@@ -183,6 +183,8 @@ end
 ---A step pressed before the tree was ready, with the window and buffer it was pressed in.
 ---@class changeset.WaitingStep
 ---@field count integer Presses added up, down for positive.
+---@field kind changeset.StepUnit|"preview" What the presses step by; a press of another kind starts the count again.
+---@field take fun(count: integer)
 ---@field win integer
 ---@field buf integer
 
@@ -190,9 +192,10 @@ end
 local waiting
 
 ---What a step from `M.step` lends `actions.open_step`.
----@type changeset.ActionHooks
+---@type changeset.StepHooks
 local step_hooks = {
   pick = pick,
+  redraw = redraw,
   close = function()
     M.close()
   end,
@@ -234,7 +237,7 @@ local function take_waiting()
   local state = assert(sidebar_state.current(), "changeset: no tree built yet")
   -- Landed again: the rows the sidebar opened on held no row for where you are.
   apply(state.position:entered(draw.view()))
-  actions.open_step(step.count, step_hooks)
+  step.take(step.count)
 end
 
 ---What the sidebar does as the tree changes.
@@ -469,7 +472,6 @@ function M.open()
       draw.paint()
     end,
   })
-  actions.bind_step_keys(bound_keys, preview_current)
   require("changeset.unified_diff").activate()
 
   redraw()
@@ -479,12 +481,11 @@ function M.open()
   end
 end
 
----Dismiss the sidebar and its step keys, putting back what they replaced. The tree stays, and keeps refreshing.
+---Dismiss the sidebar. The tree stays, and keeps refreshing.
 function M.close()
   waiting = nil
   opened_id, stepping_back = nil, false
   require("changeset.menu").close()
-  actions.unbind_step_keys()
   vim.api.nvim_clear_autocmds({ group = augroup })
   window.close()
 end
@@ -521,11 +522,12 @@ local function next_action(st)
   return st.focused and "close" or "focus"
 end
 
----Steps the sidebar's selected row `count` places and opens it in the window you are editing in. From a file window
----or the sidebar, focus stays there. A closed sidebar opens first, unfocused, on the row for where you are. Presses
+---Takes a step of `kind` in the sidebar, opening a closed one first, unfocused, on the row for where you are. Presses
 ---made before the tree is ready add up, and are taken once it is.
 ---@param count integer Down for positive.
-function M.step(count)
+---@param kind changeset.StepUnit|"preview"
+---@param take fun(count: integer)
+local function walk(count, kind, take)
   if not window.is_visible() then
     M.open()
     if not window.is_visible() then
@@ -538,11 +540,34 @@ function M.step(count)
   if not (tree and ready(tree)) then
     local win = vim.api.nvim_get_current_win()
     local buf = vim.api.nvim_win_get_buf(win)
-    local before = waiting and waiting.win == win and waiting.buf == buf and waiting.count or 0
-    waiting = { count = before + count, win = win, buf = buf }
+    local before = waiting and waiting.win == win and waiting.buf == buf and waiting.kind == kind and waiting.count or 0
+    waiting = { count = before + count, kind = kind, take = take, win = win, buf = buf }
     return vim.api.nvim_echo({ { "reading the changes…" } }, false, {})
   end
-  actions.open_step(count, step_hooks)
+  take(count)
+end
+
+---Steps the sidebar's selected row `count` places and opens it in the window you are editing in. From a file window
+---or the sidebar, focus stays there. A closed sidebar opens first, unfocused, on the row for where you are. Presses
+---made before the tree is ready add up, and are taken once it is.
+---@param count integer Down for positive.
+---@param unit ("symbol"|"file")? What counts as a place: a changed symbol, or a file, whatever folds hide it. Any row
+---on screen that opens, without one.
+function M.step(count, unit)
+  local by = unit or "change"
+  walk(count, by, function(n)
+    actions.open_step(n, by, step_hooks)
+  end)
+end
+
+---Moves the sidebar's selected row `count` rows, past section headers, and previews it in the window you were last
+---in without opening it. A closed sidebar opens first, unfocused, on the row for where you are. Presses made before
+---the tree is ready add up, and are taken once it is.
+---@param count integer Down for positive.
+function M.preview_step(count)
+  walk(count, "preview", function(n)
+    actions.preview_step(n, preview_current)
+  end)
 end
 
 ---Open, focus, or dismiss the sidebar, depending on where the cursor is.

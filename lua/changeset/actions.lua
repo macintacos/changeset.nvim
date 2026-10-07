@@ -23,6 +23,13 @@ local M = {}
 ---@field close fun() Dismiss the sidebar.
 ---@field back? fun(row: changeset.Row?) Told, before focus goes back to the sidebar, which row a step from it opened.
 
+---What the sidebar lends a step.
+---@class changeset.StepHooks : changeset.ActionHooks
+---@field redraw fun() Redraw the tree, once a step unfolds the rows over the one it reached.
+
+---What a step counts as a place: any row that opens, or only a changed symbol's, or a file's.
+---@alias changeset.StepUnit "change"|"symbol"|"file"
+
 ---The sidebar's cursor line, while it stands.
 ---@return integer?
 local function cursor()
@@ -82,17 +89,6 @@ local function jump(how, hooks)
   open_comment(commit(how, hooks))
 end
 
----@param delta integer
----@param preview fun()
-local function step(delta, preview)
-  local state, lnum = sidebar_state.current(), cursor()
-  if not (state and lnum) then
-    return
-  end
-  move(state.view:step(lnum, delta))
-  preview()
-end
-
 ---Where a row opens, as `commit` opens it.
 ---@param row changeset.Row
 ---@return string
@@ -115,81 +111,114 @@ local function standing(root)
 end
 
 ---The row a step `delta` starts from: the cursor's when it opens where the window stands. Else, among that file's
----rows, the last at or above its line, or the row just below that for a step back from past it, so the row is the
----first place; above the file's first row, just before it for a step on and at it for a step back. The sidebar can
----be on a shallower row, such as the file's, or another file's, than where you are.
----@param state changeset.SidebarState
----@param lnum integer The cursor's row.
+---rows, the one before the first below its line for a step on, or after the last above it for a step back, else the
+---file's last or first row: rows aren't in line order, and the first place must be past the line that way. The
+---sidebar can be on a shallower row, such as the file's, or another file's, than where you are.
+---@param rows changeset.Row[] The rows the step walks.
+---@param at integer Where the sidebar's cursor row is among them.
 ---@param path string?
 ---@param line integer
 ---@param delta integer
 ---@return integer
-local function start_row(state, lnum, path, line, delta)
-  local row = state.view:row(lnum)
+local function start_row(rows, at, path, line, delta)
+  local row = rows[at]
   if not path or (row and place_of(row) == ("%s:%d"):format(path, line)) then
-    return lnum
+    return at
   end
-  local first, found
-  for i, each in ipairs(state.view:visible()) do
+  local first, last, below, above
+  for i, each in ipairs(rows) do
     if each.path == path and each.kind ~= "section" and each.kind ~= "comment" then
-      first = first or i
-      if (each.lnum or 1) <= line then
-        found = i
-      end
+      first, last = first or i, i
+      below = below or ((each.lnum or 1) > line and i or nil)
+      above = (each.lnum or 1) < line and i or above
     end
   end
-  if not found then
-    return first and (delta > 0 and first - 1 or first) or lnum
+  if not first then
+    return at
   end
-  local found_line = assert(state.view:row(found)).lnum or 1
-  return delta < 0 and found_line < line and found + 1 or found
+  if delta > 0 then
+    return below and below - 1 or last
+  end
+  return above and above + 1 or first
 end
 
----The row `count` places past the sidebar's cursor, down for a positive `count`: each place a row that opens
----somewhere other than the last, starting from where the window it opens into stands. A deleted file's row and a
----whole file's review comment row open nowhere, so neither is ever one. Stops at the last such row.
----@param state changeset.SidebarState
----@param lnum integer
+---Whether a step by each unit stops on a row that opens somewhere new.
+---@type table<changeset.StepUnit, fun(row: changeset.Row): boolean>
+local STOPS = {
+  -- A deleted file's row and a whole file's review comment row open nowhere.
+  change = function(row)
+    return row.kind ~= "section" and not (row.kind == "file" and row.status == "deleted" or lists_file_comment(row))
+  end,
+  symbol = function(row)
+    return row.kind == "symbol" and not row.ancestor
+  end,
+  file = function(row)
+    return row.kind == "file" and row.status ~= "deleted"
+  end,
+}
+
+---The row `count` places past `from` among `rows`, down for a positive `count`: each place a row `stops` takes that
+---opens somewhere other than the last, starting from where the window it opens into stands. Stops at the last such row.
+---@param rows changeset.Row[]
+---@param from integer
 ---@param count integer
 ---@param here string? Where the window stands, as `place_of` spells it.
+---@param stops fun(row: changeset.Row): boolean
 ---@return integer
-local function placed(state, lnum, count, here)
+local function placed(rows, from, count, here, stops)
   local delta = count > 0 and 1 or -1
-  local to = lnum
+  local to = from
   for _ = 1, math.abs(count) do
-    local at = to
-    repeat
-      local next_lnum = state.view:step(at, delta)
-      if next_lnum == at then
-        return to
-      end
-      at = next_lnum
-      local row = assert(state.view:row(at))
-    until not (row.kind == "file" and row.status == "deleted" or lists_file_comment(row)) and place_of(row) ~= here
-    to, here = at, place_of(assert(state.view:row(at)))
+    local at = to + delta
+    while rows[at] and not (stops(rows[at]) and place_of(rows[at]) ~= here) do
+      at = at + delta
+    end
+    if not rows[at] then
+      return to
+    end
+    to, here = at, place_of(rows[at])
   end
   return to
 end
 
----Steps the sidebar's cursor `count` places, then opens that row as `<CR>` does, without its review comment, in
----the window the sidebar opens changes in. From a file window or the sidebar, focus stays there; from a window that
----holds no file, it goes where the row opened.
+---Where `row` stands among `rows`, by id; 0 for none.
+---@param rows changeset.Row[]
+---@param row changeset.Row?
+---@return integer
+local function index_of(rows, row)
+  for i, each in ipairs(rows) do
+    if row and each.id == row.id then
+      return i
+    end
+  end
+  return 0
+end
+
+---Steps the sidebar's cursor `count` places by `unit`, then opens that row as `<CR>` does, without its review comment,
+---in the window the sidebar opens changes in. A change is a row on screen; a symbol or a file is found whatever folds
+---hide it, and unfolded. From a file window or the sidebar, focus stays there; from a window that holds no file, it
+---goes where the row opened.
 ---@param count integer Down for positive.
----@param hooks changeset.ActionHooks
-function M.open_step(count, hooks)
+---@param unit changeset.StepUnit
+---@param hooks changeset.StepHooks
+function M.open_step(count, unit, hooks)
   local state, lnum = sidebar_state.current(), cursor()
   if not (state and lnum) then
     return
   end
+  local rows = unit == "change" and state.view:visible() or state.view:unfolded()
   local path, line = standing(state.tree.root)
-  local from = start_row(state, lnum, path, line, count > 0 and 1 or -1)
-  local to = placed(state, from, count, path and ("%s:%d"):format(path, line))
+  local from = start_row(rows, index_of(rows, state.view:row(lnum)), path, line, count > 0 and 1 or -1)
+  local to = placed(rows, from, count, path and ("%s:%d"):format(path, line), STOPS[unit])
   if to == from then
     -- Not wrapped, so a run of `.` stops here rather than looping.
-    return vim.api.nvim_echo({ { count > 0 and "no next change" or "no previous change" } }, false, {})
+    return vim.api.nvim_echo({ { ("no %s %s"):format(count > 0 and "next" or "previous", unit) } }, false, {})
   end
   local focus = vim.api.nvim_get_current_win()
-  move(to)
+  if state.view:reveal(rows[to].id) then
+    hooks.redraw()
+  end
+  move(index_of(state.view:visible(), rows[to]))
   local row = commit("reuse", hooks)
   if focus == window.win() and row then
     if hooks.back then
@@ -199,63 +228,19 @@ function M.open_step(count, hooks)
   end
 end
 
----The step keys bound while the sidebar stands, each with the global mapping it replaced.
----@type { lhs: string, prior: vim.api.keyset.get_keymap? }[]
-local step_bindings = {}
-
-local NEXT_DESC = "Next change (Changeset)"
-local PREV_DESC = "Previous change (Changeset)"
-
----The global normal-mode mapping for `lhs`, if any.
----@param lhs string
----@return vim.api.keyset.get_keymap?
-local function global_mapping(lhs)
-  -- Global only: maparg() prefers a buffer-local mapping, which mapset() would restore onto the buffer current at close.
-  return vim.iter(vim.api.nvim_get_keymap("n")):find(function(keymap)
-    return vim.keycode(keymap.lhs) == vim.keycode(lhs)
-  end)
-end
-
----Remove the step keys and put back what they replaced; a map set over one since stays. Safe to repeat: `close` also
----runs with no sidebar open.
-function M.unbind_step_keys()
-  -- Newest first: a key bound twice records changeset's own first mapping as the second's prior.
-  for i = #step_bindings, 1, -1 do
-    local binding = step_bindings[i]
-    local current = global_mapping(binding.lhs)
-    if not current or current.desc == NEXT_DESC or current.desc == PREV_DESC then
-      pcall(vim.keymap.del, "n", binding.lhs)
-      if binding.prior then
-        vim.fn.mapset(binding.prior)
-      end
-    end
-  end
-  step_bindings = {}
-end
-
----@param lhs (string|false)?
----@param desc string
----@param on_press fun()
-local function bind_step_key(lhs, desc, on_press)
-  if not lhs then
+---Moves the sidebar's cursor `count` rows, skipping section headers, then previews the row it lands on.
+---@param count integer Down for positive.
+---@param preview fun() Preview the row under the sidebar's cursor.
+function M.preview_step(count, preview)
+  local state, lnum = sidebar_state.current(), cursor()
+  if not (state and lnum) then
     return
   end
-  step_bindings[#step_bindings + 1] = { lhs = lhs, prior = global_mapping(lhs) }
-  vim.keymap.set("n", lhs, on_press, { desc = desc })
-end
-
----Bind the `next` / `prev` keys globally, remembering the global mapping each replaces.
----Unbinds first: a closed sidebar's scheduled close may not have run yet.
----@param keys changeset.Config.Keymaps
----@param preview fun() Preview the row under the sidebar's cursor.
-function M.bind_step_keys(keys, preview)
-  M.unbind_step_keys()
-  bind_step_key(keys.next, NEXT_DESC, function()
-    step(1, preview)
-  end)
-  bind_step_key(keys.prev, PREV_DESC, function()
-    step(-1, preview)
-  end)
+  for _ = 1, math.abs(count) do
+    lnum = state.view:step(lnum, count > 0 and 1 or -1)
+  end
+  move(lnum)
+  preview()
 end
 
 ---Open the symbol-kind filter menu, redrawing as kinds are toggled.
@@ -308,7 +293,7 @@ local function prompt_filter(state, redraw)
   redraw()
 end
 
----Bind `keys` on the sidebar's buffer. `?` lists exactly these and the step keys.
+---Bind `keys` on the sidebar's buffer. `?` lists exactly these.
 ---@param buf integer
 ---@param keys changeset.Config.Keymaps
 ---@param hooks changeset.ActionHooks
@@ -411,13 +396,7 @@ function M.set_keymaps(buf, keys, hooks)
     end
   end, "Yank path:line")
   map(keys.help, function()
-    help.show(
-      buf,
-      own,
-      vim.tbl_map(function(binding)
-        return binding.lhs
-      end, step_bindings)
-    )
+    help.show(buf, own)
   end, "Show these keymaps")
   map(keys.filter_kinds, function(state)
     open_kind_menu(state, redraw)

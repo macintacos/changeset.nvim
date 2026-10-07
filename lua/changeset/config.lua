@@ -3,7 +3,7 @@
 local M = {}
 
 ---@class changeset.Config
----@field keymaps? changeset.Config.Keymaps The sidebar's keys, and the step keys it binds globally while open; each a key or `false` to leave it unbound.
+---@field keymaps? changeset.Config.Keymaps The sidebar's keys, each a key or `false` to leave it unbound.
 ---@field layout? changeset.Config.Layout
 ---@field pr_review? changeset.Config.PrReview
 ---@field review_comment? changeset.Config.ReviewComment
@@ -27,8 +27,6 @@ local M = {}
 ---@field help? string|false Show these keymaps. Default `?`.
 ---@field filter_kinds? string|false Filter by symbol kind. Default `F`.
 ---@field filter? string|false Filter the tree. Default `f`.
----@field next? string|false Next change, from any window while the sidebar is open. Default off.
----@field prev? string|false Previous change, from any window while the sidebar is open. Default off.
 
 ---@class changeset.Config.Layout
 ---@field min_file_width? number Narrower than this beside the sidebar, the files get the width and the tree moves below them. Default 80.
@@ -69,8 +67,6 @@ local DEFAULTS = {
     help = "?",
     filter_kinds = "F",
     filter = "f",
-    next = false,
-    prev = false,
   },
   layout = { min_file_width = 80 },
   pr_review = { enabled = false },

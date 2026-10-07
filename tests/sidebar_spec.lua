@@ -2,7 +2,10 @@ vim.opt.rtp:prepend(require("support.deps").path("mini.icons"))
 require("mini.icons").setup()
 
 local changeset = require("changeset")
-changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
+-- The <Plug> maps live in the plugin file, which the spec runner does not load.
+vim.cmd("runtime plugin/changeset.lua")
+-- What `]g` runs: the spec runner starts before startup is done, which maps the default keys.
+local PREVIEW_NEXT = vim.keycode("<Plug>(changeset-preview-next)")
 local build = require("changeset.build")
 local render = require("changeset.render")
 local window = require("changeset.window")
@@ -318,14 +321,14 @@ describe("changeset sidebar", function()
       assert.equal(1, #gaps)
     end)
 
-    it("previews the next section's first file with ]h from a section's last line", function()
+    it("previews the next section's first file with ]g from a section's last line", function()
       vim.cmd.edit("mod.lua")
       local target = vim.api.nvim_get_current_win()
       local buf = open_sidebar()
       vim.api.nvim_set_current_win((assert(window.win())))
       vim.api.nvim_win_set_cursor(0, { line_of(buf, "Docs") - 1, 0 })
 
-      press("]h")
+      press(PREVIEW_NEXT)
 
       assert.equal(line_of(buf, "README.md"), vim.api.nvim_win_get_cursor(0)[1])
       assert.truthy(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(target)):find("README.md$"))
@@ -594,7 +597,7 @@ describe("changeset sidebar", function()
 
       after_each(function()
         vim.fn.delete(prefs.path())
-        changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
+        changeset.setup()
       end)
 
       it("notes under the tree which kinds it is hiding", function()
@@ -609,7 +612,7 @@ describe("changeset sidebar", function()
       end)
 
       it("names the key it bound to the kind menu in that note", function()
-        changeset.setup({ keymaps = { next = "]h", prev = "[h", filter_kinds = "<C-k>" } })
+        changeset.setup({ keymaps = { filter_kinds = "<C-k>" } })
         open_unanswered()
         answer_all()
 
@@ -697,7 +700,7 @@ describe("changeset sidebar", function()
       vim.api.nvim_set_current_win(win)
       vim.api.nvim_win_set_cursor(win, { line_of(buf, "L1", line_of(buf, "Docs")), 0 })
 
-      press("]h")
+      press(PREVIEW_NEXT)
 
       assert.truthy(vim.api.nvim_win_get_cursor((assert(window.win())))[1] > config)
     end)
@@ -891,7 +894,7 @@ describe("changeset sidebar", function()
   ---@field from_winbar string
   ---@field previewed integer The buffer the preview put there.
 
-  ---Open the sidebar from `mod.lua` and walk the selection `steps` rows with `]h`,
+  ---Open the sidebar from `mod.lua` and walk the selection `steps` rows with `]g`,
   ---pressed with the cursor `from` the sidebar or the file window, where it stays.
   ---Asserts the previews left the jumplist and the buffer list alone.
   ---@param steps integer
@@ -916,14 +919,14 @@ describe("changeset sidebar", function()
     local listed = #vim.fn.getbufinfo({ buflisted = 1 })
 
     for _ = 1, steps do
-      vim.cmd.normal("]h")
+      vim.cmd.normal(PREVIEW_NEXT)
     end
 
     assert.same(before, vim.fn.getjumplist(target)[1])
     assert.equal(listed, #vim.fn.getbufinfo({ buflisted = 1 }))
     assert.equal(standing, vim.api.nvim_get_current_win())
     -- From the sidebar, the band is the proof a preview landed at all: without it
-    -- an untouched jumplist would also pass when `]h` did nothing. From the file,
+    -- an untouched jumplist would also pass when `]g` did nothing. From the file,
     -- the callers prove it by the buffer instead, since the window being read has none.
     if from == "sidebar" then
       assert.truthy(vim.wo[target].winbar ~= "")
@@ -966,7 +969,7 @@ describe("changeset sidebar", function()
     commit_after(3, press_enter)
   end)
 
-  -- One `]h` stays inside the file the sidebar was opened from, where the commit
+  -- One `]g` stays inside the file the sidebar was opened from, where the commit
   -- re-shows the buffer the window already holds, so no buffer swap records the
   -- jump and the commit has to.
   it("sends <C-o> back for a row in the file the sidebar was opened from", function()
