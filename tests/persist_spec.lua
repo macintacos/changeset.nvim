@@ -99,6 +99,22 @@ describe("changeset position in a session", function()
     assert.truthy(Sidebar.cursor_line():find("other.lua", 1, true))
   end)
 
+  it("keeps the sidebar a session refills over an open one", function()
+    vim.cmd.edit("mod.lua")
+    changeset.open()
+    Sidebar.settle()
+    local autocmds = #vim.api.nvim_get_autocmds({ group = "changeset" })
+
+    -- As `:restart` does under a config that reads its own session at VimEnter: the
+    -- second read's `only` closes the first one's sidebar before laying out its own.
+    vim.cmd("silent only")
+    restore_session({ here = { path = "mod.lua", lnum = 8 } })
+    Sidebar.flush()
+
+    assert.is_true(window.is_visible())
+    assert.equal(autocmds, #vim.api.nvim_get_autocmds({ group = "changeset" }))
+  end)
+
   it("hides the cursor when a session reopens the sidebar with focus in it", function()
     vim.cmd.edit("mod.lua")
 

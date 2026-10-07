@@ -335,12 +335,24 @@ function M.setup(opts)
   end
 end
 
+---Drop everything the sidebar set up but its window.
+local function release()
+  waiting = nil
+  opened_id, stepping_back = nil, false
+  require("changeset.menu").close()
+  vim.api.nvim_clear_autocmds({ group = augroup })
+end
+
 ---Open the sidebar on the current buffer's repository, drawing its tree.
 function M.open()
   -- `window.buf()`, not `window.win()`: the buffer is wiped with its window, so it is
   -- live exactly while a sidebar stands on some tabpage.
   if window.buf() then
     M.close()
+  else
+    -- A session read over the sidebar closes its window, and this runs before the
+    -- `WinClosed` close that would let go of it.
+    release()
   end
   local kept = build.current()
   if not build.build() then
@@ -377,7 +389,12 @@ function M.open()
     pattern = tostring(win),
     desc = "changeset: let go of the sidebar when its window closes another way",
     callback = function()
-      vim.schedule(M.close)
+      vim.schedule(function()
+        -- A session read over the sidebar opens its own before this runs.
+        if not window.is_visible() then
+          M.close()
+        end
+      end)
     end,
   })
   vim.api.nvim_create_autocmd("CursorMoved", {
@@ -483,10 +500,7 @@ end
 
 ---Dismiss the sidebar. The tree stays, and keeps refreshing.
 function M.close()
-  waiting = nil
-  opened_id, stepping_back = nil, false
-  require("changeset.menu").close()
-  vim.api.nvim_clear_autocmds({ group = augroup })
+  release()
   window.close()
 end
 
