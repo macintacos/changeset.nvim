@@ -196,7 +196,7 @@ describe("the sidebar's Comments section", function()
     open_with_review_comments()
     local before = #vim.api.nvim_tabpage_list_wins(0)
 
-    press_on("alpha.txt:5-6", "-")
+    press_on("alpha.txt:5-6", "<C-s>")
 
     local win = assert(comment_window())
     assert.equal("a range", text_of(win))

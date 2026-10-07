@@ -11,8 +11,8 @@ local M = {}
 ---@class changeset.Config.Keymaps
 ---@field jump? string|false Go to this change. Default `<CR>`.
 ---@field jump_close? string|false Go to this change and close the tree. Default `<S-CR>`.
----@field jump_vsplit? string|false Go to this change in a vertical split. Default `/`.
----@field jump_split? string|false Go to this change in a split. Default `-`.
+---@field jump_vsplit? string|false Go to this change in a vertical split. Default `<C-v>`.
+---@field jump_split? string|false Go to this change in a split. Default `<C-s>`.
 ---@field jump_tab? string|false Go to this change in a new tab. Default `<C-t>`.
 ---@field close? string|false Close the tree. Default `q`.
 ---@field expand? string|false Expand. Default `l`.
@@ -51,8 +51,8 @@ local DEFAULTS = {
   keymaps = {
     jump = "<CR>",
     jump_close = "<S-CR>",
-    jump_vsplit = "/",
-    jump_split = "-",
+    jump_vsplit = "<C-v>",
+    jump_split = "<C-s>",
     jump_tab = "<C-t>",
     close = "q",
     expand = "l",
@@ -74,6 +74,8 @@ local DEFAULTS = {
 }
 
 local current = vim.deepcopy(DEFAULTS)
+---@type string[]
+local ignored = {}
 
 ---@param options changeset.Options
 local function validate(options)
@@ -100,19 +102,65 @@ local function validate(options)
   vim.validate("review_comment.blocks", options.review_comment.blocks, "boolean")
 end
 
----Lay `opts` over the defaults, not over the last call's. On a bad value, raise an error naming the option and keep what was in force.
+---Splits `opts` into the options `defaults` has and the dotted paths of those it doesn't. A list is one option.
+---@param opts table
+---@param defaults table
+---@param prefix string
+---@return table known
+---@return string[] unknown
+local function split(opts, defaults, prefix)
+  local known, unknown = {}, {}
+  for key, value in pairs(opts) do
+    local default = defaults[key]
+    if default == nil then
+      table.insert(unknown, prefix .. tostring(key))
+    elseif type(default) == "table" and not vim.islist(default) and type(value) == "table" then
+      local inner_unknown
+      known[key], inner_unknown = split(value, default, prefix .. key .. ".")
+      vim.list_extend(unknown, inner_unknown)
+    else
+      known[key] = value
+    end
+  end
+  table.sort(unknown)
+  return known, unknown
+end
+
+---`opts` split against the defaults.
+---@param opts table
+---@return table known
+---@return string[] unknown
+function M._split(opts)
+  return split(opts, DEFAULTS, "")
+end
+
+---Lay `opts` over the defaults, not over the last call's. On a bad value, raise an error naming the option and keep
+---what was in force. An option it doesn't know only warns, so a stale one can't stop startup.
 ---@param opts changeset.Config?
 function M.setup(opts)
   vim.validate("opts", opts, "table", true)
-  local merged = vim.tbl_deep_extend("force", vim.deepcopy(DEFAULTS), opts or {})
+  local known, unknown = M._split(opts or {})
+  local merged = vim.tbl_deep_extend("force", vim.deepcopy(DEFAULTS), known)
   validate(merged)
-  current = merged
+  current, ignored = merged, unknown
+  if #unknown > 0 then
+    vim.notify(
+      ("Changeset: ignoring unknown options %s. See :help changeset.nvim-options"):format(table.concat(unknown, ", ")),
+      vim.log.levels.WARN
+    )
+  end
 end
 
 ---The options in force: what the last setup() asked for, not whether PR Review Mode is on. Read-only.
 ---@return changeset.Options
 function M.get()
   return current
+end
+
+---The dotted paths of the options the last setup() didn't know, and left out of those in force.
+---@return string[]
+function M.unknown()
+  return ignored
 end
 
 return M

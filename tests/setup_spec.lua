@@ -145,6 +145,48 @@ describe("changeset setup", function()
     assert.equal("other.lua", vim.fs.basename(vim.api.nvim_buf_get_name(0)))
   end)
 
+  ---Presses `key` on other.lua's row; returns the screen positions of the window it opened and of the file's window.
+  ---@param key string
+  ---@return integer[] opened
+  ---@return integer[] origin
+  local function split_from_sidebar(key)
+    local buf = open_sidebar()
+    local origin = vim.fn.bufwinid("mod.lua")
+    local lnum = vim.fn.match(lines_of(buf), [[other\.lua]]) + 1
+    vim.api.nvim_set_current_win((assert(window.win())))
+    vim.api.nvim_win_set_cursor(0, { lnum, 0 })
+
+    vim.api.nvim_feedkeys(vim.keycode(key), "x", false)
+
+    assert.equal("other.lua", vim.fs.basename(vim.api.nvim_buf_get_name(0)))
+    return vim.fn.win_screenpos(0), vim.fn.win_screenpos(origin)
+  end
+
+  it("opens a row in a vertical split on <C-v>", function()
+    local opened, origin = split_from_sidebar("<C-v>")
+
+    assert.equal(origin[1], opened[1])
+    assert.not_equal(origin[2], opened[2])
+  end)
+
+  it("opens a row in a split on <C-s>", function()
+    local opened, origin = split_from_sidebar("<C-s>")
+
+    assert.equal(origin[2], opened[2])
+    assert.not_equal(origin[1], opened[1])
+  end)
+
+  it("searches the tree on /", function()
+    local buf = open_sidebar()
+    local win = assert(window.win())
+    vim.api.nvim_set_current_win(win)
+
+    vim.api.nvim_feedkeys(vim.keycode([[/other\.lua<CR>]]), "xt", false)
+
+    assert.equal(win, vim.api.nvim_get_current_win())
+    assert.truthy(lines_of(buf)[vim.api.nvim_win_get_cursor(win)[1]]:find("other.lua", 1, true))
+  end)
+
   it("names the bound jump key in the footer", function()
     changeset.setup({ keymaps = { jump = "o" } })
     open_sidebar()

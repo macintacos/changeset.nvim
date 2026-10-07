@@ -16,6 +16,7 @@ describe("changeset.health", function()
     symbol_servers = { "lua_ls" },
     parsers = { { lang = "rust", found = true } },
     options = config.get(),
+    unknown_options = {},
   }
 
   ---Level of the first finding, in report order, whose message contains `text`.
@@ -144,6 +145,25 @@ describe("changeset.health", function()
 
   it("shows the options in force", function()
     assert.equal("info", level({}, "min_file_width"))
+  end)
+
+  it("warns about the options setup() didn't know, and leaves them out of those in force", function()
+    local notify = vim.notify
+    vim.notify = function() end
+    config.setup({ keymaps = { next = "]h" } })
+    vim.notify = notify
+    local ok, calls = pcall(checked)
+    config.setup()
+    assert.is_true(ok, tostring(calls))
+
+    local warned = vim.iter(calls):find(function(call)
+      return call[1] == "warn" and call[2]:find("keymaps.next", 1, true) ~= nil
+    end)
+    assert.not_nil(warned)
+    local dumped = vim.iter(calls):find(function(call)
+      return call[2]:find("min_file_width", 1, true) ~= nil
+    end)
+    assert.falsy(dumped[2]:find("]h", 1, true))
   end)
 
   it("probes each parser the test-symbol marker needs", function()

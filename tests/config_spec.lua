@@ -44,4 +44,50 @@ describe("changeset.config", function()
     end
     assert.equal(100, config.get().layout.min_file_width)
   end)
+
+  describe("unknown options", function()
+    local notify, notes
+
+    before_each(function()
+      notify, notes = vim.notify, {}
+      vim.notify = function(msg, level)
+        table.insert(notes, { msg = msg, level = level })
+      end
+    end)
+
+    after_each(function()
+      vim.notify = notify
+    end)
+
+    it("warns once, naming each option it doesn't know whatever its value, and applies the rest", function()
+      config.setup({ keymaps = { next = "]h", prev = { "[h" }, jump = "o" } })
+
+      assert.equal("o", config.get().keymaps.jump)
+      assert.equal(1, #notes)
+      assert.equal(vim.log.levels.WARN, notes[1].level)
+      assert.truthy(notes[1].msg:find("keymaps.next, keymaps.prev", 1, true), notes[1].msg)
+    end)
+
+    it("says nothing when it knows every option", function()
+      config.setup({ keymaps = { jump = "o" }, review_comment = { save = { "<C-j>" } } })
+
+      assert.same({}, notes)
+    end)
+  end)
+
+  describe("_split", function()
+    it("names each option it doesn't know by its dotted path, keeping the rest", function()
+      local known, unknown = config._split({ keymaps = { next = "]h", jump = "o" }, colour = "red" })
+
+      assert.same({ keymaps = { jump = "o" } }, known)
+      assert.same({ "colour", "keymaps.next" }, unknown)
+    end)
+
+    it("takes a list-valued option as one option", function()
+      local known, unknown = config._split({ review_comment = { save = { "<C-j>" } } })
+
+      assert.same({ review_comment = { save = { "<C-j>" } } }, known)
+      assert.same({}, unknown)
+    end)
+  end)
 end)

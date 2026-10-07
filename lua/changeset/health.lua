@@ -30,6 +30,7 @@ local M = {}
 ---@field symbol_servers string[]
 ---@field parsers { lang: string, found: boolean }[]
 ---@field options changeset.Options
+---@field unknown_options string[] Dotted paths of the options setup() didn't know.
 
 ---@param level changeset.health.Level
 ---@param msg string
@@ -65,6 +66,7 @@ local function probe()
       return { lang = lang, found = vim.treesitter.language.add(lang) ~= nil }
     end, attributes.languages()),
     options = config.get(),
+    unknown_options = config.unknown(),
   }
 end
 
@@ -172,6 +174,26 @@ local function parsers(facts)
   end, facts.parsers)
 end
 
+---@param facts changeset.health.Facts
+---@return changeset.health.Finding[]
+local function configuration(facts)
+  local findings = {}
+  if #facts.unknown_options > 0 then
+    local names = vim.tbl_map(function(path)
+      return "`" .. path .. "`"
+    end, facts.unknown_options)
+    table.insert(
+      findings,
+      finding(
+        "warn",
+        ("unknown options, ignored: %s. See `:help changeset.nvim-options`"):format(table.concat(names, ", "))
+      )
+    )
+  end
+  table.insert(findings, finding("info", vim.inspect(facts.options)))
+  return findings
+end
+
 ---The findings `check` emits for `facts`, by section. Pure; exposed for the spec.
 ---@param facts changeset.health.Facts
 ---@return changeset.health.Section[]
@@ -190,7 +212,7 @@ function M._report(facts)
         symbols(facts),
       }, parsers(facts)),
     },
-    { name = "Configuration", findings = { finding("info", vim.inspect(facts.options)) } },
+    { name = "Configuration", findings = configuration(facts) },
   }
 end
 
