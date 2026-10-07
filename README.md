@@ -291,7 +291,8 @@ sidebar, a PR or `gh`.
 
 - `:Changeset comment new` opens a markdown window under the cursor's line, moving the
   lines below down, in any file of the repository. `:'<,'>Changeset comment new` opens it under the
-  selection and comments on the selected lines. The keys in `review_comment.save`,
+  selection and comments on the selected lines. Its title leads with the comment bubble,
+  and its bottom border shows the keys that end it. The keys in `review_comment.save`,
   `<C-CR>` or `<C-s>` by default, or `<C-g>cc`, save it and close the window. Any other
   close keeps its text as a draft: `q`, `<S-Esc>`, `:q`, focus leaving the
   window for any other, or quitting Neovim with it open. Empty text keeps nothing. It opens a review comment already there to edit instead: on one line, the
@@ -556,7 +557,8 @@ The sidebar derives each group's default from your colorscheme, and derives it a
 | `ChangesetReviewComment` | A review comment's bubble, its circle and the line numbers it covers in its file | `DiagnosticOk`'s colour, bold |
 | `ChangesetReviewCommentDraft` | A draft review comment's bubble, its circle and the line numbers it covers | `DiagnosticOk`'s colour mixed halfway to `Comment`'s |
 | `ChangesetReviewCommentBody` | A review comment's body after its circle | links to `ChangesetMeta` |
-| `ChangesetTitleIcon` | The file's glyph heading a whole file's review comment window | the file icon's colour on `FloatTitle`'s background |
+| `ChangesetTitleIcon` | The glyph heading a review comment window: the bubble, or a whole file's icon | the glyph's colour on `FloatTitle`'s background |
+| `ChangesetKeycap` | A key the review comment window's footer names | links to `ChangesetButton` |
 | `ChangesetBlockBorder` | A review comment block's border | links to `FloatBorder` |
 | `ChangesetBlockTitle` | A review comment block's title | `FloatTitle`'s colour on `NormalFloat`'s background, bold |
 | `ChangesetBlockBody` | A review comment block's text | links to `NormalFloat` |
@@ -601,8 +603,8 @@ vim.api.nvim_create_autocmd("ColorScheme", {
 })
 ```
 
-`ChangesetPreviewIcon` and `ChangesetTitleIcon` are recoloured for each file, so defining
-either paints every file's glyph there one colour. The status rail beside each file uses gitsigns' `GitSignsAdd`,
+`ChangesetPreviewIcon` and `ChangesetTitleIcon` are recoloured for each file and comment,
+so defining either paints every glyph there one colour. The status rail beside each file uses gitsigns' `GitSignsAdd`,
 `GitSignsChange`, `GitSignsDelete` and `GitSignsUntracked`.
 
 ## Health

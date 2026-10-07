@@ -401,7 +401,8 @@ None of this needs the sidebar, a PR or `gh`.
 
 - `:Changeset comment new` opens a markdown window under the cursor’s line, moving the
     lines below down, in any file of the repository. `:'<,'>Changeset comment new` opens it under the
-    selection and comments on the selected lines. The keys in `review_comment.save`,
+    selection and comments on the selected lines. Its title leads with the comment bubble,
+    and its bottom border shows the keys that end it. The keys in `review_comment.save`,
     `<C-CR>` or `<C-s>` by default, or `<C-g>cc`, save it and close the window. Any other
     close keeps its text as a draft: `q`, `<S-Esc>`, `:q`, focus leaving the
     window for any other, or quitting Neovim with it open. Empty text keeps nothing. It opens a review comment already there to edit instead: on one line, the
@@ -746,9 +747,12 @@ it again on `:colorscheme`.
   ChangesetReviewCommentBody    A review comment’s body     links to ChangesetMeta
                                 after its circle
 
-  ChangesetTitleIcon            The file’s glyph heading a  the file icon’s colour on
-                                whole file’s review comment FloatTitle’s background
-                                window
+  ChangesetTitleIcon            The glyph heading a review  the glyph’s colour on
+                                comment window: the bubble, FloatTitle’s background
+                                or a whole file’s icon
+
+  ChangesetKeycap               A key the review comment    links to ChangesetButton
+                                window’s footer names
 
   ChangesetBlockBorder          A review comment block’s    links to FloatBorder
                                 border
@@ -858,8 +862,8 @@ changes, set it from a `ColorScheme` autocmd:
     })
 <
 
-`ChangesetPreviewIcon` and `ChangesetTitleIcon` are recoloured for each file,
-so defining either paints every file’s glyph there one colour. The status
+`ChangesetPreviewIcon` and `ChangesetTitleIcon` are recoloured for each file
+and comment, so defining either paints every glyph there one colour. The status
 rail beside each file uses gitsigns’ `GitSignsAdd`, `GitSignsChange`,
 `GitSignsDelete` and `GitSignsUntracked`.
 

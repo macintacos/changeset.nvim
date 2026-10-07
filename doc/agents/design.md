@@ -317,14 +317,14 @@ row apart on either side, all readable while the review comment is drafted:
 ```text
 local function greet(name)
 
- ╭ Review comment · line 3 ───────────────────────────────────────────────╮
+ ╭ 󰍩 Review comment · line 3 ─────────────────────────────────────────────╮
  │**bold** and a list:                                                    │
  │- item                                                                  │
  │                                                                        │
  │                                                                        │
  │                                                                        │
  │                                                                        │
- ╰───────────────────────────────────────────────── <C-CR> save · q draft ╯
+ ╰────────────────────────────────────────────────  <C-CR>  save   q  draft ╯
 
   return "hello " .. name
 end
@@ -350,12 +350,14 @@ wraps at word boundaries. `style = "minimal"` drops the number column and sign c
 which describe a file this buffer is not. The filetype is set once the float is open, so a
 user's markdown `FileType` settings, such as `spell`, reach it and win over the style.
 
-The border does the labelling, as the kind menu's does. The title names the line or lines.
+The border does the labelling, as the kind menu's does. The title names the line or lines,
+led by the bubble that marks them in the sign column, `󰍩`, or a draft's `󰍪`, in its colour.
 The footer's right end names the first `review_comment.save` key in Neovim's own notation
-and the close that keeps a draft (`<C-CR> save · q draft`), since every review comment ends
-with one of those two, and they are the ones nobody should have to look up. A window too
-narrow for it drops it: Neovim cuts a footer from its left, leaving `<CR> save`, a key that
-doesn't save. The other keys stay off the border: `?` lists them all. However a
+and the close that keeps a draft (`<C-CR> save  q draft`), since every review comment ends
+with one of those two, and they are the ones nobody should have to look up. Each key is a
+keycap in `ChangesetKeycap`, which links to the dialogs' button, so it reads as something to
+press, not a word of the label. A window too narrow for it drops it: Neovim cuts a footer
+from its left, leaving `<CR> save`, a key that doesn't save. The other keys stay off the border: `?` lists them all. However a
 review comment's text goes, except the close a taken save makes, it is kept as a draft:
 `q` in normal mode, focus leaving the float, `<S-Esc>` in either mode where the terminal sends it, `:q`,
 `<C-w>c`, quitting Neovim. One `BufUnload` hook on the window's buffer catches them all:
@@ -375,10 +377,10 @@ closing. Inside a file it opens under the first line: `comment new` with no rang
 means the whole file, since a file is read from its top, while a selection of that line
 still means the line, so line 1 keeps its own comments. The title names its reach as a
 line's names its lines, `Review comment · whole file`, and leads with the file's icon from
-the icon plugin, the glyph its sidebar row wears, so the two kinds of window read apart at
-a glance. The glyph's group is recoloured onto `FloatTitle`'s background as the preview
-band's glyph is onto the band's, or an icon plugin's foreground-only group would punch a
-hole in the title.
+the icon plugin, the glyph its sidebar row wears, where a line's leads with its bubble, so
+the two kinds of window read apart at a glance. Either glyph's group is recoloured onto
+`FloatTitle`'s background as the preview band's glyph is onto the band's, or a
+foreground-only group would punch a hole in the title.
 
 ### Dialogs ask in floats of changeset's own
 
