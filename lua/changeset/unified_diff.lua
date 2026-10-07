@@ -2,9 +2,24 @@
 ---It draws the lines gone since gitsigns' base inline, as `:Gitsigns diffthis unified=true` does. Closing one in any
 ---window turns it off everywhere until Neovim exits.
 
+local render = require("changeset.render")
+
 local M = {}
 
 local GROUP = "changeset.unified_diff"
+
+-- The groups gitsigns draws the view with, each drawn as changeset's instead. Many themes give gitsigns' a flat
+-- foreground, which hides the syntax colouring under it; changeset's are backgrounds alone.
+local DIFF_HL = {
+  GitSignsAddPreview = render.DIFF_ADD_HL,
+  GitSignsAddInline = render.DIFF_ADD_TEXT_HL,
+  -- A word changed on an added line is new text, as GitHub colours it.
+  GitSignsChangeInline = render.DIFF_ADD_TEXT_HL,
+  GitSignsDeleteInline = render.DIFF_DELETE_TEXT_HL,
+  GitSignsDeleteVirtLn = render.DIFF_DELETE_HL,
+  GitSignsDeleteVirtLnInLine = render.DIFF_DELETE_TEXT_HL,
+  GitSignsVirtLnum = render.DIFF_DELETE_HL,
+}
 
 ---@type "waiting"|"on"|"off"
 local state = "waiting"
@@ -39,6 +54,22 @@ local function turn_off()
   vim.api.nvim_clear_autocmds({ group = GROUP })
 end
 
+---Draw gitsigns' diff groups in `win` as changeset's, beside the window's own overrides. Sorted, so painting a window
+---again leaves 'winhighlight' as it was.
+---@param win integer
+local function paint(win)
+  local kept = vim.tbl_filter(function(pair)
+    return DIFF_HL[pair:match("^[^:]*")] == nil
+  end, vim.split(vim.wo[win].winhighlight, ",", { trimempty = true }))
+  for from, to in vim.spairs(DIFF_HL) do
+    kept[#kept + 1] = from .. ":" .. to
+  end
+  local value = table.concat(kept, ",")
+  if vim.wo[win].winhighlight ~= value then
+    vim.wo[win].winhighlight = value
+  end
+end
+
 ---Show `buf`'s unified diff in `win`, replacing any view there, against the base `git_obj` names.
 ---
 ---What `:Gitsigns diffthis unified=true` runs, with the window held: it takes the current window only once the base's
@@ -60,6 +91,7 @@ local function open(win, buf, git_obj, text)
     if state == "on" and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
       -- Before `show`, which registers the view at once but then waits on its diff.
       opened[win] = { buf = buf, base = base, text = text }
+      paint(win)
       require("gitsigns.unified").show(win, base, created, loaded)
     elseif created then
       vim.api.nvim_buf_delete(base, { force = true })

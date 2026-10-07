@@ -957,6 +957,21 @@ publishes a last update mid-unload, with its status already cleared and no buffe
 to change. So a vanished view is never reopened from there, and a buffer without a status
 never gets one.
 
+The view reads as GitHub's diff does: a tinted background behind each added and deleted
+line, a stronger one behind the words that changed, and the text in its own syntax colours.
+gitsigns draws the view with its preview groups, which many themes give a flat foreground,
+catppuccin's transparent mode among them, painting every token on a line one red or green.
+Each window changeset opens a view in maps those groups to changeset's background-only
+tints through 'winhighlight', beside the window's own entries, so gitsigns' groups keep the
+theme's colours everywhere else. The mapping stays with the window after its view closes,
+where it only touches gitsigns' inline hunk previews.
+
+How a hunk's lines pair up is gitsigns' `diff_opts`, left to the user. Neovim's default
+'diffopt', which gitsigns follows, carries `linematch:40`, which interleaves a hunk's
+removed and added lines by similarity rather than listing the removed above the added as
+GitHub does. Changing it for the view alone would mean changing it for gitsigns' signs and
+hunks too.
+
 Review comments draw their virtual lines at column 0, which Neovim draws ahead of gitsigns'
 deleted lines under the same line. So the review comment window's room and a line's blocks
 stay directly under their line, the deleted lines after them. A parked block's rows are

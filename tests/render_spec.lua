@@ -1038,6 +1038,10 @@ describe("changeset.render", function()
       "DiagnosticOk",
       "NormalFloat",
       "DiagnosticError",
+      "GitSignsAdd",
+      "GitSignsDelete",
+      "Added",
+      "Removed",
     }
     local saved
 
@@ -1242,6 +1246,48 @@ describe("changeset.render", function()
       local r, g, b = unpack(channels(group(render.SELECTED_HL).bg))
       assert.is_true(r > 0x10 and r < 0xf0)
       assert.same({ 0x10, 0x10 }, { g, b })
+    end)
+
+    local GREEN = 0x10f010
+
+    it("tints the unified diff's added lines toward the theme's added colour, a changed word further", function()
+      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = BACKGROUND })
+      vim.api.nvim_set_hl(0, "GitSignsAdd", { fg = GREEN })
+
+      render.define_highlights()
+
+      local line, word = group(render.DIFF_ADD_HL), group(render.DIFF_ADD_TEXT_HL)
+      local l, w = channels(line.bg), channels(word.bg)
+      assert.is_true(l[2] > 0x10 and l[2] < w[2] and w[2] < 0xf0)
+      assert.same({ 0x10, 0x10, 0x10, 0x10 }, { l[1], l[3], w[1], w[3] })
+      assert.same({}, { line.fg, word.fg })
+    end)
+
+    it("tints the unified diff's deleted lines toward the theme's deleted colour, a changed word further", function()
+      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = BACKGROUND })
+      vim.api.nvim_set_hl(0, "GitSignsDelete", { fg = RED })
+
+      render.define_highlights()
+
+      local line, word = group(render.DIFF_DELETE_HL), group(render.DIFF_DELETE_TEXT_HL)
+      local l, w = channels(line.bg), channels(word.bg)
+      assert.is_true(l[1] > 0x10 and l[1] < w[1] and w[1] < 0xf0)
+      assert.same({ 0x10, 0x10, 0x10, 0x10 }, { l[2], l[3], w[2], w[3] })
+      assert.same({}, { line.fg, word.fg })
+    end)
+
+    it("tints the unified diff from Added and Removed before gitsigns has coloured its groups", function()
+      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = BACKGROUND })
+      vim.api.nvim_set_hl(0, "GitSignsAdd", {})
+      vim.api.nvim_set_hl(0, "GitSignsDelete", {})
+      vim.api.nvim_set_hl(0, "Added", { fg = GREEN })
+      vim.api.nvim_set_hl(0, "Removed", { fg = RED })
+
+      render.define_highlights()
+
+      local added, deleted = channels(group(render.DIFF_ADD_HL).bg), channels(group(render.DIFF_DELETE_HL).bg)
+      assert.is_true(added[2] > 0x10 and deleted[1] > 0x10)
+      assert.same({ 0x10, 0x10, 0x10, 0x10 }, { added[1], added[3], deleted[2], deleted[3] })
     end)
 
     it("draws every state glyph in the accent", function()

@@ -2,6 +2,7 @@ local Fixture = require("support.git")
 local Paths = require("changeset.paths")
 local blocks = require("changeset.review_comment_blocks")
 local comment_store = require("changeset.comment_store")
+local render = require("changeset.render")
 local review_comment_window = require("changeset.review_comment_window")
 local unified_diff = require("changeset.unified_diff")
 local window = require("changeset.window")
@@ -170,6 +171,61 @@ describe("changeset.unified_diff", function()
     end, 20))
 
     assert.is_false(shows(vim.api.nvim_get_current_win()))
+  end)
+
+  -- Line 2 is gone from a.txt, under line 1, and line 5 became "changed 5".
+  describe("in colour", function()
+    before_each(function()
+      vim.o.termguicolors = true
+      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = 0x101010 })
+      -- As catppuccin's transparent theme paints them: one flat colour over every token on the line.
+      vim.api.nvim_set_hl(0, "GitSignsAddPreview", { fg = 0x00ff00 })
+      vim.api.nvim_set_hl(0, "GitSignsDeleteVirtLn", { fg = 0xff0000 })
+      render.define_highlights()
+    end)
+
+    after_each(function()
+      vim.wo.winhighlight = ""
+    end)
+
+    ---The colours drawn at the last character of the first screen row showing `text`.
+    ---@param text string
+    ---@return { foreground: integer?, background: integer? }
+    local function last_cell(text)
+      local found
+      assert.is_true(vim.wait(5000, function()
+        found = screen_rows():enumerate():find(function(_, row)
+          return row:find(text, 1, true) ~= nil
+        end)
+        return found ~= nil
+      end, 20))
+      local row = screen_rows():totable()[found]
+      local col = vim.fn.strchars(row:sub(1, row:find(text, 1, true) + #text - 2))
+      return vim.api.nvim__inspect_cell(1, found - 1, col)[2]
+    end
+
+    it("draws added and deleted lines on changeset's tints, each token in its own colour", function()
+      vim.cmd.edit("a.txt")
+
+      local deleted, added = last_cell("line 2"), last_cell("changed 5")
+      assert.same(
+        { vim.api.nvim_get_hl(0, { name = render.DIFF_DELETE_HL }).bg, 0xcccccc },
+        { deleted.background, deleted.foreground or 0xcccccc }
+      )
+      assert.same(
+        { vim.api.nvim_get_hl(0, { name = render.DIFF_ADD_HL }).bg, 0xcccccc },
+        { added.background, added.foreground or 0xcccccc }
+      )
+    end)
+
+    it("keeps the window's own highlight overrides beside them", function()
+      vim.wo.winhighlight = "Search:IncSearch"
+
+      vim.cmd.edit("a.txt")
+
+      assert.is_true(shows(vim.api.nvim_get_current_win()))
+      assert.matches("Search:IncSearch", vim.wo.winhighlight)
+    end)
   end)
 
   -- Line 2 is gone from a.txt, so gitsigns draws it as a virtual line under line 1.

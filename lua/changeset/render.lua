@@ -214,6 +214,22 @@ M.BUTTON_KEY_HL = "ChangesetButtonKey"
 ---@type string
 M.DIALOG_SELECTED_HL = "ChangesetDialogSelected"
 
+---Background of a line the unified diff shows added. Created by `define_highlights`.
+---@type string
+M.DIFF_ADD_HL = "ChangesetDiffAdd"
+
+---Background of the words a line the unified diff shows added changed. Created by `define_highlights`.
+---@type string
+M.DIFF_ADD_TEXT_HL = "ChangesetDiffAddText"
+
+---Background of a line the unified diff shows deleted. Created by `define_highlights`.
+---@type string
+M.DIFF_DELETE_HL = "ChangesetDiffDelete"
+
+---Background of the words a line the unified diff shows deleted changed. Created by `define_highlights`.
+---@type string
+M.DIFF_DELETE_TEXT_HL = "ChangesetDiffDeleteText"
+
 ---Group for the filetype glyph on the preview band. Recoloured by `band_icon` for each
 ---file; defining it yourself draws every file's glyph in one colour.
 ---@type string
@@ -260,6 +276,9 @@ local SELECTED_TINT, HERE_TINT, PICKED_TINT = 0.2, 0.12, 0.06
 
 -- How far a dialog's button moves from the float's background toward its text, when it can't take the editor's.
 local BUTTON_SHADE = 0.15
+
+-- How far a unified diff line's background moves toward its added or deleted colour, and a changed word's.
+local DIFF_TINT, DIFF_TEXT_TINT = 0.15, 0.35
 
 -- Stands in at the tail of the preview band when the row names no destination.
 local HINT = "%s to open"
@@ -966,6 +985,16 @@ function M.define_highlights()
   set_default(M.SELECTED_ICON_HL, { fg = accent })
   set_default(M.HERE_ICON_HL, { fg = accent })
   set_default(M.PICKED_ICON_HL, { fg = accent })
+  -- Backgrounds alone, as GitHub draws a diff, so syntax keeps colouring the text. Added and Removed stand in until
+  -- gitsigns, which derives its groups from them, has run.
+  local added = vim.api.nvim_get_hl(0, { name = "GitSignsAdd", link = false }).fg
+    or vim.api.nvim_get_hl(0, { name = "Added", link = false }).fg
+  local deleted = vim.api.nvim_get_hl(0, { name = "GitSignsDelete", link = false }).fg
+    or vim.api.nvim_get_hl(0, { name = "Removed", link = false }).fg
+  set_default(M.DIFF_ADD_HL, { bg = added and mix(base, added, DIFF_TINT) })
+  set_default(M.DIFF_ADD_TEXT_HL, { bg = added and mix(base, added, DIFF_TEXT_TINT) })
+  set_default(M.DIFF_DELETE_HL, { bg = deleted and mix(base, deleted, DIFF_TINT) })
+  set_default(M.DIFF_DELETE_TEXT_HL, { bg = deleted and mix(base, deleted, DIFF_TEXT_TINT) })
   -- A dialog sits on NormalFloat, which no theme checked paints like Normal, so its tints start from the float.
   local float = vim.api.nvim_get_hl(0, { name = "NormalFloat", link = false })
   local float_bg, float_fg = float.bg or base, float.fg or normal.fg or 0x808080

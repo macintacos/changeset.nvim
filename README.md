@@ -255,6 +255,23 @@ against the same base as gitsigns' gutter, the branch's fork point under
 [PR Review Mode](#pr-review-mode) and the index otherwise, follows that base as it moves,
 and stays on after the sidebar closes. It needs gitsigns, and does nothing without it.
 
+It draws in changeset's own [highlight groups](#highlight-groups), not gitsigns' preview
+groups, which many themes paint a flat red or green. Each added or deleted line gets a
+background tinted from your theme's diff colours, with a stronger tint behind the words
+that changed, and its text keeps its syntax colours.
+
+gitsigns decides how a hunk's lines pair up. Neovim's default `'diffopt'`, which gitsigns
+follows, includes `linematch:40`, which interleaves a hunk's removed and added lines by
+similarity. To list each hunk's removed lines above its added ones, as GitHub does, turn it
+off in gitsigns' setup. This changes gitsigns' signs and hunks too:
+
+```lua
+require("gitsigns").setup({ diff_opts = { linematch = 0 } })
+```
+
+`diff_opts.algorithm` picks the algorithm itself: `"myers"`, git's default, `"minimal"`,
+`"patience"` or `"histogram"`.
+
 Closing it in any window, with `:Gitsigns diffthis unified=true`, turns it off for every
 file you open afterwards, until Neovim exits. Files already showing it keep it until you
 close it there too. The next session turns it on again the first time the sidebar opens.
@@ -542,6 +559,10 @@ The sidebar derives each group's default from your colorscheme, and derives it a
 | `ChangesetPreviewLabel` | The badge at the head of that band | `DiagnosticWarn`'s colour, reversed, bold |
 | `ChangesetPreviewHint` | The hint at the tail of that band | `Comment`'s colour on the band, italic |
 | `ChangesetPreviewIcon` | The file's glyph on that band | the file icon's colour on the band |
+| `ChangesetDiffAdd` | A line the [unified diff](#unified-diff) shows added | `Normal`'s background tinted toward `GitSignsAdd` |
+| `ChangesetDiffAddText` | The words an added line changed | a stronger `GitSignsAdd` tint |
+| `ChangesetDiffDelete` | A line the unified diff shows deleted, and its line number | `Normal`'s background tinted toward `GitSignsDelete` |
+| `ChangesetDiffDeleteText` | The words a deleted line changed | a stronger `GitSignsDelete` tint |
 
 A colorscheme's definition of a group wins. So does your own `nvim_set_hl`, until the
 next `:colorscheme` clears it. To keep an override across colorscheme changes, set it from
