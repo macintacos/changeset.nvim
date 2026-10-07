@@ -148,10 +148,7 @@ describe("changeset.health", function()
   end)
 
   it("warns about the options setup() didn't know, and leaves them out of those in force", function()
-    local notify = vim.notify
-    vim.notify = function() end
     config.setup({ keymaps = { next = "]h" } })
-    vim.notify = notify
     local ok, calls = pcall(checked)
     config.setup()
     assert.is_true(ok, tostring(calls))

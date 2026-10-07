@@ -12,7 +12,7 @@ local M = {}
 ---@field jump? string|false Go to this change. Default `<CR>`.
 ---@field jump_close? string|false Go to this change and close the tree. Default `<S-CR>`.
 ---@field jump_vsplit? string|false Go to this change in a vertical split. Default `<C-v>`.
----@field jump_split? string|false Go to this change in a split. Default `<C-s>`.
+---@field jump_split? string|false Go to this change in a split. Default `<C-x>`.
 ---@field jump_tab? string|false Go to this change in a new tab. Default `<C-t>`.
 ---@field close? string|false Close the tree. Default `q`.
 ---@field expand? string|false Expand. Default `l`.
@@ -52,7 +52,7 @@ local DEFAULTS = {
     jump = "<CR>",
     jump_close = "<S-CR>",
     jump_vsplit = "<C-v>",
-    jump_split = "<C-s>",
+    jump_split = "<C-x>",
     jump_tab = "<C-t>",
     close = "q",
     expand = "l",
@@ -144,10 +144,13 @@ function M.setup(opts)
   validate(merged)
   current, ignored = merged, unknown
   if #unknown > 0 then
-    vim.notify(
-      ("Changeset: ignoring unknown options %s. See :help changeset.nvim-options"):format(table.concat(unknown, ", ")),
-      vim.log.levels.WARN
-    )
+    -- Scheduled: setup() runs during startup, before a notifier set up later, such as mini.notify, replaces vim.notify.
+    vim.schedule(function()
+      vim.notify(
+        ("Changeset: ignoring unknown options %s. See :help changeset.nvim-options"):format(table.concat(unknown, ", ")),
+        vim.log.levels.WARN
+      )
+    end)
   end
 end
 

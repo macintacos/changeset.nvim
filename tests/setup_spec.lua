@@ -169,8 +169,8 @@ describe("changeset setup", function()
     assert.not_equal(origin[2], opened[2])
   end)
 
-  it("opens a row in a split on <C-s>", function()
-    local opened, origin = split_from_sidebar("<C-s>")
+  it("opens a row in a split on <C-x>", function()
+    local opened, origin = split_from_sidebar("<C-x>")
 
     assert.equal(origin[2], opened[2])
     assert.not_equal(origin[1], opened[1])

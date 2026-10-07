@@ -48,28 +48,52 @@ describe("changeset.config", function()
   describe("unknown options", function()
     local notify, notes
 
-    before_each(function()
-      notify, notes = vim.notify, {}
+    ---Stand in for a notifier, such as mini.notify, that replaces `vim.notify` once it is set up.
+    local function set_up_notifier()
       vim.notify = function(msg, level)
         table.insert(notes, { msg = msg, level = level })
       end
+    end
+
+    before_each(function()
+      notify, notes = vim.notify, {}
     end)
 
     after_each(function()
+      -- Lets a warning still scheduled land here, not in the next test.
+      vim.wait(20)
       vim.notify = notify
     end)
 
-    it("warns once, naming each option it doesn't know whatever its value, and applies the rest", function()
-      config.setup({ keymaps = { next = "]h", prev = { "[h" }, jump = "o" } })
+    it(
+      "warns once through a notifier set up later in startup, naming each option it doesn't know whatever its value, and applies the rest",
+      function()
+        config.setup({ keymaps = { next = "]h", prev = { "[h" }, jump = "o" } })
+        set_up_notifier()
 
-      assert.equal("o", config.get().keymaps.jump)
-      assert.equal(1, #notes)
-      assert.equal(vim.log.levels.WARN, notes[1].level)
-      assert.truthy(notes[1].msg:find("keymaps.next, keymaps.prev", 1, true), notes[1].msg)
+        assert.equal("o", config.get().keymaps.jump)
+        vim.wait(1000, function()
+          return #notes > 0
+        end)
+        vim.wait(20)
+        assert.equal(1, #notes)
+        assert.equal(vim.log.levels.WARN, notes[1].level)
+        assert.truthy(notes[1].msg:find("keymaps.next, keymaps.prev", 1, true), notes[1].msg)
+      end
+    )
+
+    it("forgets the unknown options of an earlier setup()", function()
+      config.setup({ keymaps = { next = "]h" } })
+
+      config.setup({ keymaps = { jump = "o" } })
+
+      assert.same({}, config.unknown())
     end)
 
     it("says nothing when it knows every option", function()
+      set_up_notifier()
       config.setup({ keymaps = { jump = "o" }, review_comment = { save = { "<C-j>" } } })
+      vim.wait(20)
 
       assert.same({}, notes)
     end)
