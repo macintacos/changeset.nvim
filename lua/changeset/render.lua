@@ -138,6 +138,10 @@ M.BLOCK_BODY_HL = "ChangesetBlockBody"
 ---@type string
 M.BLOCK_PARKED_HL = "ChangesetBlockParked"
 
+---Group for the title of the block the cursor is parked on. Created by `define_highlights`.
+---@type string
+M.BLOCK_PARKED_TITLE_HL = "ChangesetBlockParkedTitle"
+
 ---Group for the keys a parked block names in its bottom border. Created by `define_highlights`.
 ---@type string
 M.BLOCK_HINT_HL = "ChangesetBlockHint"
@@ -975,9 +979,14 @@ function M.define_highlights()
   set_default(M.DIALOG_SELECTED_HL, { bg = mix(float_bg, accent, SELECTED_TINT) })
   -- A block is the review comment window collapsed, so it wears the float's colours; parked, the dialog's focus.
   set_default(M.BLOCK_BORDER_HL, { link = "FloatBorder" })
-  set_default(M.BLOCK_TITLE_HL, { link = "FloatTitle" })
+  -- Virtual lines sit on Normal, not NormalFloat, so the title takes the float's background or it shows as a hole.
+  local float_title = vim.api.nvim_get_hl(0, { name = "FloatTitle", link = false })
+  set_default(M.BLOCK_TITLE_HL, { fg = float_title.fg, bg = float.bg, bold = true })
   set_default(M.BLOCK_BODY_HL, { link = "NormalFloat" })
-  set_default(M.BLOCK_PARKED_HL, { fg = accent, bg = float.bg, bold = true })
+  -- Parked takes the comment marks' green, which no border uses, and a reversed title: it must read on a theme whose
+  -- floats have no background to tint.
+  set_default(M.BLOCK_PARKED_HL, { fg = ok, bg = float.bg, bold = true })
+  set_default(M.BLOCK_PARKED_TITLE_HL, { fg = ok, reverse = true, bold = true })
   set_default(M.BLOCK_HINT_HL, { fg = comment.fg, bg = float.bg, italic = true })
   -- Fully blended is the TUI's cue to hide the cursor outright. `nocombine` is only
   -- there to keep the group: one holding nothing but `blend` is stored as cleared.

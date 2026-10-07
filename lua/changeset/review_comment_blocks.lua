@@ -10,37 +10,52 @@ local ns = vim.api.nvim_create_namespace("changeset.review_comment_blocks")
 
 -- The review comment window's measure, so a block reads as that window collapsed.
 local MAX_WIDTH = 72
-local MIN_WIDTH = 20
 local HINT = " <CR> edit · d delete "
+local ELLIPSIS = "…"
 local SOLID = { h = "─", v = "│" }
 local DASHED = { h = "┄", v = "┆" }
 
----@class changeset.Block
----@field id integer The extmark drawing it.
----@field comment changeset.ReviewComment
+---@class changeset.BlockMove
+---@field key string
+---@field down boolean
+---@field plug string Holds what `key` did before, which the map runs when it doesn't park.
+
+---@type changeset.BlockMove[]
+local MOVES = {
+  { key = "j", down = true, plug = "<Plug>(changeset-block-j)" },
+  { key = "<Down>", down = true, plug = "<Plug>(changeset-block-down)" },
+  { key = "gj", down = true, plug = "<Plug>(changeset-block-gj)" },
+  { key = "k", down = false, plug = "<Plug>(changeset-block-k)" },
+  { key = "<Up>", down = false, plug = "<Plug>(changeset-block-up)" },
+  { key = "gk", down = false, plug = "<Plug>(changeset-block-gk)" },
+}
+
+---@class changeset.BufferBlocks
+---@field anchors table<integer, changeset.ReviewComment[]> Each extmark's comments, in store order, top first.
+---@field widest integer The measure they were drawn at.
 
 ---@class changeset.ParkedBlock
 ---@field win integer
 ---@field buf integer
----@field index integer Into the buffer's blocks.
----@field at integer The line the cursor waits on: the block's own line, or the one under it.
+---@field id integer The extmark holding its stack.
+---@field index integer Its place in the stack, top first.
+---@field pos integer[] Where the cursor waits, its column kept for stepping off.
 ---@field cursorline boolean The window's 'cursorline' before parking.
 ---@field maps table<string, table> The buffer's own maps the block's keys stood in for.
 
----Whether blocks show; nil until first asked, then `review_comment.blocks` decides.
+---Whether blocks show, once toggled; until then `review_comment.blocks` decides.
 ---@type boolean?
-local shown
+local toggled
 
----Each buffer's blocks, in the order a cursor meets them.
----@type table<integer, changeset.Block[]>
+---@type table<integer, changeset.BufferBlocks>
 local drawn = {}
+
+---Each buffer with the movement maps, and its own maps they stood in for.
+---@type table<integer, table<string, table>>
+local moves = {}
 
 ---@type changeset.ParkedBlock?
 local parked
-
----Each window's buffer and cursor as the last `CursorMoved` left them.
----@type table<integer, { buf: integer, pos: integer[] }>
-local last = {}
 
 ---@param text string
 ---@return integer
@@ -51,16 +66,16 @@ end
 ---Whether review comments show as blocks.
 ---@return boolean
 function M.shown()
-  if shown == nil then
-    shown = config.get().review_comment.blocks
+  if toggled == nil then
+    return config.get().review_comment.blocks
   end
-  return shown == true
+  return toggled
 end
 
 ---Shows review comments as blocks in every buffer, or as their marks alone.
 ---@param on boolean
 function M.show(on)
-  shown = on
+  toggled = on
   require("changeset.review_comments").redraw()
 end
 
@@ -69,24 +84,30 @@ function M.toggle()
   M.show(not M.shown())
 end
 
----"line 4", or "lines 3-5" for a range.
----@param comment changeset.ReviewComment
----@return string
-local function lines_label(comment)
-  local first, last_line = comment.start_line or comment.line, comment.line
-  return first < last_line and ("lines %d-%d"):format(first, last_line) or ("line %d"):format(last_line)
-end
-
--- ponytail: one width per buffer, from its narrowest window; a block in a wider window stays that narrow.
 ---The widest box inside `buf`'s narrowest window, borders excluded.
 ---@param buf integer
 ---@return integer
 local function measure(buf)
-  local room = MAX_WIDTH
+  local room = MAX_WIDTH + 2
   for _, win in ipairs(vim.fn.win_findbuf(buf)) do
-    room = math.min(room, vim.api.nvim_win_get_width(win) - vim.fn.getwininfo(win)[1].textoff - 2)
+    room = math.min(room, vim.api.nvim_win_get_width(win) - vim.fn.getwininfo(win)[1].textoff)
   end
-  return math.max(room, MIN_WIDTH)
+  return math.max(room - 2, 3)
+end
+
+---`text` cut to at most `room` cells, ending in an ellipsis when cut.
+---@param text string
+---@param room integer
+---@return string
+local function fit(text, room)
+  if cells(text) <= room then
+    return text
+  end
+  local n = vim.fn.strchars(text)
+  while n > 0 and cells(vim.fn.strcharpart(text, 0, n)) > room - cells(ELLIPSIS) do
+    n = n - 1
+  end
+  return vim.fn.strcharpart(text, 0, n) .. ELLIPSIS
 end
 
 ---`comment`'s box as virtual lines, at most `widest` cells inside its border.
@@ -98,23 +119,26 @@ local function box(comment, widest, is_parked)
   -- TODO: read `draft` off changeset.ReviewComment once the drafts branch declares it there.
   local edge = (comment --[[@as { draft: boolean? }]]).draft and DASHED or SOLID
   local border = is_parked and render.BLOCK_PARKED_HL or render.BLOCK_BORDER_HL
-  local title = " Review comment · " .. lines_label(comment) .. " "
-  local text = dialog.wrap(vim.trim(comment.body:gsub("\r\n", "\n")), widest - 2)
+  local label = require("changeset.review_comments").lines_label(comment.start_line or comment.line, comment.line)
+  local title = " Review comment · " .. label .. " "
+  local text = dialog.wrap(vim.trim((comment.body:gsub("\r\n", "\n"))), math.max(widest - 2, 1))
   local inner = cells(title) + 1
   for _, line in ipairs(text) do
     inner = math.max(inner, cells(line) + 2)
   end
   inner = math.min(inner, widest)
+  -- At least one cell of border after the title, so a cut one still reads as sitting in the border.
+  title = fit(title, inner - 1)
   local lines = {
     {
       { "╭", border },
-      { title, is_parked and render.BLOCK_PARKED_HL or render.BLOCK_TITLE_HL },
-      { edge.h:rep(math.max(inner - cells(title), 0)), border },
+      { title, is_parked and render.BLOCK_PARKED_TITLE_HL or render.BLOCK_TITLE_HL },
+      { edge.h:rep(inner - cells(title)), border },
       { "╮", border },
     },
   }
   for _, line in ipairs(text) do
-    local padded = " " .. line .. (" "):rep(inner - cells(line) - 1)
+    local padded = " " .. line .. (" "):rep(math.max(inner - cells(line) - 1, 0))
     lines[#lines + 1] = { { edge.v, border }, { padded, render.BLOCK_BODY_HL }, { edge.v, border } }
   end
   local bottom = { { "╰", border } }
@@ -128,25 +152,58 @@ local function box(comment, widest, is_parked)
   return lines
 end
 
+---The line extmark `id` of `buf` sits on now, 1-based: edits move it off its comments' stored line.
 ---@param buf integer
----@param index integer
----@param is_parked boolean
-local function paint(buf, index, is_parked)
-  local block = drawn[buf][index]
-  vim.api.nvim_buf_set_extmark(buf, ns, block.comment.line - 1, 0, {
-    id = block.id,
-    virt_lines = box(block.comment, measure(buf), is_parked),
-  })
+---@param id integer
+---@return integer
+local function anchor_line(buf, id)
+  return vim.api.nvim_buf_get_extmark_by_id(buf, ns, id, {})[1] + 1
 end
 
----Gives back the buffer's own maps the parked block's keys stood in for.
----@param state changeset.ParkedBlock
-local function unmap(state)
-  for lhs, saved in pairs(state.maps) do
-    pcall(vim.keymap.del, "n", lhs, { buffer = state.buf })
-    if saved.buffer == 1 then
-      vim.api.nvim_buf_call(state.buf, function()
-        vim.fn.mapset("n", false, saved)
+---The extmark holding the blocks under line `line` of `buf`, if any.
+---@param buf integer
+---@param line integer
+---@return integer?
+local function anchor_at(buf, line)
+  if not drawn[buf] or line < 1 then
+    return
+  end
+  local mark = vim.api.nvim_buf_get_extmarks(buf, ns, { line - 1, 0 }, { line - 1, -1 }, { limit = 1 })[1]
+  return mark and mark[1]
+end
+
+---Redraws extmark `id`'s stack, block `parked_index` parked.
+---@param buf integer
+---@param id integer
+---@param parked_index integer?
+local function paint(buf, id, parked_index)
+  local blocks = drawn[buf]
+  local lines = {}
+  for i, comment in ipairs(blocks.anchors[id]) do
+    vim.list_extend(lines, box(comment, blocks.widest, i == parked_index))
+  end
+  vim.api.nvim_buf_set_extmark(buf, ns, anchor_line(buf, id) - 1, 0, { id = id, virt_lines = lines })
+end
+
+---`buf`'s map of `lhs` in Normal mode, else the global one; empty when neither.
+---@param buf integer
+---@param lhs string
+---@return table
+local function map_of(buf, lhs)
+  return vim.api.nvim_buf_call(buf, function()
+    return vim.fn.maparg(lhs, "n", false, true)
+  end)
+end
+
+---Takes our maps of `saved`'s keys out of `buf`, putting back the buffer's own maps they stood in for.
+---@param buf integer
+---@param saved table<string, table>
+local function restore(buf, saved)
+  for lhs, map in pairs(saved) do
+    pcall(vim.keymap.del, "n", lhs, { buffer = buf })
+    if map.buffer == 1 then
+      vim.api.nvim_buf_call(buf, function()
+        vim.fn.mapset("n", false, map)
       end)
     end
   end
@@ -159,144 +216,255 @@ local function unpark()
     return
   end
   parked = nil
-  if vim.api.nvim_buf_is_valid(state.buf) and drawn[state.buf] and drawn[state.buf][state.index] then
-    paint(state.buf, state.index, false)
+  if drawn[state.buf] and drawn[state.buf].anchors[state.id] then
+    paint(state.buf, state.id, nil)
   end
-  unmap(state)
+  if vim.api.nvim_buf_is_valid(state.buf) then
+    restore(state.buf, state.maps)
+  end
   dialog.show_cursor()
   if vim.api.nvim_win_is_valid(state.win) then
-    vim.wo[state.win].cursorline = state.cursorline
+    vim.api.nvim_set_option_value("cursorline", state.cursorline, { scope = "local", win = state.win })
   end
 end
 
----Scrolls `win` the least that shows the parked block whole, when it fits.
+---Rows of the current window from its first screen row to the end of line `line`, its filler included.
+---@param view vim.fn.winsaveview.ret
+---@param line integer
+---@return integer
+local function rows_through(view, line)
+  local hidden = vim.api.nvim_win_text_height(0, { start_row = view.topline - 1, end_row = view.topline - 1 }).fill
+    - view.topfill
+  return vim.api.nvim_win_text_height(0, { start_row = view.topline - 1, end_row = line - 1 }).all - hidden
+end
+
+---Rows line `line` takes, its filler above it left out.
+---@param line integer
+---@return integer
+local function text_rows(line)
+  local height = vim.api.nvim_win_text_height(0, { start_row = line - 1, end_row = line - 1 })
+  return height.all - height.fill
+end
+
+---Screen rows, from the top of the current window, of the first and last row of the parked block in `state`; 0
+---for both while it is above the window.
+---@param state changeset.ParkedBlock
+---@param view vim.fn.winsaveview.ret
+---@return integer first
+---@return integer last
+local function block_rows(state, view)
+  local line = anchor_line(state.buf, state.id)
+  local blocks = drawn[state.buf]
+  local above, height, after = 0, 0, 0
+  for i, comment in ipairs(blocks.anchors[state.id]) do
+    local rows = #box(comment, blocks.widest, false)
+    if i < state.index then
+      above = above + rows
+    elseif i == state.index then
+      height = rows
+    else
+      after = after + rows
+    end
+  end
+  local next_line = line + 1
+  local last
+  if next_line > vim.api.nvim_buf_line_count(state.buf) and line >= view.topline then
+    last = rows_through(view, line) + above + height
+  elseif next_line >= view.topline then
+    -- The stack is the filler above the next line.
+    last = rows_through(view, next_line) - text_rows(next_line) - after
+  else
+    return 0, 0
+  end
+  return last - height + 1, last
+end
+
+---Scrolls the parked block's window the least that shows the block whole, never scrolling its cursor off.
 ---@param state changeset.ParkedBlock
 local function reveal(state)
-  local line = drawn[state.buf][state.index].comment.line
-  local below = state.at == line
-  local text = vim.api.nvim_buf_get_lines(state.buf, line - 1, line, false)[1]
   vim.api.nvim_win_call(state.win, function()
-    for _ = 1, vim.api.nvim_win_get_height(0) do
-      if below then
-        local next_line = math.min(line + 1, vim.api.nvim_buf_line_count(state.buf))
-        local top = vim.fn.screenpos(0, line, 1).row
-        if vim.fn.screenpos(0, next_line, 1).row > 0 or next_line == line or top <= vim.fn.win_screenpos(0)[1] then
-          return
-        end
+    local win_height = vim.api.nvim_win_get_height(0)
+    local at = vim.api.nvim_win_get_cursor(0)[1]
+    for _ = 1, win_height do
+      local view = vim.fn.winsaveview()
+      local first, last = block_rows(state, view)
+      local cursor_last = rows_through(view, at)
+      local cursor_first = cursor_last - text_rows(at) + 1
+      if last > win_height and first > 1 and cursor_first > 1 then
         vim.cmd.normal({ vim.keycode("<C-e>"), bang = true })
-      else
-        local cur = vim.fn.screenpos(0, state.at, 1).row
-        local bottom = vim.fn.win_screenpos(0)[1] + vim.api.nvim_win_get_height(0) - 1
-        if vim.fn.screenpos(0, line, math.max(#text, 1)).row > 0 or cur >= bottom then
-          return
-        end
+      elseif first < 1 and cursor_last < win_height then
         vim.cmd.normal({ vim.keycode("<C-y>"), bang = true })
+      else
+        return
       end
     end
   end)
 end
 
----@param lhs string
----@param rhs fun()
----@param desc string
----@param state changeset.ParkedBlock
-local function map(state, lhs, rhs, desc)
-  local saved = vim.api.nvim_buf_call(state.buf, function()
-    return vim.fn.maparg(lhs, "n", false, true)
-  end)
-  state.maps[lhs] = saved
-  vim.keymap.set("n", lhs, rhs, { buffer = state.buf, nowait = true, desc = desc })
-end
-
----Parks the cursor of `win` on `buf`'s block `index`, waiting on line `at`.
+---Parks the cursor of `win`, waiting at `pos`, on block `index` of extmark `id`'s stack in `buf`.
 ---@param win integer
 ---@param buf integer
+---@param id integer
 ---@param index integer
----@param at integer
-local function park(win, buf, index, at)
+---@param pos integer[]
+local function park(win, buf, id, index, pos)
   unpark()
-  local state = { win = win, buf = buf, index = index, at = at, cursorline = vim.wo[win].cursorline, maps = {} }
+  ---@type changeset.ParkedBlock
+  local state = {
+    win = win,
+    buf = buf,
+    id = id,
+    index = index,
+    pos = pos,
+    cursorline = vim.api.nvim_get_option_value("cursorline", { scope = "local", win = win }),
+    maps = {},
+  }
   parked = state
-  paint(buf, index, true)
+  paint(buf, id, index)
   -- The block is what the cursor is on; the line it waits on would read as focused instead.
   dialog.hide_cursor()
-  vim.wo[win].cursorline = false
-  local comment = drawn[buf][index].comment
-  local function edit()
-    unpark()
-    require("changeset.reviewing").open(comment)
+  vim.api.nvim_set_option_value("cursorline", false, { scope = "local", win = win })
+  local comment = drawn[buf].anchors[id][index]
+  ---Runs `verb` on the comment once the block lets go, unless the block has moved off the comment's stored line.
+  ---@param verb fun(reviewing: table)
+  local function act(verb)
+    return function()
+      local reviewing = require("changeset.reviewing")
+      if vim.bo[buf].modified then
+        return vim.notify("Changeset: " .. reviewing.UNSAVED, vim.log.levels.WARN)
+      end
+      unpark()
+      verb(reviewing)
+    end
   end
-  map(state, "<CR>", edit, "Edit the review comment")
-  map(state, "c", edit, "Edit the review comment")
-  map(state, "d", function()
-    unpark()
-    require("changeset.reviewing").ask_delete(comment)
-  end, "Delete the review comment")
-  map(state, "<Esc>", unpark, "Step off the review comment")
+  local function edit(reviewing)
+    reviewing.open(comment)
+  end
+  local keys = {
+    { "<CR>", act(edit), "Edit the review comment" },
+    { "c", act(edit), "Edit the review comment" },
+    {
+      "d",
+      act(function(reviewing)
+        reviewing.ask_delete(comment)
+      end),
+      "Delete the review comment",
+    },
+    { "<Esc>", unpark, "Step off the review comment" },
+  }
+  for _, key in ipairs(keys) do
+    state.maps[key[1]] = map_of(buf, key[1])
+    vim.keymap.set("n", key[1], key[2], { buffer = buf, nowait = true, desc = key[3] })
+  end
   reveal(state)
 end
 
----Indexes of `buf`'s blocks under line `line`, top first.
----@param buf integer
+---Moves the cursor of `win` to line `line`, held to its buffer, at column `col`.
+---@param win integer
 ---@param line integer
----@return integer[]
-local function under(buf, line)
-  local found = {}
-  for i, block in ipairs(drawn[buf] or {}) do
-    if block.comment.line == line then
-      found[#found + 1] = i
+---@param col integer
+local function put(win, line, col)
+  local count = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
+  vim.api.nvim_win_set_cursor(win, { math.max(math.min(line, count), 1), col })
+end
+
+---Moves from the parked block to the next in its stack, else off it: down to the line under it, up to its line.
+---@param state changeset.ParkedBlock
+---@param down boolean
+local function step(state, down)
+  local index = state.index + (down and 1 or -1)
+  if drawn[state.buf].anchors[state.id][index] then
+    return park(state.win, state.buf, state.id, index, state.pos)
+  end
+  local line = anchor_line(state.buf, state.id)
+  unpark()
+  put(state.win, down and line + 1 or line, state.pos[2])
+end
+
+---The first line of the closed fold holding `line`, else `line`.
+---@param line integer
+---@return integer
+local function fold_top(line)
+  local top = vim.fn.foldclosed(line)
+  return top == -1 and line or top
+end
+
+---The last line of the closed fold holding `line`, else `line`.
+---@param line integer
+---@return integer
+local function fold_end(line)
+  local last = vim.fn.foldclosedend(line)
+  return last == -1 and line or last
+end
+
+---Runs what `move`'s key did before, parking instead on a block it would have crossed.
+---@param move changeset.BlockMove
+local function moved(move)
+  local plug = vim.keycode(move.plug)
+  if vim.v.count > 0 then
+    return vim.cmd.normal(vim.v.count .. plug)
+  end
+  local win, buf = vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf()
+  if parked and parked.win == win and parked.buf == buf and drawn[buf] then
+    return step(parked, move.down)
+  end
+  local before = vim.api.nvim_win_get_cursor(win)
+  local view = vim.fn.winsaveview()
+  vim.cmd.normal(plug)
+  local after = vim.api.nvim_win_get_cursor(win)
+  local id, index = nil, 1
+  if move.down then
+    local last = fold_end(before[1])
+    id = anchor_at(buf, last)
+    -- Unmoved, the key failed on the last line, which can still have blocks under it; moved within the line, as
+    -- `gj` on a wrapped one does, it hasn't reached them yet.
+    if after[1] <= last and not vim.deep_equal(after, before) then
+      id = nil
+    end
+  else
+    local top = fold_top(before[1])
+    if after[1] < top and fold_end(after[1]) == top - 1 then
+      id = anchor_at(buf, top - 1)
+      index = id and #drawn[buf].anchors[id] or 1
     end
   end
-  return found
-end
-
----@param win integer
----@param pos integer[]
-local function put(win, pos)
-  vim.api.nvim_win_set_cursor(win, pos)
-  last[win].pos = pos
-end
-
----Moves on from the parked block after the cursor moved `delta` lines off where it waited, to `pos`.
----@param state changeset.ParkedBlock
----@param delta integer
----@param pos integer[]
-local function step_off(state, delta, pos)
-  local line = drawn[state.buf][state.index].comment.line
-  local stack = under(state.buf, line)
-  local k = vim.fn.index(stack, state.index) + 1
-  local neighbour = (delta == 1 or delta == -1) and stack[k + delta]
-  if neighbour then
-    put(state.win, { state.at, pos[2] })
-    return park(state.win, state.buf, neighbour, state.at)
-  end
-  unpark()
-  -- The cursor moved from where it waited, not from the block, so a step onto the far side's line is put right.
-  if delta == 1 and state.at == line + 1 then
-    put(state.win, { line + 1, pos[2] })
-  elseif delta == -1 and state.at == line then
-    put(state.win, { line, pos[2] })
+  if id then
+    vim.fn.winrestview(view)
+    park(win, buf, id, index, before)
   end
 end
 
----Parks the cursor on a block a one-line move just crossed, or moves it on from the parked one.
+---Maps the movement keys in `buf`, each running what it did before through a `<Plug>` copy of that.
 ---@param buf integer
-local function moved(buf)
-  local win = vim.api.nvim_get_current_win()
-  local pos = vim.api.nvim_win_get_cursor(win)
-  local prev = last[win]
-  last[win] = { buf = buf, pos = pos }
-  if parked and parked.win == win then
-    return step_off(parked, pos[1] - parked.at, pos)
+local function map_moves(buf)
+  local saved = {}
+  for _, move in ipairs(MOVES) do
+    local own = map_of(buf, move.key)
+    saved[move.key] = own
+    saved[move.plug] = {}
+    if next(own) then
+      -- A copy, not the key: a map whose rhs starts with its own lhs doesn't remap that key, losing the user's.
+      local copy = vim.tbl_extend("force", own, { lhs = move.plug, lhsraw = vim.keycode(move.plug), buffer = 1 })
+      copy.lhsrawalt = nil
+      vim.api.nvim_buf_call(buf, function()
+        vim.fn.mapset("n", false, copy)
+      end)
+    else
+      vim.keymap.set("n", move.plug, move.key, { buffer = buf })
+    end
+    vim.keymap.set("n", move.key, function()
+      moved(move)
+    end, { buffer = buf, desc = "Move, stopping on review comment blocks" })
   end
-  if not (prev and prev.buf == buf and drawn[buf]) then
-    return
-  end
-  local delta = pos[1] - prev.pos[1]
-  local crossed = delta == 1 and under(buf, prev.pos[1]) or delta == -1 and under(buf, pos[1]) or {}
-  if #crossed > 0 then
-    put(win, prev.pos)
-    park(win, buf, delta == 1 and crossed[1] or crossed[#crossed], prev.pos[1])
+  moves[buf] = saved
+end
+
+---Takes the movement maps out of `buf`, giving back what they stood in for.
+---@param buf integer
+local function unmap_moves(buf)
+  if moves[buf] then
+    restore(buf, moves[buf])
+    moves[buf] = nil
   end
 end
 
@@ -309,65 +477,110 @@ function M.draw(buf, comments)
   end
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   drawn[buf] = nil
+  local line_count = vim.api.nvim_buf_line_count(buf)
+  comments = vim.tbl_filter(function(comment)
+    return comment.line <= line_count
+  end, comments)
   if not M.shown() or #comments == 0 then
+    return unmap_moves(buf)
+  end
+  local by_line, lines = {}, {}
+  for _, comment in ipairs(comments) do
+    if not by_line[comment.line] then
+      by_line[comment.line] = {}
+      lines[#lines + 1] = comment.line
+    end
+    table.insert(by_line[comment.line], comment)
+  end
+  -- One extmark a line: Neovim draws separate marks' virtual lines on one line newest first, not in store order.
+  drawn[buf] = { anchors = {}, widest = measure(buf) }
+  for _, line in ipairs(lines) do
+    local id = vim.api.nvim_buf_set_extmark(buf, ns, line - 1, 0, {})
+    drawn[buf].anchors[id] = by_line[line]
+    paint(buf, id, nil)
+  end
+  if not moves[buf] then
+    map_moves(buf)
+  end
+end
+
+---Redraws `buf`'s blocks at its windows' measure when that changed, a parked block staying parked.
+---@param buf integer
+local function refit(buf)
+  local blocks = drawn[buf]
+  if not blocks or not vim.api.nvim_buf_is_loaded(buf) or measure(buf) == blocks.widest then
     return
   end
-  local ordered = {}
-  for i, comment in ipairs(comments) do
-    ordered[i] = { i = i, comment = comment }
+  blocks.widest = measure(buf)
+  for id in pairs(blocks.anchors) do
+    paint(buf, id, parked and parked.buf == buf and parked.id == id and parked.index or nil)
   end
-  table.sort(ordered, function(a, b)
-    return a.comment.line < b.comment.line or (a.comment.line == b.comment.line and a.i < b.i)
-  end)
-  local widest = measure(buf)
-  drawn[buf] = vim.tbl_map(function(entry)
-    return {
-      comment = entry.comment,
-      id = vim.api.nvim_buf_set_extmark(buf, ns, entry.comment.line - 1, 0, {
-        virt_lines = box(entry.comment, widest, false),
-      }),
-    }
-  end, ordered)
 end
 
 local group = vim.api.nvim_create_augroup("changeset.review_comment_blocks", { clear = true })
 
--- Fires: any cursor move, so a one-line move across a block parks on it and the next one moves on.
-vim.api.nvim_create_autocmd("CursorMoved", {
-  group = group,
-  desc = "changeset: park the cursor on a review comment block a one-line move reaches",
-  callback = function(args)
-    if drawn[args.buf] or parked then
-      moved(args.buf)
-    else
-      last[vim.api.nvim_get_current_win()] = { buf = args.buf, pos = vim.api.nvim_win_get_cursor(0) }
-    end
-  end,
-})
-
--- Fires: anything else done while parked, which the block's keys don't cover, so the cursor steps off it.
+-- Fires: a mode change, a window or buffer left, or text changed while parked, none of which the block's keys cover.
 vim.api.nvim_create_autocmd({ "ModeChanged", "WinLeave", "BufLeave", "TextChanged" }, {
   group = group,
   desc = "changeset: step off a review comment block on any other action",
-  callback = unpark,
+  callback = function()
+    unpark()
+  end,
 })
 
--- Fires: windows resized or a buffer shown in another, which changes the narrowest window a block fits.
-vim.api.nvim_create_autocmd({ "WinResized", "BufWinEnter" }, {
+-- Fires: windows resized, which may change the narrowest window their buffers' blocks must fit.
+vim.api.nvim_create_autocmd("WinResized", {
   group = group,
   desc = "changeset: refit review comment blocks to their narrowest window",
   callback = function()
-    for buf, blocks in pairs(drawn) do
-      if vim.api.nvim_buf_is_valid(buf) then
-        M.draw(
-          buf,
-          vim.tbl_map(function(block)
-            return block.comment
-          end, blocks)
-        )
+    for _, win in ipairs(vim.v.event.windows or {}) do
+      if vim.api.nvim_win_is_valid(win) then
+        refit(vim.api.nvim_win_get_buf(win))
       end
     end
   end,
 })
+
+-- Fires: a buffer shown in a window, which may be narrower than the ones its blocks were drawn for.
+vim.api.nvim_create_autocmd("BufWinEnter", {
+  group = group,
+  desc = "changeset: refit a buffer's review comment blocks to a new window",
+  callback = function(args)
+    refit(args.buf)
+  end,
+})
+
+-- Fires: a buffer unloaded, which takes its lines and extmarks with it.
+vim.api.nvim_create_autocmd("BufUnload", {
+  group = group,
+  desc = "changeset: forget the review comment blocks of an unloaded buffer",
+  callback = function(args)
+    if parked and parked.buf == args.buf then
+      unpark()
+    end
+    drawn[args.buf] = nil
+    unmap_moves(args.buf)
+  end,
+})
+
+---The keys a parked block lets through: its own and the movement keys, `g` only as the start of `gj` or `gk`.
+local KEEPS = {}
+for _, lhs in ipairs({ "j", "k", "<Down>", "<Up>", "<CR>", "c", "d", "<Esc>" }) do
+  KEEPS[vim.keycode(lhs)] = true
+end
+local after_g = false
+
+-- Any other key lets go, `zz` and `<C-e>` included, which change neither mode nor text.
+vim.on_key(function(_, typed)
+  if not parked or not typed or typed == "" then
+    return
+  end
+  local was_g = after_g
+  after_g = typed == "g" and not was_g
+  if after_g or (KEEPS[typed] and (not was_g or typed == "j" or typed == "k")) then
+    return
+  end
+  vim.schedule(unpark)
+end, ns)
 
 return M

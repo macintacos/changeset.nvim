@@ -20,14 +20,13 @@ describe("review comment blocks", function()
     Fixture.commit("alpha", tmp)
     os.remove(comment_store.path())
     changeset.setup({ review_comment = { blocks = true } })
-    blocks.show(true)
     vim.cmd.edit("alpha.txt")
   end)
 
   after_each(function()
+    vim.cmd("silent! only")
     vim.cmd("silent! %bwipeout!")
-    changeset.setup()
-    blocks.show(false)
+    vim.cmd("silent! nunmap j")
     vim.fn.chdir(previous_dir)
     vim.fn.delete(tmp, "rf")
     os.remove(comment_store.path())
@@ -38,48 +37,70 @@ describe("review comment blocks", function()
     comment_store.keep(Paths.root(0), comment)
   end
 
-  ---Each block's lines as text, in buffer order, keyed by nothing: a list of { line = N, text = { ... } }.
-  ---@return { line: integer, text: string[], hl: string[][] }[]
+  ---Each extmark's lines as text, in buffer order.
+  ---@return { line: integer, text: string[] }[]
   local function drawn()
     local ns = vim.api.nvim_get_namespaces()["changeset.review_comment_blocks"]
     local out = {}
     for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, { details = true })) do
-      local text, hl = {}, {}
+      local text = {}
       for i, chunks in ipairs(mark[4].virt_lines or {}) do
         text[i] = table.concat(vim.tbl_map(function(chunk)
           return chunk[1]
         end, chunks))
-        hl[i] = vim.tbl_map(function(chunk)
-          return chunk[2]
-        end, chunks)
       end
-      out[#out + 1] = { line = mark[2] + 1, text = text, hl = hl }
+      out[#out + 1] = { line = mark[2] + 1, text = text }
     end
     return out
   end
 
-  ---Presses `keys`, firing the `CursorMoved` a UI-less Neovim leaves out when they move the cursor.
-  ---@param keys string
-  local function press(keys)
-    local before = vim.api.nvim_win_get_cursor(0)
-    vim.api.nvim_feedkeys(vim.keycode(keys), "x", false)
-    if not vim.deep_equal(before, vim.api.nvim_win_get_cursor(0)) then
-      vim.api.nvim_exec_autocmds("CursorMoved", {})
+  ---The first words of each body row, top first.
+  ---@param text string[]
+  ---@return string[]
+  local function bodies(text)
+    local out = {}
+    for _, row in ipairs(text) do
+      out[#out + 1] = row:match("^│ (%a+)")
     end
+    return out
   end
 
-  ---@param line integer
-  local function go(line)
-    -- By way of a far line, so the arrival is no one-line move.
-    for _, at in ipairs({ line + 10, line }) do
-      vim.api.nvim_win_set_cursor(0, { at, 0 })
-      vim.api.nvim_exec_autocmds("CursorMoved", {})
-    end
+  ---@param keys string
+  local function press(keys)
+    vim.api.nvim_feedkeys(vim.keycode(keys), "xt", false)
   end
 
   local function lnum()
     return vim.api.nvim_win_get_cursor(0)[1]
   end
+
+  ---@param line integer
+  local function go(line)
+    vim.api.nvim_win_set_cursor(0, { line, 0 })
+  end
+
+  ---The parked block's line and its body's first word.
+  ---@return integer?, string?
+  local function parked()
+    for _, mark in ipairs(drawn()) do
+      for i, row in ipairs(mark.text) do
+        if row:find("<CR> edit", 1, true) then
+          local top = i
+          while not vim.startswith(mark.text[top], "╭") do
+            top = top - 1
+          end
+          return mark.line, mark.text[top + 1]:match("^%S+ (%a+)")
+        end
+      end
+    end
+  end
+
+  it("starts showing blocks when setup() asks for them", function()
+    keep({ path = "alpha.txt", line = 3, body = "short" })
+
+    assert.is_true(blocks.shown())
+    assert.are.equal(1, #drawn())
+  end)
 
   it("draws a one-line comment as a box three lines tall under its last line, titled with its lines", function()
     keep({ path = "alpha.txt", line = 3, body = "short" })
@@ -111,15 +132,16 @@ describe("review comment blocks", function()
     end
   end)
 
-  it("narrows to the narrowest window showing the buffer", function()
-    keep({ path = "alpha.txt", line = 3, body = ("word "):rep(40) })
+  it("narrows to the narrowest window showing the buffer, cutting the title rather than the box", function()
     vim.cmd("vsplit")
-    vim.api.nvim_win_set_width(0, 40)
-    vim.api.nvim_exec_autocmds("WinResized", {})
+    vim.api.nvim_win_set_width(0, 24)
+    keep({ path = "alpha.txt", line = 3, body = ("word "):rep(40) })
 
-    local room = 40 - vim.fn.getwininfo(vim.api.nvim_get_current_win())[1].textoff
-    local width = vim.fn.strdisplaywidth(drawn()[1].text[1])
-    assert.truthy(width <= room and width > room - 6)
+    local room = 24 - vim.fn.getwininfo(vim.api.nvim_get_current_win())[1].textoff
+    local text = drawn()[1].text
+    assert.are.equal(room, vim.fn.strdisplaywidth(text[1]))
+    assert.are.equal(room, vim.fn.strdisplaywidth(text[2]))
+    assert.truthy(text[1]:find("…", 1, true))
   end)
 
   it("drops the end-of-line text of a comment drawn as a block, keeping its lit numbers", function()
@@ -139,13 +161,13 @@ describe("review comment blocks", function()
     assert.truthy(text[3]:find("┄"))
   end)
 
-  it("stacks two blocks on one line", function()
+  it("stacks two blocks on one line in the order the store lists them", function()
     keep({ path = "alpha.txt", line = 3, body = "first" })
     keep({ path = "alpha.txt", line = 3, start_line = 2, body = "second" })
 
-    local stack = drawn()
-    assert.are.same({ 3, 3 }, { stack[1].line, stack[2].line })
-    assert.is_true(stack[1].text[2] ~= stack[2].text[2])
+    local marks = drawn()
+    assert.are.equal(1, #marks)
+    assert.are.same({ "first", "second" }, bodies(marks[1].text))
   end)
 
   it("toggles between blocks and marks", function()
@@ -158,31 +180,55 @@ describe("review comment blocks", function()
     assert.are.equal(1, #drawn())
   end)
 
+  it("forgets the blocks of a buffer unloaded under them", function()
+    keep({ path = "alpha.txt", line = 3, body = "short" })
+    local alpha = vim.api.nvim_get_current_buf()
+    vim.cmd.enew()
+
+    vim.cmd.bdelete(alpha)
+    vim.cmd("vsplit")
+    vim.api.nvim_win_set_width(0, 30)
+    vim.cmd.redraw()
+  end)
+
+  it("lands through the user's own expr map, and leaves a count to it", function()
+    vim.cmd([[nnoremap <expr> j v:count == 0 ? 'gj' : 'j']])
+    keep({ path = "alpha.txt", line = 3, body = "short" })
+    go(3)
+
+    press("j")
+    assert.are.equal(3, parked())
+
+    press("<Esc>2j")
+    assert.are.equal(5, lnum())
+  end)
+
+  it("gives a buffer its own map of j back when blocks hide", function()
+    vim.keymap.set("n", "j", "<Nop>", { buffer = 0, desc = "mine" })
+    keep({ path = "alpha.txt", line = 3, body = "short" })
+    assert.are.equal("Move, stopping on review comment blocks", vim.fn.maparg("j", "n", false, true).desc)
+
+    blocks.toggle()
+    assert.are.equal("mine", vim.fn.maparg("j", "n", false, true).desc)
+    blocks.toggle()
+  end)
+
   describe("landing", function()
     before_each(function()
       keep({ path = "alpha.txt", line = 3, body = "short" })
     end)
-
-    ---The line and text of the block showing its keys.
-    local function selected()
-      for _, block in ipairs(drawn()) do
-        if block.text[#block.text]:find("<CR> edit") then
-          return block.line, block.text[2]
-        end
-      end
-    end
 
     it("lands on the block with j from its line, then steps off onto the next line", function()
       go(3)
 
       press("j")
       assert.are.equal(3, lnum())
-      assert.are.equal(3, selected())
+      assert.are.equal(3, parked())
       assert.truthy(cursor.hidden())
 
       press("j")
       assert.are.equal(4, lnum())
-      assert.is_nil(selected())
+      assert.is_nil(parked())
       assert.is_false(cursor.hidden())
     end)
 
@@ -191,33 +237,29 @@ describe("review comment blocks", function()
 
       press("k")
       assert.are.equal(4, lnum())
-      assert.are.equal(3, selected())
+      assert.are.equal(3, parked())
 
       press("k")
       assert.are.equal(3, lnum())
-      assert.is_nil(selected())
+      assert.is_nil(parked())
     end)
 
     it("goes back the way it came", function()
       go(3)
-      press("j")
-      press("k")
+      press("jk")
       assert.are.equal(3, lnum())
 
       go(4)
-      press("k")
-      press("j")
+      press("kj")
       assert.are.equal(4, lnum())
-      assert.is_nil(selected())
+      assert.is_nil(parked())
     end)
 
-    it("lands whatever j is mapped to", function()
-      vim.keymap.set("n", "j", "gj")
-      go(3)
+    it("keeps the column it parked from", function()
+      vim.api.nvim_win_set_cursor(0, { 4, 3 })
 
-      press("j")
-      vim.keymap.del("n", "j")
-      assert.are.equal(3, selected())
+      press("kk")
+      assert.are.same({ 3, 3 }, vim.api.nvim_win_get_cursor(0))
     end)
 
     it("moves past the block on a count", function()
@@ -225,36 +267,163 @@ describe("review comment blocks", function()
 
       press("5j")
       assert.are.equal(7, lnum())
-      assert.is_nil(selected())
+      assert.is_nil(parked())
     end)
 
-    it("stops on each of two stacked blocks", function()
+    it("parks nothing for a jump of one line", function()
+      go(4)
+
+      press(":3<CR>")
+      assert.are.equal(3, lnum())
+      assert.is_nil(parked())
+    end)
+
+    it("parks nothing on leaving insert mode a line away", function()
+      go(3)
+
+      press("otyped<Esc>")
+      assert.are.equal(4, lnum())
+      assert.is_nil(parked())
+    end)
+
+    it("extends a Visual selection past the block", function()
+      go(3)
+
+      press("Vj")
+      assert.are.equal(4, lnum())
+      assert.is_nil(parked())
+      press("<Esc>")
+    end)
+
+    it("leaves the cursor where p and u put it", function()
+      ---The lines the cursor is on after `p`, then after `u`, from line 3.
+      local function paste_and_undo()
+        go(3)
+        press("yyp")
+        local pasted = lnum()
+        press("u")
+        return { pasted, lnum() }
+      end
+      blocks.toggle()
+      local native = paste_and_undo()
+      blocks.toggle()
+
+      assert.are.same(native, paste_and_undo())
+      assert.is_nil(parked())
+    end)
+
+    it("lets go on a key the block doesn't take", function()
+      go(3)
+      press("j")
+
+      press("zz")
+      vim.wait(100, function()
+        return parked() == nil
+      end)
+      assert.is_nil(parked())
+    end)
+
+    it("stops on each of two stacked blocks, top first, both ways", function()
       keep({ path = "alpha.txt", line = 3, start_line = 2, body = "second" })
       go(3)
 
       press("j")
-      local line, first = selected()
-      assert.are.equal(3, line)
+      assert.are.same({ 3, "short" }, { parked() })
       press("j")
-      local _, second = selected()
-      assert.truthy(second)
-      assert.is_true(first ~= second)
-      press("j")
+      assert.are.same({ 3, "second" }, { parked() })
+      press("k")
+      assert.are.same({ 3, "short" }, { parked() })
+      press("jj")
       assert.are.equal(4, lnum())
+      press("k")
+      assert.are.same({ 3, "second" }, { parked() })
     end)
 
-    it("deselects on <Esc> and gives back the keys it took", function()
+    it("walks a stack under the first line and one under the last", function()
+      keep({ path = "alpha.txt", line = 1, body = "top" })
+      keep({ path = "alpha.txt", line = 40, body = "bottom" })
+      go(1)
+      press("j")
+      assert.are.same({ 1, "top" }, { parked() })
+      press("k")
+      assert.are.equal(1, lnum())
+      assert.is_nil(parked())
+
+      go(40)
+      press("j")
+      assert.are.same({ 40, "bottom" }, { parked() })
+      press("j")
+      assert.are.equal(40, lnum())
+      assert.is_nil(parked())
+    end)
+
+    it("steps off onto a closed fold next to the block", function()
+      vim.cmd("4,6fold")
+      go(3)
+
+      press("jj")
+      assert.are.equal(4, vim.fn.foldclosed(lnum()))
+
+      press("k")
+      assert.are.equal(3, parked())
+      press("k")
+      assert.are.equal(3, lnum())
+    end)
+
+    it("parks where the block sits after unsaved edits, and won't edit it then", function()
+      vim.api.nvim_buf_set_lines(0, 0, 0, false, { "new" })
+      go(4)
+
+      press("j")
+      assert.are.equal(4, parked())
+
+      press("<CR>")
+      assert.are.equal(4, parked())
+    end)
+
+    it("shows the parked block whole with nowrap without moving the cursor", function()
+      vim.wo.wrap = false
+      vim.api.nvim_buf_set_text(0, 2, 7, 2, 7, { ("x"):rep(500) })
+      go(4)
+      vim.cmd("normal! zt")
+
+      press("k")
+      assert.are.equal(4, lnum())
+      assert.are.same({ 4, 3 }, { vim.fn.winsaveview().topline, vim.fn.winsaveview().topfill })
+    end)
+
+    it("keeps a parked block parked when its buffer's windows resize", function()
+      go(3)
+      press("j")
+
+      vim.api.nvim_open_win(0, false, { split = "left", width = 30 })
+      assert.are.equal(3, parked())
+      assert.truthy(vim.fn.strdisplaywidth(drawn()[1].text[1]) <= 30)
+    end)
+
+    it("hides cursorline only in its own window", function()
+      vim.o.cursorline = true
+      go(3)
+
+      press("j")
+      assert.is_false(vim.wo.cursorline)
+      assert.is_true(vim.go.cursorline)
+      press("<Esc>")
+      vim.o.cursorline = false
+    end)
+
+    it("gives back the keys it took", function()
       go(3)
       press("j")
       assert.are.equal("<Esc>", vim.fn.maparg("<Esc>", "n", false, true).lhs)
 
       press("<Esc>")
-      assert.is_nil(selected())
+      assert.is_nil(parked())
       assert.are.same({}, vim.fn.maparg("<Esc>", "n", false, true))
       assert.are.same({}, vim.fn.maparg("d", "n", false, true))
     end)
 
-    it("asks to delete the selected block's comment on d", function()
+    it("asks to delete the parked block's comment on d", function()
       go(3)
       press("j")
 
@@ -266,7 +435,7 @@ describe("review comment blocks", function()
       end))
     end)
 
-    it("opens the selected block's comment for editing on <CR>", function()
+    it("opens the parked block's comment for editing on <CR>", function()
       go(3)
       press("j")
 
