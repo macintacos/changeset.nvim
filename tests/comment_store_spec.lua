@@ -32,6 +32,12 @@ describe("changeset.comment_store", function()
     assert.same({ comment({ body = "again" }) }, comment_store.list(ROOT))
   end)
 
+  it("lists a comment on a whole file, which names no line", function()
+    comment_store.keep(ROOT, { path = "lua/a.lua", body = "hi" })
+
+    assert.same({ { path = "lua/a.lua", body = "hi" } }, comment_store.list(ROOT))
+  end)
+
   it("keeps a comment on another range of the same file beside it", function()
     comment_store.keep(ROOT, comment())
     comment_store.keep(ROOT, comment({ start_line = 6 }))
@@ -122,7 +128,7 @@ describe("changeset.comment_store", function()
   end)
 
   for _, entry in ipairs({
-    '{"path":"a","body":"b"}',
+    '{"path":"a","body":"b","start_line":1}',
     '{"path":"a","body":"b","line":3,"start_line":"1"}',
     '{"path":"a","body":"b","line":0}',
     '{"path":"a","body":"b","line":3,"start_line":3}',

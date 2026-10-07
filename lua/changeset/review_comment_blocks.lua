@@ -703,6 +703,9 @@ local group = vim.api.nvim_create_augroup("changeset.review_comment_blocks", { c
 -- brings them back as it closes.
 review_comment_window.watch(function(window, opened)
   local buf, line = window.source_buf, window.comment.line
+  if not line then
+    return
+  end
   editing[buf] = editing[buf] or {}
   editing[buf][line] = (editing[buf][line] or 0) + (opened and 1 or -1)
   if editing[buf][line] <= 0 then

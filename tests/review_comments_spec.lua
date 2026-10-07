@@ -130,6 +130,11 @@ describe("review_comments", function()
     assert.are.same({ { 7, 9 }, { 9, 30 }, { 30, 30 } }, rows(alpha))
   end)
 
+  it("marks no line for a review comment on the whole file", function()
+    set({ comment("beta.txt", 16), { path = "beta.txt", body = "b" } })
+    assert.are.same({ { 15, 15 } }, rows(beta))
+  end)
+
   it("skips a review comment past the buffer's last line", function()
     set(vim.list_extend(all(), { comment("beta.txt", 99) }))
     assert.are.same({ { 15, 15 } }, rows(beta))

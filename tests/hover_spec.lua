@@ -98,6 +98,11 @@ describe("hover", function()
     )
   end)
 
+  it("leaves a whole file's review comment out of every line's hover", function()
+    set({ SINGLE, { path = "alpha.txt", body = "the file" } })
+    assert.are.equal("**Review comment · line 20**\n\nsaved body", hover(alpha, 20))
+  end)
+
   it("marks a file read after its comments were kept", function()
     set({ BETA })
     vim.cmd.edit(dir .. "/beta.txt")

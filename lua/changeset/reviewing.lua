@@ -33,19 +33,26 @@ end
 
 local lines_label = review_comments.lines_label
 
----Where `comment` sits, as the Comments row and the pasted review name it: "a.lua:4", or "a.lua:3-5" for a range.
+---Where `comment` sits, as the Comments row and the pasted review name it: "a.lua:4", "a.lua:3-5" for a range, or
+---"a.lua" for the whole file.
 ---@param comment changeset.ReviewComment
 ---@return string
 local function location(comment)
+  if not comment.line then
+    return comment.path
+  end
   local first = comment.start_line or comment.line
   return first < comment.line and ("%s:%d-%d"):format(comment.path, first, comment.line)
     or ("%s:%d"):format(comment.path, comment.line)
 end
 
----Where `comment` sits, for a sentence: "line 4 of a.lua".
+---Where `comment` sits, for a sentence: "line 4 of a.lua", or "the whole of a.lua".
 ---@param comment changeset.ReviewComment
 ---@return string
 local function place(comment)
+  if not comment.line then
+    return "the whole of " .. comment.path
+  end
   return ("%s of %s"):format(lines_label(comment.start_line or comment.line, comment.line), comment.path)
 end
 
@@ -113,15 +120,16 @@ local function with_body(comment, body, draft)
   return { path = comment.path, line = comment.line, start_line = comment.start_line, body = body, draft = draft }
 end
 
----Opens the window under `comment`'s lines of the current buffer, holding its text: a save replaces it, a blank
----save or close asks to delete it, and a close with changed text keeps it as a draft.
+---Opens the window under `comment`'s lines of the current buffer, or a whole file's under the cursor's line,
+---holding its text: a save replaces it, a blank save or close asks to delete it, and a close with changed text keeps
+---it as a draft.
 ---@param comment changeset.ReviewComment
 function M.open(comment)
-  local repository = Paths.root(0)
+  local repository = root()
   local last = comment.line
   local kind = comment.draft and "Edit draft review comment · " or "Edit review comment · "
   review_comment_window.open({
-    line = last,
+    line = last or vim.api.nvim_win_get_cursor(0)[1],
     title = kind .. lines_label(comment.start_line or last, last),
     save_desc = "Save the review comment",
     close_desc = "Close, keeping the text as a draft",
@@ -164,12 +172,75 @@ local function file_path(repository, buf)
   return vim.bo[buf].buftype == "" and name ~= "" and vim.fs.relpath(repository, vim.fs.normalize(name)) or nil
 end
 
+---Opens the review comment window under line `line` of the current window for `comment`, new, its body "". Closing
+---it keeps its text, so nothing typed is lost.
+---@param repository string
+---@param comment changeset.ReviewComment
+---@param line integer
+local function open_new(repository, comment, line)
+  review_comment_window.open({
+    line = line,
+    title = "Review comment · " .. lines_label(comment.start_line or comment.line, comment.line),
+    save_desc = "Save the review comment",
+    close_desc = "Close, keeping the text as a draft",
+    keys = config.get().review_comment.save,
+    comment = comment,
+    keep = function(body)
+      -- A blank keep would drop whatever was saved on this range meanwhile.
+      if body:find("%S") and not keep(repository, with_body(comment, body, true)) then
+        say_draft()
+      end
+    end,
+    save = function(body, done)
+      done(keep(repository, with_body(comment, body)))
+    end,
+  })
+end
+
+---The file the sidebar's cursor row stands for: a file's row, or a Comments row listing a whole file's comment.
+---@return string? path
+local function sidebar_file()
+  local row = require("changeset.draw").row_at_cursor()
+  if row and (row.kind == "file" or row.review_comment and not row.review_comment.line) then
+    return row.path
+  end
+end
+
+---The comment on the whole of `path`.
+---@param repository string
+---@param path string
+---@return changeset.ReviewComment?
+local function on_file(repository, path)
+  return vim.iter(comment_store.list(repository)):find(function(comment)
+    return comment.path == path and not comment.line
+  end)
+end
+
+---Opens the review comment window under the sidebar's cursor row for the whole file it stands for, or that file's
+---comment to edit.
+local function comment_file()
+  local repository = root()
+  local path = sidebar_file()
+  if not path then
+    return say(vim.log.levels.WARN, "run `:Changeset comment new` from a file in %s, or on a file's row", repository)
+  end
+  local existing = on_file(repository, path)
+  if existing then
+    return M.open(existing)
+  end
+  open_new(repository, { path = path, body = "" }, vim.api.nvim_win_get_cursor(0)[1])
+end
+
 ---Opens the review comment window under line `last` of the current buffer, for lines `first` to `last`, or an
 ---existing comment to edit: for a range, the one on exactly that range; for one line, the narrowest covering it.
----Closing a new one keeps its text, so nothing typed is lost.
+---From the sidebar, it is for the whole file the cursor's row stands for. Closing a new one keeps its text, so
+---nothing typed is lost.
 ---@param first integer
 ---@param last integer
 function M.comment(first, last)
+  if window.is_focused() then
+    return comment_file()
+  end
   local repository = Paths.root(0)
   local path = file_path(repository, 0)
   if not path then
@@ -189,38 +260,13 @@ function M.comment(first, last)
   if existing then
     return M.open(existing)
   end
-  ---@param body string
-  ---@return changeset.ReviewComment
-  local function comment_of(body)
-    return { path = path, line = last, start_line = first < last and first or nil, body = body }
-  end
-  review_comment_window.open({
-    line = last,
-    title = "Review comment · " .. lines_label(first, last),
-    save_desc = "Save the review comment",
-    close_desc = "Close, keeping the text as a draft",
-    keys = config.get().review_comment.save,
-    comment = comment_of(""),
-    keep = function(body)
-      -- A blank keep would drop whatever was saved on this range meanwhile.
-      if body:find("%S") then
-        local draft = comment_of(body)
-        draft.draft = true
-        if not keep(repository, draft) then
-          say_draft()
-        end
-      end
-    end,
-    save = function(body, done)
-      done(keep(repository, comment_of(body)))
-    end,
-  })
+  open_new(repository, { path = path, line = last, start_line = first < last and first or nil, body = "" }, last)
 end
 
 ---Deletes the comment being written in `open`: asks first when it is stored or holds text, else just closes.
 ---@param open changeset.ReviewCommentWindow
 local function delete_open(open)
-  local repository = Paths.root(vim.api.nvim_win_get_buf(open.source))
+  local repository = vim.api.nvim_win_call(open.source, root)
   local stored = vim.iter(comment_store.list(repository)):find(function(comment)
     return comment.path == open.comment.path
       and comment.line == open.comment.line
@@ -249,20 +295,21 @@ local function delete_open(open)
   end)
 end
 
----The repository's review comment saved last: the store appends on every keep, so its last saved entry.
+---The repository's review comment saved last on lines: the store appends on every keep, so its last such saved entry.
 ---@param repository string
 ---@return changeset.ReviewComment?
 local function last_saved(repository)
   local comments = comment_store.list(repository)
   for i = #comments, 1, -1 do
-    if not comments[i].draft then
+    if not comments[i].draft and comments[i].line then
       return comments[i]
     end
   end
 end
 
 ---Runs subcommand `name` from the review comment window `open`: `comment new` saves it, `comment del` deletes it, and
----any other closes it, keeping a draft, then calls `run` from the comment's first line in the window it opened from.
+---any other closes it, keeping a draft, then calls `run` in the window it opened from, from the comment's first line,
+---or for a whole file's, from where that window's cursor is.
 ---@param open changeset.ReviewCommentWindow
 ---@param name string
 ---@param run fun()
@@ -274,7 +321,7 @@ function M.from_window(open, name, run)
     return delete_open(open)
   end
   if name == "comment last" then
-    local last = last_saved(Paths.root(vim.api.nvim_win_get_buf(open.source)))
+    local last = last_saved(vim.api.nvim_win_call(open.source, root))
     if
       last
       and last.path == open.comment.path
@@ -293,14 +340,35 @@ function M.from_window(open, name, run)
       return
     end
     vim.api.nvim_set_current_win(open.source)
-    local lnum = math.min(open.comment.start_line or open.comment.line, vim.api.nvim_buf_line_count(0))
-    vim.api.nvim_win_set_cursor(open.source, { lnum, 0 })
+    local last = open.comment.line
+    if last then
+      local lnum = math.min(open.comment.start_line or last, vim.api.nvim_buf_line_count(0))
+      vim.api.nvim_win_set_cursor(open.source, { lnum, 0 })
+    end
     run()
   end)
 end
 
----Deletes the review comment on the cursor's line, the narrowest of those covering it.
+---Deletes the comment on the whole file the sidebar's cursor row stands for.
+local function delete_file()
+  local repository = root()
+  local path = sidebar_file()
+  if not path then
+    return say(vim.log.levels.WARN, "run `:Changeset comment del` from a file, or on a file's row")
+  end
+  local comment = on_file(repository, path)
+  if not comment then
+    return say(vim.log.levels.INFO, "no review comment on the whole of %s", path)
+  end
+  drop(repository, comment)
+end
+
+---Deletes the review comment on the cursor's line, the narrowest of those covering it; from the sidebar, the one on
+---the whole file the cursor's row stands for.
 function M.delete()
+  if window.is_focused() then
+    return delete_file()
+  end
   if vim.bo.modified then
     return say(vim.log.levels.WARN, M.UNSAVED)
   end
@@ -379,15 +447,16 @@ local function longest_backticks(lines)
   return longest
 end
 
----One comment's block: its place by absolute path, its lines fenced in the file's language, and its body.
+---One comment's block: its place by absolute path, its lines fenced in the file's language, and its body. A whole
+---file's quotes none.
 ---@param repository string
 ---@param comment changeset.ReviewComment
 ---@param read changeset.reviewing.ReadLines
 ---@return string
 local function block(repository, comment, read)
-  local first = comment.start_line or comment.line
   local parts = { vim.fs.joinpath(repository, location(comment)) }
-  local lines = read(comment.path, first, comment.line)
+  local last = comment.line
+  local lines = last and read(comment.path, comment.start_line or last, last)
   if lines then
     local fence = ("`"):rep(longest_backticks(lines) + 1)
     parts[#parts + 1] = fence .. (vim.filetype.match({ filename = comment.path }) or "")
@@ -398,7 +467,8 @@ local function block(repository, comment, read)
   return table.concat(parts, "\n")
 end
 
----The text a review is pasted as: a block per comment, by path, then line, a blank line between blocks.
+---The text a review is pasted as: a block per comment, by path, then line, a whole file's first, a blank line
+---between blocks.
 ---@param repository string
 ---@param comments changeset.ReviewComment[]
 ---@param read changeset.reviewing.ReadLines
@@ -409,7 +479,7 @@ function M._review_text(repository, comments, read)
     if a.path ~= b.path then
       return a.path < b.path
     end
-    return a.line < b.line
+    return (a.line or 0) < (b.line or 0)
   end)
   return table.concat(
     vim.tbl_map(function(comment)
@@ -483,10 +553,11 @@ function M.submit()
   end)
 end
 
+---0 for a whole file's comment, which sorts ahead of its lines'.
 ---@param comment changeset.ReviewComment
 ---@return integer
 local function first_line(comment)
-  return comment.start_line or comment.line
+  return comment.start_line or comment.line or 0
 end
 
 ---`comments` by path, then first line, the order the Comments section lists them in.
@@ -608,12 +679,12 @@ local function land(win, from_sidebar, repository, comment)
   return true
 end
 
----`repository`'s comments whose files are there, in the order of `in_order`.
+---`repository`'s comments on lines of files that are there, in the order of `in_order`.
 ---@param repository string
 ---@return changeset.ReviewComment[]
 local function reachable(repository)
   return vim.tbl_filter(function(comment)
-    return vim.uv.fs_stat(vim.fs.joinpath(repository, comment.path)) ~= nil
+    return comment.line ~= nil and vim.uv.fs_stat(vim.fs.joinpath(repository, comment.path)) ~= nil
   end, comment_store.list(repository))
 end
 

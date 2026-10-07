@@ -62,6 +62,26 @@ local function open_comment(row)
   end
 end
 
+---Whether `row` lists a review comment on a whole file, which opens under the row, there being no line to go to.
+---@param row changeset.Row?
+---@return boolean
+local function lists_file_comment(row)
+  return row ~= nil and row.review_comment ~= nil and row.review_comment.line == nil
+end
+
+---Opens the cursor's row `how`, then the review comment it lists; a whole file's opens under the row instead.
+---@param how "reuse"|"vsplit"|"split"|"tab"
+---@param hooks changeset.ActionHooks
+local function jump(how, hooks)
+  local row = draw.row_at_cursor()
+  local comment = row and row.review_comment
+  if row and comment and not comment.line then
+    hooks.pick(row)
+    return reviewing.open(comment)
+  end
+  open_comment(commit(how, hooks))
+end
+
 ---@param delta integer
 ---@param preview fun()
 local function step(delta, preview)
@@ -126,8 +146,8 @@ local function start_row(state, lnum, path, line, delta)
 end
 
 ---The row `count` places past the sidebar's cursor, down for a positive `count`: each place a row that opens
----somewhere other than the last, starting from where the window it opens into stands. A deleted file's row opens
----nowhere, so it is never one. Stops at the last such row.
+---somewhere other than the last, starting from where the window it opens into stands. A deleted file's row and a
+---whole file's review comment row open nowhere, so neither is ever one. Stops at the last such row.
 ---@param state changeset.SidebarState
 ---@param lnum integer
 ---@param count integer
@@ -145,7 +165,7 @@ local function placed(state, lnum, count, here)
       end
       at = next_lnum
       local row = assert(state.view:row(at))
-    until not (row.kind == "file" and row.status == "deleted") and place_of(row) ~= here
+    until not (row.kind == "file" and row.status == "deleted" or lists_file_comment(row)) and place_of(row) ~= here
     to, here = at, place_of(assert(state.view:row(at)))
   end
   return to
@@ -316,23 +336,27 @@ function M.set_keymaps(buf, keys, hooks)
   end
 
   map(keys.jump, function()
-    open_comment(commit("reuse", hooks))
+    jump("reuse", hooks)
   end, "Go to this change")
   -- The commit leaves the cursor in the window it jumped to, and `close` keeps
   -- focus where it already is, so the sidebar goes without taking the jump back.
   map(keys.jump_close, function()
+    -- A whole file's review comment opens under its row, which closing would take away.
+    if lists_file_comment(draw.row_at_cursor()) then
+      return jump("reuse", hooks)
+    end
     local row = commit("reuse", hooks)
     hooks.close()
     open_comment(row)
   end, "Go to this change and close the tree")
   map(keys.jump_vsplit, function()
-    open_comment(commit("vsplit", hooks))
+    jump("vsplit", hooks)
   end, "Go to this change in a vertical split")
   map(keys.jump_split, function()
-    open_comment(commit("split", hooks))
+    jump("split", hooks)
   end, "Go to this change in a split")
   map(keys.jump_tab, function()
-    open_comment(commit("tab", hooks))
+    jump("tab", hooks)
   end, "Go to this change in a new tab")
   map(keys.delete_comment, function()
     local row = draw.row_at_cursor()

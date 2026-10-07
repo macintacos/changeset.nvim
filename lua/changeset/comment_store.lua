@@ -9,7 +9,7 @@ local M = {}
 
 ---@class changeset.ReviewComment
 ---@field path string Repo-relative.
----@field line integer The last line, 1-based.
+---@field line integer? The last line, 1-based; nil for a comment on the whole file.
 ---@field start_line integer? The first line, only for a range.
 ---@field body string
 ---@field draft true? Kept but not saved, so submit and yank leave it out.
@@ -30,14 +30,13 @@ local function valid(entry)
   return type(entry) == "table"
     and type(entry.path) == "string"
     and type(entry.body) == "string"
-    and type(entry.line) == "number"
-    and entry.line % 1 == 0
-    and entry.line >= 1
+    and (entry.line == nil or (type(entry.line) == "number" and entry.line % 1 == 0 and entry.line >= 1))
     and (entry.draft == nil or entry.draft == true)
     and (
       entry.start_line == nil
       or (
-        type(entry.start_line) == "number"
+        entry.line ~= nil
+        and type(entry.start_line) == "number"
         and entry.start_line % 1 == 0
         and entry.start_line >= 1
         and entry.start_line < entry.line

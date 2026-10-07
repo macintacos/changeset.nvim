@@ -534,15 +534,15 @@ local function span(spanned)
   return tostring(spanned.line)
 end
 
----A comment row: the file marks' circle in the rail's column, the file's icon, its name and line, and the body's
----first line, quiet like the marks' and clipped to fit.
+---A comment row: the file marks' circle in the rail's column, the file's icon, its name and line, the name alone for
+---a whole file's, and the body's first line, quiet like the marks' and clipped to fit.
 ---@param row changeset.Row
 ---@param opts changeset.RenderOpts
 ---@return changeset.Line
 local function comment_line(row, opts)
   local comment = assert(row.review_comment, "changeset: a comment row lists nothing")
   local glyph, icon_hl = opts.icon(row)
-  local where = vim.fs.basename(row.path) .. ":" .. span(comment)
+  local where = vim.fs.basename(row.path) .. (comment.line and ":" .. span(comment) or "")
   local circle = comment.draft and M.REVIEW_COMMENT_DRAFT_CIRCLE or M.REVIEW_COMMENT_CIRCLE
   local room = opts.width - vim.fn.strdisplaywidth(MARGIN .. circle .. " " .. glyph .. " ") - stat_cells(nil)
   where = clip_right(where, room)

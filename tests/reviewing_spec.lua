@@ -486,6 +486,15 @@ describe("changeset.reviewing", function()
       assert.equal("/repo/notes.zzqq:1\n```\nnotes.zzqq 1\n```\nb", text)
     end)
 
+    it("writes a whole file's comment as its absolute path and its text, ahead of its lines' comments", function()
+      local text = reviewing._review_text("/repo", {
+        { path = "a.lua", line = 2, body = "a line" },
+        { path = "a.lua", body = "the file" },
+      }, read)
+
+      assert.equal("/repo/a.lua\nthe file\n\n/repo/a.lua:2\n```lua\na.lua 2\n```\na line", text)
+    end)
+
     it("writes no fence when the lines can't be read", function()
       assert.equal(
         "/repo/gone.lua:5\nwhy",
@@ -745,6 +754,17 @@ describe("changeset.reviewing", function()
       assert.equal(vim.log.levels.WARN, notes[1].level)
     end)
 
+    it("passes over a comment on a whole file", function()
+      three_comments()
+      comment_store.keep(dir, { path = "b.lua", body = "the file" })
+      vim.api.nvim_win_set_cursor(0, { 8, 0 })
+
+      reviewing.next_comment(1)
+
+      assert.same({ "b.lua", 3 }, { where() })
+      assert.equal("review comment 3 of 3", echoes[1])
+    end)
+
     it("steps over as many comments as its count", function()
       three_comments()
       vim.api.nvim_win_set_cursor(0, { 1, 0 })
@@ -818,6 +838,17 @@ describe("changeset.reviewing", function()
       assert.equal("last", window().body)
     end)
 
+    it("passes over a comment on a whole file", function()
+      edit_file()
+      comment_store.keep(dir, comment({ body = "last on a line" }))
+      comment_store.keep(dir, { path = "a.lua", body = "the file" })
+
+      reviewing.last_comment()
+
+      assert.equal(4, vim.api.nvim_win_get_cursor(0)[1])
+      assert.equal("last on a line", window().body)
+    end)
+
     it("warns, naming its file, when the file of the comment saved last is gone", function()
       edit_file()
       comment_store.keep(dir, comment())
@@ -872,6 +903,19 @@ describe("changeset.reviewing", function()
       end, qf.items)
       assert.same({ { 2, 3, "first" }, { 6, 6, "second …" } }, items)
       assert.equal(dir .. "/a.lua", vim.fs.normalize(vim.api.nvim_buf_get_name(qf.items[1].bufnr)))
+    end)
+
+    it("lists a whole file's comment as an item on no line, ahead of its lines'", function()
+      edit_file()
+      comment_store.keep(dir, comment({ line = 6, body = "a line" }))
+      comment_store.keep(dir, { path = "a.lua", body = "the file" })
+
+      reviewing.list()
+
+      local items = vim.tbl_map(function(item)
+        return { item.lnum, item.end_lnum, item.text }
+      end, vim.fn.getqflist())
+      assert.same({ { 0, 0, "the file" }, { 6, 6, "a line" } }, items)
     end)
 
     it("marks a draft's item", function()

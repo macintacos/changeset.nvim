@@ -658,7 +658,8 @@ function M.build(files, symbols_by_path, lines)
     :totable()
 end
 
----The Comments section: a row per review comment, by path, then line, then as listed. A row goes to its line.
+---The Comments section: a row per review comment, by path, then line, a whole file's first, then as listed. A row goes
+---to its line.
 ---The header counts the rows, and carries no stat: a review comment changes no line.
 ---@param review_comments changeset.ReviewComment[]
 ---@return changeset.Row? section nil when there is nothing to list.
@@ -675,7 +676,7 @@ function M.comments(review_comments)
       return a.path < b.path
     end
     if a.line ~= b.line then
-      return a.line < b.line
+      return (a.line or 0) < (b.line or 0)
     end
     return arrival[a] < arrival[b]
   end)
@@ -692,7 +693,9 @@ function M.comments(review_comments)
     ancestor = false,
     children = vim.tbl_map(function(comment)
       return {
-        id = ("%s\0%s:%d-%d"):format(COMMENTS_ID, comment.path, comment.start_line or comment.line, comment.line),
+        id = comment.line
+            and ("%s\0%s:%d-%d"):format(COMMENTS_ID, comment.path, comment.start_line or comment.line, comment.line)
+          or ("%s\0%s"):format(COMMENTS_ID, comment.path),
         kind = "comment",
         depth = 1,
         name = comment.path,

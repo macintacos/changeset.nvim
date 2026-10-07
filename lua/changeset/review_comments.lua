@@ -25,6 +25,7 @@ function M.at(comments, path, lnum)
     local first, last = comment.start_line or comment.line, comment.line
     if
       comment.path == path
+      and last
       and first <= lnum
       and lnum <= last
       and not (narrowest_width and last - first >= narrowest_width)
@@ -86,11 +87,14 @@ function M.bubble(buf, lnum)
   end
 end
 
----"line 4", or "lines 3-5" for a range.
----@param first integer
----@param last integer
+---"line 4", "lines 3-5" for a range, or "whole file" for none.
+---@param first integer?
+---@param last integer?
 ---@return string
 function M.lines_label(first, last)
+  if not (first and last) then
+    return "whole file"
+  end
   return first < last and ("lines %d-%d"):format(first, last) or ("line %d"):format(last)
 end
 
@@ -111,7 +115,7 @@ local function hover_text(fname, lnum)
   local entries = {}
   for _, comment in ipairs(comment_store.list(root)) do
     local first, last = comment.start_line or comment.line, comment.line
-    if comment.path == path and first <= lnum and lnum <= last then
+    if comment.path == path and last and first <= lnum and lnum <= last then
       local body = comment.body:gsub("\r\n", "\n")
       local heading = comment.draft and "Draft review comment" or "Review comment"
       table.insert(entries, ("**%s · %s**\n\n%s"):format(heading, M.lines_label(first, last), body))
@@ -138,7 +142,7 @@ local function mark_file(buf, root, comments)
   local line_count = vim.api.nvim_buf_line_count(buf)
   local marked = {}
   for _, comment in ipairs(comments) do
-    if comment.path == path and comment.line <= line_count then
+    if comment.path == path and comment.line and comment.line <= line_count then
       mark(buf, comment)
       marked[#marked + 1] = comment
     end
