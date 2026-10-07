@@ -38,6 +38,28 @@ end
 
 local CALLABLE = { Function = true, Method = true, Constructor = true }
 
+-- Kinds a server gives a function stored as a value: a TS arrow const, class-field arrow or getter.
+local HOLDS_VALUE = { Variable = true, Constant = true, Property = true }
+local LOCAL = { Variable = true, Constant = true }
+
+---Whether `row` is a callable: a function, or a value declaring locals, which an object literal never does directly.
+---@param row { node: table, kind: string }
+---@return boolean
+local function callable(row)
+  if CALLABLE[row.kind] then
+    return true
+  end
+  if not HOLDS_VALUE[row.kind] then
+    return false
+  end
+  for _, child in ipairs(row.node.children or {}) do
+    if LOCAL[vim.lsp.protocol.SymbolKind[child.kind]] then
+      return true
+    end
+  end
+  return false
+end
+
 -- What a callable keeps as children. Servers also list its locals, parameters and object keys, each of
 -- which would take a line of the callable's change from it.
 local IN_CALLABLE = {
@@ -101,7 +123,7 @@ end
 local function walk(out, nodes, kinds, depth, in_callable)
   for _, row in ipairs(level(nodes, kinds, in_callable)) do
     out[#out + 1] = to_item(row, depth)
-    walk(out, row.node.children or {}, kinds, depth + 1, CALLABLE[row.kind])
+    walk(out, row.node.children or {}, kinds, depth + 1, callable(row))
   end
 end
 

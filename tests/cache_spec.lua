@@ -98,7 +98,7 @@ describe("changeset.cache", function()
 
   describe("path", function()
     it("names the file for the entry format it holds", function()
-      assert.truthy(vim.endswith(cache.path("/repo"), ".v4.json"))
+      assert.truthy(vim.endswith(cache.path("/repo"), ".v5.json"))
     end)
   end)
 

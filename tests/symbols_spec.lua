@@ -80,8 +80,15 @@ describe("changeset.symbols", function()
 
     describe("under a callable", function()
       -- Keeps every kind used here, so only the nesting can drop one.
-      local CODE =
-        { Class = true, Constructor = true, Function = true, Method = true, Property = true, Variable = true }
+      local CODE = {
+        Class = true,
+        Constant = true,
+        Constructor = true,
+        Function = true,
+        Method = true,
+        Property = true,
+        Variable = true,
+      }
 
       for _, kind in ipairs({ "Function", "Method", "Constructor" }) do
         it("drops a " .. kind .. "'s locals, parameters and object keys", function()
@@ -109,6 +116,41 @@ describe("changeset.symbols", function()
 
         assert.same({ "outer", "inner" }, field(items, "name"))
         assert.same({ 0, 1 }, field(items, "depth"))
+      end)
+
+      it("drops the locals of a function held in a variable", function()
+        local items = symbols.flatten({
+          sym("handler", KIND.Variable, 0, { sym("token", KIND.Variable, 1), sym("status", KIND.Constant, 2) }),
+        }, CODE)
+
+        assert.same({ "handler" }, field(items, "name"))
+      end)
+
+      it("drops the locals of a function held in a class field", function()
+        local items = symbols.flatten({
+          sym("Sweeper", KIND.Class, 0, { sym("sweep", KIND.Property, 1, { sym("dropped", KIND.Variable, 2) }) }),
+        }, CODE)
+
+        assert.same({ "Sweeper", "sweep" }, field(items, "name"))
+      end)
+
+      it("drops a getter's locals", function()
+        local items = symbols.flatten({
+          sym("Pool", KIND.Class, 0, { sym("size", KIND.Property, 1, { sym("n", KIND.Variable, 2) }) }),
+        }, CODE)
+
+        assert.same({ "Pool", "size" }, field(items, "name"))
+      end)
+
+      it("keeps an object literal's keys", function()
+        local items = symbols.flatten({
+          sym("DEFAULTS", KIND.Constant, 0, {
+            sym("keymaps", KIND.Property, 1, { sym("jump", KIND.Property, 2) }),
+            sym("onOpen", KIND.Method, 3),
+          }),
+        }, CODE)
+
+        assert.same({ "DEFAULTS", "keymaps", "jump", "onOpen" }, field(items, "name"))
       end)
 
       it("keeps the members of a class declared inside a function", function()
