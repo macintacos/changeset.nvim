@@ -366,6 +366,14 @@ only leaves insert mode, so a habitual `<Esc>` on the way to normal mode never c
 A save of only whitespace is no save: it closes the window like `q`, so the blank text
 reaches the same hook and the caller discards it, never storing it.
 
+A review comment on a whole file has no line to open under, and a deleted file has no
+buffer, so its window opens under a row of the sidebar instead: the file's row, or its
+Comments row. The sidebar is the one place every changed file has a line, a deleted one
+included, and the row above names the file the comment is about, as the line above names
+the code. Being any other source window, the sidebar gets the same room, placement and
+closing. The title names its reach as a line's names its lines: `Review comment · whole
+file`.
+
 ### Dialogs ask in floats of changeset's own
 
 ```text
@@ -507,7 +515,8 @@ rather than claiming that nothing changed.
  10 󰍩 end                              ● ok here ● and simplify
 ```
 
-Each review comment is marked in its file's buffer by three things. Its line numbers, every
+Each review comment on lines is marked in its file's buffer by three things; one on the
+whole file is about no line, so it marks none, and hover leaves it out. Its line numbers, every
 line of a range, turn `ChangesetReviewComment`: `DiagnosticOk`'s green, bold, a deliberate
 divergence from § Visual system's vocabulary rule, since the config has no "all is well"
 green and `GitSignsAdd`, the green it does use, already means added lines. The number
@@ -691,6 +700,8 @@ filetype, and its body. The path is absolute, because the agent's pane can run i
 directory or worktree than the repository's. The lines are read as they are now, from the buffer when the file
 is loaded, so the agent sees what the comment was written against, unsaved edits included.
 Blocks go by path, then line, a blank line apart, the way the Comments section orders them.
+A whole file's block is its absolute path and its body, ahead of the blocks on its lines:
+quoting the whole file would bury the comments, and a deleted file has nothing to quote.
 A block whose lines can't be read, its file gone or its range past the end, keeps its place
 and body and drops the fence rather than quoting the wrong lines.
 
@@ -753,6 +764,15 @@ A row is for finding what you wrote, so its keys act on that. `<CR>` and the spl
 keys jump to its line, then open it editable in the review comment window, its title and
 keys' descriptions saying edit and update. `d` asks first, in the question of § Dialogs that
 `:Changeset review abandon` uses too, then deletes it.
+
+A whole file's review comment has no line, so its row names the file alone and sorts ahead
+of the file's lines, where line 0 would. Its keys open it under the row itself, as
+`:Changeset comment new` on the file's row does, without opening the file: `<S-CR>` too
+keeps the sidebar open, since closing it would take the window's room with it. The steps
+of § `<C-g>n` pass over the row, as they pass over a deleted file's, and so do
+`:Changeset comment next`, `prev` and `last`: a jump lands on a line, and this comment is
+on none. A row whose file is gone previews the deleted file's notice rather than leaving
+the last preview standing.
 
 ### Footer
 

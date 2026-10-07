@@ -110,9 +110,10 @@ after them:
 - `:Changeset review abandon` deletes every [review comment](#review-comments) of the
   repository.
 - `:Changeset comment new` writes a [review comment](#review-comments) on the cursor's
-  line, or on the selected lines, or opens the one already there to edit it.
+  line, or on the selected lines, or opens the one already there to edit it. On a file's
+  row in the sidebar, it writes one on the [whole file](#review-comments).
 - `:Changeset comment del` deletes the [review comment](#review-comments) on the cursor's
-  line.
+  line, or on a file's row in the sidebar, the one on the whole file.
 - `:Changeset comment next` / `:Changeset comment prev` jump to the next / previous
   [review comment](#review-comments).
 - `:Changeset comment last` jumps to the [review comment](#review-comments) you saved last
@@ -155,9 +156,10 @@ maps `<C-g>c` itself too, so `<C-g>c` followed by a pause comments, as `<C-g>cc`
 
 `<C-g>n` and `<C-g>p` move the sidebar's selected row to the next or previous place and
 open it as `<CR>` does, without opening a Comments row's review comment. Section headers
-are skipped. So is a deleted file's row, which opens nowhere, and any row that would open
-where the window already stands, such as a file's row, its "Other changes" row and that
-group's first change, which can all open the same line. So every press moves you. From a
+are skipped. So are a deleted file's row and a whole file's Comments row, which open
+nowhere, and any row that would open where the window already stands, such as a file's
+row, its "Other changes" row and that group's first change, which can all open the same
+line. So every press moves you. From a
 file you stay in its window, which now shows the next place. From the sidebar, the row
 opens in the window it opens changes in, and focus stays on the sidebar. From a window
 that holds no file, such as the quickfix list, help or a float, the row opens in the
@@ -279,8 +281,8 @@ close it there too. The next session turns it on again the first time the sideba
 
 ## Review comments
 
-Review comments are notes on lines of the repository's files, kept on this machine in
-`stdpath("state")/changeset/comments.json` until `:Changeset review submit` hands them to an AI
+Review comments are notes on lines of the repository's files, or on whole files, kept on
+this machine in `stdpath("state")/changeset/comments.json` until `:Changeset review submit` hands them to an AI
 agent. They belong to the repository's root, so every branch checked out there shares
 them, and they keep their line numbers when the file changes. The first one written starts
 the review, and `:Changeset review submit` or `:Changeset review abandon` ends it. None of this needs the
@@ -358,12 +360,30 @@ A sidebar for the branch.
 Say what it maps.
 ````
 
-A block whose lines can't be read, as when its file is gone, leaves the quote out.
+A block whose lines can't be read, as when its file is gone, leaves the quote out, and so
+does a whole file's.
 
 A review comment opened to edit, titled `Edit review comment`, is replaced by a save key.
 Saving or closing it with only whitespace asks whether to delete it. Closing it with its
 text unchanged leaves it as it was; closing it with changed text keeps that text as a
 draft, which submit leaves out until you save it again.
+
+### On a whole file
+
+On a file's row in the sidebar, `:Changeset comment new` (`<C-g>cc`) writes a review
+comment on the whole file, a file the branch deleted included. Its window opens under that
+row, titled `Review comment · whole file`. A file holds one: run it again on the row to
+edit that one, and `:Changeset comment del` on the row deletes it, without asking.
+
+The Comments section lists it by the file's name alone, ahead of the comments on the
+file's lines. `<CR>` on its row, and `<S-CR>` or a split or tab key, open it to edit under
+the row, without opening the file and keeping the sidebar open. Moving onto the row
+previews the file, or, for a file that is gone, says it was deleted.
+
+It marks no line of the file and answers no hover. The pasted review names it by the
+file's absolute path alone, ahead of the comments on its lines, and `:Changeset comment list`
+lists it on no line. `:Changeset comment next`, `prev` and `last` pass over it, as `<C-g>n`
+and `<C-g>p` pass over its row.
 
 ### Where review comments show
 
@@ -446,8 +466,8 @@ The review comment window answers `:Changeset` and its `<C-g>` keys as being abo
 comment you are writing. `<C-g>cc` or `:Changeset comment new` saves it. `<C-g>cd` or
 `:Changeset comment del` deletes it, asking first when it is stored or holds text; Keep returns
 you to the window as you left it. Every other subcommand closes the window, keeping a
-draft, then runs from the comment's line in the file, so `<C-g>cn` goes to the next review
-comment after it. `<C-g>cl` or `:Changeset comment last` on the comment saved last stays
+draft, then runs from the comment's line in the file, or from a whole file's row in the
+sidebar, so `<C-g>cn` goes to the next review comment after it. `<C-g>cl` or `:Changeset comment last` on the comment saved last stays
 in the window and says so. With the default keys on, the `<C-g>` keys the plugin mapped
 work in insert mode in the window too, except a key you map in insert mode yourself, at
 any time, such as nvim-surround's `<C-g>s`, and a key you set as a `review_comment.save`
