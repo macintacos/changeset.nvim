@@ -25,6 +25,7 @@ describe("changeset.reviewing", function()
       open = function(opts)
         table.insert(windows, opts)
       end,
+      watch = function() end,
     }
     package.loaded["changeset.window"] = {
       is_focused = function()

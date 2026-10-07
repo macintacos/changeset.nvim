@@ -138,6 +138,10 @@ M.BLOCK_BODY_HL = "ChangesetBlockBody"
 ---@type string
 M.BLOCK_PARKED_HL = "ChangesetBlockParked"
 
+---Group for a draft review comment block's border and title. Created by `define_highlights`.
+---@type string
+M.BLOCK_DRAFT_HL = "ChangesetBlockDraft"
+
 ---Group for the title of the block the cursor is parked on. Created by `define_highlights`.
 ---@type string
 M.BLOCK_PARKED_TITLE_HL = "ChangesetBlockParkedTitle"
@@ -985,6 +989,9 @@ function M.define_highlights()
   set_default(M.BLOCK_BODY_HL, { link = "NormalFloat" })
   -- Parked takes the comment marks' green, which no border uses, and a reversed title: it must read on a theme whose
   -- floats have no background to tint.
+  -- The draft marks' colour, on the float's background as the other border chunks are.
+  local draft = vim.api.nvim_get_hl(0, { name = M.REVIEW_COMMENT_DRAFT_HL, link = false })
+  set_default(M.BLOCK_DRAFT_HL, { fg = draft.fg, bg = float.bg })
   set_default(M.BLOCK_PARKED_HL, { fg = ok, bg = float.bg, bold = true })
   set_default(M.BLOCK_PARKED_TITLE_HL, { fg = ok, reverse = true, bold = true })
   set_default(M.BLOCK_HINT_HL, { fg = comment.fg, bg = float.bg, italic = true })

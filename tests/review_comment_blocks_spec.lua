@@ -42,12 +42,13 @@ describe("review comment blocks", function()
     comment_store.keep(Paths.root(0), comment)
   end
 
-  ---Each extmark's lines as text, in buffer order.
+  ---Each extmark's lines as text, in buffer order, of `buf` or the current buffer.
+  ---@param buf integer?
   ---@return { line: integer, text: string[] }[]
-  local function drawn()
+  local function drawn(buf)
     local ns = vim.api.nvim_get_namespaces()["changeset.review_comment_blocks"]
     local out = {}
-    for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, { details = true })) do
+    for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf or 0, ns, 0, -1, { details = true })) do
       local text = {}
       for i, chunks in ipairs(mark[4].virt_lines or {}) do
         text[i] = table.concat(vim.tbl_map(function(chunk)
@@ -158,12 +159,16 @@ describe("review comment blocks", function()
     assert.are.equal("ChangesetReviewComment", mark.number_hl_group)
   end)
 
-  it("draws a draft with a dashed border", function()
+  it("draws a draft with a dashed border in the draft colour, titled as a draft", function()
     keep({ path = "alpha.txt", line = 3, body = "short", draft = true })
 
     local text = drawn()[1].text
+    assert.truthy(text[1]:find("^╭ Draft review comment · line 3 ┄"))
     assert.truthy(text[2]:find("^┆ short  *┆$"))
     assert.truthy(text[3]:find("┄"))
+    local ns = vim.api.nvim_get_namespaces()["changeset.review_comment_blocks"]
+    local top = vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, { details = true })[1][4].virt_lines[1]
+    assert.are.same({ "ChangesetBlockDraft", "ChangesetBlockDraft" }, { top[1][2], top[2][2] })
   end)
 
   it("stacks two blocks on one line in the order the store lists them", function()
@@ -343,6 +348,89 @@ describe("review comment blocks", function()
     blocks.toggle()
     assert.are.equal("mine", vim.fn.maparg("j", "n", false, true).desc)
     blocks.toggle()
+  end)
+
+  it("hides a line's blocks while the review comment window is open on it", function()
+    keep({ path = "alpha.txt", line = 3, body = "short" })
+    keep({ path = "alpha.txt", line = 6, body = "other" })
+    local alpha = vim.api.nvim_get_current_buf()
+    go(3)
+
+    press("j<CR>")
+    assert.are.same(
+      { 6 },
+      vim.tbl_map(
+        function(mark)
+          return mark.line
+        end,
+        vim.tbl_filter(function(mark)
+          return #mark.text > 0
+        end, drawn(alpha))
+      )
+    )
+
+    press("<Esc>q")
+    assert.are.equal(2, #vim.tbl_filter(function(mark)
+      return #mark.text > 0
+    end, drawn()))
+  end)
+
+  it("resumes a draft from its parked block", function()
+    keep({ path = "alpha.txt", line = 3, body = "half done", draft = true })
+    go(3)
+
+    press("j<CR>")
+    assert.are.equal("half done", vim.api.nvim_get_current_line())
+    assert.truthy(vim.inspect(vim.api.nvim_win_get_config(0).title):find("draft", 1, true))
+    press("<Esc>q")
+  end)
+
+  describe("stepping up onto a wrapped line", function()
+    before_each(function()
+      vim.api.nvim_buf_set_lines(0, 4, 6, false, { ("word "):rep(20), ("text "):rep(20) })
+      vim.cmd("silent write")
+      keep({ path = "alpha.txt", line = 5, body = "short" })
+      vim.cmd("vsplit")
+      vim.api.nvim_win_set_width(0, 40)
+    end)
+
+    ---Whether the cursor is on the last screen row of line 5.
+    local function on_last_row_of_5()
+      local line5 = vim.fn.getline(5)
+      local pos = vim.api.nvim_win_get_cursor(0)
+      return pos[1] == 5 and vim.fn.screenpos(0, 5, pos[2] + 1).row == vim.fn.screenpos(0, 5, #line5).row
+    end
+
+    it("lands on its last screen row from the end of the line under it", function()
+      vim.api.nvim_win_set_cursor(0, { 6, 0 })
+      press("$kk")
+      assert.is_true(on_last_row_of_5())
+      press("k")
+      assert.is_true(vim.api.nvim_win_get_cursor(0)[1] <= 5 and not on_last_row_of_5())
+    end)
+
+    it("lands on its last screen row from a far column", function()
+      vim.keymap.set("n", "k", "gk")
+      vim.cmd.edit()
+      vim.api.nvim_win_set_cursor(0, { 6, 30 })
+      press("kk")
+      assert.is_true(on_last_row_of_5())
+      press("k")
+      assert.are.equal(5, vim.api.nvim_win_get_cursor(0)[1])
+      vim.keymap.del("n", "k")
+    end)
+  end)
+
+  it("lets a split made long after letting go copy the window's own cursorline", function()
+    keep({ path = "alpha.txt", line = 3, body = "short" })
+    vim.o.cursorline = true
+    go(3)
+    press("j<Esc>")
+    vim.wait(20)
+
+    vim.wo.cursorline = false
+    vim.cmd("split")
+    assert.is_false(vim.wo.cursorline)
   end)
 
   describe("landing", function()

@@ -3,6 +3,7 @@
 local config = require("changeset.config")
 local dialog = require("changeset.dialog")
 local render = require("changeset.render")
+local review_comment_window = require("changeset.review_comment_window")
 
 local M = {}
 
@@ -67,6 +68,10 @@ local moves = {}
 ---@type changeset.ParkedBlock?
 local parked
 
+---Each buffer's lines whose blocks hide while a review comment window is open on them, its room alone under the line.
+---@type table<integer, table<integer, integer>>
+local editing = {}
+
 ---The window the last parked block was in and the 'cursorline' it gave back, for a split made as it let go.
 ---@type { win: integer, cursorline: boolean }?
 local released
@@ -130,11 +135,12 @@ end
 ---@param is_parked boolean
 ---@return [string, string][][]
 local function box(comment, widest, is_parked)
-  -- TODO: read `draft` off changeset.ReviewComment once the drafts branch declares it there.
-  local edge = (comment --[[@as { draft: boolean? }]]).draft and DASHED or SOLID
-  local border = is_parked and render.BLOCK_PARKED_HL or render.BLOCK_BORDER_HL
+  local edge = comment.draft and DASHED or SOLID
+  local plain_border = comment.draft and render.BLOCK_DRAFT_HL or render.BLOCK_BORDER_HL
+  local border = is_parked and render.BLOCK_PARKED_HL or plain_border
   local label = require("changeset.review_comments").lines_label(comment.start_line or comment.line, comment.line)
-  local title = " Review comment · " .. label .. " "
+  -- Named as hover names it.
+  local title = (comment.draft and " Draft review comment · " or " Review comment · ") .. label .. " "
   local text = dialog.wrap(vim.trim((comment.body:gsub("\r\n", "\n"))), math.max(widest - 2, 1))
   local inner = cells(title) + 1
   for _, line in ipairs(text) do
@@ -146,7 +152,10 @@ local function box(comment, widest, is_parked)
   local lines = {
     {
       { "╭", border },
-      { title, is_parked and render.BLOCK_PARKED_TITLE_HL or render.BLOCK_TITLE_HL },
+      {
+        title,
+        is_parked and render.BLOCK_PARKED_TITLE_HL or comment.draft and render.BLOCK_DRAFT_HL or render.BLOCK_TITLE_HL,
+      },
       { edge.h:rep(inner - cells(title)), border },
       { "╮", border },
     },
@@ -182,6 +191,9 @@ local function anchor_at(buf, line)
   if not drawn[buf] or line < 1 then
     return
   end
+  if editing[buf] and editing[buf][line] then
+    return
+  end
   local mark = vim.api.nvim_buf_get_extmarks(buf, ns, { line - 1, 0 }, { line - 1, -1 }, { limit = 1 })[1]
   return mark and mark[1]
 end
@@ -192,11 +204,14 @@ end
 ---@param parked_index integer?
 local function paint(buf, id, parked_index)
   local blocks = drawn[buf]
+  local line = anchor_line(buf, id)
   local lines = {}
-  for i, comment in ipairs(blocks.anchors[id]) do
-    vim.list_extend(lines, box(comment, blocks.widest, i == parked_index))
+  if not (editing[buf] and editing[buf][line]) then
+    for i, comment in ipairs(blocks.anchors[id]) do
+      vim.list_extend(lines, box(comment, blocks.widest, i == parked_index))
+    end
   end
-  vim.api.nvim_buf_set_extmark(buf, ns, anchor_line(buf, id) - 1, 0, { id = id, virt_lines = lines })
+  vim.api.nvim_buf_set_extmark(buf, ns, line - 1, 0, { id = id, virt_lines = lines })
 end
 
 ---`buf`'s map of `lhs` in Normal mode, else the global one; empty when neither.
@@ -241,7 +256,14 @@ local function unpark()
     restore(state.buf, state.maps)
   end
   dialog.show_cursor()
-  released = { win = state.win, cursorline = state.cursorline }
+  local just_released = { win = state.win, cursorline = state.cursorline }
+  released = just_released
+  -- Only a split made as the block lets go; a later one copies the window's own value.
+  vim.schedule(function()
+    if released == just_released then
+      released = nil
+    end
+  end)
   if vim.api.nvim_win_is_valid(state.win) then
     vim.api.nvim_set_option_value("cursorline", state.cursorline, { scope = "local", win = state.win })
   end
@@ -407,10 +429,21 @@ local function step(state, down)
     local col = vim.fn.virtcol2col(0, at, math.min(state.curswant + 1, vim.v.maxcol))
     vim.api.nvim_win_set_cursor(0, { at, math.max(col - 1, 0) })
     vim.fn.winrestview({ curswant = state.curswant })
-    -- Up lands on the screen row next to the block: a wrapped line's last.
-    local rows = vim.wo.wrap and text_rows(vim.api.nvim_win_get_cursor(0)[1]) or 1
+    -- Up lands on the screen row next to the block, a wrapped line's last, at the wanted column within that row.
+    local rows = vim.wo.wrap and text_rows(at) or 1
     if not down and rows > 1 and vim.fn.foldclosed(line) == -1 then
-      vim.cmd.normal({ (rows - 1) .. "gj", bang = true })
+      local last = math.max(#vim.api.nvim_get_current_line() - 1, 0)
+      vim.api.nvim_win_set_cursor(0, { at, last })
+      if state.curswant < vim.v.maxcol then
+        vim.cmd.normal({ "g0", bang = true })
+        local width = vim.api.nvim_win_get_width(0) - vim.fn.getwininfo(vim.api.nvim_get_current_win())[1].textoff
+        local wanted = vim.fn.virtcol(".") + state.curswant % width
+        vim.api.nvim_win_set_cursor(0, { at, math.max(vim.fn.virtcol2col(0, at, wanted) - 1, 0) })
+        -- On the row's own column, as `gk` would leave it, or the next screen move would jump off the line.
+        vim.fn.winrestview({ curswant = wanted - 1 })
+      else
+        vim.fn.winrestview({ curswant = state.curswant })
+      end
     end
   end)
 end
@@ -439,22 +472,17 @@ end
 ---@field buf integer
 ---@field before integer[]
 ---@field view vim.fn.winsaveview.ret
----@field seq integer
+---@field typed string? What `on_key` saw typed for the first key after the map ran: the map's key when typed.
 
 ---@type changeset.PendingMove?
 local pending
-
----What `vim.on_key` saw typed for each key, by its count, the last few kept.
----@type table<integer, string>
-local typed_keys = {}
-local seq = 0
 
 ---Whether the user typed `move`'s key, rather than a mapping, `:normal` or `feedkeys` sending it. `on_key` reports a
 ---mapped key after its map ran, so this is only known once the keys the map returned arrive.
 ---@param p changeset.PendingMove
 ---@return boolean
 local function typed(p)
-  return typed_keys[p.seq + 1] == vim.keycode(p.move.key)
+  return p.typed == vim.keycode(p.move.key)
 end
 
 ---Runs `p`'s key as it was mapped before blocks showed, in the real typeahead, so a failing motion still ends the
@@ -584,7 +612,6 @@ local function expr(move)
     buf = buf,
     before = vim.api.nvim_win_get_cursor(win),
     view = vim.fn.winsaveview(),
-    seq = seq,
   }
   if parked and parked.win == win then
     return STEP
@@ -672,6 +699,24 @@ end
 
 local group = vim.api.nvim_create_augroup("changeset.review_comment_blocks", { clear = true })
 
+-- Hides the blocks under the line a review comment window opens on, so its room sits directly under the line, and
+-- brings them back as it closes.
+review_comment_window.watch(function(window, opened)
+  local buf, line = window.source_buf, window.comment.line
+  editing[buf] = editing[buf] or {}
+  editing[buf][line] = (editing[buf][line] or 0) + (opened and 1 or -1)
+  if editing[buf][line] <= 0 then
+    editing[buf][line] = nil
+  end
+  if not (drawn[buf] and vim.api.nvim_buf_is_valid(buf)) then
+    return
+  end
+  local mark = vim.api.nvim_buf_get_extmarks(buf, ns, { line - 1, 0 }, { line - 1, -1 }, { limit = 1 })[1]
+  if mark then
+    paint(buf, mark[1], nil)
+  end
+end)
+
 -- Fires: a mode change, a window or buffer left, or text changed while parked, none of which the block's keys cover.
 vim.api.nvim_create_autocmd({ "ModeChanged", "WinLeave", "BufLeave", "TextChanged" }, {
   group = group,
@@ -737,15 +782,15 @@ end
 local MOUSE_MOVE = vim.keycode("<MouseMove>")
 local after_g = false
 
--- Records what was typed for each key, which tells a typed movement key from one a mapping sent. Any other typed key
+-- Records what was typed for the key a movement map ran for, which tells a typed key from one a mapping sent. Any other typed key
 -- lets go of a parked block, `zz` and `<C-e>` included, which change neither mode nor text.
 vim.on_key(function(_, typed_key)
   if typed_key == MOUSE_MOVE then
     return
   end
-  seq = seq + 1
-  typed_keys[seq] = typed_key or ""
-  typed_keys[seq - 20] = nil
+  if pending and pending.typed == nil then
+    pending.typed = typed_key or ""
+  end
   if not parked or not typed_key or typed_key == "" then
     return
   end

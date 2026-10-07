@@ -33,6 +33,7 @@ end
 ---The window as `current` reports it, with what can be done to it.
 ---@class changeset.ReviewCommentWindow
 ---@field source integer The window it opened from.
+---@field source_buf integer The buffer it opened on.
 ---@field comment changeset.ReviewComment
 ---@field text fun(): string Its lines joined by "\n".
 ---@field save fun() As its save keys do.
@@ -44,6 +45,24 @@ end
 ---Each open window's report, by window.
 ---@type table<integer, changeset.ReviewCommentWindow>
 local open_windows = {}
+
+---Called as each window opens and closes, with its report and whether it opened.
+---@type fun(window: changeset.ReviewCommentWindow, opened: boolean)[]
+local watchers = {}
+
+---Calls `fn` as each window opens and closes, with its report and whether it opened. For changeset's own modules.
+---@param fn fun(window: changeset.ReviewCommentWindow, opened: boolean)
+function M.watch(fn)
+  table.insert(watchers, fn)
+end
+
+---@param window changeset.ReviewCommentWindow
+---@param opened boolean
+local function tell(window, opened)
+  for _, fn in ipairs(watchers) do
+    fn(window, opened)
+  end
+end
 
 ---Where insert mode left the cursor in each window as a default key was typed there, until the key's command has
 ---run.
@@ -331,7 +350,11 @@ function M.open(opts)
   ---Takes back the room made under its line.
   local function unpad()
     gone = true
+    local report = open_windows[win]
     open_windows[win] = nil
+    if report then
+      tell(report, false)
+    end
     vim.api.nvim_del_augroup_by_id(group)
     if vim.api.nvim_buf_is_valid(source_buf) then
       vim.api.nvim_buf_del_extmark(source_buf, ns, mark)
@@ -421,6 +444,7 @@ function M.open(opts)
 
   open_windows[win] = {
     source = source,
+    source_buf = source_buf,
     comment = opts.comment,
     text = text,
     save = save,
@@ -436,6 +460,7 @@ function M.open(opts)
       leave_insert(opens)
     end,
   }
+  tell(open_windows[win], true)
 
   if opts.body then
     vim.api.nvim_win_set_cursor(win, { vim.api.nvim_buf_line_count(buf), 0 })
