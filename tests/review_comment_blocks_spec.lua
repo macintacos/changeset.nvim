@@ -385,21 +385,23 @@ describe("review comment blocks", function()
     press("q")
   end)
 
-  it("parks on the comment's own block when <Esc> in normal mode closes its window", function()
-    keep({ path = "alpha.txt", start_line = 2, line = 3, body = "range" })
-    keep({ path = "alpha.txt", line = 3, body = "short" })
-    local alpha = vim.api.nvim_get_current_buf()
-    go(3)
-    press("jj<CR>")
+  for _, key in ipairs({ "<Esc>", "q" }) do
+    it(("parks on the comment's own block when %s in normal mode closes its window"):format(key), function()
+      keep({ path = "alpha.txt", start_line = 2, line = 3, body = "range" })
+      keep({ path = "alpha.txt", line = 3, body = "short" })
+      local alpha = vim.api.nvim_get_current_buf()
+      go(3)
+      press("jj<CR>")
 
-    press("A more<Esc><Esc>")
-    assert.are.equal(alpha, vim.api.nvim_get_current_buf())
-    assert.are.same({ 3, "short" }, { parked() })
-    assert.truthy(cursor.hidden())
-    assert.truthy(vim.iter(comment_store.list(Paths.root(0))):find(function(comment)
-      return comment.body == "short more" and comment.draft
-    end))
-  end)
+      press("A more<Esc>" .. key)
+      assert.are.equal(alpha, vim.api.nvim_get_current_buf())
+      assert.are.same({ 3, "short" }, { parked() })
+      assert.truthy(cursor.hidden())
+      assert.truthy(vim.iter(comment_store.list(Paths.root(0))):find(function(comment)
+        return comment.body == "short more" and comment.draft
+      end))
+    end)
+  end
 
   describe("stepping up onto a wrapped line", function()
     before_each(function()

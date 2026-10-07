@@ -28,11 +28,11 @@ end
 ---@field icon [string, string]? A glyph and the group it comes in, drawn ahead of the title on the title's background.
 ---@field keys string[] Keys that save, in insert and normal mode.
 ---@field save_desc string The save keys' `desc`, which `?` lists.
----@field close_desc string The `desc` of the keys that close without saving, which `?` lists.
----@field back_desc string The `desc` of `<Esc>` in normal mode, which `?` lists.
+---@field close_desc string The `desc` of `<S-Esc>`, which closes without saving, as `?` lists it.
+---@field back_desc string The `desc` of `q` and `<Esc>` in normal mode, which `?` lists.
 ---@field save fun(body: string, done: fun(err: string?)) Called with the buffer's lines joined by "\n", never only whitespace; the window closes once `done` gets no error.
 ---@field keep fun(body: string) Called with the buffer's lines joined by "\n", empty included, whenever the buffer goes (a close, an :e in the float, quitting) except after a taken save.
----@field back fun() Called once `<Esc>` in normal mode has closed it as `q` does, after `keep`.
+---@field back fun() Called once `q` or `<Esc>` in normal mode has closed it, after `keep`.
 ---@field body string? The text it opens with.
 ---@field comment changeset.ReviewComment The comment it is about, as `current` reports it; a new one's body is "".
 
@@ -43,7 +43,7 @@ end
 ---@field comment changeset.ReviewComment
 ---@field text fun(): string Its lines joined by "\n".
 ---@field save fun() As its save keys do.
----@field close fun(after: fun()?) As `q` does, keeping the text, then calls `after` once it has gone and insert mode with it.
+---@field close fun(after: fun()?) As `<S-Esc>` does, keeping the text, then calls `after` once it has gone and insert mode with it.
 ---@field discard fun(after: fun()?) Closes it keeping nothing, then calls `after` as `close` does.
 ---@field resume fun() Picks writing back up where a default key typed in insert mode left it, when that key's command leaves the window open.
 ---@field hold fun(opens: fun()) Leaves insert mode, then calls `opens`, keeping the window open while focus is in the window that opens, until focus comes back to it and its mode.
@@ -413,10 +413,11 @@ function M.open(opts)
   end
   vim.keymap.set("i", "<S-Esc>", close, { buffer = buf, desc = opts.close_desc })
   map("<S-Esc>", close, opts.close_desc)
-  map("q", close, opts.close_desc)
-  map("<Esc>", function()
+  local function back()
     close(opts.back)
-  end, opts.back_desc)
+  end
+  map("q", back, opts.back_desc)
+  map("<Esc>", back, opts.back_desc)
   ---@param lhs string
   ---@return boolean
   local function saves(lhs)
