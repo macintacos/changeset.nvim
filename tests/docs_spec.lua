@@ -1,13 +1,12 @@
--- The vimdoc, not README.md: it is what :help shows, and CI fails when it lags the README.
+-- The vimdoc, not README.md: it is what :help shows, and the one that names everything.
 local root = vim.fn.fnamemodify(vim.api.nvim_get_runtime_file("plugin/changeset.lua", false)[1], ":h:h")
--- panvimdoc re-wraps at 78 columns, inside inline code too.
-local flat = table.concat(vim.fn.readfile(root .. "/doc/changeset.nvim.txt"), "\n"):gsub("%s+", " ")
+local doc = table.concat(vim.fn.readfile(root .. "/doc/changeset.nvim.txt"), "\n")
 
----Whether `name` appears whole: not as the prefix of a longer sibling (`keymaps.next` of `keymaps.next_section`).
----@param name string
+---Whether the vimdoc defines help tag `tag`.
+---@param tag string
 ---@return boolean
-local function mentions(name)
-  return flat:find("%f[%w_.]" .. vim.pesc(name) .. "%f[^%w_]") ~= nil
+local function tagged(tag)
+  return doc:find("*" .. tag .. "*", 1, true) ~= nil
 end
 
 ---Every leaf of `tbl` as a dotted path; a list is one leaf, since a list-valued option is documented by its name.
@@ -28,51 +27,80 @@ local function leaves(tbl, prefix, out)
   return out
 end
 
+---Loads the plugin as startup does, default keys included: a spec runs before VimEnter, which maps them.
+local function load_plugin()
+  vim.cmd.runtime("plugin/changeset.lua")
+  vim.api.nvim_exec_autocmds("VimEnter", {})
+end
+
+---The key in each `*changeset-<key>*` tag, spelled as nvim_get_keymap() spells a lhs.
+---@return table<string, true>
+local function key_tags()
+  local keys = {}
+  for key in doc:gmatch("%*changeset%-([^*%s]+)%*") do
+    keys[vim.fn.keytrans(vim.keycode(key))] = true
+  end
+  return keys
+end
+
 describe("doc/changeset.nvim.txt", function()
-  it("documents every option", function()
+  it("tags every option", function()
     local options = leaves(require("changeset.config").get())
     assert.is_true(#options > 0)
     for _, name in ipairs(options) do
-      assert.is_true(mentions(name), name)
+      assert.is_true(tagged("changeset-option-" .. name), name)
     end
   end)
 
-  it("documents every highlight group", function()
+  it("tags every sidebar key by its default", function()
+    for option, lhs in pairs(require("changeset.config").get().keymaps) do
+      assert.is_true(tagged("changeset-sidebar-" .. lhs), option)
+    end
+  end)
+
+  it("tags every highlight group", function()
     local groups = vim.tbl_filter(function(v)
       return type(v) == "string" and v:find("^Changeset%u") ~= nil
     end, vim.tbl_values(require("changeset.render")))
     assert.is_true(#groups > 0)
     for _, name in ipairs(groups) do
-      assert.is_true(mentions(name), name)
+      assert.is_true(tagged(name), name)
     end
   end)
 
-  it("documents every subcommand and <Plug> map", function()
-    vim.cmd.runtime("plugin/changeset.lua")
+  it("tags every subcommand", function()
+    load_plugin()
     local subcommands = vim.fn.getcompletion("Changeset ", "cmdline")
-    local plugs = vim.tbl_filter(
-      function(lhs)
-        return vim.startswith(lhs, "<Plug>(changeset")
-      end,
-      vim.tbl_map(function(map)
-        return map.lhs
-      end, vim.api.nvim_get_keymap("n"))
-    )
     assert.is_true(#subcommands > 0)
-    assert.is_true(#plugs > 0)
     for _, sub in ipairs(subcommands) do
       local verbs = vim.fn.getcompletion("Changeset " .. sub .. " ", "cmdline")
       for _, verb in ipairs(#verbs > 0 and verbs or { "" }) do
         local name = vim.trim(sub .. " " .. verb)
-        assert.truthy(flat:find(":Changeset " .. name, 1, true), name)
+        assert.is_true(tagged(":Changeset-" .. name:gsub(" ", "-")), name)
       end
-    end
-    for _, lhs in ipairs(plugs) do
-      assert.truthy(flat:find(lhs, 1, true), lhs)
     end
   end)
 
-  it("has unique tags, one of them for the options section", function()
+  it("tags every <Plug> map and every default key", function()
+    load_plugin()
+    local keys = key_tags()
+    local plugs, defaults = 0, 0
+    for _, mode in ipairs({ "n", "x" }) do
+      for _, map in ipairs(vim.api.nvim_get_keymap(mode)) do
+        if vim.startswith(map.lhs, "<Plug>(changeset") then
+          plugs = plugs + 1
+          assert.is_true(tagged(map.lhs), map.lhs)
+        elseif vim.startswith(map.rhs or "", "<Plug>(changeset") then
+          defaults = defaults + 1
+          assert.is_true(keys[map.lhs], mode .. " " .. map.lhs)
+        end
+      end
+    end
+    assert.is_true(plugs > 0)
+    assert.is_true(defaults > 0)
+  end)
+
+  it("has unique tags, one of them the options section the setup() warning names", function()
     local dir = vim.fn.tempname()
     vim.fn.mkdir(dir, "p")
     vim.fn.writefile(vim.fn.readfile(root .. "/doc/changeset.nvim.txt"), dir .. "/changeset.nvim.txt")
