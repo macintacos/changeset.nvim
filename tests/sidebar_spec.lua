@@ -433,6 +433,24 @@ describe("changeset sidebar", function()
       resolve.start = real_start
     end)
 
+    it("keeps the row under the cursor in place on screen as rows arrive above it", function()
+      open_unanswered()
+      local win = assert(window.win())
+      local before = line_of(assert(window.buf()), "other.lua")
+      cursor_to(before)
+      vim.api.nvim_win_call(win, function()
+        vim.fn.winrestview({ topline = before - 1 })
+      end)
+
+      answer("mod.lua", {})
+      Sidebar.flush()
+
+      local after = cursor_line()
+      assert(after > before, "no row arrived above the cursor")
+      assert.equal(line_of(assert(window.buf()), "other.lua"), after)
+      assert.equal(after - 1, vim.fn.line("w0", win))
+    end)
+
     it("keeps the cursor on a split file's own copy when its tests land under Tests", function()
       open_unanswered()
       cursor_to(line_of(assert(window.buf()), "session.rs"))

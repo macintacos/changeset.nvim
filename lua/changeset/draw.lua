@@ -214,6 +214,16 @@ local function draw_header(buf, win, width)
   M.reveal_header(win)
 end
 
+---Scroll `win` by the lines its cursor's row moved, so the row keeps its place on screen.
+---@param win integer
+---@param top integer The window's top line before the row moved.
+---@param moved integer Down for positive.
+local function hold_place(win, top, moved)
+  vim.api.nvim_win_call(win, function()
+    vim.fn.winrestview({ topline = math.max(1, top + moved) })
+  end)
+end
+
 ---Draw the sidebar's view of the tree, then its header and row states.
 ---@param kinds_key string|false? The key bound to the kind menu, which the hidden-kinds note names.
 function M.draw(kinds_key)
@@ -225,11 +235,9 @@ function M.draw(kinds_key)
   assert(state, "changeset: no tree built yet")
 
   local width = vim.api.nvim_win_get_width(win)
+  local cursor, top = vim.api.nvim_win_get_cursor(win)[1], vim.fn.line("w0", win)
   comments_section = comments_for(state.tree)
-  local lines, lnum = state.view:show(
-    laid_out(state.rows),
-    { icon = icon_for, width = width, cursor = vim.api.nvim_win_get_cursor(win)[1] }
-  )
+  local lines, lnum = state.view:show(laid_out(state.rows), { icon = icon_for, width = width, cursor = cursor })
 
   local text = vim.tbl_map(function(line)
     return line.text
@@ -256,6 +264,9 @@ function M.draw(kinds_key)
   hidden_note_line(buf, #text - 1, render.hidden_note(hiding, width - 1, kinds_key))
 
   vim.api.nvim_win_set_cursor(win, { lnum, 0 })
+  if lnum ~= cursor then
+    hold_place(win, top, lnum - cursor)
+  end
 
   draw_header(buf, win, width)
   M.paint()
