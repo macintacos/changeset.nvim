@@ -33,13 +33,7 @@ local function say(level, text, ...)
   vim.notify("Changeset: " .. text:format(...), level)
 end
 
----"line 4", or "lines 3-5" for a range.
----@param first integer
----@param last integer
----@return string
-local function lines_label(first, last)
-  return first < last and ("lines %d-%d"):format(first, last) or ("line %d"):format(last)
-end
+local lines_label = review_comments.lines_label
 
 ---Where `comment` sits, as the Comments row and the pasted review name it: "a.lua:4", or "a.lua:3-5" for a range.
 ---@param comment changeset.ReviewComment
@@ -83,8 +77,9 @@ end
 -- Lines of a review comment's body the delete dialog quotes: enough to tell it apart, short of a wall of text.
 local QUOTED = 4
 
--- Extmarks move with edits while stored lines don't, so in a modified buffer a verb could act on the wrong line.
-local UNSAVED = "save the file first: marks move with unsaved edits, review comments don't"
+---Why a verb that acts by line refuses in a modified buffer: extmarks move with edits while stored lines don't, so it
+---could act on the wrong line.
+M.UNSAVED = "save the file first: marks move with unsaved edits, review comments don't"
 
 ---Asks, then deletes `comment` of the current buffer's repository.
 ---@param comment changeset.ReviewComment
@@ -184,7 +179,7 @@ function M.comment(first, last)
     return say(vim.log.levels.WARN, "run `:Changeset comment` from a file in %s", repository)
   end
   if vim.bo.modified then
-    return say(vim.log.levels.WARN, UNSAVED)
+    return say(vim.log.levels.WARN, M.UNSAVED)
   end
   local existing
   if first < last then
@@ -311,7 +306,7 @@ end
 ---Deletes the review comment on the cursor's line, the narrowest of those covering it.
 function M.delete()
   if vim.bo.modified then
-    return say(vim.log.levels.WARN, UNSAVED)
+    return say(vim.log.levels.WARN, M.UNSAVED)
   end
   local repository = Paths.root(0)
   local path = file_path(repository, 0)
@@ -595,7 +590,7 @@ local function land(win, from_sidebar, repository, comment)
   local full = vim.fs.joinpath(repository, comment.path)
   local target = loaded(full)
   if target and vim.bo[target].modified then
-    say(vim.log.levels.WARN, UNSAVED)
+    say(vim.log.levels.WARN, M.UNSAVED)
     return false
   end
   local lnum = first_line(comment)
@@ -639,7 +634,7 @@ local function jump(count)
     return say(vim.log.levels.INFO, "no review comments in %s", repository)
   end
   if not from_sidebar and vim.bo[buf].modified then
-    return say(vim.log.levels.WARN, UNSAVED)
+    return say(vim.log.levels.WARN, M.UNSAVED)
   end
   local path = not from_sidebar and file_path(repository, buf) or nil
   local cursor = vim.api.nvim_win_get_cursor(win)[1]
@@ -672,7 +667,7 @@ function M.last_comment()
     return say(vim.log.levels.WARN, "the review comment saved last is on %s, which is gone", last.path)
   end
   if not from_sidebar and vim.bo[vim.api.nvim_win_get_buf(win)].modified then
-    return say(vim.log.levels.WARN, UNSAVED)
+    return say(vim.log.levels.WARN, M.UNSAVED)
   end
   if land(win, from_sidebar, repository, last) then
     M.open(last)

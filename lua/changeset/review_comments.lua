@@ -90,7 +90,7 @@ end
 ---@param first integer
 ---@param last integer
 ---@return string
-local function lines_label(first, last)
+function M.lines_label(first, last)
   return first < last and ("lines %d-%d"):format(first, last) or ("line %d"):format(last)
 end
 
@@ -114,7 +114,7 @@ local function hover_text(fname, lnum)
     if comment.path == path and first <= lnum and lnum <= last then
       local body = comment.body:gsub("\r\n", "\n")
       local heading = comment.draft and "Draft review comment" or "Review comment"
-      table.insert(entries, ("**%s · %s**\n\n%s"):format(heading, lines_label(first, last), body))
+      table.insert(entries, ("**%s · %s**\n\n%s"):format(heading, M.lines_label(first, last), body))
     end
   end
   if #entries > 0 then
