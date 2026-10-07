@@ -105,6 +105,7 @@ describe("plugin/changeset.lua", function()
       "abandon",
       "comment",
       "delete",
+      "last-comment",
       "list",
       "next",
       "next-comment",
@@ -345,12 +346,12 @@ describe("plugin/changeset.lua", function()
   end)
 
   it("maps the default <C-g> keys once startup is done", function()
-    local probe = "for _, lhs in ipairs({ 'cc', 'cn', 'cp', 'n', 'p', 'm' }) do io.write(vim.fn.maparg('<C-g>' .. lhs, 'n'), ' ') end"
+    local probe = "for _, lhs in ipairs({ 'cc', 'cn', 'cp', 'cl', 'n', 'p', 'm' }) do io.write(vim.fn.maparg('<C-g>' .. lhs, 'n'), ' ') end"
       .. " io.write(vim.fn.maparg('<C-g>cc', 'x'))"
 
     assert.equal(
       "<Plug>(changeset-comment) <Plug>(changeset-next-comment) <Plug>(changeset-prev-comment)"
-        .. " <Plug>(changeset-next) <Plug>(changeset-prev) <Plug>(changeset-review) <Plug>(changeset-comment)",
+        .. " <Plug>(changeset-last-comment) <Plug>(changeset-next) <Plug>(changeset-prev) <Plug>(changeset-review) <Plug>(changeset-comment)",
       after_startup({}, probe)
     )
   end)

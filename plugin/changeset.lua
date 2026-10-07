@@ -44,6 +44,9 @@ local subcommands = {
   ["prev-comment"] = function()
     require("changeset.reviewing").prev_comment(1)
   end,
+  ["last-comment"] = function()
+    require("changeset.reviewing").last_comment()
+  end,
   list = function()
     require("changeset.reviewing").list()
   end,
@@ -76,7 +79,7 @@ end, {
   nargs = "?",
   range = true,
   bar = true,
-  desc = "Toggle the changeset sidebar, rebuild it, toggle PR Review Mode, step through and open its changes, or write, delete, walk, list, copy, abandon or submit review comments",
+  desc = "Toggle the changeset sidebar, rebuild it, toggle PR Review Mode, step through and open its changes, or write, delete, walk, reopen, list, copy, abandon or submit review comments",
   complete = function(lead)
     local names = vim.tbl_filter(function(name)
       return vim.startswith(name, lead)
@@ -91,6 +94,7 @@ local keys = {
   { "cc", "comment", "Comment on this line, or the selection, or edit the comment there", { "n", "x" } },
   { "cn", "next-comment", "Next review comment" },
   { "cp", "prev-comment", "Previous review comment" },
+  { "cl", "last-comment", "Edit the review comment you saved last" },
   { "d", "delete", "Delete the review comment on this line" },
   { "n", "next", "Open the next change" },
   { "p", "prev", "Open the previous change" },

@@ -533,21 +533,71 @@ local function jump_window()
   end
 end
 
+---Where a comment jump starts: the window it goes in, whether that is the sidebar's, and the repository. Warns, naming
+---`command`, and returns nil from a window it can't jump from.
+---@param command string
+---@return integer? win, boolean from_sidebar, string repository
+local function jump_from(command)
+  local from_sidebar = window.is_focused()
+  local win = from_sidebar and vim.api.nvim_get_current_win() or jump_window()
+  if not win then
+    say(vim.log.levels.WARN, "run `:Changeset %s` from a file", command)
+    return nil, from_sidebar, ""
+  end
+  return win, from_sidebar, from_sidebar and root() or Paths.root(vim.api.nvim_win_get_buf(win))
+end
+
+---Puts `comment`'s first line in `win`, through the sidebar's commit from the sidebar. Refuses, saying why, when
+---either file has unsaved edits or the file can't be opened.
+---@param win integer
+---@param from_sidebar boolean
+---@param repository string
+---@param comment changeset.ReviewComment
+---@return boolean landed
+local function land(win, from_sidebar, repository, comment)
+  local full = vim.fs.joinpath(repository, comment.path)
+  local target = loaded(full)
+  if target and vim.bo[target].modified then
+    say(vim.log.levels.WARN, UNSAVED)
+    return false
+  end
+  local lnum = first_line(comment)
+  if from_sidebar then
+    return window.commit(full, lnum, "reuse")
+  end
+  local file = buffers.load(full)
+  if not file then
+    say(vim.log.levels.WARN, "can't open %s", full)
+    return false
+  end
+  vim.api.nvim_set_current_win(win)
+  vim.bo[file].buflisted = true
+  vim.cmd("normal! m'")
+  vim.api.nvim_win_set_buf(win, file)
+  vim.api.nvim_win_set_cursor(win, { math.min(lnum, vim.api.nvim_buf_line_count(file)), 0 })
+  return true
+end
+
+---`repository`'s comments whose files are there, in the order of `in_order`.
+---@param repository string
+---@return changeset.ReviewComment[]
+local function reachable(repository)
+  return vim.tbl_filter(function(comment)
+    return vim.uv.fs_stat(vim.fs.joinpath(repository, comment.path)) ~= nil
+  end, comment_store.list(repository))
+end
+
 ---Jumps to the review comment `count` away from the cursor, forward for a positive `count`, wrapping at either
 ---end. From a window that holds no file, it jumps in the window before it.
 ---@param count integer
 local function jump(count)
   local step = count > 0 and 1 or -1
-  local from_sidebar = window.is_focused()
-  local win = from_sidebar and vim.api.nvim_get_current_win() or jump_window()
+  local win, from_sidebar, repository = jump_from(step == 1 and "next-comment" or "prev-comment")
   if not win then
-    return say(vim.log.levels.WARN, "run `:Changeset %s-comment` from a file", step == 1 and "next" or "prev")
+    return
   end
   local buf = vim.api.nvim_win_get_buf(win)
-  local repository = from_sidebar and root() or Paths.root(buf)
-  local comments = vim.tbl_filter(function(comment)
-    return vim.uv.fs_stat(vim.fs.joinpath(repository, comment.path)) ~= nil
-  end, in_order(comment_store.list(repository)))
+  local comments = in_order(reachable(repository))
   if #comments == 0 then
     return say(vim.log.levels.INFO, "no review comments in %s", repository)
   end
@@ -563,30 +613,32 @@ local function jump(count)
       i, wrapped = (i - 1) % #comments + 1, true
     end
   end
-  local full = vim.fs.joinpath(repository, comments[i].path)
-  local target = loaded(full)
-  if target and vim.bo[target].modified then
-    return say(vim.log.levels.WARN, UNSAVED)
-  end
-  local lnum = first_line(comments[i])
-  if from_sidebar then
-    if not window.commit(full, lnum, "reuse") then
-      return
-    end
-  else
-    local file = buffers.load(full)
-    if not file then
-      return say(vim.log.levels.WARN, "can't open %s", full)
-    end
-    vim.api.nvim_set_current_win(win)
-    vim.bo[file].buflisted = true
-    vim.cmd("normal! m'")
-    vim.api.nvim_win_set_buf(win, file)
-    vim.api.nvim_win_set_cursor(win, { math.min(lnum, vim.api.nvim_buf_line_count(file)), 0 })
+  if not land(win, from_sidebar, repository, comments[i]) then
+    return
   end
   -- Echoed like a search count, not notified, so notifier plugins don't toast every jump.
   local text = ("review comment %d of %d"):format(i, #comments)
   vim.api.nvim_echo({ { wrapped and text .. ", wrapped" or text } }, false, {})
+end
+
+---Jumps to the repository's review comment saved last and opens it to edit. The store appends on every keep, so
+---that is its last saved entry.
+function M.last_comment()
+  local win, from_sidebar, repository = jump_from("last-comment")
+  if not win then
+    return
+  end
+  local saved = split_drafts(reachable(repository))
+  local last = saved[#saved]
+  if not last then
+    return say(vim.log.levels.INFO, "no saved review comment in %s", repository)
+  end
+  if not from_sidebar and vim.bo[vim.api.nvim_win_get_buf(win)].modified then
+    return say(vim.log.levels.WARN, UNSAVED)
+  end
+  if land(win, from_sidebar, repository, last) then
+    M.open(last)
+  end
 end
 
 ---Jumps `count` review comments forward in the repository.

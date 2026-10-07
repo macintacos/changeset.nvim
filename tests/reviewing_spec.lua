@@ -783,6 +783,43 @@ describe("changeset.reviewing", function()
     end)
   end)
 
+  describe("last_comment", function()
+    it("opens the review comment saved last in its file, passing over drafts", function()
+      edit_file()
+      vim.fn.writefile(vim.split(("y"):rep(10, "\n"), "\n"), dir .. "/b.lua")
+      comment_store.keep(dir, comment())
+      comment_store.keep(dir, comment({ path = "b.lua", line = 3, body = "last" }))
+      comment_store.keep(dir, comment({ line = 7, draft = true }))
+
+      reviewing.last_comment()
+
+      assert.equal(dir .. "/b.lua", vim.fs.normalize(vim.api.nvim_buf_get_name(0)))
+      assert.equal(3, vim.api.nvim_win_get_cursor(0)[1])
+      assert.equal("last", window().body)
+    end)
+
+    it("says when no review comment is saved", function()
+      edit_file()
+      comment_store.keep(dir, comment({ draft = true }))
+
+      reviewing.last_comment()
+
+      assert.same({}, windows)
+      assert.equal(vim.log.levels.INFO, notes[1].level)
+    end)
+
+    it("refuses in a modified buffer", function()
+      edit_file()
+      comment_store.keep(dir, comment())
+      vim.api.nvim_buf_set_lines(0, 0, 1, false, { "edited" })
+
+      reviewing.last_comment()
+
+      assert.same({}, windows)
+      assert.equal(vim.log.levels.WARN, notes[1].level)
+    end)
+  end)
+
   describe("list", function()
     after_each(function()
       vim.cmd("silent! cclose")
