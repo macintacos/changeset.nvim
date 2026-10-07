@@ -205,3 +205,123 @@ describe("changeset.comment_store", function()
     assert.is_false(written)
   end)
 end)
+
+describe("changeset.comment_store across branches", function()
+  local Fixture = require("support.git")
+  local root, worktree
+
+  ---@param ... string
+  local function git(...)
+    Fixture.git({ ... }, root)
+  end
+
+  ---Writes `entries` as the repository's record, as a store from before branches were recorded left it.
+  local function write_entries(entries)
+    jsonfile.write(comment_store.path(), { [root] = entries })
+  end
+
+  before_each(function()
+    os.remove(comment_store.path())
+    root = vim.fn.tempname()
+    vim.fn.mkdir(root, "p")
+    root = vim.fs.normalize(assert(vim.uv.fs_realpath(root)))
+    Fixture.init_repo("main", root)
+  end)
+
+  after_each(function()
+    vim.fn.delete(root, "rf")
+    if worktree then
+      vim.fn.delete(worktree, "rf")
+      worktree = nil
+    end
+    os.remove(comment_store.path())
+  end)
+
+  it("lists only the comments written on the branch checked out", function()
+    comment_store.keep(root, comment({ body = "on main" }))
+    git("switch", "-q", "-c", "other")
+
+    assert.same({}, comment_store.list(root))
+    comment_store.keep(root, comment({ line = 9, body = "on other" }))
+    assert.same({ comment({ line = 9, body = "on other" }) }, comment_store.list(root))
+
+    git("switch", "-q", "main")
+    assert.same({ comment({ body = "on main" }) }, comment_store.list(root))
+  end)
+
+  it("lists a comment stored without a branch on every branch", function()
+    write_entries({ comment() })
+
+    assert.same({ comment() }, comment_store.list(root))
+    git("switch", "-q", "-c", "other")
+    assert.same({ comment() }, comment_store.list(root))
+  end)
+
+  it("keeps another branch's comment on the range a comment is kept on", function()
+    comment_store.keep(root, comment({ body = "on main" }))
+    git("switch", "-q", "-c", "other")
+    comment_store.keep(root, comment({ body = "on other" }))
+    comment_store.drop(root, comment())
+
+    git("switch", "-q", "main")
+    assert.same({ comment({ body = "on main" }) }, comment_store.list(root))
+  end)
+
+  it("drops the branch's comments and those stored without one when all are dropped", function()
+    write_entries({ comment({ body = "before branches" }) })
+    comment_store.keep(root, comment({ line = 9, body = "on main" }))
+    git("switch", "-q", "-c", "other")
+    comment_store.keep(root, comment({ line = 12, body = "on other" }))
+
+    comment_store.drop_all(root)
+
+    assert.same({}, comment_store.list(root))
+    git("switch", "-q", "main")
+    assert.same({ comment({ line = 9, body = "on main" }) }, comment_store.list(root))
+  end)
+
+  it("drops each given comment of the branch only", function()
+    comment_store.keep(root, comment())
+    git("switch", "-q", "-c", "other")
+    comment_store.keep(root, comment())
+
+    comment_store.drop_each(root, { comment() })
+
+    git("switch", "-q", "main")
+    assert.same({ comment() }, comment_store.list(root))
+  end)
+
+  it("lists a worktree's comments by the branch checked out there", function()
+    worktree = vim.fn.tempname()
+    git("worktree", "add", "-q", worktree, "-b", "feature")
+    worktree = vim.fs.normalize(assert(vim.uv.fs_realpath(worktree)))
+    comment_store.keep(worktree, comment())
+
+    Fixture.git({ "switch", "-q", "-c", "other" }, worktree)
+
+    assert.same({}, comment_store.list(worktree))
+  end)
+
+  it("keeps a detached HEAD's comments to its commit", function()
+    comment_store.keep(root, comment({ body = "on main" }))
+    git("switch", "-q", "--detach")
+
+    assert.same({}, comment_store.list(root))
+    comment_store.keep(root, comment({ line = 9, body = "detached" }))
+    git("switch", "-q", "main")
+    assert.same({ comment({ body = "on main" }) }, comment_store.list(root))
+    git("switch", "-q", "--detach")
+    assert.same({ comment({ line = 9, body = "detached" }) }, comment_store.list(root))
+  end)
+
+  it("lists the comments of the branch a stopped rebase rewrites", function()
+    vim.fn.writefile({ "x" }, root .. "/f")
+    Fixture.commit("f", root)
+    comment_store.keep(root, comment())
+
+    vim.fn.system({ "git", "-C", root, "rebase", "--exec", "false", "HEAD~1" })
+
+    assert.truthy(vim.uv.fs_stat(root .. "/.git/rebase-merge"))
+    assert.same({ comment() }, comment_store.list(root))
+  end)
+end)

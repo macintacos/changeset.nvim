@@ -48,14 +48,22 @@ function M.glyph(comment)
   return comment.draft and DRAFT_BUBBLE or BUBBLE, render.review_comment_hl(comment)
 end
 
+---Each buffer's marks, by extmark id, and the stored comment each marks.
+---@type table<integer, table<integer, changeset.ReviewComment>>
+local placed = {}
+
+---Marks `comment` in `buf`, answering the mark's id.
 ---@param buf integer
 ---@param comment changeset.ReviewComment
+---@return integer
 local function mark(buf, comment)
   local row = (comment.start_line or comment.line) - 1
   local bubble, hl = M.glyph(comment)
   local circle = comment.draft and render.REVIEW_COMMENT_DRAFT_CIRCLE or render.REVIEW_COMMENT_CIRCLE
-  vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
+  local id = vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
     end_row = comment.line - 1,
+    -- A line added right above the last moves the end down with the last, rather than onto the new line.
+    end_right_gravity = true,
     number_hl_group = hl,
     -- A block already holds the whole text.
     virt_text = not review_comment_blocks.shown() and {
@@ -74,6 +82,24 @@ local function mark(buf, comment)
       sign_hl_group = hl,
     })
   end
+  return id
+end
+
+---Each comment marked in `buf` whose mark edits have moved, with the lines the mark covers now.
+---@param buf integer
+---@return changeset.ReviewCommentMove[]
+local function moves(buf)
+  local found = {}
+  for id, comment in pairs(placed[buf] or {}) do
+    local at = vim.api.nvim_buf_get_extmark_by_id(buf, ns, id, { details = true })
+    local first, last = at[1] and at[1] + 1, at[3] and at[3].end_row + 1
+    if first and (first ~= (comment.start_line or comment.line) or last ~= comment.line) then
+      local to = vim.deepcopy(comment)
+      to.line, to.start_line = last, first < last and first or nil
+      found[#found + 1] = { from = comment, to = to }
+    end
+  end
+  return found
 end
 
 ---The bubble on line `lnum` of `buf` and its group, from the marks already drawn; nil on a line without one.
@@ -136,12 +162,25 @@ end
 
 local attach_hover = hover.serve(hover_text)
 
----Marks `comments` that belong to `buf`'s file, answering whether it marked anything.
+---`comment` on the lines `moved` has it on, else as it is.
+---@param comment changeset.ReviewComment
+---@param moved changeset.ReviewCommentMove[]
+---@return changeset.ReviewComment
+local function moved_to(comment, moved)
+  local move = vim.iter(moved):find(function(each)
+    return vim.deep_equal(each.from, comment)
+  end)
+  return move and move.to or comment
+end
+
+---Marks `comments` that belong to `buf`'s file, a moved one on the lines `moved` has it on, answering whether it
+---marked anything.
 ---@param buf integer
 ---@param root string
 ---@param comments changeset.ReviewComment[]
+---@param moved changeset.ReviewCommentMove[]
 ---@return boolean
-local function mark_file(buf, root, comments)
+local function mark_file(buf, root, comments, moved)
   local name = vim.api.nvim_buf_get_name(buf)
   local path = name ~= "" and vim.fs.relpath(root, vim.fs.normalize(name))
   if not path then
@@ -150,9 +189,10 @@ local function mark_file(buf, root, comments)
   local line_count = vim.api.nvim_buf_line_count(buf)
   local marked = {}
   for _, comment in ipairs(comments) do
-    if comment.path == path and comment.line and comment.line <= line_count then
-      mark(buf, comment)
-      marked[#marked + 1] = comment
+    local shown = comment.path == path and comment.line and moved_to(comment, moved)
+    if shown and shown.line <= line_count then
+      placed[buf][mark(buf, shown)] = comment
+      marked[#marked + 1] = shown
     end
   end
   review_comment_blocks.draw(buf, marked)
@@ -163,12 +203,16 @@ end
 ---@param buf integer
 ---@param by_root table<string, changeset.ReviewComment[]>
 local function draw(buf, by_root)
+  -- Drawn from the stored lines, a modified buffer's marks would lose where its edits moved them before the write
+  -- that stores it.
+  local moved = vim.bo[buf].modified and moves(buf) or {}
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   vim.api.nvim_buf_clear_namespace(buf, sign_ns, 0, -1)
+  placed[buf] = {}
   review_comment_blocks.draw(buf, {})
   local root = Paths.root(buf)
   by_root[root] = by_root[root] or comment_store.list(root)
-  if mark_file(buf, root, by_root[root]) then
+  if mark_file(buf, root, by_root[root], moved) then
     attach_hover(buf, root)
   else
     hover.detach(buf)
@@ -207,13 +251,46 @@ vim.api.nvim_create_autocmd("BufReadPost", {
   end,
 })
 
--- Fires: a buffer written. Its marks moved with the edits while the stored lines didn't, so they snap back to
--- the lines every verb acts on.
+-- Fires: a buffer written. Its marks moved with the edits, so storing where they stand keeps each comment on the
+-- code it was written about.
 vim.api.nvim_create_autocmd("BufWritePost", {
   group = "changeset.review_comments",
-  desc = "changeset: put a written file's review comment marks back on their stored lines",
+  desc = "changeset: store the lines a written file's review comment marks moved to",
   callback = function(args)
-    draw(args.buf, {})
+    -- Written to another file: its own still holds the stored lines.
+    if vim.bo[args.buf].modified then
+      return
+    end
+    local moved = moves(args.buf)
+    if #moved == 0 then
+      return draw(args.buf, {})
+    end
+    if not comment_store.move(Paths.root(args.buf), moved) then
+      vim.notify("Changeset: can't move the review comments in " .. comment_store.path(), vim.log.levels.WARN)
+      draw(args.buf, {})
+    end
+  end,
+})
+
+-- Fires: Neovim regaining focus, which a branch switched outside it comes back with. Comments belong to the branch
+-- they were written on.
+vim.api.nvim_create_autocmd("FocusGained", {
+  group = "changeset.review_comments",
+  desc = "changeset: mark the review comments of the branch checked out",
+  callback = function()
+    M.redraw()
+  end,
+})
+
+-- Fires: gitsigns seeing HEAD move, a checkout made anywhere, which it publishes without a buffer.
+vim.api.nvim_create_autocmd("User", {
+  pattern = "GitSignsUpdate",
+  group = "changeset.review_comments",
+  desc = "changeset: mark the review comments of the branch checked out",
+  callback = function(args)
+    if not (args.data and args.data.buffer) then
+      M.redraw()
+    end
   end,
 })
 

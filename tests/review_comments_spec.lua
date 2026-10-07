@@ -252,16 +252,86 @@ describe("review_comments", function()
     assert.are.same({ { 15, 15 } }, rows(assert(buf)))
   end)
 
-  it("puts a buffer's marks back on the stored lines when it is written", function()
-    set({ comment("beta.txt", 16) })
-    vim.api.nvim_buf_set_lines(beta, 0, 0, false, { "new 1", "new 2" })
-    assert.are.same({ { 17, 17 } }, rows(beta))
-
-    vim.api.nvim_buf_call(beta, function()
+  ---@param buf integer
+  local function write(buf)
+    vim.api.nvim_buf_call(buf, function()
       vim.cmd("silent write")
     end)
+  end
 
-    assert.are.same({ { 15, 15 } }, rows(beta))
+  it("stores the lines a written buffer's marks moved to, a draft's too, leaving a whole file's comment", function()
+    local whole = { path = "beta.txt", body = "w" }
+    set({ comment("beta.txt", 16), { path = "beta.txt", line = 5, body = "d", draft = true }, whole })
+    vim.api.nvim_buf_set_lines(beta, 0, 0, false, { "new 1", "new 2" })
+
+    write(beta)
+
+    assert.are.same({
+      { path = "beta.txt", line = 18, body = "b" },
+      { path = "beta.txt", line = 7, body = "d", draft = true },
+      whole,
+    }, comment_store.list(dir))
+    assert.are.same({ { 6, 6 }, { 17, 17 } }, rows(beta))
+  end)
+
+  it("keeps a range on its first and last lines as lines are added above, inside and below it", function()
+    set({ comment("alpha.txt", 10, 8) })
+    vim.api.nvim_buf_set_lines(alpha, 10, 10, false, { "below" })
+    vim.api.nvim_buf_set_lines(alpha, 9, 9, false, { "above the last" })
+    vim.api.nvim_buf_set_lines(alpha, 7, 7, false, { "above the first" })
+
+    write(alpha)
+
+    assert.are.same({ comment("alpha.txt", 12, 9) }, comment_store.list(dir))
+  end)
+
+  it("puts a comment whose lines were all deleted on the line that followed them", function()
+    set({ comment("alpha.txt", 10, 8) })
+    vim.api.nvim_buf_set_lines(alpha, 7, 10, false, {})
+
+    write(alpha)
+
+    assert.are.same({ comment("alpha.txt", 8) }, comment_store.list(dir))
+    assert.are.equal("alpha 11", vim.api.nvim_buf_get_lines(alpha, 7, 8, true)[1])
+  end)
+
+  it("merges comments an edit brings onto the same lines, a draft when either was", function()
+    set({
+      { path = "alpha.txt", line = 13, body = "gone" },
+      { path = "alpha.txt", line = 14, body = "kept", draft = true },
+    })
+    vim.api.nvim_buf_set_lines(alpha, 12, 13, false, {})
+
+    write(alpha)
+
+    assert.are.same({ { path = "alpha.txt", line = 13, body = "gone\n\nkept", draft = true } }, comment_store.list(dir))
+  end)
+
+  it("keeps a modified buffer's marks where its edits moved them when another file's comment is kept", function()
+    set({ comment("beta.txt", 16) })
+    vim.api.nvim_buf_set_lines(beta, 0, 0, false, { "new 1", "new 2" })
+
+    comment_store.keep(dir, comment("alpha.txt", 3))
+    write(beta)
+
+    assert.are.same(
+      { comment("beta.txt", 18) },
+      vim.tbl_filter(function(c)
+        return c.path == "beta.txt"
+      end, comment_store.list(dir))
+    )
+  end)
+
+  it("leaves the stored lines alone when the buffer is written to another file", function()
+    set({ comment("beta.txt", 16) })
+    vim.api.nvim_buf_set_lines(beta, 0, 0, false, { "new 1", "new 2" })
+
+    vim.api.nvim_buf_call(beta, function()
+      vim.cmd("silent write " .. vim.fn.fnameescape(dir .. "/copy.txt"))
+    end)
+
+    assert.are.same({ comment("beta.txt", 16) }, comment_store.list(dir))
+    assert.are.same({ { 17, 17 } }, rows(beta))
   end)
 
   it("defines its groups again after a colorscheme change", function()

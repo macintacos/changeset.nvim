@@ -133,16 +133,16 @@ local function with_body(comment, body, draft)
   return { path = comment.path, line = comment.line, start_line = comment.start_line, body = body, draft = draft }
 end
 
----Opens the window under `comment`'s lines of the current buffer, or a whole file's under the cursor's line,
----holding its text: a save replaces it, a blank save or close asks to delete it, and a close with changed text keeps
----it as a draft.
+---Opens the window under `comment`'s lines of the current buffer, or under the cursor's line for a whole file's or
+---from the sidebar, holding its text: a save replaces it, a blank save or close asks to delete it, and a close with
+---changed text keeps it as a draft.
 ---@param comment changeset.ReviewComment
 function M.open(comment)
   local repository = root()
   local last = comment.line
   local kind = comment.draft and "Edit draft review comment · " or "Edit review comment · "
   review_comment_window.open({
-    line = last or vim.api.nvim_win_get_cursor(0)[1],
+    line = last and not window.is_focused() and last or vim.api.nvim_win_get_cursor(0)[1],
     title = kind .. lines_label(comment.start_line or last, last),
     icon = icon_of(comment),
     save_desc = "Save the review comment",
@@ -187,6 +187,16 @@ local function file_path(repository, buf)
   local name = vim.api.nvim_buf_get_name(buf)
   -- relpath prefixes the cwd to a relative name, so a non-file buffer would pass from inside the repo.
   return vim.bo[buf].buftype == "" and name ~= "" and vim.fs.relpath(repository, vim.fs.normalize(name)) or nil
+end
+
+---The loaded buffer of the file at `full`, if any.
+---@param full string
+---@return integer?
+local function loaded(full)
+  -- Not `bufnr(full)`: it takes a pattern, and settles for another file whose name `full` prefixes.
+  return vim.iter(vim.api.nvim_list_bufs()):find(function(b)
+    return vim.api.nvim_buf_is_loaded(b) and vim.fs.normalize(vim.api.nvim_buf_get_name(b)) == full
+  end)
 end
 
 ---Opens the review comment window under line `line` of the current window for `comment`, new, its body "". Closing
@@ -248,15 +258,53 @@ local function comment_on_file(repository, path)
   open_new(repository, { path = path, body = "" }, vim.api.nvim_win_get_cursor(0)[1])
 end
 
----Opens the review comment window under the sidebar's cursor row for the whole file it stands for, or that file's
----comment to edit.
-local function comment_file()
-  local repository = root()
-  local path = sidebar_file()
-  if not path then
-    return say(vim.log.levels.WARN, "run `:Changeset comment new` from a file in %s, or on a file's row", repository)
+---The lines sidebar row `row` stands for: a symbol's line, as `<CR>` opens it, a change's lines, or those of the
+---comment a Comments row lists; none for a file's row or a whole file's comment, which stand for the whole file.
+---@param row changeset.Row
+---@return integer? first
+---@return integer? last
+local function row_lines(row)
+  local comment = row.review_comment
+  if comment then
+    return comment.start_line or comment.line, comment.line
   end
-  comment_on_file(repository, path)
+  if row.kind == "orphan" then
+    return row.range[1], row.range[2]
+  end
+  if row.kind ~= "file" then
+    return row.lnum, row.lnum
+  end
+end
+
+---Opens the review comment window under the sidebar's cursor row for what the row stands for, or the comment already
+---on exactly that to edit.
+local function comment_row()
+  local repository = root()
+  local row = require("changeset.draw").row_at_cursor()
+  if not row or row.kind == "section" then
+    return say(
+      vim.log.levels.WARN,
+      "run `:Changeset comment new` on a file's, a symbol's or a change's row, or from a file in %s",
+      repository
+    )
+  end
+  local first, last = row_lines(row)
+  if not (first and last) then
+    return comment_on_file(repository, row.path)
+  end
+  local file = loaded(vim.fs.joinpath(repository, row.path))
+  if file and vim.bo[file].modified then
+    return say(vim.log.levels.WARN, M.UNSAVED)
+  end
+  local start_line = first < last and first or nil
+  local existing = vim.iter(comment_store.list(repository)):find(function(comment)
+    return comment.path == row.path and comment.start_line == start_line and comment.line == last
+  end)
+  if existing then
+    return M.open(existing)
+  end
+  local comment = { path = row.path, line = last, start_line = start_line, body = "" }
+  open_new(repository, comment, vim.api.nvim_win_get_cursor(0)[1])
 end
 
 ---The current buffer's path in `repository`, when a review comment can be written there; else warns and returns nil.
@@ -275,13 +323,13 @@ end
 
 ---Opens the review comment window under line `last` of the current buffer, for lines `first` to `last`, or an
 ---existing comment to edit: for a range, the one on exactly that range; for one line, the narrowest covering it.
----From the sidebar, it is for the whole file the cursor's row stands for. Closing a new one keeps its text, so
----nothing typed is lost.
+---From the sidebar, it is for what the cursor's row stands for. Closing a new one keeps its text, so nothing typed is
+---lost.
 ---@param first integer
 ---@param last integer
 function M.comment(first, last)
   if window.is_focused() then
-    return comment_file()
+    return comment_row()
   end
   local repository = Paths.root(0)
   local path = commentable(repository)
@@ -393,7 +441,8 @@ function M.from_window(open, name, run)
     end
     vim.api.nvim_set_current_win(open.source)
     local last = open.comment.line
-    if last then
+    -- Under a sidebar row, the comment's line is not one of the window's.
+    if last and vim.bo[open.source_buf].buftype == "" then
       local lnum = math.min(open.comment.start_line or last, vim.api.nvim_buf_line_count(0))
       vim.api.nvim_win_set_cursor(open.source, { lnum, 0 })
     end
@@ -548,16 +597,6 @@ function M._review_text(repository, comments, read)
     end, sorted),
     "\n\n"
   )
-end
-
----The loaded buffer of the file at `full`, if any.
----@param full string
----@return integer?
-local function loaded(full)
-  -- Not `bufnr(full)`: it takes a pattern, and settles for another file whose name `full` prefixes.
-  return vim.iter(vim.api.nvim_list_bufs()):find(function(b)
-    return vim.api.nvim_buf_is_loaded(b) and vim.fs.normalize(vim.api.nvim_buf_get_name(b)) == full
-  end)
 end
 
 ---Reads lines of `repository`'s files from their loaded buffers, which hold unsaved edits, else from disk.
