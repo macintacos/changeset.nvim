@@ -101,24 +101,21 @@ describe("plugin/changeset.lua", function()
   end)
 
   it("completes the subcommands that match the argument", function()
-    assert.same({
-      "abandon",
-      "comment",
-      "delete",
-      "last-comment",
-      "list",
-      "next",
-      "next-comment",
-      "prev",
-      "prev-comment",
-      "refresh",
-      "review",
-      "submit",
-      "toggle",
-      "toggle-comments",
-      "yank",
-    }, vim.fn.getcompletion("Changeset ", "cmdline"))
+    assert.same(
+      { "comment", "next", "prev", "refresh", "review", "toggle" },
+      vim.fn.getcompletion("Changeset ", "cmdline")
+    )
     assert.same({ "refresh", "review" }, vim.fn.getcompletion("Changeset re", "cmdline"))
+  end)
+
+  it("completes the verbs under a subcommand", function()
+    assert.same(
+      { "del", "last", "list", "new", "next", "prev", "toggle" },
+      vim.fn.getcompletion("Changeset comment ", "cmdline")
+    )
+    assert.same({ "last", "list" }, vim.fn.getcompletion("'<,'>Changeset  comment  l", "cmdline"))
+    assert.same({ "abandon", "mode", "submit", "yank" }, vim.fn.getcompletion("Changeset review ", "cmdline"))
+    assert.same({}, vim.fn.getcompletion("Changeset toggle ", "cmdline"))
   end)
 
   it("routes each subcommand to the module, bare :Changeset to toggle", function()
@@ -163,8 +160,19 @@ describe("plugin/changeset.lua", function()
     assert.equal(vim.log.levels.ERROR, notes[1].level)
   end)
 
-  it("refuses review while pr_review.enabled is off", function()
-    vim.cmd("Changeset review")
+  it("names the verbs a subcommand takes when its verb is missing or unknown", function()
+    vim.cmd("Changeset comment")
+    vim.cmd("Changeset review bogus")
+
+    assert.equal(2, #notes)
+    assert.equal(vim.log.levels.ERROR, notes[1].level)
+    assert.equal("Changeset: :Changeset comment takes a verb: del, last, list, new, next, prev, toggle", notes[1].msg)
+    assert.equal(vim.log.levels.ERROR, notes[2].level)
+    assert.equal("Changeset: :Changeset review takes a verb: abandon, mode, submit, yank", notes[2].msg)
+  end)
+
+  it("refuses review mode while pr_review.enabled is off", function()
+    vim.cmd("Changeset review mode")
 
     assert.equal(1, #notes)
     assert.equal(vim.log.levels.ERROR, notes[1].level)
@@ -172,12 +180,12 @@ describe("plugin/changeset.lua", function()
     assert.is_nil(package.loaded["changeset.review"])
   end)
 
-  it("toggles review once pr_review.enabled is on", function()
+  it("toggles review mode once pr_review.enabled is on", function()
     local calls = {}
     require("changeset.config").setup({ pr_review = { enabled = true } })
     package.loaded["changeset.review"] = { toggle = counter(calls, "toggle") }
 
-    vim.cmd("Changeset review")
+    vim.cmd("Changeset review mode")
 
     package.loaded["changeset.review"] = nil
     require("changeset.config").setup()
@@ -199,19 +207,19 @@ describe("plugin/changeset.lua", function()
     assert.equal(1, calls.restore)
   end)
 
-  it("routes delete and abandon to the reviewing module", function()
+  it("routes comment del and review abandon to the reviewing module", function()
     local calls = {}
     package.loaded["changeset.reviewing"] = { delete = counter(calls, "delete"), abandon = counter(calls, "abandon") }
 
-    vim.cmd("Changeset delete")
-    vim.cmd("Changeset abandon | let g:changeset_after = 1")
+    vim.cmd("Changeset comment  del")
+    vim.cmd("Changeset review abandon | let g:changeset_after = 1")
 
     package.loaded["changeset.reviewing"] = nil
     assert.same({ delete = 1, abandon = 1 }, calls)
     assert.equal(1, vim.g.changeset_after)
   end)
 
-  it("routes comment the lines it is given", function()
+  it("routes comment new the lines it is given", function()
     local ranges = {}
     package.loaded["changeset.reviewing"] = {
       comment = function(first, last)
@@ -223,10 +231,10 @@ describe("plugin/changeset.lua", function()
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(("x"):rep(10, "\n"), "\n"))
     vim.api.nvim_win_set_cursor(0, { 3, 0 })
 
-    vim.cmd("Changeset comment")
-    vim.cmd("2,4Changeset comment")
+    vim.cmd("Changeset comment new")
+    vim.cmd("2,4Changeset comment new")
     vim.cmd("normal! 2GVj\27")
-    vim.cmd("'<,'>Changeset comment")
+    vim.cmd("'<,'>Changeset comment new")
 
     vim.api.nvim_buf_delete(buf, { force = true })
     package.loaded["changeset.reviewing"] = nil
@@ -235,9 +243,11 @@ describe("plugin/changeset.lua", function()
 
   it("reports words past a subcommand as an error", function()
     vim.cmd("Changeset toggle extra")
+    vim.cmd("Changeset comment new extra")
 
-    assert.equal(1, #notes)
+    assert.equal(2, #notes)
     assert.equal(vim.log.levels.ERROR, notes[1].level)
+    assert.equal(vim.log.levels.ERROR, notes[2].level)
   end)
 
   it("loads the module on first use", function()
@@ -250,18 +260,26 @@ describe("plugin/changeset.lua", function()
 
   it("routes each <Plug> map to its subcommand", function()
     local calls = {}
-    local names = { "comment", "delete", "list", "yank", "submit", "abandon" }
+    local plugs = {
+      ["comment-new"] = "comment",
+      ["comment-del"] = "delete",
+      ["comment-last"] = "last_comment",
+      ["comment-list"] = "list",
+      ["review-yank"] = "yank",
+      ["review-submit"] = "submit",
+      ["review-abandon"] = "abandon",
+    }
     local reviewing = {}
-    for _, name in ipairs(names) do
-      reviewing[name] = counter(calls, name)
+    for _, fn in pairs(plugs) do
+      reviewing[fn] = counter(calls, fn)
     end
     package.loaded["changeset.reviewing"] = reviewing
     package.loaded["changeset.build"] = { refresh = counter(calls, "refresh") }
     require("changeset.config").setup({ pr_review = { enabled = true } })
     package.loaded["changeset.review"] = { toggle = counter(calls, "review") }
-    package.loaded["changeset.review_comment_blocks"] = { toggle = counter(calls, "toggle-comments") }
+    package.loaded["changeset.review_comment_blocks"] = { toggle = counter(calls, "blocks") }
 
-    for _, name in ipairs(vim.list_extend({ "refresh", "review", "toggle-comments" }, names)) do
+    for _, name in ipairs(vim.list_extend({ "refresh", "review-mode", "comment-toggle" }, vim.tbl_keys(plugs))) do
       vim.api.nvim_feedkeys(vim.keycode(("<Plug>(changeset-%s)"):format(name)), "x", false)
     end
 
@@ -304,8 +322,8 @@ describe("plugin/changeset.lua", function()
     it("step by their count, and . repeats them after the jump switched buffers", function()
       vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-next)") .. "..", "x", false)
       vim.api.nvim_feedkeys("3" .. vim.keycode("<Plug>(changeset-prev)") .. ".", "x", false)
-      vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-next-comment)") .. ".", "x", false)
-      vim.api.nvim_feedkeys("2" .. vim.keycode("<Plug>(changeset-prev-comment)") .. ".", "x", false)
+      vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-comment-next)") .. ".", "x", false)
+      vim.api.nvim_feedkeys("2" .. vim.keycode("<Plug>(changeset-comment-prev)") .. ".", "x", false)
 
       assert.same({
         { "step", 1 },
@@ -330,7 +348,7 @@ describe("plugin/changeset.lua", function()
     end)
   end)
 
-  it("routes the visual <Plug>(changeset-comment) the selected lines", function()
+  it("routes the visual <Plug>(changeset-comment-new) the selected lines", function()
     local ranges = {}
     package.loaded["changeset.reviewing"] = {
       comment = function(first, last)
@@ -341,7 +359,7 @@ describe("plugin/changeset.lua", function()
     vim.api.nvim_set_current_buf(buf)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(("x"):rep(10, "\n"), "\n"))
 
-    vim.api.nvim_feedkeys("2GVj" .. vim.keycode("<Plug>(changeset-comment)"), "x", false)
+    vim.api.nvim_feedkeys("2GVj" .. vim.keycode("<Plug>(changeset-comment-new)"), "x", false)
 
     vim.api.nvim_buf_delete(buf, { force = true })
     package.loaded["changeset.reviewing"] = nil
@@ -349,20 +367,21 @@ describe("plugin/changeset.lua", function()
   end)
 
   it("maps the default <C-g> keys once startup is done", function()
-    local probe = "for _, lhs in ipairs({ 'cc', 'cn', 'cp', 'cl', 'n', 'p', 'm' }) do io.write(vim.fn.maparg('<C-g>' .. lhs, 'n'), ' ') end"
+    local probe = "for _, lhs in ipairs({ 'cc', 'cd', 'cq', 'd', 'l', 's', 'n', 'm' }) do"
+      .. " io.write(vim.fn.maparg('<C-g>' .. lhs, 'n'), ' ') end"
       .. " io.write(vim.fn.maparg('<C-g>cc', 'x'))"
 
     assert.equal(
-      "<Plug>(changeset-comment) <Plug>(changeset-next-comment) <Plug>(changeset-prev-comment)"
-        .. " <Plug>(changeset-last-comment) <Plug>(changeset-next) <Plug>(changeset-prev) <Plug>(changeset-review) <Plug>(changeset-comment)",
+      "<Plug>(changeset-comment-new) <Plug>(changeset-comment-del) <Plug>(changeset-comment-list)   "
+        .. "<Plug>(changeset-review-submit) <Plug>(changeset-next) <Plug>(changeset-review-mode) <Plug>(changeset-comment-new)",
       after_startup({}, probe)
     )
   end)
 
   it("leaves a <C-g> key the user mapped alone", function()
-    local probe = "io.write(vim.fn.maparg('<C-g>d', 'n'), ' ', vim.fn.maparg('<C-g>n', 'n'))"
+    local probe = "io.write(vim.fn.maparg('<C-g>s', 'n'), ' ', vim.fn.maparg('<C-g>n', 'n'))"
 
-    assert.equal(":echo 1<CR> <Plug>(changeset-next)", after_startup({ "-c", "nnoremap <C-g>d :echo 1<CR>" }, probe))
+    assert.equal(":echo 1<CR> <Plug>(changeset-next)", after_startup({ "-c", "nnoremap <C-g>s :echo 1<CR>" }, probe))
   end)
 
   it("maps a default key that only the startup buffer maps for itself", function()
@@ -384,10 +403,10 @@ describe("plugin/changeset.lua", function()
   it("leaves a user's own maps onto changeset's <Plug> maps alone", function()
     local probe =
       "io.write(vim.fn.maparg('<C-g>n', 'n'), ' ', vim.fn.maparg('<C-g>cn', 'n'), ' ', vim.fn.maparg('<C-g>cc', 'n'))"
-    local args = { "-c", "nmap <C-g>n <Plug>(changeset-prev)", "-c", "nmap <C-g>cn <Plug>(changeset-comment)" }
+    local args = { "-c", "nmap <C-g>n <Plug>(changeset-prev)", "-c", "nmap <C-g>cn <Plug>(changeset-comment-new)" }
 
     assert.equal(
-      "<Plug>(changeset-prev) <Plug>(changeset-comment) <Plug>(changeset-comment)",
+      "<Plug>(changeset-prev) <Plug>(changeset-comment-new) <Plug>(changeset-comment-new)",
       after_startup(args, probe)
     )
   end)

@@ -1,6 +1,6 @@
----`:Changeset comment`, `delete`, `abandon`, `submit`, `next-comment`, `prev-comment`, `list` and `yank`, which write,
----delete, clear, paste into an agent's prompt, walk, list and copy the review comments kept on this machine, and the
----Comments rows' open and delete.
+---`:Changeset comment new`, `del`, `next`, `prev`, `last` and `list` and `:Changeset review submit`, `yank` and
+---`abandon`, which write, delete, walk, reopen, list, paste into an agent's prompt, copy and clear the review comments
+---kept on this machine, and the Comments rows' open and delete.
 local Paths = require("changeset.paths")
 local buffers = require("changeset.buffers")
 local build = require("changeset.build")
@@ -14,7 +14,7 @@ local window = require("changeset.window")
 
 local M = {}
 
-local FOOTER = "kept until :Changeset submit"
+local FOOTER = "kept until :Changeset review submit"
 
 ---The repository to act on: the tree's when the command runs from the sidebar, whose own buffer
 ---names none, else the current buffer's.
@@ -176,7 +176,7 @@ function M.comment(first, last)
   local repository = Paths.root(0)
   local path = file_path(repository, 0)
   if not path then
-    return say(vim.log.levels.WARN, "run `:Changeset comment` from a file in %s", repository)
+    return say(vim.log.levels.WARN, "run `:Changeset comment new` from a file in %s", repository)
   end
   if vim.bo.modified then
     return say(vim.log.levels.WARN, M.UNSAVED)
@@ -265,19 +265,19 @@ local function last_saved(repository)
   end
 end
 
----Runs subcommand `name` from the review comment window `open`: `comment` saves it, `delete` deletes it, and any
----other closes it, keeping a draft, then calls `run` from the comment's first line in the window it opened from.
+---Runs subcommand `name` from the review comment window `open`: `comment new` saves it, `comment del` deletes it, and
+---any other closes it, keeping a draft, then calls `run` from the comment's first line in the window it opened from.
 ---@param open changeset.ReviewCommentWindow
 ---@param name string
 ---@param run fun()
 function M.from_window(open, name, run)
-  if name == "comment" then
+  if name == "comment new" then
     return open.save()
   end
-  if name == "delete" then
+  if name == "comment del" then
     return delete_open(open)
   end
-  if name == "last-comment" then
+  if name == "comment last" then
     local last = last_saved(Paths.root(vim.api.nvim_win_get_buf(open.source)))
     if
       last
@@ -624,7 +624,7 @@ end
 ---@param count integer
 local function jump(count)
   local step = count > 0 and 1 or -1
-  local win, from_sidebar, repository = jump_from(step == 1 and "next-comment" or "prev-comment")
+  local win, from_sidebar, repository = jump_from(step == 1 and "comment next" or "comment prev")
   if not win then
     return
   end
@@ -655,7 +655,7 @@ end
 
 ---Jumps to the repository's review comment saved last and opens it to edit.
 function M.last_comment()
-  local win, from_sidebar, repository = jump_from("last-comment")
+  local win, from_sidebar, repository = jump_from("comment last")
   if not win then
     return
   end

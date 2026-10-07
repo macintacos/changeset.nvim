@@ -39,7 +39,7 @@ local M = {}
 ---@class changeset.Config.ReviewComment
 ---@field save? string[] Keys that save a review comment and close its window, in insert and normal mode. Default { "<C-CR>", "<C-s>" }.
 ---@field sign? boolean Put a comment bubble in the sign column on each review comment's first line; `false` leaves it to a statuscolumn that draws `require("changeset").bubble()`. Default true.
----@field blocks? boolean Start the session showing each review comment's whole text in a box under its last line, rather than its first line at the end of the line; `:Changeset toggle-comments` switches. Default false.
+---@field blocks? boolean Start the session showing each review comment's whole text in a box under its last line, rather than its first line at the end of the line; `:Changeset comment toggle` switches. Default false.
 
 ---The options in force: every top-level field set.
 ---@class changeset.Options : changeset.Config

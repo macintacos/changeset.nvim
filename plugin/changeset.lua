@@ -7,6 +7,7 @@ if vim.g.loaded_changeset then
 end
 vim.g.loaded_changeset = true
 
+---Each subcommand by its words, as typed after `:Changeset`.
 local subcommands = {
   toggle = function()
     require("changeset").toggle()
@@ -14,46 +15,49 @@ local subcommands = {
   refresh = function()
     require("changeset.build").refresh()
   end,
-  review = function()
-    if not require("changeset.config").get().pr_review.enabled then
-      return vim.notify("Changeset: :Changeset review needs pr_review.enabled = true in setup()", vim.log.levels.ERROR)
-    end
-    require("changeset.review").toggle()
-  end,
-  comment = function(opts)
-    require("changeset.reviewing").comment(opts.line1, opts.line2)
-  end,
-  delete = function()
-    require("changeset.reviewing").delete()
-  end,
-  abandon = function()
-    require("changeset.reviewing").abandon()
-  end,
-  submit = function()
-    require("changeset.reviewing").submit()
-  end,
   next = function()
     require("changeset").step(1)
   end,
   prev = function()
     require("changeset").step(-1)
   end,
-  ["next-comment"] = function()
-    require("changeset.reviewing").next_comment(1)
+  ["review mode"] = function()
+    if not require("changeset.config").get().pr_review.enabled then
+      return vim.notify(
+        "Changeset: :Changeset review mode needs pr_review.enabled = true in setup()",
+        vim.log.levels.ERROR
+      )
+    end
+    require("changeset.review").toggle()
   end,
-  ["prev-comment"] = function()
-    require("changeset.reviewing").prev_comment(1)
+  ["review submit"] = function()
+    require("changeset.reviewing").submit()
   end,
-  ["last-comment"] = function()
-    require("changeset.reviewing").last_comment()
-  end,
-  list = function()
-    require("changeset.reviewing").list()
-  end,
-  yank = function()
+  ["review yank"] = function()
     require("changeset.reviewing").yank()
   end,
-  ["toggle-comments"] = function()
+  ["review abandon"] = function()
+    require("changeset.reviewing").abandon()
+  end,
+  ["comment new"] = function(opts)
+    require("changeset.reviewing").comment(opts.line1, opts.line2)
+  end,
+  ["comment del"] = function()
+    require("changeset.reviewing").delete()
+  end,
+  ["comment next"] = function()
+    require("changeset.reviewing").next_comment(1)
+  end,
+  ["comment prev"] = function()
+    require("changeset.reviewing").prev_comment(1)
+  end,
+  ["comment last"] = function()
+    require("changeset.reviewing").last_comment()
+  end,
+  ["comment list"] = function()
+    require("changeset.reviewing").list()
+  end,
+  ["comment toggle"] = function()
     require("changeset.review_comment_blocks").toggle()
   end,
 }
@@ -65,10 +69,31 @@ local function comment_window()
   return module and module.current()
 end
 
+---The word after `prefix` in each subcommand that starts with it, sorted.
+---@param prefix string Whole words, each followed by a space: "" or "comment ".
+---@return string[]
+local function next_words(prefix)
+  local words = {}
+  for name in pairs(subcommands) do
+    local word = vim.startswith(name, prefix) and name:sub(#prefix + 1):match("^%S+")
+    if word then
+      words[word] = true
+    end
+  end
+  local names = vim.tbl_keys(words)
+  table.sort(names)
+  return names
+end
+
 vim.api.nvim_create_user_command("Changeset", function(opts)
-  local name = opts.args == "" and "toggle" or opts.args
+  local name = #opts.fargs == 0 and "toggle" or table.concat(opts.fargs, " ")
   local run = subcommands[name]
   if not run then
+    local verbs = next_words(opts.fargs[1] .. " ")
+    if #verbs > 0 then
+      local text = ("Changeset: :Changeset %s takes a verb: %s"):format(opts.fargs[1], table.concat(verbs, ", "))
+      return vim.notify(text, vim.log.levels.ERROR)
+    end
     return vim.notify("Changeset: unknown subcommand " .. opts.args, vim.log.levels.ERROR)
   end
   local open = comment_window()
@@ -79,49 +104,57 @@ vim.api.nvim_create_user_command("Changeset", function(opts)
   end
   run(opts)
 end, {
-  nargs = "?",
+  nargs = "*",
   range = true,
   bar = true,
-  desc = "Toggle the changeset sidebar, rebuild it, toggle PR Review Mode, step through and open its changes, or write, delete, walk, reopen, list, show, copy, abandon or submit review comments",
-  complete = function(lead)
-    local names = vim.tbl_filter(function(name)
-      return vim.startswith(name, lead)
-    end, vim.tbl_keys(subcommands))
-    table.sort(names)
-    return names
+  desc = "Toggle the changeset sidebar, rebuild it, step through and open its changes, toggle PR Review Mode, submit, copy or abandon the review, or write, delete, walk, reopen, list or show review comments",
+  complete = function(lead, line)
+    -- The words between `Changeset`, with any range before it, and `lead`.
+    local typed = vim.trim(line:match("^%S+%s+(.-)%S*$") or "")
+    local prefix = typed == "" and "" or typed:gsub("%s+", " ") .. " "
+    return vim.tbl_filter(function(word)
+      return vim.startswith(word, lead)
+    end, next_words(prefix))
   end,
 })
 
 ---Each subcommand's default key under `<C-g>`, and what it does.
 local keys = {
-  { "cc", "comment", "Comment on this line, or the selection, or edit the comment there", { "n", "x" } },
-  { "cn", "next-comment", "Next review comment" },
-  { "cp", "prev-comment", "Previous review comment" },
-  { "cl", "last-comment", "Edit the review comment you saved last" },
-  { "ct", "toggle-comments", "Show or hide the review comments' whole text in blocks" },
-  { "d", "delete", "Delete the review comment on this line" },
+  { "cc", "comment new", "Comment on this line, or the selection, or edit the comment there", { "n", "x" } },
+  { "cd", "comment del", "Delete the review comment on this line" },
+  { "cn", "comment next", "Next review comment" },
+  { "cp", "comment prev", "Previous review comment" },
+  { "cl", "comment last", "Edit the review comment you saved last" },
+  { "cq", "comment list", "List the review comments in the quickfix list" },
+  { "ct", "comment toggle", "Show or hide the review comments' whole text in blocks" },
   { "n", "next", "Open the next change" },
   { "p", "prev", "Open the previous change" },
-  { "l", "list", "List the review comments in the quickfix list" },
-  { "y", "yank", "Copy the review as text" },
-  { "s", "submit", "Submit the review to an agent" },
-  { "a", "abandon", "Abandon the review" },
+  { "y", "review yank", "Copy the review as text" },
+  { "s", "review submit", "Submit the review to an agent" },
+  { "a", "review abandon", "Abandon the review" },
   { "t", "toggle", "Toggle the changeset sidebar" },
   { "r", "refresh", "Rebuild the changeset sidebar" },
-  { "m", "review", "Toggle PR Review Mode" },
+  { "m", "review mode", "Toggle PR Review Mode" },
 }
 
 ---The steps `.` repeats: each one's `'operatorfunc'` call, `%d` standing for the count.
 local repeatable = {
   next = "v:lua.require'changeset'.step(%d)",
   prev = "v:lua.require'changeset'.step(-%d)",
-  ["next-comment"] = "v:lua.require'changeset.reviewing'.next_comment(%d)",
-  ["prev-comment"] = "v:lua.require'changeset.reviewing'.prev_comment(%d)",
+  ["comment next"] = "v:lua.require'changeset.reviewing'.next_comment(%d)",
+  ["comment prev"] = "v:lua.require'changeset.reviewing'.prev_comment(%d)",
 }
+
+---The `<Plug>` map of subcommand `name`, its words joined by hyphens.
+---@param name string
+---@return string
+local function plug(name)
+  return ("<Plug>(changeset-%s)"):format((name:gsub(" ", "-")))
+end
 
 for _, key in ipairs(keys) do
   local name, desc = key[2], key[3]
-  local lhs = ("<Plug>(changeset-%s)"):format(name)
+  local lhs = plug(name)
   local call = repeatable[name]
   if call then
     -- A g@ operator is what `.` repeats. The count is baked into the lambda, and <Esc> drops the typed one, so `.`
@@ -139,7 +172,7 @@ for _, key in ipairs(keys) do
   end
 end
 -- `:`, not <Cmd>, so the selection arrives as the '<,'> range.
-vim.keymap.set("x", "<Plug>(changeset-comment)", ":Changeset comment<CR>", { silent = true, desc = keys[1][3] })
+vim.keymap.set("x", plug("comment new"), ":Changeset comment new<CR>", { silent = true, desc = keys[1][3] })
 
 ---Whether a global map in `mode` has `lhs`, or starts it, or starts with it: either way `lhs` would clash with it.
 ---Buffer-local maps don't count, being only the buffer current at startup's.
@@ -174,7 +207,7 @@ local function map_defaults()
     local lhs = "<C-g>" .. key[1]
     for _, mode in ipairs(key[4] or { "n" }) do
       if not taken(lhs, mode) then
-        vim.keymap.set(mode, lhs, ("<Plug>(changeset-%s)"):format(key[2]), { desc = key[3] })
+        vim.keymap.set(mode, lhs, plug(key[2]), { desc = key[3] })
         if mode == "n" then
           offer(lhs, key[2], key[3])
         end
@@ -185,9 +218,9 @@ local function map_defaults()
   -- `cn` and `cp` would see it as a clash.
   for mode, comments in pairs(pause) do
     if comments then
-      vim.keymap.set(mode, "<C-g>c", "<Plug>(changeset-comment)", { desc = keys[1][3] })
+      vim.keymap.set(mode, "<C-g>c", plug("comment new"), { desc = keys[1][3] })
       if mode == "n" then
-        offer("<C-g>c", "comment", keys[1][3])
+        offer("<C-g>c", "comment new", keys[1][3])
       end
     end
   end

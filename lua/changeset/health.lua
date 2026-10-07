@@ -95,9 +95,15 @@ end
 ---@param facts changeset.health.Facts
 local function herdr(facts)
   if facts.herdr then
-    return finding("ok", "running inside herdr: `:Changeset submit` can paste the review into its agents' prompts")
+    return finding(
+      "ok",
+      "running inside herdr: `:Changeset review submit` can paste the review into its agents' prompts"
+    )
   end
-  return finding("warn", "not inside a herdr pane: `:Changeset submit` has no agent prompt to paste the review into")
+  return finding(
+    "warn",
+    "not inside a herdr pane: `:Changeset review submit` has no agent prompt to paste the review into"
+  )
 end
 
 ---@param facts changeset.health.Facts

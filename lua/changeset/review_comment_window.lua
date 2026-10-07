@@ -21,7 +21,7 @@ end
 ---@class changeset.ReviewCommentWindowOpts
 ---@field line integer The current window's buffer line it opens under, 1-based.
 ---@field title string The whole title, e.g. "Review comment · line 42".
----@field footer string Names where a save goes, e.g. "kept until :Changeset submit".
+---@field footer string Names where a save goes, e.g. "kept until :Changeset review submit".
 ---@field keys string[] Keys that save, in insert and normal mode.
 ---@field save_desc string The save keys' `desc`, which `?` lists.
 ---@field close_desc string The `desc` of the keys that close without saving, which `?` lists.
@@ -95,10 +95,10 @@ end
 ---@param key { name: string, desc: string }
 ---@return string
 local function window_desc(key)
-  if key.name == "comment" then
+  if key.name == "comment new" then
     return "Save the review comment"
   end
-  if key.name == "delete" then
+  if key.name == "comment del" then
     return "Delete this review comment"
   end
   return "Keep a draft, then: " .. key.desc
