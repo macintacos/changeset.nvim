@@ -250,10 +250,12 @@ you never left the sidebar for it, so the cursor stays on the row you were on.
 
 A terminal or help window is not a file you are in either, so it leaves "you are here"
 where it was. Both that and the row the sidebar's cursor is on ride the session, in the
-`ChangesetPosition` global: restoring one puts each back once the rebuilt tree has read
-its file's symbols (a deleted file has none to wait for), unless you have moved into a
-file, into the sidebar, or the sidebar's cursor by then. A file or row the changeset no
-longer holds is let go without a word.
+`ChangesetPosition` global, the row with how far down the window it sat: restoring one
+puts each back once the rebuilt tree has read its file's symbols (a deleted file has none
+to wait for), the row scrolled to where it was, unless you have moved into a file, into
+the sidebar, or the sidebar's cursor by then. While the row waits, the cursor waits on its
+file's row rather than the top of the tree. A file or row the changeset no longer holds is
+let go without a word.
 
 ### The kind menu docks against the sidebar, and reuses its rail
 
@@ -1245,7 +1247,8 @@ repository's deliberate choice is none of that save's business.
   `l`-expanded chain. One key scheme serves all three. Every redraw re-anchors the same
   way; when the cursor's file row is gone from screen — its changes all turned out to be
   tests or comments, or a filter kept only one copy — the cursor moves to the first file
-  row with that path.
+  row with that path. The window scrolls by as many lines as the cursor moved, so its row
+  stays where it was on screen while rows arrive or leave above it.
 - **Opening the sidebar is an ordinary split.** It takes its width with `winfixwidth`
   (a drawer its height, with `winfixheight`) already set and then lets `'equalalways'`
   settle the rest, so the windows that were already open share out what is left instead
@@ -1257,7 +1260,9 @@ repository's deliberate choice is none of that save's business.
 - **A session restores the window, not its contents.** `:mksession` records the layout but
   not a scratch buffer's contents, so the sidebar comes back as an empty window. Its
   name is what survives, and it is how the tree finds that window and fills it rather
-  than splitting a second sidebar beside it.
+  than splitting a second sidebar beside it. A session read over an open sidebar closes it
+  first: the session lays out its windows from the focused one, and the sidebar's would
+  otherwise take a file with the sidebar's window options still on it.
 - **A cached file is never loaded or parsed.** Reading symbols is what puts a changed file
   in a buffer, so a file answered from the cache has none, and anything the tree needs
   from its text comes off disk instead. The test flag its attributes gave each symbol

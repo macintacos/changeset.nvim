@@ -902,7 +902,7 @@ WHERE STATE IS STORED                   *changeset.nvim-where-state-is-stored*
 - Hidden symbol kinds: `stdpath("state")/changeset/filters.json`.
 - Review comments: `stdpath("state")/changeset/comments.json`.
 - Sessions: `:mksession` restores the sidebar when `'sessionoptions'` contains `blank`
-    (the default), and its cursor row too when it also contains `globals`.
+    (the default), and its cursor row and scroll too when it also contains `globals`.
 - Folds: kept in memory per repository until Neovim exits.
 - Turning the |changeset.nvim-unified-diff| off: kept in memory until Neovim exits.
 

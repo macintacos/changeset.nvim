@@ -634,7 +634,7 @@ deferred. It installs nothing, starts no language server and makes no network re
 - Hidden symbol kinds: `stdpath("state")/changeset/filters.json`.
 - Review comments: `stdpath("state")/changeset/comments.json`.
 - Sessions: `:mksession` restores the sidebar when `'sessionoptions'` contains `blank`
-  (the default), and its cursor row too when it also contains `globals`.
+  (the default), and its cursor row and scroll too when it also contains `globals`.
 - Folds: kept in memory per repository until Neovim exits.
 - Turning the [unified diff](#unified-diff) off: kept in memory until Neovim exits.
 
