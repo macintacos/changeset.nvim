@@ -584,7 +584,11 @@ the text on `NormalFloat` with a cell of padding either side. Virtual lines sit 
 in the border. It is as tall as its text and as wide as the longer of its text and its
 title, wrapped at word boundaries within the window's measure, 72 columns at most. The
 bubble and the lit numbers stay, since the sign is where the eye finds a comment. A
-draft's border is dashed, `┄` and `┆`. One switch covers every buffer, now and as files
+draft's block is titled as hover titles it, "Draft review comment · line 3", and its
+dashed border, `┄` and `┆`, and title take the draft marks' colour, so it matches the
+draft's bubble, circle and numbers; parked, it looks like any other parked block. While
+the review comment window is open on a line, that line's blocks hide, so the window's
+room sits directly under the line, and come back as it closes. One switch covers every buffer, now and as files
 are read later, because a review is read whole or not at all; `review_comment.blocks`
 picks the state a session starts in, read until the first toggle.
 
@@ -974,7 +978,9 @@ repository's deliberate choice is none of that save's business.
   fails. Otherwise the motion runs, and a callback after it parks if it crossed a block.
   While parked the keys move the cursor themselves, so folds, wrapped lines and the first
   and last lines step the same as any other; stepping off restores the column the cursor
-  wanted, so a later `j` or `$` keeps it.
+  wanted, so a later `j` or `$` keeps it. Stepping up onto a wrapped line lands on its last
+  screen row, at the wanted column within that row, worked out rather than reached with
+  `gj`, which overshoots onto the next line from a column already on a later row.
 - **Only a key the user typed parks, in plain Normal mode.** A count, a macro replaying,
   insert mode's `<C-o>` and a key sent by a mapping, `:normal` or `feedkeys` run the motion
   untouched, or a macro would stop on every block it passed and `<C-o>j` would never get

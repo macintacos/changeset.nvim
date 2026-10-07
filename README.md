@@ -113,9 +113,9 @@ closes it. It takes one optional subcommand:
   and opens it to edit.
 - `:Changeset list` puts the [review comments](#review-comments) in the quickfix list.
 - `:Changeset yank` copies the review's saved comments to the clipboard as text, or to the unnamed register
+  when Neovim has no clipboard provider.
 - `:Changeset toggle-comments` shows every [review comment](#review-comments)'s whole
   text in a block under its lines, or goes back to the marks alone, in every buffer.
-  when Neovim has no clipboard provider.
 
 The sidebar opens on the right of the editor. When the editor is too narrow to leave the
 files `layout.min_file_width` columns (80 by default) beside it, the sidebar opens as a
@@ -346,8 +346,10 @@ numbers stay. A one-line move, `j` or `k` however you map them, stops on a block
 were a line of the file: `j`, `k`, `<Down>`, `<Up>`, `gj` and `gk` are mapped in a buffer
 showing blocks, each still doing what you mapped it to when it doesn't stop. The
 stopped-on block lights its border and lists its keys: `<CR>` or `c` edits the review
-comment, `d` asks to delete it, and `<Esc>` or any other key steps off. A count, a jump,
-a search or `<C-g>cn` moves past blocks.
+comment, or resumes a draft, `d` asks to delete it, and `<Esc>` or any other key steps
+off. A count, a jump, a search, a macro or a mapping moves past blocks. A draft's block
+has a dashed border in the draft colour. A line's blocks step aside while the review
+comment window is open on it.
 
 Hover shows them too. A file with a mark gets a language server client named `changeset`,
 which answers hover on a line with each review comment whose lines take it in, under a
@@ -498,6 +500,7 @@ The sidebar derives each group's default from your colorscheme, and derives it a
 | `ChangesetBlockBorder` | A review comment block's border | links to `FloatBorder` |
 | `ChangesetBlockTitle` | A review comment block's title | `FloatTitle`'s colour on `NormalFloat`'s background, bold |
 | `ChangesetBlockBody` | A review comment block's text | links to `NormalFloat` |
+| `ChangesetBlockDraft` | A draft review comment block's border and title | `ChangesetReviewCommentDraft`'s colour on `NormalFloat`'s background |
 | `ChangesetBlockParked` | The border of the block the cursor stopped on | `DiagnosticOk`'s colour, bold |
 | `ChangesetBlockParkedTitle` | The title of the block the cursor stopped on | `DiagnosticOk`'s colour, reversed, bold |
 | `ChangesetBlockHint` | The keys that block lists in its bottom border | `Comment`'s colour, italic |

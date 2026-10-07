@@ -132,9 +132,9 @@ sidebar closes it. It takes one optional subcommand:
     and opens it to edit.
 - `:Changeset list` puts the |changeset.nvim-review-comments| in the quickfix list.
 - `:Changeset yank` copies the review’s saved comments to the clipboard as text, or to the unnamed register
+    when Neovim has no clipboard provider.
 - `:Changeset toggle-comments` shows every review comment |changeset.nvim-review-comments|’s whole
     text in a block under its lines, or goes back to the marks alone, in every buffer.
-    when Neovim has no clipboard provider.
 
 The sidebar opens on the right of the editor. When the editor is too narrow to
 leave the files `layout.min_file_width` columns (80 by default) beside it, the
@@ -460,8 +460,10 @@ move, `j` or `k` however you map them, stops on a block as if it were a line of
 the file: `j`, `k`, `<Down>`, `<Up>`, `gj` and `gk` are mapped in a buffer
 showing blocks, each still doing what you mapped it to when it doesn’t stop.
 The stopped-on block lights its border and lists its keys: `<CR>` or `c` edits
-the review comment, `d` asks to delete it, and `<Esc>` or any other key steps
-off. A count, a jump, a search or `<C-g>cn` moves past blocks.
+the review comment, or resumes a draft, `d` asks to delete it, and `<Esc>` or
+any other key steps off. A count, a jump, a search, a macro or a mapping moves
+past blocks. A draft’s block has a dashed border in the draft colour. A
+line’s blocks step aside while the review comment window is open on it.
 
 Hover shows them too. A file with a mark gets a language server client named
 `changeset`, which answers hover on a line with each review comment whose lines
@@ -640,36 +642,36 @@ HIGHLIGHT GROUPS                             *changeset.nvim-highlight-groups*
 The sidebar derives each group’s default from your colorscheme, and derives
 it again on `:colorscheme`.
 
-  --------------------------------------------------------------------------------
+  -----------------------------------------------------------------------------------------
   Group                         Colours                     Default
-  ----------------------------- --------------------------- ----------------------
-  ChangesetMeta                 Text that is not content:   Comment’s colour,
-                                counts, notes               italic
+  ----------------------------- --------------------------- -------------------------------
+  ChangesetMeta                 Text that is not content:   Comment’s colour, italic
+                                counts, notes
 
   ChangesetMatch                Characters a filter matched links to Search
 
-  ChangesetHidden               A kind the tree is not      Comment’s colour,
-                                showing, in the kind menu   struck through
+  ChangesetHidden               A kind the tree is not      Comment’s colour, struck
+                                showing, in the kind menu   through
 
   ChangesetHeader               The sidebar’s header strip  TabLine’s background
 
-  ChangesetHeaderIcon           The branch glyph on the     Directory’s colour on
-                                header                      the header
+  ChangesetHeaderIcon           The branch glyph on the     Directory’s colour on the
+                                header                      header
 
-  ChangesetHeaderDim            The remote, nouns and PR on Comment’s colour on
-                                the header                  the header
+  ChangesetHeaderDim            The remote, nouns and PR on Comment’s colour on the header
+                                the header
 
-  ChangesetHeaderRef            The ref the tree is         Normal’s colour on the
-                                compared against            header, bold
+  ChangesetHeaderRef            The ref the tree is         Normal’s colour on the header,
+                                compared against            bold
 
-  ChangesetReviewComment        A review comment’s bubble,  DiagnosticOk’s colour,
-                                its circle and the line     bold
+  ChangesetReviewComment        A review comment’s bubble,  DiagnosticOk’s colour, bold
+                                its circle and the line
                                 numbers it covers in its
                                 file
 
-  ChangesetReviewCommentDraft   A draft review comment’s    DiagnosticOk’s colour
-                                bubble, its circle and the  mixed halfway to
-                                line numbers it covers      Comment’s
+  ChangesetReviewCommentDraft   A draft review comment’s    DiagnosticOk’s colour mixed
+                                bubble, its circle and the  halfway to Comment’s
+                                line numbers it covers
 
   ChangesetReviewCommentBody    A review comment’s body     links to ChangesetMeta
                                 after its circle
@@ -678,39 +680,40 @@ it again on `:colorscheme`.
                                 border
 
   ChangesetBlockTitle           A review comment block’s    FloatTitle’s colour on
-                                title                       NormalFloat’s
-                                                            background, bold
+                                title                       NormalFloat’s background, bold
 
   ChangesetBlockBody            A review comment block’s    links to NormalFloat
                                 text
 
-  ChangesetBlockParked          The border of the block the DiagnosticOk’s colour,
-                                cursor stopped on           bold
+  ChangesetBlockDraft           A draft review comment      ChangesetReviewCommentDraft’s
+                                block’s border and title    colour on NormalFloat’s
+                                                            background
+
+  ChangesetBlockParked          The border of the block the DiagnosticOk’s colour, bold
+                                cursor stopped on
 
   ChangesetBlockParkedTitle     The title of the block the  DiagnosticOk’s colour,
                                 cursor stopped on           reversed, bold
 
-  ChangesetBlockHint            The keys that block lists   Comment’s colour,
-                                in its bottom border        italic
+  ChangesetBlockHint            The keys that block lists   Comment’s colour, italic
+                                in its bottom border
 
-  ChangesetBadge                The badge in the footer     Directory’s colour,
-                                                            reversed, bold
+  ChangesetBadge                The badge in the footer     Directory’s colour, reversed,
+                                                            bold
 
-  ChangesetFooter               The footer’s text           Comment’s colour on
-                                                            StatusLine
+  ChangesetFooter               The footer’s text           Comment’s colour on StatusLine
 
   ChangesetFooterKey            Keys and the filter in the  StatusLine, bold
                                 footer
 
-  ChangesetSelected             The sidebar’s cursor row    Normal’s background
-                                while focused               tinted toward
-                                                            Statement
+  ChangesetSelected             The sidebar’s cursor row    Normal’s background tinted
+                                while focused               toward Statement
 
-  ChangesetHere                 The row for where your      a lighter Statement
-                                cursor is                   tint
+  ChangesetHere                 The row for where your      a lighter Statement tint
+                                cursor is
 
-  ChangesetPicked               The row last opened from    a lighter Statement
-                                the sidebar                 tint
+  ChangesetPicked               The row last opened from    a lighter Statement tint
+                                the sidebar
 
   ChangesetSelectedIcon         The glyph on the selected   Statement’s colour
                                 row
@@ -724,42 +727,37 @@ it again on `:colorscheme`.
   ChangesetNoCursor             The cursor while in the     fully blended
                                 sidebar, hidden
 
-  ChangesetButton               A dialog’s button           Normal, else
-                                                            NormalFloat shaded
-                                                            toward its text where
-                                                            they share a
-                                                            background
+  ChangesetButton               A dialog’s button           Normal, else NormalFloat shaded
+                                                            toward its text where they
+                                                            share a background
 
-  ChangesetButtonFocus          A dialog’s focused button   Statement’s colour,
+  ChangesetButtonFocus          A dialog’s focused button   Statement’s colour, reversed,
+                                                            bold
+
+  ChangesetButtonDanger         The button that deletes, in DiagnosticError’s colour on the
+                                a dialog asking first       button’s background
+
+  ChangesetButtonDangerFocus    That button while focused   DiagnosticError’s colour,
                                                             reversed, bold
-
-  ChangesetButtonDanger         The button that deletes, in DiagnosticError’s
-                                a dialog asking first       colour on the button’s
-                                                            background
-
-  ChangesetButtonDangerFocus    That button while focused   DiagnosticError’s
-                                                            colour, reversed, bold
 
   ChangesetButtonKey            The letter that presses a   underlined
                                 button
 
-  ChangesetDialogSelected       A dialog’s focused row      NormalFloat’s
-                                                            background tinted
+  ChangesetDialogSelected       A dialog’s focused row      NormalFloat’s background tinted
                                                             toward Statement
 
-  ChangesetPreview              The band over a window      CursorLine’s
-                                being previewed into        background, else
-                                                            Visual’s
+  ChangesetPreview              The band over a window      CursorLine’s background, else
+                                being previewed into        Visual’s
 
-  ChangesetPreviewLabel         The badge at the head of    DiagnosticWarn’s
-                                that band                   colour, reversed, bold
+  ChangesetPreviewLabel         The badge at the head of    DiagnosticWarn’s colour,
+                                that band                   reversed, bold
 
-  ChangesetPreviewHint          The hint at the tail of     Comment’s colour on
-                                that band                   the band, italic
+  ChangesetPreviewHint          The hint at the tail of     Comment’s colour on the band,
+                                that band                   italic
 
-  ChangesetPreviewIcon          The file’s glyph on that    the file icon’s colour
-                                band                        on the band
-  --------------------------------------------------------------------------------
+  ChangesetPreviewIcon          The file’s glyph on that    the file icon’s colour on the
+                                band                        band
+  -----------------------------------------------------------------------------------------
 A colorscheme’s definition of a group wins. So does your own `nvim_set_hl`,
 until the next `:colorscheme` clears it. To keep an override across colorscheme
 changes, set it from a `ColorScheme` autocmd:
