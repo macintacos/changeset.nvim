@@ -320,13 +320,13 @@ row apart on either side, all readable while the review comment is drafted:
 local function greet(name)
 
  ╭ 󰍩 Review comment · line 3 ─────────────────────────────────────────────╮
- │**bold** and a list:                                                    │
- │- item                                                                  │
+ │ **bold** and a list:                                                   │
+ │ - item                                                                 │
  │                                                                        │
  │                                                                        │
  │                                                                        │
  │                                                                        │
- ╰────────────────────────────────────────────────  <C-CR>  save   q  draft ╯
+ ╰──────────────────────────────────────────────  <C-CR>  save   q  draft ╯
 
   return "hello " .. name
 end
@@ -343,10 +343,23 @@ Focus never returns to it from the source: leaving it closes it, keeping a draft
 off the line: it stays on the line number, as the float does.
 
 Its width is the room right of the source window's gutter, less that column and the
-border, between 20 and 88 columns, re-fitted as the source is resized: a review comment is
-prose, and prose reads at a short measure, while 20 keeps a cramped split usable. Six rows
-are room for a paragraph without pushing the code after it far away; a longer review
-comment scrolls.
+border, between 20 and 72 columns, re-fitted as the source is resized. 72 is the most a
+review comment's block is inside its border too, so a long review comment's box keeps its
+width between editing and reading, as the window collapsed. A review comment is prose,
+which reads at a short measure: the text runs to about 70 cells, the long end of the 45 to
+75 characters a line of prose reads comfortably at, while 20 keeps a cramped split usable.
+A one-cell `'statuscolumn'` keeps the text a cell off the left border, wrapped rows
+included, as a block pads its text. The right has no pad: Neovim fills a window's text to
+its last column, and a border character is one cell. Six rows are room for a paragraph
+without pushing the code after it far away; a longer review comment scrolls.
+
+The buffer is named for the file and lines the review comment is on,
+`review-comment://lua/a.lua:4-5` or, for a whole file, `review-comment://lua/a.lua`, so a
+statusline says what is being written rather than `[Scratch]`. The scheme keeps Neovim from
+expanding the name into a path under the working directory, and it is not `changeset://`,
+which a loaded session looks for to find the sidebar. The buffer is `nofile`, so `:w`,
+`:w!`, `:update`, `:wall` and `'autowrite'` never put that name on disk.
+
 The buffer is `markdown`, so the formatting is highlighted as it is typed, and it
 wraps at word boundaries. `style = "minimal"` drops the number column and sign column,
 which describe a file this buffer is not. The filetype is set once the float is open, so a
@@ -376,17 +389,7 @@ buffer, so from the sidebar its window opens under a row instead: the file's row
 Comments row. The sidebar is the one place every changed file has a line, a deleted one
 included, and the row above names the file the comment is about, as the line above names
 the code. Being any other source window, the sidebar gets the same room, placement and
-closing.
-
-Every other row comments the same way, on what it stands for, so a review read row by row
-from the preview is written without leaving the sidebar: a symbol's row on the line `<CR>`
-opens, a change's row on the change's lines, an "Other changes" row on the line it opens,
-and a Comments row opens its review comment. The title names the line or lines as any line
-comment's does, and a review comment already on exactly those lines opens to edit. A
-section header refuses, saying which rows take one, and so does a row whose file has
-unsaved edits, as the line verbs do. A deleted file is never read, so its row is its only
-one. A subcommand run from a window under a row runs from that row, not from the comment's
-line, which is none of the sidebar's. Inside a file it opens under the first line: `comment new` with no range there
+closing. Inside a file it opens under the first line: `comment new` with no range there
 means the whole file, since a file is read from its top, while a selection of that line
 still means the line, so line 1 keeps its own comments. The title names its reach as a
 line's names its lines, `Review comment · whole file`, and leads with the file's icon from
@@ -394,6 +397,18 @@ the icon plugin, the glyph its sidebar row wears, where a line's leads with its 
 the two kinds of window read apart at a glance. Either glyph's group is recoloured onto
 `FloatTitle`'s background as the preview band's glyph is onto the band's, or a
 foreground-only group would punch a hole in the title.
+
+Every other row comments the same way, on what it stands for, so a review read row by row
+from the preview is written without leaving the sidebar: a symbol's row on the line `<CR>`
+opens, a change's row on the change's lines, an "Other changes" row on the line it opens,
+and a Comments row opens its review comment. The title names the line or lines as any line
+comment's does. The review comment `comment new` would open from the file opens to edit:
+on a symbol's or an "Other changes" row, one line, the narrowest covering it, so a range
+written over a function in the file is the one its row edits; on a change's row, the one on
+exactly its lines. A section header refuses, saying which rows take one, and so does a row
+whose file has unsaved edits, as the line verbs do. A deleted file is never read, so its
+row is its only one. A subcommand run from a window under a row runs from that row, not
+from the comment's line, which is none of the sidebar's.
 
 ### Dialogs ask in floats of changeset's own
 
@@ -408,11 +423,11 @@ foreground-only group would punch a hole in the title.
 │                                         │
 ╰─────────────────────────────────────────╯
 
-╭ Submit the review ─────────────────────────────────────╮
-│▌ 1  ● claude   idle     󰎤 parser  Fix the parser       │
-│  2  ● codex    working  󰎧 tests   run the suite        │
-│  3  ● claude   blocked  answer its prompt first        │
-╰ <CR> or 1-3 submit  q cancel ──────────────────────────╯
+╭ Submit 3 review comments ───────────────────────────────────────────────╮
+│▌ 1  ● claude  idle     parser-fix  fix/parser  Fix the parser           │
+│  2  ● codex   working  changeset   main        run the suite            │
+│  3  ● claude  blocked  sandbox     trunk       answer its prompt first  │
+╰ <CR> or 1-3 submit  q cancel ───────────────────────────────────────────╯
 ```
 
 The question before a deletion and the choice of agent for `:Changeset review submit` are floats
@@ -444,13 +459,16 @@ Shift does nothing, silently. `dd` is how a Vim hand deletes a line, and on a Co
 its second `d` arrives before the question draws: unshifted, it would delete the review
 comment unseen, skipping the look the quote exists for.
 
-The picker lines its rows up in columns, a row's last cell running free. Each row leads with
-its number, which a digit presses, and a `●` in its status's colour: idle and done in
-`DiagnosticOk`, working in `DiagnosticWarn`, blocked in `DiagnosticError`, anything else in
-the meta colour. The focused row wears the sidebar's selection tint, mixed over the float's
-background rather than Normal's, since no colorscheme checked paints the two alike, and a
-`▌` in the accent at its left edge, where a list is read from. An agent at a permission
-prompt is listed dimmed, saying why, and can't be picked.
+The picker lines its rows up in columns, a row's last cell running free and cut at the
+editor's edge. Each row leads with its number, which a digit presses, and a `●` in its
+status's colour: idle and done in `DiagnosticOk`, working in `DiagnosticWarn`, blocked in
+`DiagnosticError`, anything else in the meta colour. After its name and status a row says
+where the agent works, its directory's last component and its branch, so two agents in
+different worktrees of one repository read apart; herdr's tab label, which mostly repeats
+the title, is left out. The focused row wears the sidebar's selection tint, mixed over the
+float's background rather than Normal's, since no colorscheme checked paints the two alike,
+and a `▌` in the accent at its left edge, where a list is read from. An agent at a
+permission prompt is listed dimmed, saying why, and can't be picked.
 
 The cursor is hidden while a dialog has focus: the focus is drawn, and the cursor would only
 cover it. It hides through a `'guicursor'` entry of its own, `n:ChangesetNoCursor`, apart
@@ -461,8 +479,14 @@ answer runs, so whatever the answer opens or focuses is not undone by the close.
 Other plugins' marks stay off a dialog's text. mini.indentscope would rule a scope line
 down its margins and mini.cursorword would underline the focused label under the hidden
 cursor, so both are off in its buffer. It scrolls back to its first line whenever its
-cursor moves: scrollEOF.nvim scrolls on that to leave room past a buffer's end, which
-would push the quoted place out of a window sized to show every line.
+window scrolls: scrollEOF.nvim scrolls to leave room past a buffer's end, which would push
+the quoted place out of a window sized to show every line, and does so even from a move in
+the sidebar made just before the dialog opened, its scroll deferred until the dialog has
+focus. It answers both ways scrollEOF reaches it. Its own cursor moving covers the tick
+it opens in, since Neovim fires no `WinScrolled` for a float scrolled before its first
+redraw. `WinScrolled` in any window covers later ticks, since Neovim names only the first
+of several windows that scrolled at once. A dialog taller than the editor scrolls as its
+focus moves, and is left to.
 
 A dialog is modal, and three things hold it so:
 
@@ -553,24 +577,46 @@ lists them; their ranges' number colours merge. Their blocks stack in that order
 
 The marks are drawn in every loaded buffer of a repository with review comments, sidebar
 or not, once changeset is loaded: `plugin/changeset.lua` requires nothing, so a session
-that never uses changeset marks nothing. They are redrawn after every write to the store,
-as a file is read, and when Neovim regains focus or gitsigns sees HEAD move, since either
-can follow a branch switch, and a redraw reads the store once for each repository it draws.
+that never uses changeset marks nothing. They are redrawn after every write to the store
+and as a file is read, and a redraw reads the store once for each repository it draws.
+When Neovim regains focus, or gitsigns reports a change without a buffer, which it does
+when HEAD moves and on every `:cd`, only the buffers whose repository has checked out
+another branch since they were drawn are redrawn, since either can follow a branch switch:
+a redraw lets go of a parked block, and focus comes back from every trip to the agent's
+pane.
 
-The marks are extmarks, so they follow edits, and writing the file stores the lines each
-mark has moved to: the review comment stays on the code it was written about, however the
-lines above it changed, by hand or by a formatter on save. A range keeps its first and last
-lines, its end moving down with a line added right above the last. A review comment whose
-lines were all deleted goes to the line that followed them, where its mark collapses, and
-review comments that end up on one range merge into one, their bodies a blank line apart, a
-draft if any was: the store holds one a range, which every verb that finds a review comment
-by its lines relies on. A draft moves as a saved one does; a whole file's has no mark and
-stays. A redraw before the write, such as one for another file's review comment, draws a
-modified buffer's marks where its edits moved them, not back on the stored lines, or the
-write would store those. Writing the buffer to another file moves nothing, its own file
-still holding the stored lines, and an edit made outside Neovim moves nothing either, there
-being no mark to follow it. Until the write the verbs that act by line refuse in the
-modified buffer, since the marks and the stored lines disagree.
+The marks are extmarks, so they follow edits as they are made, and writing the file stores
+the lines the edits moved each review comment to: it stays on the code it was written
+about, however the lines above it changed, by hand or by a formatter on save. The stored
+lines are mapped through a diff, never read back off the marks. Neovim applies a replaced
+block, as a formatter applies each hunk, a `:%!` filter or a whole-document LSP edit does,
+as a delete and an insert, which collapses every mark inside the block onto one line, so
+read back they would merge every review comment in a reformatted block. Instead a buffer's
+lines are kept whenever its marks are drawn while it is unmodified, which is where the
+stored lines sit, and the write diffs them against the lines written, with
+`vim.text.diff`'s histogram algorithm, as conform diffs a formatter's output:
+
+- A line outside every change moves by the lines added and removed above it.
+- A line inside a rewritten block keeps its place in the block, as far as the new block
+  reaches.
+- A range maps its first and last lines apart. Its deleted last line goes to the line
+  before the deletion, so the range never takes in a line it didn't cover.
+- A review comment whose lines were all deleted goes to the line that followed them, or to
+  the file's new last line when none did, so it is still drawn.
+
+Review comments that a write still brings onto one range, as deleting a commented line
+right above another does, merge into one, their bodies a blank line apart, a draft if any
+was: the store holds one a range, which every verb that finds a review comment by its
+lines relies on. A merge can't be split again, so it warns, naming the lines and saying
+when the result is a draft, which submit holds back. A moved review comment stored before
+branches were recorded is filed under the branch, as an edit files it. A draft moves as a
+saved one does; a whole file's has no lines and stays. A redraw before the write, such as
+one for another file's review comment, draws a modified buffer's marks where the same diff
+puts them, not back on the stored lines. Writing the buffer to another file moves nothing,
+its own file still holding the stored lines. An edit made outside Neovim moves nothing
+either: the buffer reads the file in again, and its lines are kept anew. Until the write
+the verbs that act by line refuse in the modified buffer, since the marks and the stored
+lines disagree.
 
 The third mark, a comment bubble `󰍩` in the same group, takes the sign column on the first
 line, and it is the one that does compete for a cell. It is left at the default extmark
@@ -634,6 +680,10 @@ A detached HEAD in a stopped rebase sees the branch the rebase rewrites, which g
 review, as § What it remembers treats it. Any other detached HEAD, a bisect or a tag
 checked out, files its review comments under its commit. They stay with the code they were
 written against, show on no branch, and come back when that commit is checked out again.
+
+A reftable repository's `HEAD` file always reads `ref: refs/heads/.invalid`, the real HEAD
+living in the reftable, which only git reads. So it has no branch: its review comments are
+filed under none and show on every branch, as they did before branches were recorded.
 
 ### A review comment can show as a block
 
@@ -763,15 +813,39 @@ The paste is left unsent and the agent's pane focused. The review is the start o
 conversation, not all of it: the user adds what the comments don't say, such as what to
 fix first, and presses Enter. With one agent in the workspace it goes there; with several,
 the agent picker of § Dialogs asks, so the user never routes a review to an agent they can't
-see.
+see. Its title counts what goes, "Submit 3 review comments".
 
-The review comments are deleted once the paste lands, because the agent now holds them and
-a later submit would paste them twice. Only the ones pasted go: one written, or edited, while
-the picker was open stays for the next review. A refusal keeps them all. An agent at a
-permission prompt refuses, since herdr would drop the paste there without a word, and a
-review that vanished into a prompt would read as delivered. The picker lists one but won't
-pick it, and delivery checks again, since a pick can be minutes old. A cancelled pick says
-nothing.
+The picker ranks its rows so the likely target is the one focused, since a reflexive `<CR>`
+takes it, and herdr's own order can put an agent working in another repository first. The
+agent this branch's review last went to in this Neovim leads while its pane still works in
+the directory it did then, since a pane outlives its agent. Then come agents working in the
+repository, inside one of its worktrees, then the rest. A branch name is no evidence:
+`main` and `trunk` repeat across repositories. Within each group ready agents lead and
+blocked ones trail. Focus starts on the first that can be picked only in the first two
+groups; otherwise no row is focused and `<CR>` does nothing until a move or a digit, so a
+reflexive `<CR>` never pastes into another repository's agent. `doc/agents/herdr.md` has
+the fields and the git call behind it.
+
+The review comments are taken out of the review once the paste lands, because the agent now
+holds them and a later submit would paste them twice. Only the ones pasted go: one written,
+or edited, while the picker was open stays for the next review. A refusal keeps them all. An
+agent at a permission prompt refuses, since herdr would drop the paste there without a
+word, and a review that vanished into a prompt would read as delivered. The picker lists one
+but won't pick it, and delivery checks again, since a pick can be minutes old. A cancelled
+pick says nothing.
+
+A paste can still be lost after it lands: one `<C-c>` in Claude Code clears the prompt. So
+the store keeps the batch it took, per repository and branch as the comments themselves
+are, and `:Changeset review restore` brings it back as saved review comments. A batch is
+only ever the last: the next submit replaces it, so batches never pile up. Abandon leaves
+it, since its question counts only the comments still listed and can't promise the batch
+away. Restoring brings the batch back and forgets it, except any review comment whose range
+holds one written since: the store keeps one a range and the newer one is what the user
+means now, so that one stays submitted, and the notice says so, for a restore once the
+newer one is gone. Its lines are the ones stored at the submit, not moved by edits made
+since. The submit's notice keeps the picker's word and names the command, where a user who
+just lost a paste looks: "submitted 3 review comments to sb-alpha; :Changeset review restore
+brings them back".
 
 ### The Comments section lists what you wrote
 
@@ -1200,12 +1274,19 @@ repository's deliberate choice is none of that save's business.
   buffer fires for a window `nvim_open_win` is still opening, so it checks the window. The
   command-line window doesn't count either: nothing can close while it is open, and
   leaving it returns to the float.
-- **The window's insert-mode `<C-g>` keys leave insert mode in their own keys.** Each runs
-  `<C-\><C-n>` ahead of its `<Cmd>`, noting the cursor first in a `<Cmd>` of its own, since
-  an `<expr>` map reads it before typeahead has moved it. So the command runs, and the
-  delete dialog is open, before any key typed after it: a typed-ahead `D` or `<CR>` answers
-  the dialog, as § Dialogs promises. A command that leaves the window open, such as a failed
-  save or `comment last` on the comment already open, restarts insert mode at that cursor.
+- **The window's insert-mode save, `<S-Esc>` and `<C-g>` keys leave insert mode in their
+  own keys.**
+  Each runs `<C-\><C-n>` ahead of its `<Cmd>`, noting the cursor first in a `<Cmd>` of its
+  own, since an `<expr>` map reads it before typeahead has moved it. So the save or command
+  runs, the window closed or the delete dialog open, before any key typed after it: a `:e`
+  or `<C-g>cc` typed straight after a save acts in the file the save returns to, and a
+  typed-ahead `D` or `<CR>` answers the dialog, as § Dialogs promises. A blank save of a
+  saved review comment opens that dialog at once, as `<C-g>cd` does, rather than from the
+  close, which can't open a window while the buffer unloads. Keys typed straight after
+  `<S-Esc>` act in the file, never in the float, where a `dd` would empty the draft before
+  the close kept it. A save or command
+  that leaves the window open, such as a failed save or `comment last` on the comment
+  already open, restarts insert mode at that cursor.
   The window skips, in insert mode only, each key `mapcheck()` finds an insert-mode map
   clashing with when it opens, its buffer's markdown maps included. A map made after
   startup counts too: the user's nvim-surround sets its insert `<C-g>s` in a
@@ -1216,11 +1297,12 @@ repository's deliberate choice is none of that save's business.
 - **The draft notice is scheduled.** A subcommand run from the window reports straight
   after the close; notified after it, the draft notice replaces that message on a stock UI
   instead of stacking under it into a hit-enter prompt.
-- **A saved review comment leaves insert mode before the window closes.** The save keys
-  are pressed while typing and the answer comes later. `stopinsert` only takes effect on
-  the next loop iteration, so the window closes on the float's own `InsertLeave`; closing
-  sooner ends insert mode in the user's file, nudging its cursor left and firing its
-  `InsertLeave`.
+- **A close asked for in insert mode waits for insert mode to end.** A subcommand a user's
+  own insert-mode map runs through `<Cmd>` closes the window while it is in insert mode. `stopinsert` only takes effect on the next loop iteration, so the
+  window closes on the float's own `InsertLeave`; closing sooner ends insert mode in the
+  user's file, nudging its cursor left and firing its `InsertLeave`. Keys typed meanwhile
+  still reach the float, which is why the window's own insert-mode keys leave insert mode
+  themselves.
 - **`<C-s>` saves alongside `<C-CR>`** because many terminals never send `<C-CR>`.
 - **A float is never clipped to the window it is anchored to.** Scrolled off its line, the
   review comment window would sit at the source's edge over other text, or past it over
@@ -1255,8 +1337,8 @@ repository's deliberate choice is none of that save's business.
 - **A previewed file is highlighted, not opened.** Its buffer stays unlisted until a
   commit promotes it — `<CR>`, or the cursor arriving in its window by any route (mouse,
   `<C-w>`, `:wincmd`, another plugin). A deleted row's preview is the exception: it stands
-  in for a file that cannot be opened, so arriving in it chooses nothing. It carries a
-  filetype, so treesitter, syntax and any language server attach to it exactly as they
+  in for a file that cannot be opened, so arriving in it chooses nothing. A previewed file
+  carries a filetype, so treesitter, syntax and any language server attach to it exactly as they
   would to a file you opened. The filetype has to be named explicitly: previews happen in
   a `CursorMoved` callback, autocommands do not nest, and the read therefore skips the
   `BufRead` chain that would otherwise detect one. gitsigns is attached explicitly for the
@@ -1266,20 +1348,28 @@ repository's deliberate choice is none of that save's business.
   review comment marks' `BufReadPost` is run explicitly for the same reason, so a
   previewed file shows its marks.
 - **A deleted file previews what it held at the base.** git reads it off the main loop, so
-  passing over the row never waits on git, and an answer that lands after the cursor has
-  left the row is dropped rather than replacing the newer preview. The lines go in a
+  passing over the row never waits on git. An answer that lands after the cursor has left
+  the row, or you the window you asked from, is dropped, rather than replace a newer preview
+  or the buffer of a window you have since entered. The lines go in a
   scratch buffer, each tinted `ChangesetDiffDelete` as the unified view tints a deleted
   line, with the filetype its path names. That is set before the buffer is shown, as
   `buffers.load` sets a file's, so its `FileType` handlers set nothing on the borrowed
   window; and the buffer being `nofile`, no language server starts on it. When git can't
-  read the base, a notice that the file was deleted stands in instead. Each stand-in is a
+  read the base, or it holds a NUL byte, git's own sign of a binary file, or is past 1.5 MiB,
+  snacks.nvim's bigfile size, a notice that the file was deleted stands in instead: a
+  stand-in has no name for a bigfile guard to match, and each pass over the row parses it
+  anew. Each stand-in is a
   new buffer, wiped once no window shows it, so no filetype or highlighter carries over.
 - **`?` documents the sidebar, not its buffer.** A buffer collects mappings from whoever
-  wants one — a blanket `FileType` autocmd elsewhere in a user's config is all it takes —
-  and those keys are not this sidebar's interface. The keys it sets are recorded as it
-  sets them, and which-key is handed a throwaway buffer carrying only those, since it
-  describes whatever a buffer maps and takes no say in which. The callbacks travel across
-  with the keys, so pressing one from inside the popup still works.
+  wants one — a blanket `FileType` autocmd elsewhere in a user's config is all it takes, as
+  mkdnflow maps every markdown buffer, the review comment window's among them — and those
+  keys are not this sidebar's interface. The sidebar, the kind menu and the review comment
+  window record the keys they set as they set them, and the plain float lists only those.
+  which-key lists the current buffer's mappings once its popup is up, whichever buffer it
+  was handed, so the others are lifted off the buffer while it shows and put back with
+  `mapset()` once it closes, or fails. The popup returns only once closed, and a key picked
+  in it is typed after, so the key reaches the buffer's own mappings, which-key's trigger
+  for a lifted prefix included.
 - **The selection is the focused sidebar's cursor.** It moves with the cursor, in step
   rather than a tick behind, and goes when focus leaves the sidebar, for a float opened
   from it too, leaving "you are here". Previews never count as being somewhere: the
@@ -1302,8 +1392,8 @@ repository's deliberate choice is none of that save's business.
   tests or comments, or a filter kept only one copy — the cursor moves to the first file
   row with that path. The window scrolls by as many lines as the cursor moved, so its row
   stays where it was on screen while rows arrive or leave above it. A window showing the
-  tree's top stays there instead, header rows included, while the row still fits on screen,
-  so a section arriving above it, as Comments does with the first review comment, comes into
+  tree's top stays there instead, header rows included, while the row still fits on screen
+  with `'scrolloff'` kept, so a section arriving above it, as Comments does with the first review comment, comes into
   view rather than scrolling out of it.
 - **Opening the sidebar is an ordinary split.** It takes its width with `winfixwidth`
   (a drawer its height, with `winfixheight`) already set and then lets `'equalalways'`
@@ -1357,6 +1447,9 @@ repository's deliberate choice is none of that save's business.
   anything it drops, so a function declared inside a local still shows. A class declared
   in a function keeps its members, and a data file, whose keys are its structure, keeps
   everything.
+  A variable, constant or property counts as a function when its direct children include a
+  local, as TypeScript lists an arrow function, a class-field arrow or a getter; an object
+  literal's keys are properties and methods, so it keeps them.
 - **Counts come off the unfiltered tree.** A hidden kind still has to report its size, or
   the menu could not tell you what putting it back would cost.
 - **A float's border is drawn outside the size it is given.** Anchoring the menu by its

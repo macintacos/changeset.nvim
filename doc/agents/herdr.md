@@ -14,18 +14,33 @@ call.
 | Command                                | Reads                                                     |
 | -------------------------------------- | --------------------------------------------------------- |
 | `herdr agent list`                     | `{"result":{"agents":[…]}}`                               |
-| `herdr tab list --workspace <ws>`      | `{"result":{"tabs":[{"tab_id","label",…}]}}`              |
 | `herdr pane send-text <pane_id> <txt>` | nothing on success                                        |
 | `herdr agent focus <pane_id>`          | nothing                                                   |
 
 An agent entry carries `agent`, `agent_status`, `pane_id`, `tab_id`, `workspace_id`,
-`title`, `cwd` and `focused`. `agent_status` is `idle`, `working`, `blocked`, `done` or
-`unknown`; `idle` and `done` both mean the agent is ready for input. herdr leaves `name`,
-`display_agent` and `state_labels`, a `{status = label}` map, out of an entry until
-something sets them, so changeset reads each as optional.
+`title`, `cwd`, `foreground_cwd`, `tokens` and `focused`. `agent_status` is `idle`,
+`working`, `blocked`, `done` or `unknown`; `idle` and `done` both mean the agent is ready
+for input. herdr leaves `name`, `display_agent` and `state_labels`, a `{status = label}`
+map, out of an entry until something sets them, so changeset reads each as optional.
 
-`tab list` runs only when the user must pick between several agents, and only for the tab
-labels the agent picker shows. A failed one leaves the picker's tab column blank.
+`cwd` is the pane's directory and `foreground_cwd` the directory of the program in its
+foreground, the agent itself. They differ when the pane started in one directory and the
+agent runs in another, so changeset reads `foreground_cwd` first. `tokens.branch` is the
+branch checked out there.
+
+## Ranking the picker
+
+With several agents the picker lists, in order: the agent this repository's branch last
+sent to in this Neovim, while its pane's directory is still the one it had then, since a
+herdr pane outlives its agent; then agents working in this repository; then the rest. An
+agent works in it when its directory is inside one of the repository's worktrees, which
+one `git worktree list --porcelain` run in its root lists, its own included. git names a
+worktree by its real path, so the agent's directory is resolved first. `tokens.branch` is
+shown but never ranks, since branch names repeat across repositories. Within each group
+ready agents come first, then working, then any other status, then blocked; ties keep
+herdr's order. Focus starts on the first agent that can be picked in the first two groups,
+else on none. That git call runs only when there is a pick to make; a failed one ranks by
+the last agent and the statuses alone.
 
 ## Workspace scoping
 

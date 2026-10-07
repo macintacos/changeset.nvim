@@ -24,7 +24,7 @@ command's route below.
 loaded, whether the review comment window is current. If it is, every subcommand goes to
 `reviewing.from_window()`: `comment new` saves, `comment del` deletes the comment being written, and
 any other closes the window, keeping a draft, then runs from the comment's line in the
-source window. That is the one place the rule lives; no verb checks for the window itself.
+source window, or from the sidebar row the window was opened under. That is the one place the rule lives; no verb checks for the window itself.
 The plugin records the default `<C-g>` keys it mapped globally in normal mode in
 `vim.g.changeset_window_keys`. The window maps each of them again in normal mode on its own
 buffer, unless it equals a `review_comment.save` key. It maps them in insert mode too, but
@@ -38,7 +38,8 @@ mapped in that mode, and all of them are off when `vim.g.changeset_no_default_ma
 set.
 
 A new command is a `:Changeset` subcommand, never a second user command. It gets a
-`<Plug>` map and, when it's a review or walking verb, a mnemonic `<C-g>` default. A verb
+`<Plug>` map and, when it's a review or walking verb, a mnemonic `<C-g>` default. A
+recovery verb, such as `review restore`, gets only its `<Plug>` map. A verb
 that walks the tree and opens what it reaches is `next` or `prev`, with what it counts
 after it, its key under `<C-g>n`, which which-key names "navigation". A verb that writes, walks,
 lists or shows review comments goes under `comment`, its key under `<C-g>c`. One that hands
