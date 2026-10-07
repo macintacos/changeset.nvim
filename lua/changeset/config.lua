@@ -39,6 +39,7 @@ local M = {}
 ---@class changeset.Config.ReviewComment
 ---@field save? string[] Keys that save a review comment and close its window, in insert and normal mode. Default { "<C-CR>", "<C-s>" }.
 ---@field sign? boolean Put a comment bubble in the sign column on each review comment's first line; `false` leaves it to a statuscolumn that draws `require("changeset").bubble()`. Default true.
+---@field blocks? boolean Start the session showing each review comment's whole text in a box under its last line, rather than its first line at the end of the line; `:Changeset toggle-comments` switches. Default false.
 
 ---The options in force: every top-level field set.
 ---@class changeset.Options : changeset.Config
@@ -73,7 +74,7 @@ local DEFAULTS = {
   },
   layout = { min_file_width = 80 },
   pr_review = { enabled = false },
-  review_comment = { save = { "<C-CR>", "<C-s>" }, sign = true },
+  review_comment = { save = { "<C-CR>", "<C-s>" }, sign = true, blocks = false },
 }
 
 local current = vim.deepcopy(DEFAULTS)
@@ -100,6 +101,7 @@ local function validate(options)
       end)
   end, "non-empty list of non-empty strings")
   vim.validate("review_comment.sign", options.review_comment.sign, "boolean")
+  vim.validate("review_comment.blocks", options.review_comment.blocks, "boolean")
 end
 
 ---Lay `opts` over the defaults, not over the last call's. On a bad value, raise an error naming the option and keep what was in force.

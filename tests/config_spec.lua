@@ -35,6 +35,7 @@ describe("changeset.config", function()
       { { review_comment = { save = {} } }, "review_comment.save" },
       { { review_comment = { save = { "" } } }, "review_comment.save" },
       { { review_comment = { sign = "no" } }, "review_comment.sign" },
+      { { review_comment = { blocks = "yes" } }, "review_comment.blocks" },
     }) do
       local ok, err = pcall(config.setup, case[1])
       assert.is_false(ok)
