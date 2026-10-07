@@ -278,7 +278,7 @@ local SELECTED_TINT, HERE_TINT, PICKED_TINT = 0.2, 0.12, 0.06
 local BUTTON_SHADE = 0.15
 
 -- How far a unified diff line's background moves toward its added or deleted colour, and a changed word's.
-local DIFF_TINT, DIFF_TEXT_TINT = 0.15, 0.35
+local DIFF_TINT, DIFF_TEXT_TINT = 0.1, 0.3
 
 -- Stands in at the tail of the preview band when the row names no destination.
 local HINT = "%s to open"
