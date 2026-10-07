@@ -38,11 +38,26 @@ end
 ---@field save fun() As its save keys do.
 ---@field close fun(after: fun()?) As `q` does, keeping the text, then calls `after` once it has gone and insert mode with it.
 ---@field discard fun(after: fun()?) Closes it keeping nothing, then calls `after` as `close` does.
+---@field resume fun() Picks writing back up where a default key typed in insert mode left it, when that key's command leaves the window open.
 ---@field hold fun(opens: fun()) Leaves insert mode, then calls `opens`, keeping the window open while focus is in the window that opens, until focus comes back to it and its mode.
 
 ---Each open window's report, by window.
 ---@type table<integer, changeset.ReviewCommentWindow>
 local open_windows = {}
+
+---Where insert mode left the cursor in each window as a default key was typed there, until the key's command has
+---run.
+---@type table<integer, integer[]>
+local typed_at = {}
+
+---Notes where insert mode is in the current window, for the default key being typed there.
+function M._typed()
+  local win = vim.api.nvim_get_current_win()
+  typed_at[win] = vim.api.nvim_win_get_cursor(win)
+  vim.schedule(function()
+    typed_at[win] = nil
+  end)
+end
 
 ---The review comment window, when it is the current window.
 ---@return changeset.ReviewCommentWindow?
@@ -50,8 +65,8 @@ function M.current()
   return open_windows[vim.api.nvim_get_current_win()]
 end
 
----The default `<C-g>` keys `plugin/changeset.lua` mapped in normal mode and left free in insert mode, each with its
----subcommand and `desc`; none while the default keys are off.
+---The default `<C-g>` keys `plugin/changeset.lua` mapped in normal mode, each with its subcommand and `desc`; none
+---while the default keys are off.
 ---@return { lhs: string, name: string, desc: string }[]
 local function default_keys()
   return vim.g.changeset_window_keys or {}
@@ -254,6 +269,21 @@ function M.open(opts)
   -- Fires: any window scrolling or resizing, the source among them; its pattern names only the
   -- first window that changed.
   vim.api.nvim_create_autocmd("WinScrolled", { group = group, callback = place })
+  ---Picks writing back up at `cursor`, where insert mode left off.
+  ---@param cursor integer[]
+  local function restart_insert(cursor)
+    vim.api.nvim_win_set_cursor(win, cursor)
+    local row = vim.api.nvim_buf_get_lines(buf, cursor[1] - 1, cursor[1], false)[1] or ""
+    vim.cmd(cursor[2] >= #row and "startinsert!" or "startinsert")
+  end
+
+  ---Picks writing back up after a default key typed in insert mode that left the window open.
+  local function resume_typing()
+    if typed_at[win] and vim.api.nvim_get_current_win() == win then
+      restart_insert(typed_at[win])
+    end
+  end
+
   local held = false
   ---Where to pick writing back up on return from a window it held for, if it was writing.
   ---@type integer[]?
@@ -270,9 +300,7 @@ function M.open(opts)
       if resume then
         local cursor = resume
         resume = nil
-        vim.api.nvim_win_set_cursor(win, cursor)
-        local row = vim.api.nvim_buf_get_lines(buf, cursor[1] - 1, cursor[1], false)[1] or ""
-        vim.cmd(cursor[2] >= #row and "startinsert!" or "startinsert")
+        restart_insert(cursor)
       end
     end,
   })
@@ -339,10 +367,11 @@ function M.open(opts)
     saving = true
     opts.save(text(), function(err)
       saving = false
-      if not err then
-        saved = true
-        close()
+      if err then
+        return resume_typing()
       end
+      saved = true
+      close()
     end)
   end
 
@@ -354,24 +383,35 @@ function M.open(opts)
   vim.keymap.set("i", "<S-Esc>", close, { buffer = buf, desc = opts.close_desc })
   map("<S-Esc>", close, opts.close_desc)
   map("q", close, opts.close_desc)
-  ---The cursor insert mode left at when a default key was typed in it, until the key's command has run.
-  ---@type integer[]?
-  local typed_at
-  for _, key in ipairs(default_keys()) do
+  ---@param lhs string
+  ---@return boolean
+  local function saves(lhs)
+    return vim.iter(opts.keys):any(function(key)
+      return vim.keycode(key) == vim.keycode(lhs)
+    end)
+  end
+  -- A key the user maps in insert mode, at startup or since, keeps doing what they mapped, here as anywhere. Asked
+  -- before any is mapped here, and counting the markdown maps already on this buffer.
+  local keys = vim.tbl_filter(function(key)
+    return not saves(key.lhs)
+  end, default_keys())
+  local free = {}
+  for _, key in ipairs(keys) do
+    free[key.lhs] = vim.fn.mapcheck(key.lhs, "i") == ""
+  end
+  for _, key in ipairs(keys) do
     local desc = window_desc(key)
     local command = ("<Cmd>Changeset %s<CR>"):format(key.name)
     -- Not `map`: its nowait would end `<C-g>c` before `<C-g>cn` could follow.
     vim.keymap.set("n", key.lhs, command, { buffer = buf, desc = desc })
     own[#own + 1] = key.lhs
-    -- Typed mid-sentence, so they work in insert mode too. They leave insert mode in their own keys, so the command
-    -- runs, and a dialog it opens is open, before any key typed after them.
-    vim.keymap.set("i", key.lhs, function()
-      typed_at = vim.api.nvim_win_get_cursor(win)
-      vim.schedule(function()
-        typed_at = nil
-      end)
-      return "<C-\\><C-n>" .. command
-    end, { buffer = buf, expr = true, desc = desc })
+    if free[key.lhs] then
+      -- Typed mid-sentence, so they work in insert mode too. They leave insert mode in their own keys, so the command
+      -- runs, and a dialog it opens is open, before any key typed after them.
+      -- The cursor is noted from a <Cmd> of its own: an <expr> map reads it before typeahead has moved it.
+      local note = "<Cmd>lua require('changeset.review_comment_window')._typed()<CR>"
+      vim.keymap.set("i", key.lhs, note .. "<C-\\><C-n>" .. command, { buffer = buf, desc = desc })
+    end
   end
   map("?", function()
     help.show(buf, own)
@@ -389,9 +429,10 @@ function M.open(opts)
       saved = true
       close(after)
     end,
+    resume = resume_typing,
     hold = function(opens)
       held = true
-      resume = inserting() and vim.api.nvim_win_get_cursor(win) or typed_at
+      resume = inserting() and vim.api.nvim_win_get_cursor(win) or typed_at[win]
       leave_insert(opens)
     end,
   }

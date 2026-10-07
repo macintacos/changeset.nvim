@@ -191,6 +191,9 @@ describe(":Changeset from the review comment window", function()
     vim.api.nvim_feedkeys(vim.keycode("A<C-g>cn"), "x", false)
 
     assert.is_true(closed())
+    vim.wait(200, function()
+      return #notes > 0
+    end, 10)
     assert.truthy(vim.iter(notes):find(function(note)
       return note.msg:find("draft", 1, true) and note.level == vim.log.levels.INFO
     end))
@@ -263,5 +266,77 @@ describe(":Changeset from the review comment window", function()
         return comment.line == 4 and comment.draft
       end))
     end)
+  end)
+
+  it("leaves to the user an insert-mode key under <C-g> mapped after startup", function()
+    local ran = 0
+    vim.keymap.set("i", "<C-g>y", function()
+      ran = ran + 1
+    end)
+    write(4, "")
+    local mapped = insert_map("<C-g>y")
+    vim.api.nvim_feedkeys(vim.keycode("Ahi<C-g>y<Esc>"), "x", false)
+    vim.keymap.del("i", "<C-g>y")
+
+    assert.is_nil(mapped)
+    assert.equal(1, ran)
+    assert.truthy(review_comment_window.current())
+  end)
+
+  it("lists under ? a key whose insert form the user took, as it acts in the window", function()
+    write(4, "")
+    local keymap = vim.iter(vim.api.nvim_buf_get_keymap(0, "n")):find(function(each)
+      return vim.keycode(each.lhs) == vim.keycode("<C-g>s")
+    end)
+
+    assert.equal("Keep a draft, then: Submit the review to an agent", assert(keymap).desc)
+  end)
+
+  it("saves on a save key that is also a default <C-g> key", function()
+    require("changeset.config").setup({ review_comment = { save = { "<C-g>y" } } })
+    write(4, "")
+    vim.api.nvim_feedkeys(vim.keycode("Ahi<C-g>y"), "x", false)
+    require("changeset.config").setup()
+
+    assert.is_true(closed())
+    assert.same({ { path = "a.lua", line = 4, body = "hi" } }, comment_store.list(dir))
+  end)
+
+  it("goes on writing after an insert-mode key that leaves the window open", function()
+    comment_store.keep(dir, { path = "a.lua", line = 9, body = "last" })
+    vim.api.nvim_win_set_cursor(source, { 9, 0 })
+    vim.cmd("9Changeset comment")
+    vim.api.nvim_feedkeys(vim.keycode("A more<C-g>clX<Esc>"), "x", false)
+
+    assert.same({ "last moreX" }, vim.api.nvim_buf_get_lines(0, 0, -1, false))
+  end)
+
+  it("goes on writing after a save that fails", function()
+    write(4, "")
+    vim.fn.writefile({ "[1,2]" }, comment_store.path())
+    vim.api.nvim_feedkeys(vim.keycode("Atext<C-g>ccX<Esc>"), "x", false)
+    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    os.remove(comment_store.path())
+
+    assert.same({ "textX" }, lines)
+  end)
+
+  it("notifies the draft after the subcommand's own message, so it replaces it", function()
+    local said = {}
+    vim.api.nvim_echo = function()
+      table.insert(said, "echo")
+    end
+    vim.notify = function(msg)
+      table.insert(said, msg:find("draft", 1, true) and "draft" or "other")
+    end
+    comment_store.keep(dir, { path = "a.lua", line = 15, body = "after" })
+    write(4, "typing")
+    vim.api.nvim_feedkeys(vim.keycode("A<C-g>cn"), "x", false)
+    vim.wait(200, function()
+      return vim.tbl_contains(said, "draft")
+    end, 10)
+
+    assert.equal("echo", said[1])
+    assert.truthy(vim.tbl_contains(said, "draft"))
   end)
 end)

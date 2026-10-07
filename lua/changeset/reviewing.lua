@@ -98,9 +98,13 @@ function M.ask_delete(comment)
   end)
 end
 
----Notified, not echoed, so the echo of a subcommand run next can't wipe it.
+---Notified, not echoed, so a notifier keeps it.
 local function say_draft()
-  say(vim.log.levels.INFO, "kept the review comment as a draft")
+  -- Scheduled, so it comes after the message of a subcommand run from the window and replaces it, rather than
+  -- stacking under it into a hit-enter prompt.
+  vim.schedule(function()
+    say(vim.log.levels.INFO, "kept the review comment as a draft")
+  end)
 end
 
 ---`comment` with `body`, saved, or a draft when `draft` is set.
@@ -282,7 +286,8 @@ function M.from_window(open, name, run)
       and last.line == open.comment.line
       and last.start_line == open.comment.start_line
     then
-      return vim.api.nvim_echo({ { "already editing the review comment saved last" } }, false, {})
+      vim.api.nvim_echo({ { "already editing the review comment saved last" } }, false, {})
+      return open.resume()
     end
   end
   open.close(function()

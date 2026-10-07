@@ -107,6 +107,9 @@ describe("changeset.reviewing", function()
       window().keep("typed")
 
       assert.same({ comment({ body = "typed", draft = true }) }, comment_store.list(dir))
+      vim.wait(100, function()
+        return #notes > 0
+      end, 10)
       assert.equal(vim.log.levels.INFO, notes[1].level)
     end)
 
@@ -248,6 +251,9 @@ describe("changeset.reviewing", function()
       window().keep("changed")
 
       assert.same({ comment({ body = "changed", draft = true }) }, comment_store.list(dir))
+      vim.wait(100, function()
+        return #notes > 0
+      end, 10)
       assert.equal(vim.log.levels.INFO, notes[1].level)
     end)
 

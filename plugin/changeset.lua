@@ -158,16 +158,13 @@ local function map_defaults()
   -- Decided before any default is mapped, which would all clash with it. A user's map that blocks `<C-g>cc` blocks it
   -- too.
   local pause = { n = not taken("<C-g>c", "n"), x = not taken("<C-g>c", "x") }
-  -- The normal-mode keys the review comment window also maps in insert mode, on its own buffer: each one the user's
-  -- insert-mode maps leave free.
+  -- The keys mapped in normal mode, which the review comment window maps again on its own buffer.
   local window_keys = {}
   ---@param lhs string
   ---@param name string
   ---@param desc string
   local function offer(lhs, name, desc)
-    if not taken(lhs, "i") then
-      window_keys[#window_keys + 1] = { lhs = lhs, name = name, desc = desc }
-    end
+    window_keys[#window_keys + 1] = { lhs = lhs, name = name, desc = desc }
   end
   for _, key in ipairs(keys) do
     local lhs = "<C-g>" .. key[1]
