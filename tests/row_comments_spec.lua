@@ -68,17 +68,19 @@ describe("a review comment from a symbol's or a change's row", function()
     return root
   end
 
-  ---The review comment window, once one is open.
+  ---The review comment window, if one is open.
   ---@return integer? win
   local function comment_window()
-    local win
-    vim.wait(1000, function()
-      win = vim.iter(vim.api.nvim_list_wins()):find(function(w)
-        return vim.api.nvim_win_get_config(w).relative == "win"
-      end)
-      return win ~= nil
-    end, 10)
-    return win
+    return vim.iter(vim.api.nvim_list_wins()):find(function(w)
+      return vim.api.nvim_win_get_config(w).relative == "win"
+    end)
+  end
+
+  ---The text of the review comment window `win`.
+  ---@param win integer
+  ---@return string
+  local function text_of(win)
+    return table.concat(vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false), "\n")
   end
 
   ---@param win integer
@@ -93,14 +95,9 @@ describe("a review comment from a symbol's or a change's row", function()
   ---@param win integer
   ---@param text string
   local function save(win, text)
-    local buf = vim.api.nvim_win_get_buf(win)
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { text })
-    vim
-      .iter(vim.api.nvim_buf_get_keymap(buf, "i"))
-      :find(function(keymap)
-        return keymap.lhs == "<C-S>"
-      end)
-      .callback()
+    vim.api.nvim_buf_set_lines(vim.api.nvim_win_get_buf(win), 0, -1, false, { text })
+    vim.api.nvim_set_current_win(win)
+    vim.api.nvim_feedkeys(vim.keycode("a<C-s>"), "x", false)
   end
 
   ---Puts the sidebar's cursor on the row containing `text`, answering its line.
@@ -146,7 +143,43 @@ describe("a review comment from a symbol's or a change's row", function()
 
     local win = assert(comment_window())
     assert.same({ lnum - 1, 0 }, vim.api.nvim_win_get_config(win).bufpos)
-    assert.equal("already", table.concat(vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false)))
+    assert.equal("already", text_of(win))
+  end)
+
+  it("opens the narrowest comment covering a symbol's line to edit, as from the file", function()
+    open_sidebar({
+      { path = "mod.lua", line = 10, start_line = 6, body = "wide" },
+      { path = "mod.lua", line = 9, start_line = 7, body = "narrow" },
+    })
+    cursor_to("M.one")
+
+    vim.cmd("Changeset comment new")
+
+    assert.equal("narrow", text_of(assert(comment_window())))
+  end)
+
+  it("is written on the line an Other changes row opens, its first change's first", function()
+    local root = open_sidebar()
+    cursor_to("Other changes")
+
+    vim.cmd("Changeset comment new")
+
+    save(assert(comment_window()), "here?")
+    assert.same({ { path = "mod.lua", line = 2, body = "here?" } }, comment_store.list(root))
+  end)
+
+  it("opens the comment a Comments row lists to edit, under the row", function()
+    open_sidebar({
+      { path = "mod.lua", line = 9, start_line = 7, body = "listed" },
+      { path = "mod.lua", line = 7, body = "narrower" },
+    })
+    local lnum = cursor_to("mod.lua:7-9")
+
+    vim.cmd("Changeset comment new")
+
+    local win = assert(comment_window())
+    assert.same({ lnum - 1, 0 }, vim.api.nvim_win_get_config(win).bufpos)
+    assert.equal("listed", text_of(win))
   end)
 
   it("keeps a draft and the sidebar's cursor on its row when another subcommand runs from its window", function()

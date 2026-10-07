@@ -1,4 +1,5 @@
 local Dialog = require("support.dialog")
+local Fixture = require("support.git")
 local fake = require("support.herdr")
 local herdr = require("changeset.herdr")
 
@@ -10,18 +11,25 @@ describe("changeset.herdr", function()
   end
 
   local mine = agent({ pane_id = "w1:p0" })
-  local alpha = agent({ pane_id = "w1:p1", name = "alpha", tab_id = "w1:t1", title = "Fix the parser" })
-  local beta = agent({ pane_id = "w1:p2", agent = "codex", agent_status = "working", tab_id = "w1:t2" })
+  local alpha = agent({
+    pane_id = "w1:p1",
+    name = "alpha",
+    title = "Fix the parser",
+    cwd = "/src/parser",
+    tokens = { branch = "fix-parser" },
+  })
+  local beta = agent({ pane_id = "w1:p2", agent = "codex", agent_status = "working" })
 
   ---Runs `send` and waits for its callback.
   ---@param text string
+  ---@param keys string? Pressed in the agent picker once it opens.
+  ---@param root string? The repository the text is about; a fresh one, which no send has gone from, when absent.
   ---@return string? err
   ---@return string? name
   ---@return boolean called
-  ---@param keys string? Pressed in the agent picker once it opens.
-  local function send(text, keys)
+  local function send(text, keys, root)
     local done, err, name = false, nil, nil
-    herdr.send(text, function(e, n)
+    herdr.send(text, { title = "Submit 2 review comments", root = root or vim.fn.tempname() }, function(e, n)
       done, err, name = true, e, n
     end)
     if keys then
@@ -64,27 +72,129 @@ describe("changeset.herdr", function()
     }, writes())
   end)
 
-  it("offers several agents in herdr's order with name, status, tab and title, and sends to the pick", function()
-    fake.set("agent list", fake.agents({ alpha, beta }))
-    fake.set(
-      "tab list",
-      { stdout = vim.json.encode({ result = { tabs = { { tab_id = "w1:t1", label = "parser" } } } }) }
-    )
+  it("offers several agents under the title it is given, with where each works, and sends to the pick", function()
+    fake.set("agent list", fake.agents({ beta, alpha }))
     local done, err, name = false, nil, nil
-    herdr.send("hi", function(e, n)
+    herdr.send("hi", { title = "Submit 2 review comments", root = vim.fn.tempname() }, function(e, n)
       done, err, name = true, e, n
     end)
-    local rows = Dialog.lines()
+    local title, rows = Dialog.title(), Dialog.lines()
     Dialog.press("2")
     vim.wait(5000, function()
       return done
     end)
 
-    assert.same({ "▌ 1  ● alpha  idle     parser  Fix the parser", "  2  ● codex  working" }, rows)
+    assert.equal("Submit 2 review comments", title)
+    assert.same({ "  1  ● alpha  idle     parser  fix-parser  Fix the parser", "  2  ● codex  working" }, rows)
     assert.is_nil(err)
     assert.equal("codex", name)
-    assert.same({ "tab", "list", "--workspace", "w1" }, fake.calls()[2])
     assert.equal("w1:p2", writes()[1][3])
+  end)
+
+  describe("with a repository checked out in two places", function()
+    local root, worktree
+
+    before_each(function()
+      root = vim.fn.tempname()
+      vim.fn.mkdir(root, "p")
+      root = vim.fs.normalize(assert(vim.uv.fs_realpath(root)))
+      Fixture.init_repo("main", root)
+      worktree = vim.fn.tempname()
+      Fixture.git({ "worktree", "add", "-q", worktree, "-b", "feature" }, root)
+      worktree = vim.fs.normalize(assert(vim.uv.fs_realpath(worktree)))
+    end)
+
+    after_each(function()
+      vim.fn.delete(root, "rf")
+      vim.fn.delete(worktree, "rf")
+    end)
+
+    ---The picker's rows for `agents`, each its name after a bar when focused; the pick is then cancelled.
+    ---@param agents table[]
+    ---@return string[]
+    local function offered(agents)
+      fake.set("agent list", fake.agents(agents))
+      local done = false
+      herdr.send("hi", { title = "Submit", root = root }, function()
+        done = true
+      end)
+      local rows = vim.tbl_map(function(line)
+        return (vim.startswith(line, "▌") and "▌" or "") .. line:match("● (%S+)")
+      end, Dialog.lines())
+      Dialog.press("q")
+      vim.wait(5000, function()
+        return done
+      end)
+      return rows
+    end
+
+    local other = agent({ pane_id = "w1:p1", name = "other", cwd = "/src/other", tokens = { branch = "main" } })
+    local held = agent({ pane_id = "w1:p2", name = "held", agent_status = "blocked", tokens = { branch = "main" } })
+    local busy = agent({ pane_id = "w1:p3", name = "busy", agent_status = "working", tokens = { branch = "feature" } })
+
+    before_each(function()
+      held.cwd = root
+      busy.cwd = worktree .. "/lua"
+    end)
+
+    it("lists the agents working in it first, and one elsewhere on a branch of the same name with the rest", function()
+      assert.same({ "▌busy", "held", "other" }, offered({ other, held, busy }))
+    end)
+
+    it("counts an agent working in it through a link", function()
+      local link = vim.fn.tempname()
+      assert(vim.uv.fs_symlink(worktree, link))
+      busy.cwd = link
+
+      local rows = offered({ other, busy })
+      vim.fn.delete(link)
+
+      assert.same({ "▌busy", "other" }, rows)
+    end)
+
+    it("focuses no row when no agent working in it can be picked", function()
+      assert.same({ "held", "other" }, offered({ other, held }))
+    end)
+
+    it("leads with the agent it last went to while that agent works where it did", function()
+      fake.set("agent list", fake.agents({ other, held, busy }))
+      send("hi", "3", root)
+
+      assert.same({ "▌other", "busy", "held" }, offered({ other, held, busy }))
+      local moved = vim.tbl_extend("force", other, { cwd = "/src/moved" })
+      assert.same({ "▌busy", "held", "other" }, offered({ moved, held, busy }))
+    end)
+
+    it("remembers the agent it last went to for each branch", function()
+      fake.set("agent list", fake.agents({ other, held, busy }))
+      send("hi", "3", root)
+      Fixture.git({ "checkout", "-q", "-b", "next" }, root)
+
+      assert.same({ "▌busy", "held", "other" }, offered({ other, held, busy }))
+    end)
+  end)
+
+  it("ranks the agent last sent to, then those working in the repository, ready first and blocked last", function()
+    local ranked, focus = herdr._rank({
+      agent({ pane_id = "out-blocked", agent_status = "blocked", cwd = "/elsewhere" }),
+      agent({ pane_id = "out-idle", cwd = "/repo-other" }),
+      agent({ pane_id = "in-blocked", agent_status = "blocked", cwd = "/repo" }),
+      agent({ pane_id = "in-unknown", agent_status = "unknown", cwd = "/wt/feature/lua" }),
+      agent({ pane_id = "in-working", agent_status = "working", cwd = "/repo" }),
+      agent({ pane_id = "in-idle", cwd = "/repo/lua" }),
+      agent({ pane_id = "in-done", agent_status = "done", cwd = "/repo" }),
+      agent({ pane_id = "last", agent_status = "working", cwd = "/elsewhere" }),
+    }, { worktrees = { "/repo", "/wt/feature" }, last = { pane = "last", dir = "/elsewhere" } }, function(path)
+      return path
+    end)
+
+    assert.same(
+      { "last", "in-idle", "in-done", "in-working", "in-unknown", "in-blocked", "out-idle", "out-blocked" },
+      vim.tbl_map(function(a)
+        return a.pane_id
+      end, ranked)
+    )
+    assert.equal(1, focus)
   end)
 
   it("sends nothing when the pick is cancelled", function()
@@ -137,29 +247,27 @@ describe("changeset.herdr", function()
   end)
 
   it("labels a status through the agent's state labels", function()
-    local row = herdr._row(
-      { pane_id = "p", agent = "x", agent_status = "working", state_labels = { working = "Thinking" } },
-      {}
-    )
+    local row =
+      herdr._row({ pane_id = "p", agent = "x", agent_status = "working", state_labels = { working = "Thinking" } })
     assert.equal("Thinking", row.cells[2][1])
   end)
 
-  it("leaves the title blank where the tab's label already holds it, keeping its column", function()
-    -- herdr can prefix a label with the tab's number glyph.
-    local row = herdr._row({ pane_id = "p", agent = "x", tab_id = "t", title = "parser" }, { t = "󰎤 parser" })
+  it("shows where an agent works by the directory of the program in its pane, over the pane's own", function()
+    local row = herdr._row({
+      pane_id = "p",
+      agent = "x",
+      cwd = "/home",
+      foreground_cwd = "/wt/sandbox-pr1",
+      tokens = { branch = "feat/store" },
+      title = "t",
+    })
 
     assert.same(
-      { "x", "", "󰎤 parser", "" },
+      { "x", "", "sandbox-pr1", "feat/store", "t" },
       vim.tbl_map(function(cell)
         return cell[1]
       end, row.cells)
     )
-  end)
-
-  it("keeps a title the tab's label only contains", function()
-    local row = herdr._row({ pane_id = "p", agent = "x", tab_id = "t", title = "fix" }, { t = "󰎤 fix the parser" })
-
-    assert.equal("fix", row.cells[4][1])
   end)
 
   it("reports that there is no agent when none is left", function()

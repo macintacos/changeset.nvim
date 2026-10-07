@@ -259,7 +259,7 @@ describe("review_comments", function()
     end)
   end
 
-  it("stores the lines a written buffer's marks moved to, a draft's too, leaving a whole file's comment", function()
+  it("stores the lines a written buffer's edits moved to, a draft's too, leaving a whole file's comment", function()
     local whole = { path = "beta.txt", body = "w" }
     set({ comment("beta.txt", 16), { path = "beta.txt", line = 5, body = "d", draft = true }, whole })
     vim.api.nvim_buf_set_lines(beta, 0, 0, false, { "new 1", "new 2" })
@@ -295,6 +295,101 @@ describe("review_comments", function()
     assert.are.equal("alpha 11", vim.api.nvim_buf_get_lines(alpha, 7, 8, true)[1])
   end)
 
+  it("keeps a range on its first line and the one before its last when the last is deleted", function()
+    set({ comment("alpha.txt", 10, 8) })
+    vim.api.nvim_buf_set_lines(alpha, 9, 10, false, {})
+
+    write(alpha)
+
+    assert.are.same({ comment("alpha.txt", 9, 8) }, comment_store.list(dir))
+  end)
+
+  it("puts a comment on the file's last line on the new last line when that line is deleted", function()
+    set({ comment("beta.txt", 20) })
+    vim.api.nvim_buf_set_lines(beta, 19, 20, false, {})
+
+    write(beta)
+
+    assert.are.same({ comment("beta.txt", 19) }, comment_store.list(dir))
+    assert.are.same({ { 18, 18 } }, rows(beta))
+  end)
+
+  ---An LSP edit replacing rows `first` to `last`, end exclusive, with `new`.
+  ---@param first integer
+  ---@param last integer
+  ---@param new string[]
+  ---@return table
+  local function text_edit(first, last, new)
+    local text = #new > 0 and table.concat(new, "\n") .. "\n" or ""
+    return {
+      range = { start = { line = first, character = 0 }, ["end"] = { line = last, character = 0 } },
+      newText = text,
+    }
+  end
+
+  local indented = { "  alpha 4", "  alpha 5", "  alpha 6" }
+  for _, case in ipairs({
+    {
+      "a formatter rewriting the block that holds them",
+      function()
+        vim.lsp.util.apply_text_edits({ text_edit(3, 6, indented) }, alpha, "utf-16")
+      end,
+      0,
+    },
+    {
+      "a formatter rewriting their block and adding a line above",
+      function()
+        vim.lsp.util.apply_text_edits({ text_edit(1, 1, { "added" }), text_edit(3, 6, indented) }, alpha, "utf-16")
+      end,
+      1,
+    },
+    {
+      "a filter of the whole buffer",
+      function()
+        vim.api.nvim_buf_call(alpha, function()
+          vim.cmd("silent %!cat")
+        end)
+      end,
+      0,
+    },
+    {
+      "the whole buffer set again to the same text",
+      function()
+        vim.api.nvim_buf_set_lines(alpha, 0, -1, false, vim.api.nvim_buf_get_lines(alpha, 0, -1, false))
+      end,
+      0,
+    },
+    {
+      "a language server's edit of the whole document",
+      function()
+        local document = vim.api.nvim_buf_get_lines(alpha, 0, -1, false)
+        document[4], document[5], document[6] = unpack(indented)
+        vim.lsp.util.apply_text_edits({ text_edit(0, #document, document) }, alpha, "utf-16")
+      end,
+      0,
+    },
+  }) do
+    local name, edit, shift = case[1], case[2], case[3]
+    it(("keeps each comment on its own line through %s"):format(name), function()
+      set({
+        { path = "alpha.txt", line = 3, start_line = 2, body = "r" },
+        { path = "alpha.txt", line = 4, body = "a" },
+        { path = "alpha.txt", line = 5, body = "b" },
+        { path = "alpha.txt", line = 6, body = "c" },
+      })
+      edit()
+
+      write(alpha)
+
+      assert.are.same({
+        { path = "alpha.txt", line = 3 + shift, start_line = 2 + shift, body = "r" },
+        { path = "alpha.txt", line = 4 + shift, body = "a" },
+        { path = "alpha.txt", line = 5 + shift, body = "b" },
+        { path = "alpha.txt", line = 6 + shift, body = "c" },
+      }, comment_store.list(dir))
+    end)
+  end
+
   it("merges comments an edit brings onto the same lines, a draft when either was", function()
     set({
       { path = "alpha.txt", line = 13, body = "gone" },
@@ -307,19 +402,34 @@ describe("review_comments", function()
     assert.are.same({ { path = "alpha.txt", line = 13, body = "gone\n\nkept", draft = true } }, comment_store.list(dir))
   end)
 
+  it("warns where a write merged comments, and that the result is a draft", function()
+    set({
+      { path = "alpha.txt", line = 13, body = "gone" },
+      { path = "alpha.txt", line = 14, body = "kept", draft = true },
+    })
+    vim.api.nvim_buf_set_lines(alpha, 12, 13, false, {})
+    local notify, warnings = vim.notify, {}
+    vim.notify = function(msg, level)
+      if level == vim.log.levels.WARN then
+        warnings[#warnings + 1] = msg
+      end
+    end
+
+    write(alpha)
+
+    vim.notify = notify
+    assert.are.equal(1, #warnings)
+    assert.truthy(warnings[1]:find("line 13 of alpha.txt", 1, true))
+    assert.truthy(warnings[1]:find("draft", 1, true))
+  end)
+
   it("keeps a modified buffer's marks where its edits moved them when another file's comment is kept", function()
     set({ comment("beta.txt", 16) })
     vim.api.nvim_buf_set_lines(beta, 0, 0, false, { "new 1", "new 2" })
 
     comment_store.keep(dir, comment("alpha.txt", 3))
-    write(beta)
 
-    assert.are.same(
-      { comment("beta.txt", 18) },
-      vim.tbl_filter(function(c)
-        return c.path == "beta.txt"
-      end, comment_store.list(dir))
-    )
+    assert.are.same({ { 17, 17 } }, rows(beta))
   end)
 
   it("leaves the stored lines alone when the buffer is written to another file", function()

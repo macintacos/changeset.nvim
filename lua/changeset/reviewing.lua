@@ -1,6 +1,6 @@
----`:Changeset comment new`, `del`, `next`, `prev`, `last` and `list` and `:Changeset review submit`, `yank` and
----`abandon`, which write, delete, walk, reopen, list, paste into an agent's prompt, copy and clear the review comments
----kept on this machine, and the Comments rows' open and delete.
+---`:Changeset comment new`, `del`, `next`, `prev`, `last` and `list` and `:Changeset review submit`, `restore`, `yank`
+---and `abandon`, which write, delete, walk, reopen, list, paste into an agent's prompt, bring back, copy and clear the
+---review comments kept on this machine, and the Comments rows' open and delete.
 local Paths = require("changeset.paths")
 local buffers = require("changeset.buffers")
 local build = require("changeset.build")
@@ -133,6 +133,10 @@ local function with_body(comment, body, draft)
   return { path = comment.path, line = comment.line, start_line = comment.start_line, body = body, draft = draft }
 end
 
+---Defined with the subcommands that run from the window.
+---@type fun(open: changeset.ReviewCommentWindow)
+local delete_open
+
 ---Opens the window under `comment`'s lines of the current buffer, or under the cursor's line for a whole file's or
 ---from the sidebar, holding its text: a save replaces it, a blank save or close asks to delete it, and a close with
 ---changed text keeps it as a draft.
@@ -164,6 +168,9 @@ function M.open(comment)
     save = function(body, done)
       done(keep(repository, with_body(comment, body)))
     end,
+    blank = function(open)
+      delete_open(open)
+    end,
     back = function()
       review_comment_blocks.select(comment)
     end,
@@ -177,6 +184,22 @@ end
 ---@return changeset.ReviewComment?
 local function at(repository, path, lnum)
   return review_comments.at(comment_store.list(repository), path, lnum)
+end
+
+---The comment `comment new` on lines `first` to `last` of `path` opens to edit: for a range, the one on exactly that
+---range; for one line, the narrowest covering it.
+---@param repository string
+---@param path string
+---@param first integer
+---@param last integer
+---@return changeset.ReviewComment?
+local function existing_on(repository, path, first, last)
+  if first == last then
+    return at(repository, path, last)
+  end
+  return vim.iter(comment_store.list(repository)):find(function(comment)
+    return comment.path == path and comment.start_line == first and comment.line == last
+  end)
 end
 
 ---`buf`'s path in its repository; nil for a buffer that isn't a file there.
@@ -277,7 +300,7 @@ local function row_lines(row)
 end
 
 ---Opens the review comment window under the sidebar's cursor row for what the row stands for, or the comment already
----on exactly that to edit.
+---there to edit, found as from the file.
 local function comment_row()
   local repository = root()
   local row = require("changeset.draw").row_at_cursor()
@@ -296,14 +319,11 @@ local function comment_row()
   if file and vim.bo[file].modified then
     return say(vim.log.levels.WARN, M.UNSAVED)
   end
-  local start_line = first < last and first or nil
-  local existing = vim.iter(comment_store.list(repository)):find(function(comment)
-    return comment.path == row.path and comment.start_line == start_line and comment.line == last
-  end)
+  local existing = existing_on(repository, row.path, first, last)
   if existing then
     return M.open(existing)
   end
-  local comment = { path = row.path, line = last, start_line = start_line, body = "" }
+  local comment = { path = row.path, line = last, start_line = first < last and first or nil, body = "" }
   open_new(repository, comment, vim.api.nvim_win_get_cursor(0)[1])
 end
 
@@ -322,9 +342,8 @@ local function commentable(repository)
 end
 
 ---Opens the review comment window under line `last` of the current buffer, for lines `first` to `last`, or an
----existing comment to edit: for a range, the one on exactly that range; for one line, the narrowest covering it.
----From the sidebar, it is for what the cursor's row stands for. Closing a new one keeps its text, so nothing typed is
----lost.
+---existing comment there to edit. From the sidebar, it is for what the cursor's row stands for. Closing a new one
+---keeps its text, so nothing typed is lost.
 ---@param first integer
 ---@param last integer
 function M.comment(first, last)
@@ -336,14 +355,7 @@ function M.comment(first, last)
   if not path then
     return
   end
-  local existing
-  if first < last then
-    existing = vim.iter(comment_store.list(repository)):find(function(comment)
-      return comment.path == path and comment.start_line == first and comment.line == last
-    end)
-  else
-    existing = at(repository, path, last)
-  end
+  local existing = existing_on(repository, path, first, last)
   if existing then
     return M.open(existing)
   end
@@ -365,7 +377,7 @@ end
 
 ---Deletes the comment being written in `open`: asks first when it is stored or holds text, else just closes.
 ---@param open changeset.ReviewCommentWindow
-local function delete_open(open)
+function delete_open(open)
   local repository = vim.api.nvim_win_call(open.source, root)
   local stored = vim.iter(comment_store.list(repository)):find(function(comment)
     return comment.path == open.comment.path
@@ -499,6 +511,13 @@ local function drafts_label(n)
   return n == 1 and "1 draft" or ("%d drafts"):format(n)
 end
 
+---"1 review comment", "2 review comments".
+---@param n integer
+---@return string
+local function comments_label(n)
+  return n == 1 and "1 review comment" or ("%d review comments"):format(n)
+end
+
 ---`comments` split into the saved ones and how many are drafts.
 ---@param comments changeset.ReviewComment[]
 ---@return changeset.ReviewComment[] saved, integer drafts
@@ -619,8 +638,8 @@ local function reader(repository)
   end
 end
 
----Pastes the repository's saved review comments into an agent's prompt through herdr, then deletes the ones pasted.
----Drafts stay.
+---Pastes the repository's saved review comments into an agent's prompt through herdr, then takes the ones pasted out
+---of the store, where `restore` can bring them back. Drafts stay.
 function M.submit()
   local repository = root()
   local comments, drafts = split_drafts(comment_store.list(repository))
@@ -631,26 +650,58 @@ function M.submit()
     return say(vim.log.levels.INFO, "no review comments to submit")
   end
   local staying = drafts > 0 and ("; %s %s"):format(drafts_label(drafts), drafts == 1 and "stays" or "stay") or ""
-  require("changeset.herdr").send(M._review_text(repository, comments, reader(repository)), function(err, agent)
+  local count = comments_label(#comments)
+  local text = M._review_text(repository, comments, reader(repository))
+  require("changeset.herdr").send(text, { title = "Submit " .. count, root = repository }, function(err, agent)
     if err then
       return say(vim.log.levels.WARN, "can't submit the review: %s", err)
     end
     if not agent then
       return
     end
-    local count = #comments == 1 and "1 comment waits" or ("%d comments wait"):format(#comments)
     -- Only what went: a comment written or edited while the pick was open stays.
-    if not comment_store.drop_each(repository, comments) then
+    if not comment_store.take(repository, comments) then
       return say(
         vim.log.levels.WARN,
-        "submitted the review to %s: its %s in the prompt, but they are still listed: can't remove them from %s",
-        agent,
+        "pasted %s into %s's prompt, but %s still listed: can't remove %s from %s",
         count,
+        agent,
+        #comments == 1 and "it is" or "they are",
+        #comments == 1 and "it" or "them",
         comment_store.path()
       )
     end
-    say(vim.log.levels.INFO, "submitted the review to %s: its %s in the prompt%s", agent, count, staying)
+    say(
+      vim.log.levels.INFO,
+      "submitted %s to %s; :Changeset review restore brings %s back%s",
+      count,
+      agent,
+      #comments == 1 and "it" or "them",
+      staying
+    )
   end)
+end
+
+---Brings back the review comments the repository's branch submitted last, as saved ones, leaving out any on lines that
+---hold a review comment now.
+function M.restore()
+  local repository = root()
+  local restored, kept = comment_store.restore(repository)
+  if not restored then
+    return say(vim.log.levels.ERROR, "can't restore the review comments in %s", comment_store.path())
+  end
+  if restored + kept == 0 then
+    return say(vim.log.levels.INFO, "no submitted review comments to restore in %s", repository)
+  end
+  if kept == 0 then
+    return say(vim.log.levels.INFO, "restored %s", comments_label(restored))
+  end
+  local staying = kept == 1 and "stays submitted: its lines hold a newer one"
+    or "stay submitted: their lines hold newer ones"
+  if restored == 0 then
+    return say(vim.log.levels.INFO, "%s %s", comments_label(kept), staying)
+  end
+  say(vim.log.levels.INFO, "restored %s; %d %s", comments_label(restored), kept, staying)
 end
 
 ---0 for a whole file's comment, which sorts ahead of its lines'.
@@ -889,9 +940,8 @@ function M.yank()
     return say(vim.log.levels.INFO, "no review comments to copy")
   end
   local where = Paths.put(M._review_text(repository, comments, reader(repository)))
-  local count = #comments == 1 and "1 comment" or #comments .. " comments"
   local left_out = drafts > 0 and ("; %s left out"):format(drafts_label(drafts)) or ""
-  say(vim.log.levels.INFO, "copied the review's %s%s%s", count, where, left_out)
+  say(vim.log.levels.INFO, "copied %s%s%s", comments_label(#comments), where, left_out)
 end
 
 return M

@@ -51,6 +51,9 @@ local subcommands = {
   ["review submit"] = function()
     require("changeset.reviewing").submit()
   end,
+  ["review restore"] = function()
+    require("changeset.reviewing").restore()
+  end,
   ["review yank"] = function()
     require("changeset.reviewing").yank()
   end,
@@ -129,7 +132,7 @@ end, {
   nargs = "*",
   range = true,
   bar = true,
-  desc = "Toggle the changeset sidebar, rebuild it, step through its changes, symbols or files, open or preview them, toggle PR Review Mode, submit, copy or abandon the review, or write, delete, walk, reopen, list or show review comments",
+  desc = "Toggle the changeset sidebar, rebuild it, step through its changes, symbols or files, open or preview them, toggle PR Review Mode, submit, restore, copy or abandon the review, or write, delete, walk, reopen, list or show review comments",
   complete = function(lead, line)
     -- The words between `Changeset`, with any range before it, and `lead`.
     local typed = vim.trim(line:match("^%S+%s+(.-)%S*$") or "")
@@ -308,6 +311,15 @@ for _, key in ipairs(keys) do
 end
 -- `:`, not <Cmd>, so the selection arrives as the '<,'> range.
 vim.keymap.set("x", plug("comment new"), ":Changeset comment new<CR>", { silent = true, desc = comment_new.desc })
+vim.keymap.set(
+  "n",
+  plug("review restore"),
+  "<Cmd>Changeset review restore<CR>",
+  { desc = "Bring back the review comments submitted last" }
+)
+
+-- which-key's name for each prefix the default keys share.
+local GROUPS = { ["<C-g>c"] = "comment", ["<C-g>n"] = "navigation" }
 
 ---Whether a global map in `mode` has `lhs`, or starts it, or starts with it: either way `lhs` would clash with it.
 ---Buffer-local maps don't count, being only the buffer current at startup's.
@@ -333,21 +345,27 @@ local function map_defaults()
   -- The `<C-g>` keys mapped in normal mode, which the review comment window maps again on its own buffer. Not `]g`,
   -- which the window would map in insert mode too, where it is text.
   local window_keys = {}
-  -- Every key mapped, as which-key specs that add its icon, and the `<C-g>n` group's name once one of its keys is.
+  -- Every key mapped, as which-key specs that add its icon, and each group's name once one of its keys is.
   local icon_specs = {}
-  local navigates = false
+  local named = {}
   ---@param mode string
   ---@param lhs string
   ---@param key changeset.DefaultKey
   local function map(mode, lhs, key)
     vim.keymap.set(mode, lhs, plug(key.name), { desc = key.desc })
-    icon_specs[#icon_specs + 1] = { lhs, mode = mode, icon = key.icon }
+    -- A group's own key takes its group's spec: which-key keeps the last of two specs for one key, and names a key
+    -- with keys under it after its desc unless its spec names the group.
+    if not GROUPS[lhs] then
+      icon_specs[#icon_specs + 1] = { lhs, mode = mode, icon = key.icon }
+    end
     if mode == "n" and vim.startswith(lhs, "<C-g>") then
       window_keys[#window_keys + 1] = { lhs = lhs, name = key.name, desc = key.desc }
     end
-    if mode == "n" and vim.startswith(lhs, "<C-g>n") and not navigates then
-      navigates = true
-      icon_specs[#icon_specs + 1] = { "<C-g>n", mode = "n", group = "navigation", icon = key.icon }
+    for prefix, group in pairs(GROUPS) do
+      if vim.startswith(lhs, prefix) and not named[mode .. prefix] then
+        named[mode .. prefix] = true
+        icon_specs[#icon_specs + 1] = { prefix, mode = mode, group = group, icon = key.icon }
+      end
     end
   end
   for _, key in ipairs(keys) do

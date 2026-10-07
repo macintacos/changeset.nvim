@@ -111,6 +111,7 @@ describe("changeset.comment_store", function()
       assert.same({}, comment_store.list(ROOT))
       assert.is_false(comment_store.keep(ROOT, comment()))
       assert.is_false(comment_store.drop_all(ROOT))
+      assert.is_nil(comment_store.restore(ROOT))
       assert.same({ junk }, vim.fn.readfile(comment_store.path()))
     end)
   end
@@ -163,7 +164,7 @@ describe("changeset.comment_store", function()
     assert.same({ { path = "a", body = "b", line = 3 } }, comment_store.list(ROOT))
   end)
 
-  it("drops exactly the comments it is given in one write, leaving one edited since", function()
+  it("takes out exactly the comments it is given in one write, leaving one edited since", function()
     comment_store.keep(ROOT, comment())
     comment_store.keep(ROOT, comment({ line = 9, start_line = nil }))
     comment_store.keep(ROOT, comment({ line = 12, start_line = nil, body = "edited" }))
@@ -172,7 +173,7 @@ describe("changeset.comment_store", function()
       writes = writes + 1
     end)
 
-    local written = comment_store.drop_each(
+    local written = comment_store.take(
       ROOT,
       { comment(), comment({ line = 9, start_line = nil }), comment({ line = 12, start_line = nil }) }
     )
@@ -180,6 +181,75 @@ describe("changeset.comment_store", function()
     assert.is_true(written)
     assert.equal(1, writes)
     assert.same({ comment({ line = 12, start_line = nil, body = "edited" }) }, comment_store.list(ROOT))
+  end)
+
+  describe("restore", function()
+    local one, two = { path = "lua/a.lua", line = 3, body = "one" }, comment({ body = "two" })
+
+    it("brings back the comments taken last as saved comments, once", function()
+      comment_store.keep(ROOT, one)
+      comment_store.keep(ROOT, two)
+      comment_store.take(ROOT, { one, two })
+
+      assert.same({ 2, 0 }, { comment_store.restore(ROOT) })
+      assert.same({ one, two }, comment_store.list(ROOT))
+      assert.same({ 0, 0 }, { comment_store.restore(ROOT) })
+      assert.same({ one, two }, comment_store.list(ROOT))
+    end)
+
+    it("keeps a comment whose range holds one written since, for a restore once that one is gone", function()
+      local since = comment({ body = "since", draft = true })
+      comment_store.keep(ROOT, one)
+      comment_store.keep(ROOT, two)
+      comment_store.take(ROOT, { one, two })
+      comment_store.keep(ROOT, since)
+
+      assert.same({ 1, 1 }, { comment_store.restore(ROOT) })
+      assert.same({ since, one }, comment_store.list(ROOT))
+      comment_store.drop(ROOT, since)
+      assert.same({ 1, 0 }, { comment_store.restore(ROOT) })
+      assert.same({ one, two }, comment_store.list(ROOT))
+    end)
+
+    it("counts a malformed comment taken last as neither restored nor kept", function()
+      comment_store.keep(ROOT, one)
+      comment_store.take(ROOT, { one })
+      local data = jsonfile.read(comment_store.path())
+      table.insert(data.submitted[ROOT][""], { path = 1 })
+      jsonfile.write(comment_store.path(), data)
+
+      assert.same({ 1, 0 }, { comment_store.restore(ROOT) })
+    end)
+
+    it("brings back only the comments taken last", function()
+      comment_store.keep(ROOT, one)
+      comment_store.take(ROOT, { one })
+      comment_store.keep(ROOT, two)
+      comment_store.take(ROOT, { two })
+
+      comment_store.restore(ROOT)
+
+      assert.same({ two }, comment_store.list(ROOT))
+    end)
+
+    it("brings back the comments taken last after every listed comment is dropped", function()
+      comment_store.keep(ROOT, one)
+      comment_store.take(ROOT, { one })
+      comment_store.keep(ROOT, two)
+
+      comment_store.drop_all(ROOT)
+
+      assert.same({ 1, 0 }, { comment_store.restore(ROOT) })
+      assert.same({ one }, comment_store.list(ROOT))
+    end)
+
+    it("brings back another repository's comments only there", function()
+      comment_store.keep(ROOT, one)
+      comment_store.take(ROOT, { one })
+
+      assert.same({ 0, 0 }, { comment_store.restore("/other") })
+      assert.same({ 1, 0 }, { comment_store.restore(ROOT) })
+    end)
   end)
 
   it("runs a subscriber once per write", function()
@@ -280,14 +350,25 @@ describe("changeset.comment_store across branches", function()
     assert.same({ comment({ line = 9, body = "on main" }) }, comment_store.list(root))
   end)
 
-  it("drops each given comment of the branch only", function()
+  it("takes each given comment of the branch only", function()
     comment_store.keep(root, comment())
     git("switch", "-q", "-c", "other")
     comment_store.keep(root, comment())
 
-    comment_store.drop_each(root, { comment() })
+    comment_store.take(root, { comment() })
 
     git("switch", "-q", "main")
+    assert.same({ comment() }, comment_store.list(root))
+  end)
+
+  it("restores the comments taken on the branch checked out", function()
+    comment_store.keep(root, comment())
+    comment_store.take(root, { comment() })
+    git("switch", "-q", "-c", "other")
+
+    assert.same({ 0, 0 }, { comment_store.restore(root) })
+    git("switch", "-q", "main")
+    assert.same({ 1, 0 }, { comment_store.restore(root) })
     assert.same({ comment() }, comment_store.list(root))
   end)
 
@@ -314,6 +395,16 @@ describe("changeset.comment_store across branches", function()
     assert.same({ comment({ line = 9, body = "detached" }) }, comment_store.list(root))
   end)
 
+  it("files a reftable repository's comments under no branch, whose HEAD file names none", function()
+    git("refs", "migrate", "--ref-format=reftable")
+    comment_store.keep(root, comment())
+
+    git("refs", "migrate", "--ref-format=files")
+    git("switch", "-q", "-c", "other")
+
+    assert.same({ comment() }, comment_store.list(root))
+  end)
+
   it("lists the comments of the branch a stopped rebase rewrites", function()
     vim.fn.writefile({ "x" }, root .. "/f")
     Fixture.commit("f", root)
@@ -323,5 +414,63 @@ describe("changeset.comment_store across branches", function()
 
     assert.truthy(vim.uv.fs_stat(root .. "/.git/rebase-merge"))
     assert.same({ comment() }, comment_store.list(root))
+  end)
+end)
+
+describe("changeset.comment_store relocating", function()
+  local relocate = comment_store._relocate
+
+  ---@param line integer
+  ---@param fields table?
+  local function at(line, fields)
+    return vim.tbl_extend("force", { path = "a.lua", line = line, body = "b" .. line }, fields or {})
+  end
+
+  ---@param from table
+  ---@param line integer
+  local function move(from, line)
+    return { from = from, to = vim.tbl_extend("force", from, { line = line }) }
+  end
+
+  it("puts an entry equal to a move's from on its to's lines, filing one without a branch under the branch", function()
+    local list, merged = relocate({ at(5), at(9, { branch = "main" }) }, { move(at(5), 6) }, "main")
+
+    assert.same({ at(6, { body = "b5", branch = "main" }), at(9, { branch = "main" }) }, list)
+    assert.same({}, merged)
+  end)
+
+  it("moves an entry only while its body and draft are those the move was made from", function()
+    local entries = { at(5, { body = "edited", branch = "main" }), at(7, { draft = true, branch = "main" }) }
+
+    local list = relocate(entries, { move(at(5), 6), move(at(7), 8) }, "main")
+
+    assert.same(entries, list)
+  end)
+
+  it("merges entries brought onto one range into the first listed, a draft when either was, and answers it", function()
+    local entries = { at(5, { branch = "main" }), at(6, { draft = true, branch = "main" }) }
+
+    local list, merged = relocate(entries, { move(at(6, { draft = true }), 5) }, "main")
+
+    local into = at(5, { body = "b5\n\nb6", draft = true, branch = "main" })
+    assert.same({ into }, list)
+    assert.same({ { comment = into, count = 2 } }, merged)
+  end)
+
+  it("leaves another branch's entries and malformed ones where they are, merging none of them", function()
+    local entries = { at(5, { branch = "other" }), "junk", at(6, { branch = "main" }) }
+
+    local list, merged = relocate(entries, { move(at(6), 5) }, "main")
+
+    assert.same({ at(5, { branch = "other" }), "junk", at(5, { body = "b6", branch = "main" }) }, list)
+    assert.same({}, merged)
+  end)
+
+  it("changes none of the entries it is given", function()
+    local entries = { at(5, { branch = "main" }), at(6, { branch = "main" }) }
+
+    relocate(entries, { move(at(6), 5) }, "main")
+
+    assert.same({ at(5, { branch = "main" }), at(6, { branch = "main" }) }, entries)
   end)
 end)

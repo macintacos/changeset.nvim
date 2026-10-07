@@ -1,6 +1,6 @@
 ---A fake `herdr` on PATH, so no spec writes to a real pane. Every call records its
----arguments and answers by command (`agent list`, `tab list`, `pane send-text`,
----`agent focus`): with the oldest answer queued for it, removing it, else the one set for it,
+---arguments and answers by command (`agent list`, `pane send-text`, `agent focus`):
+---with the oldest answer queued for it, removing it, else the one set for it,
 ---else an empty success. Requiring it is what installs it; PATH is never restored, since each
 ---spec runs in its own nvim.
 local bin = vim.fn.tempname()

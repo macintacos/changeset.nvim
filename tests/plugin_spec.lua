@@ -114,7 +114,10 @@ describe("plugin/changeset.lua", function()
       vim.fn.getcompletion("Changeset comment ", "cmdline")
     )
     assert.same({ "last", "list" }, vim.fn.getcompletion("'<,'>Changeset  comment  l", "cmdline"))
-    assert.same({ "abandon", "mode", "submit", "yank" }, vim.fn.getcompletion("Changeset review ", "cmdline"))
+    assert.same(
+      { "abandon", "mode", "restore", "submit", "yank" },
+      vim.fn.getcompletion("Changeset review ", "cmdline")
+    )
     assert.same({ "file", "symbol" }, vim.fn.getcompletion("Changeset next ", "cmdline"))
     assert.same({ "next", "prev" }, vim.fn.getcompletion("Changeset preview ", "cmdline"))
     assert.same({}, vim.fn.getcompletion("Changeset toggle ", "cmdline"))
@@ -170,7 +173,7 @@ describe("plugin/changeset.lua", function()
     assert.equal(vim.log.levels.ERROR, notes[1].level)
     assert.equal("Changeset: :Changeset comment takes a verb: del, last, list, new, next, prev, toggle", notes[1].msg)
     assert.equal(vim.log.levels.ERROR, notes[2].level)
-    assert.equal("Changeset: :Changeset review takes a verb: abandon, mode, submit, yank", notes[2].msg)
+    assert.equal("Changeset: :Changeset review takes a verb: abandon, mode, restore, submit, yank", notes[2].msg)
   end)
 
   it("refuses review mode while pr_review.enabled is off", function()
@@ -272,6 +275,7 @@ describe("plugin/changeset.lua", function()
       ["comment-list"] = "list",
       ["review-yank"] = "yank",
       ["review-submit"] = "submit",
+      ["review-restore"] = "restore",
       ["review-abandon"] = "abandon",
     }
     local reviewing = {}
@@ -486,12 +490,12 @@ describe("plugin/changeset.lua", function()
     )
   end)
 
-  it("names the <C-g>n keys' group for which-key", function()
+  it("names the <C-g>c and <C-g>n groups for which-key, <C-g>c's on its one spec though it is a key too", function()
     local stub = "lua package.loaded['which-key'] = { add = function(spec) added = spec end }"
-    local probe =
-      "for _, spec in ipairs(added) do if spec.group then io.write(spec.mode, spec[1], ' ', spec.group) end end"
+    local probe = "for _, spec in ipairs(added) do if vim.list_contains({ '<C-g>c', '<C-g>n' }, spec[1]) then"
+      .. " io.write(spec.mode, spec[1], ' ', tostring(spec.group), ' ') end end"
 
-    assert.equal("n<C-g>n navigation", after_startup({ "-c", stub }, probe))
+    assert.equal("n<C-g>c comment x<C-g>c comment n<C-g>n navigation ", after_startup({ "-c", stub }, probe))
   end)
 
   it("maps no default keys when vim.g.changeset_no_default_maps is set", function()

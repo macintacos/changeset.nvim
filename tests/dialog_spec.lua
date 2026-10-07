@@ -256,7 +256,7 @@ describe("changeset.dialog", function()
       assert.equal(before, vim.o.guicursor)
     end)
 
-    it("scrolls back to its first line, which a plugin keeping room past the end would push off the top", function()
+    it("scrolls back to its first line when a plugin scrolls it in the tick it opens", function()
       -- Older than the dialog's, as scrollEOF.nvim's is, so it runs first.
       local group = vim.api.nvim_create_augroup("scroll_past_end", {})
       vim.api.nvim_create_autocmd("CursorMoved", {
@@ -272,6 +272,21 @@ describe("changeset.dialog", function()
       vim.api.nvim_del_augroup_by_id(group)
 
       assert.equal(1, vim.fn.line("w0"))
+    end)
+
+    it("scrolls back to its first line when a plugin scrolls it in a later tick", function()
+      ask()
+      local win = assert(Dialog.win())
+
+      -- As scrollEOF.nvim's deferred scroll, from a move made just before the dialog opened, does.
+      vim.api.nvim_win_call(win, function()
+        vim.fn.winrestview({ topline = 3 })
+      end)
+      -- Neovim fires WinScrolled before a redraw, which a spec runs none of, naming only the first window that
+      -- scrolled: it can be another.
+      vim.api.nvim_exec_autocmds("WinScrolled", { pattern = tostring(opener) })
+
+      assert.equal(1, vim.fn.line("w0", win))
     end)
 
     it("turns off mini.indentscope's scope line and mini.cursorword's underline", function()
@@ -326,13 +341,17 @@ describe("changeset.dialog", function()
     }
 
     ---@param items changeset.DialogItem[]?
-    local function pick(items)
+    ---@param focus integer|false|nil
+    local function pick(items, focus)
       -- Its own table, which a dialog closed by an earlier case can't answer into.
       local mine = { answered = false }
       result = mine
-      dialog.choose({ title = "Submit the review", items = items or ITEMS, action = "submit" }, function(index)
-        mine.chosen, mine.answered = index, true
-      end)
+      dialog.choose(
+        { title = "Submit the review", items = items or ITEMS, action = "submit", focus = focus },
+        function(index)
+          mine.chosen, mine.answered = index, true
+        end
+      )
       assert(Dialog.win(), "no dialog opened")
     end
 
@@ -378,6 +397,28 @@ describe("changeset.dialog", function()
       pick({ ITEMS[2], ITEMS[1] })
 
       assert.equal(2, answer("<CR>"))
+    end)
+
+    it("can open with no row focused, choosing nothing on <CR> until a move focuses one", function()
+      pick(nil, false)
+
+      assert.equal(3, answer("<CR>k<CR>"))
+    end)
+
+    it("keeps its focused row in view when it is taller than the editor", function()
+      local lines = vim.o.lines
+      vim.o.lines = 8
+      pick(vim.tbl_map(function(n)
+        return { cells = { { "agent " .. n } } }
+      end, vim.fn.range(1, 9)))
+      local win = assert(Dialog.win())
+
+      Dialog.press("jjjjj")
+      vim.api.nvim_exec_autocmds("WinScrolled", { pattern = tostring(win) })
+      local top = vim.fn.getwininfo(win)[1].topline
+      vim.o.lines = lines
+
+      assert.is_true(top > 1)
     end)
 
     it("chooses a row clicked", function()

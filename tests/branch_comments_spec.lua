@@ -37,6 +37,7 @@ describe("review comments in a buffer after a branch switch", function()
   end)
 
   after_each(function()
+    require("changeset.review_comment_blocks").show(false)
     vim.cmd("silent! %bwipeout!")
     for _, client in ipairs(vim.lsp.get_clients({ name = "changeset" })) do
       client:stop(true)
@@ -65,4 +66,28 @@ describe("review comments in a buffer after a branch switch", function()
 
     assert.same({}, marked_rows())
   end)
+
+  it("leaves the marks alone on gitsigns' update of one buffer, which comes as it is typed in", function()
+    git("switch", "-q", "-c", "other")
+    vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate", data = { buffer = buf } })
+
+    assert.same({ 3 }, marked_rows())
+  end)
+
+  for _, trigger in ipairs({
+    { "Neovim regains focus", "FocusGained", {} },
+    { "gitsigns updates without a buffer", "User", { pattern = "GitSignsUpdate" } },
+  }) do
+    it(("keeps a block parked when %s on the same branch"):format(trigger[1]), function()
+      local blocks = require("changeset.review_comment_blocks")
+      blocks.show(true)
+      blocks.select(comment_store.list(dir)[1])
+      local parked = vim.fn.maparg("<CR>", "n", false, true).desc
+      assert.not_nil(parked)
+
+      vim.api.nvim_exec_autocmds(trigger[2], trigger[3])
+
+      assert.equal(parked, vim.fn.maparg("<CR>", "n", false, true).desc)
+    end)
+  end
 end)

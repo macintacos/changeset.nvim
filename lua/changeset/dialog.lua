@@ -49,6 +49,7 @@ local NO_CURSOR = "n:" .. render.NO_CURSOR_HL
 ---@field title string What choosing does, e.g. "Submit the review".
 ---@field items changeset.DialogItem[]
 ---@field action string The verb for choosing, which the footer names: "submit".
+---@field focus? integer|false The row focused at first, false for none; the first that can be chosen when absent.
 
 ---@class changeset.DialogFrame
 ---@field title string
@@ -316,15 +317,31 @@ local function open(lines, frame, answer)
       end)
     end,
   })
-  -- Fires: the cursor moving to a button. scrollEOF.nvim scrolls on it to leave room past a buffer's end, pushing lines
-  -- out of a window sized to show them all; its autocmd is older, so it runs first and this one undoes it.
-  vim.api.nvim_create_autocmd("CursorMoved", {
-    buffer = buf,
-    desc = "changeset: scroll a dialog back to its first line",
-    callback = function()
+  -- scrollEOF.nvim scrolls to leave room past a buffer's end, pushing lines out of a window sized to show them all.
+  -- One taller than the editor scrolls as it must.
+  local function pin()
+    if vim.api.nvim_buf_line_count(buf) <= vim.api.nvim_win_get_height(state.win) then
       vim.api.nvim_win_call(state.win, function()
         vim.fn.winrestview({ topline = 1 })
       end)
+    end
+  end
+  -- Fires: the cursor moving in the dialog, as in the tick it opens, where Neovim fires no WinScrolled for a float
+  -- scrolled before its first redraw. scrollEOF's autocmd is older, so it runs first and this one undoes it.
+  vim.api.nvim_create_autocmd("CursorMoved", {
+    buffer = buf,
+    desc = "changeset: scroll a dialog back to its first line",
+    callback = pin,
+  })
+  -- Fires: any window scrolling in a later tick, not only the dialog's, since Neovim names just the first of several
+  -- that scrolled at once, and a move just before the dialog opened can scroll it a tick late.
+  vim.api.nvim_create_autocmd("WinScrolled", {
+    desc = "changeset: scroll a dialog back to its first line",
+    callback = function()
+      if not vim.api.nvim_win_is_valid(state.win) then
+        return true
+      end
+      pin()
     end,
   })
   -- Fires: the editor resized under the dialog, which would leave it off centre or past the edge. Buffer-local, as
@@ -563,9 +580,13 @@ function M.choose(opts, cb)
     end, vim.fn.range(1, #rows))
   end
 
-  local focus = vim.iter(ipairs(opts.items)):find(function(_, item)
-    return not item.unavailable
-  end)
+  local focus = opts.focus
+  if focus == nil then
+    focus = vim.iter(ipairs(opts.items)):find(function(_, item)
+      return not item.unavailable
+    end)
+  end
+  focus = focus or nil
   local state = open(lines(focus), {
     title = opts.title,
     footer = ("<CR> or %s %s  q cancel"):format(digits, opts.action),
@@ -591,10 +612,7 @@ function M.choose(opts, cb)
   end
   ---@param by integer 1 for the next row that can be chosen, -1 for the previous.
   local function step(by)
-    if not focus then
-      return
-    end
-    for i = focus + by, by > 0 and #opts.items or 1, by do
+    for i = (focus or by > 0 and 0 or #opts.items + 1) + by, by > 0 and #opts.items or 1, by do
       if not opts.items[i].unavailable then
         return move(i)
       end

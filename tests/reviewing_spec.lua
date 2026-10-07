@@ -583,13 +583,14 @@ describe("changeset.reviewing", function()
   end)
 
   describe("submit", function()
-    local sent, answer
+    local sent, opts, answer
 
     before_each(function()
-      sent, answer = {}, {}
+      sent, opts, answer = {}, nil, {}
       package.loaded["changeset.herdr"] = {
-        send = function(text, cb)
+        send = function(text, o, cb)
           table.insert(sent, text)
+          opts = o
           cb(answer[1], answer[2])
         end,
       }
@@ -603,6 +604,16 @@ describe("changeset.reviewing", function()
       reviewing.submit()
 
       assert.equal(dir .. "/a.lua:4\n```lua\nunsaved\n```\nhi", sent[1])
+    end)
+
+    it("titles the agent picker with what it sends, and ranks the agents by the repository", function()
+      edit_file()
+      comment_store.keep(dir, comment())
+      comment_store.keep(dir, comment({ line = 7 }))
+
+      reviewing.submit()
+
+      assert.same({ title = "Submit 2 review comments", root = dir }, opts)
     end)
 
     it("quotes an unloaded file from disk beside a loaded file whose name it prefixes", function()
@@ -620,7 +631,7 @@ describe("changeset.reviewing", function()
     it("warns that the sent comments are still listed when they can't be removed", function()
       edit_file()
       comment_store.keep(dir, comment())
-      package.loaded["changeset.herdr"].send = function(_, cb)
+      package.loaded["changeset.herdr"].send = function(_, _, cb)
         vim.fn.writefile({ "[1,2]" }, comment_store.path())
         cb(nil, "claude")
       end
@@ -663,11 +674,11 @@ describe("changeset.reviewing", function()
       assert.truthy(notes[1].msg:find("1 draft", 1, true), notes[1].msg)
     end)
 
-    it("removes only the sent comments once sent, and says who got them", function()
+    it("removes only the sent comments once sent, and says where they went and how to get them back", function()
       edit_file()
       comment_store.keep(dir, comment())
       comment_store.keep(dir, comment({ line = 9, body = "as sent" }))
-      package.loaded["changeset.herdr"].send = function(_, cb)
+      package.loaded["changeset.herdr"].send = function(_, _, cb)
         comment_store.keep(dir, comment({ line = 7, body = "written meanwhile" }))
         comment_store.keep(dir, comment({ line = 9, body = "edited meanwhile" }))
         cb(nil, "claude")
@@ -679,8 +690,10 @@ describe("changeset.reviewing", function()
         { comment({ line = 7, body = "written meanwhile" }), comment({ line = 9, body = "edited meanwhile" }) },
         comment_store.list(dir)
       )
-      assert.equal(vim.log.levels.INFO, notes[#notes].level)
-      assert.truthy(notes[#notes].msg:find("claude", 1, true))
+      assert.same({
+        msg = "Changeset: submitted 2 review comments to claude; :Changeset review restore brings them back",
+        level = vim.log.levels.INFO,
+      }, notes[#notes])
     end)
 
     it("keeps every comment and warns when sending fails", function()
@@ -712,6 +725,78 @@ describe("changeset.reviewing", function()
 
       assert.same({}, sent)
       assert.equal(vim.log.levels.INFO, notes[1].level)
+    end)
+  end)
+
+  describe("restore", function()
+    before_each(function()
+      package.loaded["changeset.herdr"] = {
+        send = function(_, _, cb)
+          cb(nil, "claude")
+        end,
+      }
+    end)
+
+    it("brings back the review comments submitted last, saying how many", function()
+      edit_file()
+      comment_store.keep(dir, comment())
+      comment_store.keep(dir, comment({ line = 7 }))
+      reviewing.submit()
+
+      reviewing.restore()
+
+      assert.same({ comment(), comment({ line = 7 }) }, comment_store.list(dir))
+      assert.same({ msg = "Changeset: restored 2 review comments", level = vim.log.levels.INFO }, notes[#notes])
+    end)
+
+    it("says how many stay submitted for lines that hold a review comment written since", function()
+      edit_file()
+      comment_store.keep(dir, comment())
+      comment_store.keep(dir, comment({ line = 7 }))
+      reviewing.submit()
+      comment_store.keep(dir, comment({ body = "since" }))
+
+      reviewing.restore()
+
+      assert.same({ comment({ body = "since" }), comment({ line = 7 }) }, comment_store.list(dir))
+      assert.equal(
+        "Changeset: restored 1 review comment; 1 stays submitted: its lines hold a newer one",
+        notes[#notes].msg
+      )
+    end)
+
+    it("says when every review comment submitted last stays submitted", function()
+      edit_file()
+      comment_store.keep(dir, comment())
+      comment_store.keep(dir, comment({ line = 7 }))
+      reviewing.submit()
+      comment_store.keep(dir, comment({ body = "since" }))
+      comment_store.keep(dir, comment({ line = 7, body = "since" }))
+
+      reviewing.restore()
+
+      assert.equal("Changeset: 2 review comments stay submitted: their lines hold newer ones", notes[#notes].msg)
+    end)
+
+    it("says when there is nothing to restore", function()
+      edit_file()
+
+      reviewing.restore()
+
+      assert.same({}, comment_store.list(dir))
+      assert.equal(vim.log.levels.INFO, notes[1].level)
+      assert.truthy(notes[1].msg:find("no submitted review comments to restore", 1, true), notes[1].msg)
+    end)
+
+    it("reports a record it can't restore into", function()
+      edit_file()
+      vim.fn.mkdir(vim.fs.dirname(comment_store.path()), "p")
+      vim.fn.writefile({ "[1,2]" }, comment_store.path())
+
+      reviewing.restore()
+
+      os.remove(comment_store.path())
+      assert.equal(vim.log.levels.ERROR, notes[1].level)
     end)
   end)
 
