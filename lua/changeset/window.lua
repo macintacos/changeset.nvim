@@ -4,6 +4,7 @@
 local buffers = require("changeset.buffers")
 local config = require("changeset.config")
 local render = require("changeset.render")
+local unified_diff = require("changeset.unified_diff")
 
 local M = {}
 
@@ -416,6 +417,7 @@ function M.preview(path, lnum, band, pick)
   end
   local win = borrow(buf, band, pick)
   sign(buf)
+  unified_diff.sync(win)
   if lnum then
     local last = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
     vim.api.nvim_win_set_cursor(win, { M._clamp(lnum, last), 0 })

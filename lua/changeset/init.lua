@@ -468,6 +468,7 @@ function M.open()
     end,
   })
   actions.bind_step_keys(bound_keys, preview_current)
+  require("changeset.unified_diff").activate()
 
   redraw()
   -- A kept tree misses what nothing announced, such as a file edited outside Neovim while it kept focus.
