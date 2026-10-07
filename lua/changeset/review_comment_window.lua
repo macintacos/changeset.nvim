@@ -38,7 +38,7 @@ end
 ---@field save fun() As its save keys do.
 ---@field close fun(after: fun()?) As `q` does, keeping the text, then calls `after` once it has gone and insert mode with it.
 ---@field discard fun() Closes it keeping nothing.
----@field hold fun() Keeps it open while focus is in the window it is about to open, until focus comes back.
+---@field hold fun(opens: fun()) Leaves insert mode, then calls `opens`, keeping the window open while focus is in the window that opens, until focus comes back to it and its mode.
 
 ---Each open window's report, by window.
 ---@type table<integer, changeset.ReviewCommentWindow>
@@ -48,6 +48,23 @@ local open_windows = {}
 ---@return changeset.ReviewCommentWindow?
 function M.current()
   return open_windows[vim.api.nvim_get_current_win()]
+end
+
+---The default `<C-g>` keys `plugin/changeset.lua` mapped in normal mode, by `lhs`, each with its `<Plug>`'s
+---subcommand and `desc`. A key the user took maps something else, and is left out.
+---@return { lhs: string, name: string, desc: string }[]
+local function default_keys()
+  if vim.g.changeset_no_default_maps then
+    return {}
+  end
+  local found = {}
+  for _, keymap in ipairs(vim.api.nvim_get_keymap("n")) do
+    local name = (keymap.rhs or ""):match("^<Plug>%(changeset%-(.+)%)$")
+    if name and vim.startswith(keymap.lhs, "<C-G>") then
+      found[#found + 1] = { lhs = keymap.lhs, name = name, desc = keymap.desc }
+    end
+  end
+  return found
 end
 
 ---Where a save goes on the left, `hint` on the right, the border between them; `hint` only
@@ -185,22 +202,29 @@ function M.open(opts)
     end
   end
 
+  ---Whether the float is current in insert or replace mode.
+  local function inserting()
+    return vim.api.nvim_get_current_win() == win and vim.api.nvim_get_mode().mode:find("^[iR]") ~= nil
+  end
+
+  ---Calls `after` once insert mode has ended in the float, at once when it isn't on.
+  ---@param after fun()
+  local function leave_insert(after)
+    if not inserting() then
+      return after()
+    end
+    -- stopinsert only takes effect on the next loop iteration; acting before then leaves
+    -- insert in whatever window is current next, moving its cursor and firing its InsertLeave.
+    -- Fires: insert mode ending in this float, after the stopinsert below.
+    vim.api.nvim_create_autocmd("InsertLeave", { buffer = buf, once = true, callback = vim.schedule_wrap(after) })
+    vim.cmd.stopinsert()
+  end
+
   ---@param after fun()?
   local function close(after)
-    if vim.api.nvim_get_current_win() ~= win or not vim.api.nvim_get_mode().mode:find("^[iR]") then
-      return close_now(after)
-    end
-    -- stopinsert only takes effect on the next loop iteration; closing before then leaves
-    -- insert in the user's file, moving its cursor and firing its InsertLeave.
-    -- Fires: insert mode ending in this float, after the stopinsert below.
-    vim.api.nvim_create_autocmd("InsertLeave", {
-      buffer = buf,
-      once = true,
-      callback = vim.schedule_wrap(function()
-        close_now(after)
-      end),
-    })
-    vim.cmd.stopinsert()
+    leave_insert(function()
+      close_now(after)
+    end)
   end
 
   local function text()
@@ -225,12 +249,25 @@ function M.open(opts)
   -- first window that changed.
   vim.api.nvim_create_autocmd("WinScrolled", { group = group, callback = place })
   local held = false
-  -- Fires: focus coming back from a window it held for.
+  ---Where to pick writing back up on return from a window it held for, if it was writing.
+  ---@type integer[]?
+  local resume
+  -- Fires: focus coming back from a window it held for, and a new window entered while it shows this buffer.
   vim.api.nvim_create_autocmd("WinEnter", {
     group = group,
     buffer = buf,
     callback = function()
+      if vim.api.nvim_get_current_win() ~= win then
+        return
+      end
       held = false
+      if resume then
+        local cursor = resume
+        resume = nil
+        vim.api.nvim_win_set_cursor(win, cursor)
+        local row = vim.api.nvim_buf_get_lines(buf, cursor[1] - 1, cursor[1], false)[1] or ""
+        vim.cmd(cursor[2] >= #row and "startinsert!" or "startinsert")
+      end
     end,
   })
   -- Fires: focus leaving the float for any window. Checked once the move lands, since a window can't close while
@@ -310,8 +347,14 @@ function M.open(opts)
   vim.keymap.set("i", "<S-Esc>", close, { buffer = buf, desc = opts.close_desc })
   map("<S-Esc>", close, opts.close_desc)
   map("q", close, opts.close_desc)
+  -- Typed mid-sentence, so they work in insert mode too; normal mode has the global maps.
+  local globals = {}
+  for _, key in ipairs(default_keys()) do
+    vim.keymap.set("i", key.lhs, ("<Cmd>Changeset %s<CR>"):format(key.name), { buffer = buf, desc = key.desc })
+    globals[#globals + 1] = key.lhs
+  end
   map("?", function()
-    help.show(buf, own)
+    help.show(buf, own, globals)
     -- A help window that takes focus is a look at the keys, not a move away.
     held = vim.api.nvim_get_current_win() ~= win
   end, "Show these keymaps")
@@ -326,8 +369,10 @@ function M.open(opts)
       saved = true
       close()
     end,
-    hold = function()
+    hold = function(opens)
       held = true
+      resume = inserting() and vim.api.nvim_win_get_cursor(win) or nil
+      leave_insert(opens)
     end,
   }
 

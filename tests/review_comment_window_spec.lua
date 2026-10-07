@@ -297,7 +297,7 @@ describe("review_comment_window", function()
 
   it("stays open while focus is in a window it holds for, closing once focus leaves it again", function()
     local win = open()
-    review_comment_window.current().hold()
+    review_comment_window.current().hold(function() end)
     vim.api.nvim_set_current_win(source)
     vim.wait(50)
     assert.is_true(vim.api.nvim_win_is_valid(win))

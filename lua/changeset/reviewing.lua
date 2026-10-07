@@ -127,6 +127,7 @@ function M.open(comment)
     footer = FOOTER,
     keys = config.get().review_comment.save,
     body = comment.body,
+    comment = comment,
     keep = function(body)
       if not body:find("%S") then
         -- Scheduled: the question opens a window, and this one is still closing.
@@ -196,10 +197,11 @@ function M.comment(first, last)
   review_comment_window.open({
     line = last,
     title = "Review comment · " .. lines_label(first, last),
-    save_desc = "Keep the review comment",
-    close_desc = "Close, keeping the text",
+    save_desc = "Save the review comment",
+    close_desc = "Close, keeping the text as a draft",
     footer = FOOTER,
     keys = config.get().review_comment.save,
+    comment = comment_of(""),
     keep = function(body)
       -- A blank keep would drop whatever was saved on this range meanwhile.
       if body:find("%S") then
@@ -214,6 +216,59 @@ function M.comment(first, last)
       done(keep(repository, comment_of(body)))
     end,
   })
+end
+
+---Deletes the comment being written in `open`: asks first when it is stored or holds text, else just closes.
+---@param open changeset.ReviewCommentWindow
+local function delete_open(open)
+  local repository = Paths.root(vim.api.nvim_win_get_buf(open.source))
+  local stored = vim.iter(comment_store.list(repository)):find(function(comment)
+    return comment.path == open.comment.path
+      and comment.line == open.comment.line
+      and comment.start_line == open.comment.start_line
+  end)
+  local text = open.text()
+  if not stored and not text:find("%S") then
+    return open.discard()
+  end
+  open.hold(function()
+    dialog.confirm({
+      title = "Delete the review comment",
+      body = {
+        { text = location(open.comment), hl = render.META_HL, path = true },
+        { text = text:find("%S") and text or stored.body, quote = render.REVIEW_COMMENT_HL, max_lines = QUOTED },
+      },
+      action = "Delete",
+    }, function()
+      open.discard()
+      if stored then
+        drop(repository, stored)
+      end
+    end)
+  end)
+end
+
+---Runs subcommand `name` from the review comment window `open`: `comment` saves it, `delete` deletes it, and any
+---other closes it, keeping a draft, then calls `run` from the comment's first line in the window it opened from.
+---@param open changeset.ReviewCommentWindow
+---@param name string
+---@param run fun()
+function M.from_window(open, name, run)
+  if name == "comment" then
+    return open.save()
+  end
+  if name == "delete" then
+    return delete_open(open)
+  end
+  open.close(function()
+    if not vim.api.nvim_win_is_valid(open.source) then
+      return
+    end
+    vim.api.nvim_set_current_win(open.source)
+    local lnum = math.min(open.comment.start_line or open.comment.line, vim.api.nvim_buf_line_count(0))
+    vim.api.nvim_win_set_cursor(open.source, { lnum, 0 })
+    run()
+  end)
 end
 
 ---Deletes the review comment on the cursor's line, the narrowest of those covering it.

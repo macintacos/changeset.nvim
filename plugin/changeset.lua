@@ -52,10 +52,24 @@ local subcommands = {
   end,
 }
 
+---The review comment window, when it is current. Never loads its module: no window is open until it is loaded.
+---@return changeset.ReviewCommentWindow?
+local function comment_window()
+  local module = package.loaded["changeset.review_comment_window"]
+  return module and module.current()
+end
+
 vim.api.nvim_create_user_command("Changeset", function(opts)
-  local run = subcommands[opts.args == "" and "toggle" or opts.args]
+  local name = opts.args == "" and "toggle" or opts.args
+  local run = subcommands[name]
   if not run then
     return vim.notify("Changeset: unknown subcommand " .. opts.args, vim.log.levels.ERROR)
+  end
+  local open = comment_window()
+  if open then
+    return require("changeset.reviewing").from_window(open, name, function()
+      run(opts)
+    end)
   end
   run(opts)
 end, {
@@ -105,6 +119,9 @@ for _, key in ipairs(keys) do
     -- A g@ operator is what `.` repeats. The count is baked into the lambda, and <Esc> drops the typed one, so `.`
     -- repeats the first count.
     vim.keymap.set("n", lhs, function()
+      if comment_window() then
+        return ("<Cmd>Changeset %s<CR>"):format(name)
+      end
       vim.o.operatorfunc = ("{_ -> %s}"):format(call:format(vim.v.count1))
       return "<Esc>g@l"
     end, { expr = true, desc = desc })
