@@ -126,6 +126,7 @@ describe("changeset.comment_store", function()
     '{"path":"a","body":"b","line":3,"start_line":"1"}',
     '{"path":"a","body":"b","line":0}',
     '{"path":"a","body":"b","line":3,"start_line":3}',
+    '{"path":"a","body":"b","line":3,"draft":false}',
   }) do
     it("skips the entry " .. entry .. " in a list, and keeps it through a write", function()
       write_record('{"/repo":[' .. entry .. "]}")
@@ -136,6 +137,19 @@ describe("changeset.comment_store", function()
       assert.same(vim.json.decode(entry), jsonfile.read(comment_store.path())[ROOT][1])
     end)
   end
+
+  it("lists a draft as one", function()
+    comment_store.keep(ROOT, comment({ draft = true }))
+
+    assert.same({ comment({ draft = true }) }, comment_store.list(ROOT))
+  end)
+
+  it("replaces a draft with the comment saved on its range", function()
+    comment_store.keep(ROOT, comment({ draft = true }))
+    comment_store.keep(ROOT, comment({ body = "saved" }))
+
+    assert.same({ comment({ body = "saved" }) }, comment_store.list(ROOT))
+  end)
 
   it("reads a null start_line as a single-line comment", function()
     write_record('{"/repo":[{"path":"a","body":"b","line":3,"start_line":null}]}')

@@ -12,6 +12,7 @@ local M = {}
 ---@field line integer The last line, 1-based.
 ---@field start_line integer? The first line, only for a range.
 ---@field body string
+---@field draft true? Kept but not saved, so submit and yank leave it out.
 
 ---@type table<fun(), true>
 local subscribers = {}
@@ -32,6 +33,7 @@ local function valid(entry)
     and type(entry.line) == "number"
     and entry.line % 1 == 0
     and entry.line >= 1
+    and (entry.draft == nil or entry.draft == true)
     and (
       entry.start_line == nil
       or (
