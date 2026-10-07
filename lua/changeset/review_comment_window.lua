@@ -28,6 +28,27 @@ end
 ---@field save fun(body: string, done: fun(err: string?)) Called with the buffer's lines joined by "\n", never only whitespace; the window closes once `done` gets no error.
 ---@field keep fun(body: string) Called with the buffer's lines joined by "\n", empty included, whenever the buffer goes (a close, an :e in the float, quitting) except after a taken save.
 ---@field body string? The text it opens with.
+---@field comment changeset.ReviewComment The comment it is about, as `current` reports it; a new one's body is "".
+
+---The window as `current` reports it, with what can be done to it.
+---@class changeset.ReviewCommentWindow
+---@field source integer The window it opened from.
+---@field comment changeset.ReviewComment
+---@field text fun(): string Its lines joined by "\n".
+---@field save fun() As its save keys do.
+---@field close fun(after: fun()?) As `q` does, keeping the text, then calls `after` once it has gone and insert mode with it.
+---@field discard fun() Closes it keeping nothing.
+---@field hold fun() Keeps it open while focus is in the window it is about to open, until focus comes back.
+
+---Each open window's report, by window.
+---@type table<integer, changeset.ReviewCommentWindow>
+local open_windows = {}
+
+---The review comment window, when it is the current window.
+---@return changeset.ReviewCommentWindow?
+function M.current()
+  return open_windows[vim.api.nvim_get_current_win()]
+end
 
 ---Where a save goes on the left, `hint` on the right, the border between them; `hint` only
 ---when both fit in `width`.
@@ -106,7 +127,7 @@ function M.open(opts)
   if opts.body then
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(opts.body, "\n"))
   end
-  local hint = vim.fn.keytrans(vim.keycode(opts.keys[1])) .. " save"
+  local hint = vim.fn.keytrans(vim.keycode(opts.keys[1])) .. " save · q draft"
 
   ---Its line, held to the source's end should edits there shorten it.
   local function line()
@@ -154,20 +175,31 @@ function M.open(opts)
   vim.wo[win].wrap = true
   vim.wo[win].linebreak = true
 
-  local function close_now()
+  ---@param after fun()?
+  local function close_now(after)
     if vim.api.nvim_win_is_valid(win) then
       vim.api.nvim_win_close(win, true)
     end
+    if after then
+      after()
+    end
   end
 
-  local function close()
+  ---@param after fun()?
+  local function close(after)
     if vim.api.nvim_get_current_win() ~= win or not vim.api.nvim_get_mode().mode:find("^[iR]") then
-      return close_now()
+      return close_now(after)
     end
     -- stopinsert only takes effect on the next loop iteration; closing before then leaves
     -- insert in the user's file, moving its cursor and firing its InsertLeave.
     -- Fires: insert mode ending in this float, after the stopinsert below.
-    vim.api.nvim_create_autocmd("InsertLeave", { buffer = buf, once = true, callback = vim.schedule_wrap(close_now) })
+    vim.api.nvim_create_autocmd("InsertLeave", {
+      buffer = buf,
+      once = true,
+      callback = vim.schedule_wrap(function()
+        close_now(after)
+      end),
+    })
     vim.cmd.stopinsert()
   end
 
@@ -192,15 +224,25 @@ function M.open(opts)
   -- Fires: any window scrolling or resizing, the source among them; its pattern names only the
   -- first window that changed.
   vim.api.nvim_create_autocmd("WinScrolled", { group = group, callback = place })
-  -- Fires: entering the float, whose line the source may have scrolled away meanwhile.
+  local held = false
+  -- Fires: focus coming back from a window it held for.
   vim.api.nvim_create_autocmd("WinEnter", {
     group = group,
     buffer = buf,
     callback = function()
-      if attached() then
-        reveal(source, line())
-      end
+      held = false
     end,
+  })
+  -- Fires: focus leaving the float for any window. Checked once the move lands, since a window can't close while
+  -- focus is leaving it.
+  vim.api.nvim_create_autocmd("WinLeave", {
+    group = group,
+    buffer = buf,
+    callback = vim.schedule_wrap(function()
+      if not held and vim.api.nvim_get_current_win() ~= win then
+        close_now()
+      end
+    end),
   })
   local gone = false
   -- Edits carry the padding with the text, and replacing every line carries it to the end,
@@ -217,6 +259,7 @@ function M.open(opts)
   ---Takes back the room made under its line.
   local function unpad()
     gone = true
+    open_windows[win] = nil
     vim.api.nvim_del_augroup_by_id(group)
     if vim.api.nvim_buf_is_valid(source_buf) then
       vim.api.nvim_buf_del_extmark(source_buf, ns, mark)
@@ -269,7 +312,24 @@ function M.open(opts)
   map("q", close, opts.close_desc)
   map("?", function()
     help.show(buf, own)
+    -- A help window that takes focus is a look at the keys, not a move away.
+    held = vim.api.nvim_get_current_win() ~= win
   end, "Show these keymaps")
+
+  open_windows[win] = {
+    source = source,
+    comment = opts.comment,
+    text = text,
+    save = save,
+    close = close,
+    discard = function()
+      saved = true
+      close()
+    end,
+    hold = function()
+      held = true
+    end,
+  }
 
   if opts.body then
     vim.api.nvim_win_set_cursor(win, { vim.api.nvim_buf_line_count(buf), 0 })

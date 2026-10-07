@@ -3,7 +3,7 @@ local Fixture = require("support.git")
 local comment_store = require("changeset.comment_store")
 
 describe("changeset.reviewing", function()
-  local reviewing, notify, notes, windows, dir, tree, focused
+  local reviewing, notify, notes, windows, dir, tree, focused, echoes, echo
 
   ---The options of the window opened last.
   local function window()
@@ -14,6 +14,10 @@ describe("changeset.reviewing", function()
     os.remove(comment_store.path())
     notes, windows, focused, tree = {}, {}, false, nil
     notify = vim.notify
+    echoes, echo = {}, vim.api.nvim_echo
+    vim.api.nvim_echo = function(chunks)
+      table.insert(echoes, chunks[1][1])
+    end
     vim.notify = function(msg, level)
       table.insert(notes, { msg = msg, level = level })
     end
@@ -39,6 +43,7 @@ describe("changeset.reviewing", function()
 
   after_each(function()
     vim.notify = notify
+    vim.api.nvim_echo = echo
     vim.cmd("silent! %bwipeout!")
     vim.fn.delete(dir, "rf")
     vim.cmd("silent! fclose!")
@@ -95,13 +100,14 @@ describe("changeset.reviewing", function()
       assert.same({ comment({ start_line = 2, body = "note" }) }, comment_store.list(dir))
     end)
 
-    it("keeps the text of a window closed without saving", function()
+    it("keeps the text of a window closed without saving as a draft, and says so", function()
       edit_file()
 
       reviewing.comment(4, 4)
       window().keep("typed")
 
-      assert.same({ comment({ body = "typed" }) }, comment_store.list(dir))
+      assert.same({ comment({ body = "typed", draft = true }) }, comment_store.list(dir))
+      assert.equal(1, #echoes)
     end)
 
     it("keeps nothing of a window closed blank", function()
@@ -234,15 +240,46 @@ describe("changeset.reviewing", function()
       assert.truthy(err)
     end)
 
-    it("drops an edit closed without saving, and says so", function()
+    it("keeps an edit closed without saving as a draft, and says so", function()
       edit_file()
       comment_store.keep(dir, comment())
 
       reviewing.open(comment())
       window().keep("changed")
 
+      assert.same({ comment({ body = "changed", draft = true }) }, comment_store.list(dir))
+      assert.equal(1, #echoes)
+    end)
+
+    it("leaves a saved comment closed unchanged saved", function()
+      edit_file()
+      comment_store.keep(dir, comment())
+
+      reviewing.open(comment())
+      window().keep("hi")
+
       assert.same({ comment() }, comment_store.list(dir))
-      assert.equal(vim.log.levels.INFO, notes[1].level)
+      assert.same({}, echoes)
+    end)
+
+    it("saves a draft as a saved comment", function()
+      edit_file()
+      comment_store.keep(dir, comment({ draft = true }))
+
+      reviewing.open(comment({ draft = true }))
+      window().save("hi", function() end)
+
+      assert.same({ comment() }, comment_store.list(dir))
+    end)
+
+    it("resumes a draft's text under a title that says it is one", function()
+      edit_file()
+      comment_store.keep(dir, comment({ draft = true }))
+
+      reviewing.comment(4, 4)
+
+      assert.equal("hi", window().body)
+      assert.truthy(window().title:lower():find("draft"), window().title)
     end)
   end)
 
@@ -534,19 +571,6 @@ describe("changeset.reviewing", function()
   end)
 
   describe("next_comment and prev_comment", function()
-    local echoed, echo
-
-    before_each(function()
-      echoed, echo = {}, vim.api.nvim_echo
-      vim.api.nvim_echo = function(chunks)
-        table.insert(echoed, chunks[1][1])
-      end
-    end)
-
-    after_each(function()
-      vim.api.nvim_echo = echo
-    end)
-
     ---Writes `b.lua` beside `a.lua` and keeps comments on a.lua:4, a.lua:2-7 and b.lua:3.
     local function three_comments()
       edit_file()
@@ -568,7 +592,7 @@ describe("changeset.reviewing", function()
       reviewing.next_comment(1)
       assert.same({ "a.lua", 4 }, { where() })
       assert.equal(0, vim.api.nvim_win_get_cursor(0)[2])
-      assert.equal("review comment 2 of 3", echoed[1])
+      assert.equal("review comment 2 of 3", echoes[1])
 
       reviewing.next_comment(1)
       assert.same({ "b.lua", 3 }, { where() })
@@ -582,7 +606,7 @@ describe("changeset.reviewing", function()
       assert.same({ "a.lua", 2 }, { where() })
       reviewing.prev_comment(1)
       assert.same({ "b.lua", 3 }, { where() })
-      assert.matches("review comment 3 of 3.*wrapped", echoed[2])
+      assert.matches("review comment 3 of 3.*wrapped", echoes[2])
     end)
 
     it("wraps past the last comment to the first", function()
@@ -593,7 +617,7 @@ describe("changeset.reviewing", function()
       reviewing.next_comment(1)
 
       assert.same({ "a.lua", 2 }, { where() })
-      assert.matches("wrapped", echoed[1])
+      assert.matches("wrapped", echoes[1])
     end)
 
     it("skips a comment whose file is gone", function()
@@ -672,7 +696,7 @@ describe("changeset.reviewing", function()
       assert.same({ "a.lua", 4 }, { where() })
       reviewing.prev_comment(3)
       assert.same({ "a.lua", 4 }, { where() })
-      assert.equal("review comment 2 of 3, wrapped", echoed[#echoed])
+      assert.equal("review comment 2 of 3, wrapped", echoes[#echoes])
     end)
 
     it("keeps focus where it was when it refuses the file window before it", function()

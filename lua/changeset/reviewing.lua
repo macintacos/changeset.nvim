@@ -98,38 +98,48 @@ function M.ask_delete(comment)
   end)
 end
 
----Opens the window under `comment`'s lines of the current buffer, holding its text: a save replaces it, and a
----blank save or close asks to delete it. Closing it otherwise drops the edit.
+---Echoed like the jump count, not notified, so notifier plugins don't toast every close.
+local function say_draft()
+  vim.api.nvim_echo({ { "kept the review comment as a draft" } }, false, {})
+end
+
+---`comment` with `body`, saved, or a draft when `draft` is set.
+---@param comment changeset.ReviewComment
+---@param body string
+---@param draft true?
+---@return changeset.ReviewComment
+local function with_body(comment, body, draft)
+  return { path = comment.path, line = comment.line, start_line = comment.start_line, body = body, draft = draft }
+end
+
+---Opens the window under `comment`'s lines of the current buffer, holding its text: a save replaces it, a blank
+---save or close asks to delete it, and a close with changed text keeps it as a draft.
 ---@param comment changeset.ReviewComment
 function M.open(comment)
   local repository = Paths.root(0)
   local last = comment.line
-  ---@param body string
-  local function asked_blank(body)
-    if body:find("%S") then
-      return false
-    end
-    -- Scheduled: the question opens a window, and this one is still closing.
-    vim.schedule(function()
-      M.ask_delete(comment)
-    end)
-    return true
-  end
+  local kind = comment.draft and "Edit draft review comment · " or "Edit review comment · "
   review_comment_window.open({
     line = last,
-    title = "Edit review comment · " .. lines_label(comment.start_line or last, last),
-    save_desc = "Update the review comment",
-    close_desc = "Close, dropping the edit",
+    title = kind .. lines_label(comment.start_line or last, last),
+    save_desc = "Save the review comment",
+    close_desc = "Close, keeping the text as a draft",
     footer = FOOTER,
     keys = config.get().review_comment.save,
     body = comment.body,
     keep = function(body)
-      if not asked_blank(body) and body ~= comment.body then
-        say(vim.log.levels.INFO, "closed without updating, so the review comment keeps its saved text")
+      if not body:find("%S") then
+        -- Scheduled: the question opens a window, and this one is still closing.
+        return vim.schedule(function()
+          M.ask_delete(comment)
+        end)
+      end
+      if body ~= comment.body and not keep(repository, with_body(comment, body, true)) then
+        say_draft()
       end
     end,
     save = function(body, done)
-      done(keep(repository, vim.tbl_extend("force", comment, { body = body })))
+      done(keep(repository, with_body(comment, body)))
     end,
   })
 end
@@ -193,7 +203,11 @@ function M.comment(first, last)
     keep = function(body)
       -- A blank keep would drop whatever was saved on this range meanwhile.
       if body:find("%S") then
-        keep(repository, comment_of(body))
+        local draft = comment_of(body)
+        draft.draft = true
+        if not keep(repository, draft) then
+          say_draft()
+        end
       end
     end,
     save = function(body, done)
