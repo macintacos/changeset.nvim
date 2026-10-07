@@ -68,7 +68,7 @@ end
 
 ---Sync every dependency to its pin, raising if any failed.
 function M.install()
-  -- Keep in sync with .luarc.check.json's workspace.library, which lists every pin but luacov and panvimdoc.
+  -- Keep in sync with .luarc.check.json's workspace.library, which lists every pin but luacov.
   local pins = {
     ["plenary.nvim"] = {
       src = "https://github.com/nvim-lua/plenary.nvim",
@@ -92,7 +92,6 @@ function M.install()
       rev = "070a5d7b985546cc57e1fc61e5bc507fecac6045",
     },
     luacov = { src = "https://github.com/lunarmodules/luacov", rev = "b1f9eae400da976b93edb7f94cf5d05f538a0655" }, -- v0.17.0
-    panvimdoc = { src = "https://github.com/kdheepak/panvimdoc", rev = "4c8eaecb80058694171627629c6ff59bcf41472d" }, -- v6.0.0
   }
   local errors = M.sync(pins, M.dir)
   if #errors > 0 then

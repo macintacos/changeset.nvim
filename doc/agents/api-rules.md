@@ -5,8 +5,8 @@ These rules apply to a change to what users call or configure: options, `:Change
 
 ## The user contract
 
-What `README.md` documents is the contract with users' configs. Changing or removing any of
-it is a breaking change.
+What `README.md` and `doc/changeset.nvim.txt` document is the contract with users' configs.
+Changing or removing any of it is a breaking change.
 
 `plugin/changeset.lua` requires no `changeset.*` module when it loads, because those
 modules create their autocmds as they load, and a session that never opens the sidebar
@@ -64,13 +64,16 @@ one gets:
    top-level table.
 2. A default in `DEFAULTS`.
 3. A check in `validate()`.
-4. A row in README `## Options`, followed by `mise run docs`.
+4. An entry tagged `changeset-option-<path>` in `doc/changeset.nvim.txt`, and its default in
+   the README's `setup()` block.
 
 A module reads an option through `config.get()` when it acts, never when it loads, so a
 later `setup()` call reaches it.
 
 ## Documenting a name
 
-`tests/docs_spec.lua` fails until every option, `:Changeset` subcommand, `<Plug>` map and
-highlight group appears in the vimdoc. The highlight groups are the `Changeset*` names in
-`lua/changeset/render.lua`. Add each new name to the README, then run `mise run docs`.
+`tests/docs_spec.lua` fails until `doc/changeset.nvim.txt` tags every option, `:Changeset`
+subcommand, `<Plug>` map, default key and highlight group, in the scheme `AGENTS.md` § Keeping
+docs current gives. The highlight groups are the `Changeset*` names in
+`lua/changeset/render.lua`. Add each new name to the README too when it adds a key, a command
+or an option.
