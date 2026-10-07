@@ -24,8 +24,9 @@ local DIFF_HL = {
 ---@type "waiting"|"on"|"off"
 local state = "waiting"
 
----Each window's view this module opened: its buffer, the buffer holding its base, and the base's text gitsigns held.
----@type table<integer, { buf: integer, base: integer, text: string[] }>
+---Each window's view this module opened: its buffer, the buffer holding its base, the base's text gitsigns held, and the
+---hunks `cover` last drew it with.
+---@type table<integer, { buf: integer, base: integer, text: string[], covered: Gitsigns.Hunk.Hunk[]? }>
 local opened = {}
 
 ---Each window with a view on its way, and the buffer it is for.
@@ -67,6 +68,39 @@ local function paint(win)
   local value = table.concat(kept, ",")
   if vim.wo[win].winhighlight ~= value then
     vim.wo[win].winhighlight = value
+  end
+end
+
+---Hide the signs gitsigns puts beside `view`'s lines, and draw the gutter of each line it draws added on its tint.
+---Marked in the view's own namespace, which gitsigns clears as it draws the view anew or closes it.
+---@param view Gitsigns.UnifiedView
+---@param signed Gitsigns.Hunk.Hunk[] The hunks gitsigns signs, which a file new since its base has more of.
+local function cover(view, signed)
+  -- Above gitsigns' signs, which the sign column then has no room for, and below diagnostics' by default.
+  local priority = require("gitsigns.config").config.sign_priority + 1
+  local last = vim.api.nvim_buf_line_count(view.buf) - 1
+  local tinted = {}
+  local function mark(row, hl)
+    vim.api.nvim_buf_set_extmark(view.buf, view.ns, row, 0, {
+      sign_text = " ",
+      sign_hl_group = hl,
+      number_hl_group = hl,
+      priority = priority,
+    })
+  end
+  for _, hunk in ipairs(view.hunks) do
+    for row = hunk.added.start - 1, hunk.added.start + hunk.added.count - 2 do
+      tinted[row] = true
+      mark(row, render.DIFF_ADD_HL)
+    end
+  end
+  -- A deletion's sign sits on the line before it, or the first.
+  for _, hunk in ipairs(signed) do
+    for row = math.max(hunk.added.start, 1) - 1, math.min(math.max(hunk.vend, 1) - 1, last) do
+      if not tinted[row] then
+        mark(row)
+      end
+    end
   end
 end
 
@@ -190,6 +224,18 @@ function M.activate()
     desc = "changeset: forget the unified diff of a closed window",
     callback = function(args)
       opened[tonumber(args.match)] = nil
+    end,
+  })
+  -- gitsigns draws a view's hunks anew with no event to say so, but always redraws the window after.
+  vim.api.nvim_set_decoration_provider(vim.api.nvim_create_namespace(GROUP), {
+    on_win = function(_, win)
+      local mine, view = opened[win], require("gitsigns.unified").get_view(win)
+      if mine and view and view.buf == mine.buf and view.hunks and view.hunks ~= mine.covered then
+        mine.covered = view.hunks
+        local bcache = require("gitsigns.cache").cache[view.buf]
+        cover(view, bcache and bcache.hunks or {})
+      end
+      return false
     end,
   })
   for _, win in ipairs(vim.api.nvim_list_wins()) do

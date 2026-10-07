@@ -970,6 +970,14 @@ tints through 'winhighlight', beside the window's own entries, so gitsigns' grou
 theme's colours everywhere else. The mapping stays with the window after its view closes,
 where it only touches gitsigns' inline hunk previews.
 
+gitsigns' signs say again what the view already draws, so a blank sign covers each one,
+one priority above gitsigns' and so, by default, under diagnostics'. On an added line it carries the line's tint as both sign and number
+highlight, which a 'statuscolumn' takes for its own background, so the tint runs through
+the gutter as it does under gitsigns' deleted lines. A fold column takes no highlight from
+a mark and stays as it was. The marks live in gitsigns' namespace for the view, which
+gitsigns clears whenever it draws the view anew or closes it. It announces neither, but
+redraws the window after, so a decoration provider puts them back on that redraw.
+
 How a hunk's lines pair up is gitsigns' `diff_opts`, left to the user. Neovim's default
 'diffopt', which gitsigns follows, carries `linematch:40`, which interleaves a hunk's
 removed and added lines by similarity rather than listing the removed above the added as

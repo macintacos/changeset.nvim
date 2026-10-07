@@ -364,7 +364,8 @@ It draws in changeset’s own |changeset.nvim-highlight-groups|, not
 gitsigns’ preview groups, which many themes paint a flat red or green. Each
 added or deleted line gets a background tinted from your theme’s diff
 colours, with a stronger tint behind the words that changed, and its text keeps
-its syntax colours.
+its syntax colours. gitsigns’ signs give way beside the lines it draws, and
+an added line’s tint runs on through its sign and number columns.
 
 gitsigns decides how a hunk’s lines pair up. Neovim’s default `'diffopt'`,
 which gitsigns follows, includes `linematch:40`, which interleaves a hunk’s
@@ -802,7 +803,8 @@ it again on `:colorscheme`.
                                 band                        band
 
   ChangesetDiffAdd              A line the unified diff     Normal’s background tinted
-                                shows added                 toward GitSignsAdd
+                                shows added, and its sign   toward GitSignsAdd
+                                and line number
 
   ChangesetDiffAddText          The words an added line     a stronger GitSignsAdd tint
                                 changed

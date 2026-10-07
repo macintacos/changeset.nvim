@@ -186,12 +186,13 @@ describe("changeset.unified_diff", function()
 
     after_each(function()
       vim.wo.winhighlight = ""
+      vim.wo.number = false
     end)
 
-    ---The colours drawn at the last character of the first screen row showing `text`.
+    ---The first screen row showing `text`, once one does.
     ---@param text string
-    ---@return { foreground: integer?, background: integer? }
-    local function last_cell(text)
+    ---@return integer
+    local function row_showing(text)
       local found
       assert.is_true(vim.wait(5000, function()
         found = screen_rows():enumerate():find(function(_, row)
@@ -199,9 +200,33 @@ describe("changeset.unified_diff", function()
         end)
         return found ~= nil
       end, 20))
+      return found
+    end
+
+    ---The colours drawn at the last character of the first screen row showing `text`.
+    ---@param text string
+    ---@return { foreground: integer?, background: integer? }
+    local function last_cell(text)
+      local found = row_showing(text)
       local row = screen_rows():totable()[found]
       local col = vim.fn.strchars(row:sub(1, row:find(text, 1, true) + #text - 2))
       return vim.api.nvim__inspect_cell(1, found - 1, col)[2]
+    end
+
+    ---The text of the gutter beside screen `row`, and each background drawn in it.
+    ---@param row integer
+    ---@return string
+    ---@return (integer|false)[]
+    local function gutter(row)
+      local cells = vim.tbl_map(function(col)
+        return vim.api.nvim__inspect_cell(1, row - 1, col)
+      end, vim.fn.range(0, vim.fn.getwininfo(vim.api.nvim_get_current_win())[1].textoff - 1))
+      return table.concat(vim.tbl_map(function(cell)
+        return cell[1]
+      end, cells)),
+        vim.list.unique(vim.tbl_map(function(cell)
+          return cell[2].background or false
+        end, cells))
     end
 
     it("draws added and deleted lines on changeset's tints, each token in its own colour", function()
@@ -216,6 +241,32 @@ describe("changeset.unified_diff", function()
         { vim.api.nvim_get_hl(0, { name = render.DIFF_ADD_HL }).bg, 0xcccccc },
         { added.background, added.foreground or 0xcccccc }
       )
+    end)
+
+    it("hides gitsigns' signs, drawing an added line's gutter on the line's tint", function()
+      vim.wo.number = true
+
+      vim.cmd.edit("a.txt")
+      row_showing("line 2")
+
+      local added, tints = gutter(row_showing("changed 5"))
+      assert.same({ "4", { vim.api.nvim_get_hl(0, { name = render.DIFF_ADD_HL }).bg } }, { vim.trim(added), tints })
+      assert.same("1", vim.trim((gutter(row_showing("line 1")))))
+    end)
+
+    -- gitsigns' view compares a file new since its base against a base of one blank line, and finds it in the file.
+    it("hides the sign gitsigns puts on a new file's blank line, which the view draws unchanged", function()
+      vim.fn.writefile({ "first", "", "last" }, "new.txt")
+      Fixture.commit("new", dir)
+      require("gitsigns").change_base(base, true)
+      vim.wo.number = true
+
+      vim.cmd.edit("new.txt")
+      assert.is_true(vim.wait(5000, function()
+        return (view(vim.api.nvim_get_current_win()) or {}).hunks ~= nil
+      end, 20))
+
+      assert.same("2", vim.trim((gutter(row_showing("first") + 1))))
     end)
 
     it("keeps the window's own highlight overrides beside them", function()
