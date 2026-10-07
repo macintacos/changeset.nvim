@@ -352,9 +352,10 @@ share a left footer padded with border to the window's width; a window too narro
 drops the key. The other keys stay off the border: `?` lists them all. However a
 review comment's text goes, except the close a taken save makes, it is kept as a draft:
 `q` in normal mode, focus leaving the float, `<S-Esc>` in either mode where the terminal sends it, `:q`,
-`<C-w>c`, an `:e` in the float, quitting Neovim. One `BufUnload` hook on the window's buffer catches
-them all, since the buffer goes with the window (`bufhidden=wipe`), and takes the room
-under the line with it. Plain `<Esc>` still
+`<C-w>c`, quitting Neovim. One `BufUnload` hook on the window's buffer catches them all:
+every close deletes the buffer, which takes with it any other window showing it, such as a
+`:split` made from the float, and the hook takes the room under the line with it. The
+float is `winfixbuf`, so an `:e` in it is refused rather than leaving it showing a file. Plain `<Esc>` still
 only leaves insert mode, so a habitual `<Esc>` on the way to normal mode never closes it.
 A save of only whitespace is no save: it closes the window like `q`, so the blank text
 reaches the same hook and the caller discards it, never storing it.
@@ -547,7 +548,12 @@ colour-blind eye and a monochrome theme; the colour backs it up. The group is th
 green mixed halfway toward `Comment`'s colour and not bold: the same note, faded because
 it is not committed to yet. It means neither added, removed nor error, which the diff and
 diagnostic colours already hold. Hover heads a draft `Draft review comment`, and the
-quickfix list prefixes its text with `[draft] `.
+quickfix list prefixes its text with `[draft] `. Like the saved green, `󰍪`, `◌` and the
+faded green are a deliberate divergence from § Visual system's vocabulary rule: none is in
+use in the config, which has no notion of a note not yet committed to, and borrowing a glyph
+it uses for something else would say the wrong thing. When a draft and a saved review
+comment start on one line, the line's one bubble is the draft's, whatever the store's
+order, since unfinished work is what should stand out; `bubble()` answers the same.
 
 No icon plugin has a category to ask for a comment, so, like the header's branch glyph,
 the bubble is borrowed rather than looked up: `󰍩` is nerd-font Material `message-text`, the
@@ -912,8 +918,9 @@ repository's deliberate choice is none of that save's business.
 
 - **An edit closed without a save keeps a draft.** Closing an existing review comment with
   its text unchanged leaves it alone, so a saved one stays saved. Closing it with changed
-  text stores that text as a draft, which submit leaves out until it is saved again; it
-  echoes, rather than notifies, so notifier plugins don't toast every close. Closing it
+  text stores that text as a draft, which submit leaves out until it is saved again. It
+  notifies at INFO rather than echoing, because a subcommand run from the window echoes
+  straight after the close and would wipe an echo. Closing it
   with only whitespace, by a save key or any other close, asks to delete it instead, since
   an empty review comment is never kept.
 - **The review comment window closes when focus leaves it.** Its `WinLeave` checks once the
@@ -921,7 +928,18 @@ repository's deliberate choice is none of that save's business.
   count: a focused `?` help and the delete dialog, which `hold()` marks before they open.
   `hold()` also leaves insert mode first, as the dialog's keys are normal-mode, and the
   return to the float restarts insert mode where it stopped. A `WinEnter` on the float's
-  buffer fires for a window `nvim_open_win` is still opening, so it checks the window.
+  buffer fires for a window `nvim_open_win` is still opening, so it checks the window. The
+  command-line window doesn't count either: nothing can close while it is open, and
+  leaving it returns to the float.
+- **The window's insert-mode `<C-g>` keys leave insert mode in their own keys.** Each runs
+  `<C-\><C-n>` ahead of its `<Cmd>`, recording the column first, so the command runs, and
+  the delete dialog is open, before any key typed after it: a typed-ahead `D` or `<CR>`
+  answers the dialog, as § Dialogs promises. `plugin/changeset.lua` records, in
+  `vim.g.changeset_window_keys`, the keys it mapped in normal mode that no insert-mode map
+  of the user's clashes with, under `taken()`'s prefix rule, so nvim-surround's insert
+  `<C-g>s` still runs in the window. The window maps them in normal mode too, on its buffer,
+  so `?` describes each as it acts there: save, delete this review comment, or keep a
+  draft, then the key's own action.
 - **A saved review comment leaves insert mode before the window closes.** The save keys
   are pressed while typing and the answer comes later. `stopinsert` only takes effect on
   the next loop iteration, so the window closes on the float's own `InsertLeave`; closing

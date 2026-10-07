@@ -24,8 +24,10 @@ loaded, whether the review comment window is current. If it is, every subcommand
 `reviewing.from_window()`: `comment` saves, `delete` deletes the comment being written, and
 any other closes the window, keeping a draft, then runs from the comment's line in the
 source window. That is the one place the rule lives; no verb checks for the window itself.
-The window maps, in insert mode on its own buffer, each default `<C-g>` key the plugin
-mapped globally in normal mode, read back from the global maps by their `<Plug>` target.
+The window maps, in insert and normal mode on its own buffer, each default `<C-g>` key the
+plugin mapped globally in normal mode and found free of the user's insert-mode maps. The
+plugin records them in `vim.g.changeset_window_keys` once startup is done, so the clash
+rule, `taken()`, lives only in the plugin.
 
 Every subcommand has a `<Plug>(changeset-<subcommand>)` map. The global keys are defaults
 under `<C-g>`, mapped once startup is done. Each one is skipped when its key is already

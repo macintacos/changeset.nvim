@@ -205,7 +205,7 @@ comment window with `review_comment.save`, in [Options](#options).
 | `<CR>` / `r` / `b` | kind menu | remember this set everywhere / for this repository / for this branch, then close |
 | `q` / `<Esc>` | kind menu | close, putting the tree back to the saved set |
 | `<C-CR>` / `<C-s>` / `<C-g>cc` | review comment window | save the review comment and close |
-| `q` / `<S-Esc>` | review comment window | close, keeping changed text as a draft |
+| `q` / `<S-Esc>` | review comment window | close, keeping a new review comment's text, or an edited one's changed text, as a draft |
 | `?` | review comment window | list its keys |
 | `f` | sidebar | filter as you type, keeping ancestors so matches stay in place and highlighting every match until you clear the filter; `<Esc>` cancels and keeps the previous filter |
 | `R` | sidebar | rebuild now |
@@ -282,21 +282,22 @@ either window any other way cancels it.
 
 `:Changeset next-comment` and `:Changeset prev-comment` walk the review comments by file
 and then line, wrapping at either end, and skip any whose file is gone. With a count,
-`<C-g>cn` and `<C-g>cp` move that many comments. From a file they start at the
+`<C-g>cn` and `<C-g>cp` move that many comments, except from inside the review comment
+window, which drops the count. From a file they start at the
 cursor; from the sidebar, at the first or last review comment; from a window that holds
 no file, such as the quickfix list, in the window before it. Like the other verbs, they
 refuse while the file you are in, or the one they would open, has unsaved edits.
 
 `:Changeset last-comment` jumps to the review comment you saved last, passing over drafts,
 and opens it to edit, following the same rules as `:Changeset next-comment`. With none
-saved, it says so.
+saved, it says so, and when that comment's file is gone, it names the file and stops.
 
 `:Changeset list` puts every review comment in the quickfix list, those whose file is
 gone included, a draft's text starting with `[draft]`. Run again while that list is still the current one, it replaces it;
 otherwise it adds a new list.
 
 `:Changeset yank` copies the review's saved comments, as `:Changeset submit` would paste
-them, and keeps the review comments. Without a clipboard provider it copies to the unnamed register and says
+them, keeps the review comments, and says how many drafts it left out. Without a clipboard provider it copies to the unnamed register and says
 so.
 
 The pasted review holds a block per review comment, by file and then line, each naming
@@ -325,25 +326,7 @@ Saving or closing it with only whitespace asks whether to delete it. Closing it 
 text unchanged leaves it as it was; closing it with changed text keeps that text as a
 draft, which submit leaves out until you save it again.
 
-### Drafts
-
-A draft is a review comment kept but not saved. Closing the review comment window any way
-but a save makes one, and the window closes as soon as focus leaves it, so text is never
-lost; it echoes `kept the review comment as a draft`. Reopening a draft, with
-`:Changeset comment` on its line or from its Comments row, resumes its text under the title
-`Edit draft review comment`, and saving it makes it a saved review comment. Submit and yank
-take only saved review comments; next-comment, prev-comment and list include drafts, and
-abandon deletes them too.
-
-### Commands from the review comment window
-
-The review comment window answers `:Changeset` and its `<C-g>` keys as being about the
-comment you are writing. `<C-g>cc` or `:Changeset comment` saves it. `<C-g>d` or
-`:Changeset delete` deletes it, asking first when it is stored or holds text; Keep returns
-you to the window as you left it. Every other subcommand closes the window, keeping a
-draft, then runs from the comment's line in the file, so `<C-g>cn` goes to the next review
-comment after it. With the default keys on, the `<C-g>` keys the plugin mapped work in
-insert mode in the window too.
+### Where review comments show
 
 Each review comment is marked in its file's buffer: a green comment bubble, `󰍩`, fills the
 sign column on its first line over any other sign there, the line numbers it covers turn
@@ -395,6 +378,30 @@ vim.o.statuscolumn = "%{%v:lua.bubble_or_fold()%}%l %s"
 In mini.statuscolumn, a `fold` section can be `%{%v:lua.bubble_or_fold()%}`: `%{%...%}`
 evaluates what the function returns as a format string, so the section draws the bubble on
 a line that carries one and `%C` everywhere else.
+
+### Drafts
+
+A draft is a review comment kept but not saved. Closing the review comment window any way
+but a save makes one, and the window closes as soon as focus leaves it, so text is never
+lost; it notifies `kept the review comment as a draft`. Reopening a draft, with
+`:Changeset comment` on its line or from its Comments row, resumes its text under the title
+`Edit draft review comment`, and saving it makes it a saved review comment. Submit and yank
+take only saved review comments; next-comment, prev-comment and list include drafts, and
+abandon deletes them too.
+
+### Commands from the review comment window
+
+The review comment window answers `:Changeset` and its `<C-g>` keys as being about the
+comment you are writing. `<C-g>cc` or `:Changeset comment` saves it. `<C-g>d` or
+`:Changeset delete` deletes it, asking first when it is stored or holds text; Keep returns
+you to the window as you left it. Every other subcommand closes the window, keeping a
+draft, then runs from the comment's line in the file, so `<C-g>cn` goes to the next review
+comment after it. `<C-g>cl` or `:Changeset last-comment` on the comment saved last stays
+in the window and says so. With the default keys on, the `<C-g>` keys the plugin mapped
+work in insert mode in the window too, except any your own insert-mode maps take, such as
+nvim-surround's `<C-g>s`. `?` lists each as it acts in the window. The command-line window,
+opened from the review comment window, is a detour: the review comment window stays open
+behind it.
 
 ## Picker
 
