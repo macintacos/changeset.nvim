@@ -296,15 +296,13 @@ end
 local function block_rows(state, view)
   local line = anchor_line(state.buf, state.id)
   local blocks = drawn[state.buf]
-  local above, height, after = 0, 0, 0
+  local above, height = 0, 0
   for i, comment in ipairs(blocks.anchors[state.id]) do
     local rows = #box(comment, blocks.widest, false)
     if i < state.index then
       above = above + rows
     elseif i == state.index then
       height = rows
-    else
-      after = after + rows
     end
   end
   local next_line = line + 1
@@ -312,8 +310,10 @@ local function block_rows(state, view)
   if next_line > vim.api.nvim_buf_line_count(state.buf) and line >= view.topline then
     last = rows_through(view, line) + above + height
   elseif next_line >= view.topline then
-    -- The stack is the filler above the next line.
-    last = rows_through(view, next_line) - text_rows(next_line) - after
+    -- The stack heads the filler above the next line, ahead of other marks' virtual lines there, such as gitsigns'
+    -- deleted lines.
+    local filler = vim.api.nvim_win_text_height(0, { start_row = line, end_row = line }).fill
+    last = rows_through(view, next_line) - text_rows(next_line) - filler + above + height
   else
     return 0, 0
   end

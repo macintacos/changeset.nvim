@@ -612,6 +612,18 @@ describe("review comment blocks", function()
       assert.are.same({ 4, 3 }, { vim.fn.winsaveview().topline, vim.fn.winsaveview().topfill })
     end)
 
+    it("shows the parked block whole above virtual lines over the next line, as gitsigns' deleted lines", function()
+      local other = vim.api.nvim_create_namespace("spec.deleted_lines")
+      local deleted = { { { "deleted 1" } }, { { "deleted 2" } } }
+      vim.api.nvim_buf_set_extmark(0, other, 3, 0, { virt_lines = deleted, virt_lines_above = true })
+      go(4)
+      vim.cmd("normal! zt")
+
+      press("k")
+      assert.are.equal(4, lnum())
+      assert.are.same({ 4, 5 }, { vim.fn.winsaveview().topline, vim.fn.winsaveview().topfill })
+    end)
+
     it("keeps a parked block parked when its buffer's windows resize", function()
       go(3)
       press("j")
