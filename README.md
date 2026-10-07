@@ -216,8 +216,7 @@ comment window with `review_comment.save`, in [Options](#options).
 | `<CR>` / `r` / `b` | kind menu | remember this set everywhere / for this repository / for this branch, then close |
 | `q` / `<Esc>` | kind menu | close, putting the tree back to the saved set |
 | `<C-CR>` / `<C-s>` / `<C-g>cc` | review comment window | save the review comment and close |
-| `q` / `<Esc>` | review comment window | in normal mode, close, keeping a new review comment's text, or an edited one's changed text, as a draft, then stop on its block while blocks show |
-| `<S-Esc>` | review comment window | close from either mode, keeping the text as `q` does, without stopping on the block |
+| `q` / `<Esc>` / `<S-Esc>` | review comment window | close, keeping a new review comment's text, or an edited one's changed text, as a draft, then stop on its block while blocks show; `<S-Esc>` works in insert mode too |
 | `?` | review comment window | list its keys |
 | `f` | sidebar | filter as you type, keeping ancestors so matches stay in place and highlighting every match until you clear the filter; `<Esc>` cancels and keeps the previous filter |
 | `R` | sidebar | rebuild now |
@@ -410,7 +409,7 @@ stopped-on block lights its border and lists its keys: `<CR>` or `c` edits the r
 comment, or resumes a draft, `d` asks to delete it, and `<Esc>` or any other key steps
 off. A count, a jump, a search, a macro or a mapping moves past blocks. A draft's block
 has a dashed border in the draft colour. A line's blocks step aside while the review
-comment window is open on it. `q` or `<Esc>` in the window's normal mode closes it stopped on its block.
+comment window is open on it. Closing the window with `q`, `<Esc>` or `<S-Esc>` stops on its block.
 
 Hover shows them too. A file with a mark gets a language server client named `changeset`,
 which answers hover on a line with each review comment whose lines take it in, under a

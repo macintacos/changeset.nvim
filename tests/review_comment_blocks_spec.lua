@@ -385,15 +385,19 @@ describe("review comment blocks", function()
     press("q")
   end)
 
-  for _, key in ipairs({ "<Esc>", "q" }) do
-    it(("parks on the comment's own block when %s in normal mode closes its window"):format(key), function()
+  for _, keys in ipairs({ "<Esc><Esc>", "<Esc>q", "<Esc><S-Esc>", "<S-Esc>" }) do
+    it(("parks on the comment's own block when %s closes its window"):format(keys), function()
       keep({ path = "alpha.txt", start_line = 2, line = 3, body = "range" })
       keep({ path = "alpha.txt", line = 3, body = "short" })
       local alpha = vim.api.nvim_get_current_buf()
       go(3)
       press("jj<CR>")
 
-      press("A more<Esc>" .. key)
+      press("A more" .. keys)
+      -- From insert mode the window closes once insert mode has ended, a loop iteration later.
+      vim.wait(1000, function()
+        return parked() ~= nil
+      end)
       assert.are.equal(alpha, vim.api.nvim_get_current_buf())
       assert.are.same({ 3, "short" }, { parked() })
       assert.truthy(cursor.hidden())

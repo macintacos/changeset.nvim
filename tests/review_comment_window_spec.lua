@@ -142,15 +142,15 @@ describe("review_comment_window", function()
   end)
 
   it("describes its keys with the descriptions it is given", function()
-    local _, buf = open({ save_desc = "Save it", close_desc = "Close it", back_desc = "Go back" })
+    local _, buf = open({ save_desc = "Save it", close_desc = "Close it" })
     for _, mode in ipairs({ "i", "n" }) do
       for _, lhs in ipairs(SAVE_KEYS) do
         assert.equal("Save it", buffer_map(buf, mode, lhs).desc)
       end
       assert.equal("Close it", buffer_map(buf, mode, "<S-Esc>").desc)
     end
-    assert.equal("Go back", buffer_map(buf, "n", "q").desc)
-    assert.equal("Go back", buffer_map(buf, "n", "<Esc>").desc)
+    assert.equal("Close it", buffer_map(buf, "n", "q").desc)
+    assert.equal("Close it", buffer_map(buf, "n", "<Esc>").desc)
   end)
 
   it("saves on each save key, in insert and normal mode", function()

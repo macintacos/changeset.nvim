@@ -364,8 +364,8 @@ review comment's text goes, except the close a taken save makes, it is kept as a
 every close deletes the buffer, which takes with it any other window showing it, such as a
 `:split` made from the float, and the hook takes the room under the line with it. The
 float is `winfixbuf`, so an `:e` in it is refused rather than leaving it showing a file. `<Esc>` in insert mode
-only leaves it; a second, in normal mode, closes the window as `q` does. Both, while blocks show, park the cursor
-on the review comment's block, so the way out lands on what was just written, selected, ready for `<CR>` or `d`.
+only leaves it; a second, in normal mode, closes the window as `q` does. Those keys and `<S-Esc>`, while blocks show, park
+the cursor on the review comment's block, so the way out lands on what was just written, selected, ready for `<CR>` or `d`.
 A save of only whitespace is no save: it closes the window like `q`, so the blank text
 reaches the same hook and the caller discards it, never storing it.
 
