@@ -240,7 +240,7 @@ comment window with `review_comment.save`, in [Options](#options).
 | `R` | sidebar | rebuild now |
 | `y` | sidebar | copy the row's `path:line` to the clipboard; nothing on a section header |
 | `d` | sidebar | on a Comments row, ask, then delete its review comment; nothing on any other row |
-| `/` `-` `<C-t>` | sidebar | open the change in a vsplit / split / new tab instead, opening a Comments row's review comment as `<CR>` does |
+| `<C-v>` `<C-s>` `<C-t>` | sidebar | open the change in a vsplit / split / new tab instead, opening a Comments row's review comment as `<CR>` does |
 | `?` | sidebar | list the keys the sidebar bound: which-key's popup where it is installed, a float where it is not |
 | `]g` / `[g` | anywhere | move the sidebar's selection to the next / previous row, previewing it and skipping section headers, so you can review without focusing the sidebar; a closed sidebar opens first, unfocused, on your row; `<C-g>nn` / `<C-g>np` open the row instead |
 
@@ -525,8 +525,8 @@ Any `keymaps` entry can be `false` to leave that key unbound.
 | --------- | --- | --------------- |
 | `keymaps.jump` | `<CR>` | Go to this change |
 | `keymaps.jump_close` | `<S-CR>` | Go to this change and close the sidebar |
-| `keymaps.jump_vsplit` | `/` | Go to this change in a vertical split |
-| `keymaps.jump_split` | `-` | Go to this change in a split |
+| `keymaps.jump_vsplit` | `<C-v>` | Go to this change in a vertical split |
+| `keymaps.jump_split` | `<C-s>` | Go to this change in a split |
 | `keymaps.jump_tab` | `<C-t>` | Go to this change in a new tab |
 | `keymaps.close` | `q` | Close the sidebar |
 | `keymaps.expand` | `l` | Expand |
@@ -550,7 +550,8 @@ Any `keymaps` entry can be `false` to leave that key unbound.
 Each `setup()` call starts from the defaults, not from the previous call. The sidebar
 picks up its options the next time it opens. Turning on `pr_review.enabled` takes effect
 at once, but turning it off again takes a restart. An invalid value raises an error
-naming the option, and the previous configuration stays in force.
+naming the option, and the previous configuration stays in force. An option changeset
+doesn't know is ignored, with a warning naming it.
 
 ## Highlight groups
 
@@ -622,7 +623,7 @@ so defining either paints every glyph there one colour. The status rail beside e
 ## Health
 
 `:checkhealth changeset` reports the requirements, each optional integration the sidebar
-does without, and the options in force.
+does without, and the options in force, warning about any it ignored as unknown.
 
 It loads plugins the way the sidebar does, so it may load one your plugin manager
 deferred. It installs nothing, starts no language server and makes no network request.
