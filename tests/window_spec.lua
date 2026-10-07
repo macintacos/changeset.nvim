@@ -1,3 +1,4 @@
+local render = require("changeset.render")
 local window = require("changeset.window")
 
 ---What the band says is the sidebar's business; these tests only need one to pass on.
@@ -567,14 +568,13 @@ describe("changeset.window", function()
       )
     end)
 
-    it("keeps one notice highlight however often the notice is shown", function()
+    it("highlights a notice's text", function()
       local _, right = staged()
 
       window.preview_notice("This file was deleted", BAND)
-      window.preview_notice("This file was deleted", BAND)
 
       local buf = vim.api.nvim_win_get_buf(right)
-      local ns = vim.api.nvim_get_namespaces()["changeset.notice"]
+      local ns = vim.api.nvim_get_namespaces()["changeset.stand_in"]
       local marks = vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, {})
       assert.equal(1, #marks)
       assert.truthy(
@@ -591,6 +591,74 @@ describe("changeset.window", function()
 
       assert.equal(before, #vim.api.nvim_tabpage_list_wins(0))
       assert.equal(vim.fn.resolve(one), showing(right))
+    end)
+
+    it("shows a deleted file's lines as read-only text of its filetype, every line tinted as deleted", function()
+      local _, right = staged()
+      window.focus()
+
+      window.preview_deleted("src/gone.lua", "local a = 1\n\nreturn a\n", BAND)
+
+      local buf = vim.api.nvim_win_get_buf(right)
+      assert.same({ "local a = 1", "", "return a" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+      assert.equal("lua", vim.bo[buf].filetype)
+      assert.is_false(vim.bo[buf].modifiable)
+      assert.is_false(vim.bo[buf].buflisted)
+      for row = 0, 2 do
+        local tints = vim.tbl_filter(function(mark)
+          return mark[4].line_hl_group == render.DIFF_DELETE_HL
+        end, vim.api.nvim_buf_get_extmarks(buf, -1, { row, 0 }, { row, -1 }, { details = true, overlap = true }))
+        assert(#tints > 0, ("line %d is not tinted as deleted"):format(row + 1))
+      end
+    end)
+
+    it("previews a file into the window a deleted file's lines are standing in", function()
+      local _, right, one = staged()
+      window.preview_deleted("src/gone.lua", "local a = 1\n", BAND)
+      local before = #vim.api.nvim_tabpage_list_wins(0)
+
+      window.preview(one, 2, BAND)
+
+      assert.equal(before, #vim.api.nvim_tabpage_list_wins(0))
+      assert.equal(vim.fn.resolve(one), showing(right))
+    end)
+
+    it("shows one stand-in after another in the same window", function()
+      local _, right = staged()
+      window.preview_notice("This file was deleted", BAND)
+      local before = #vim.api.nvim_tabpage_list_wins(0)
+
+      window.preview_deleted("src/gone.lua", "local a = 1\n", BAND)
+
+      assert.equal(before, #vim.api.nvim_tabpage_list_wins(0))
+      assert.same({ "local a = 1" }, vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(right), 0, -1, false))
+    end)
+
+    it("lets go of a deleted file's lines once a preview replaces them", function()
+      local _, right, one = staged()
+      window.preview_deleted("src/gone.lua", "local a = 1\n", BAND)
+      local stand_in = vim.api.nvim_win_get_buf(right)
+
+      window.preview(one, 2, BAND)
+
+      assert.is_false(vim.api.nvim_buf_is_valid(stand_in))
+    end)
+
+    it("leaves an older stand-in borrowed when the cursor moves into it", function()
+      local left, right = staged()
+      vim.api.nvim_set_current_win(left)
+      window.focus()
+      window.preview_deleted("src/a.lua", "local a = 1\n", BAND)
+      local older = vim.api.nvim_win_get_buf(left)
+      vim.api.nvim_set_current_win(right)
+      window.focus()
+      window.preview_deleted("src/b.lua", "local b = 2\n", BAND)
+
+      vim.api.nvim_set_current_win(left)
+      window.claim()
+
+      assert.equal(older, vim.api.nvim_win_get_buf(left))
+      assert.is_false(vim.bo[older].buflisted)
     end)
 
     it("leaves a notice borrowed when the cursor moves into it", function()

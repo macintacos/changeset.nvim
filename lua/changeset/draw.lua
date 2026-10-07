@@ -58,13 +58,15 @@ end
 ---@return changeset.Band
 function M.band_for(row, jump)
   local glyph, hl = icons.get("file", row.path)
+  local deleted = row.kind == "file" and row.status == "deleted"
   return {
     icon = glyph,
     icon_hl = render.band_icon(hl),
     path = row.path,
     -- Only a symbol row names its destination. An orphan hunk's own text is the
-    -- changed line, which is not a place and does not read as one.
-    destination = row.kind == "symbol" and row.name or nil,
+    -- changed line, which is not a place and does not read as one. The jump key opens
+    -- nothing on a deleted file, so its band says why instead.
+    destination = deleted and "deleted on this branch" or row.kind == "symbol" and row.name or nil,
     jump = jump,
   }
 end
@@ -222,6 +224,19 @@ local function hold_place(win, top, moved)
   vim.api.nvim_win_call(win, function()
     vim.fn.winrestview({ topline = math.max(1, top + moved) })
   end)
+  M.reveal_header(win)
+end
+
+---Whether `win`, scrolled to its top with the header's rows showing, shows line `lnum` and the `'scrolloff'` rows
+---below it, which Neovim would otherwise scroll in.
+---@param win integer
+---@param lnum integer
+---@return boolean
+local function in_view_from_top(win, lnum)
+  local height = vim.fn.winheight(win)
+  local so = math.min(vim.wo[win].scrolloff, math.floor((height - 1) / 2))
+  local last = math.min(lnum - 1 + so, vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win)) - 1)
+  return vim.api.nvim_win_text_height(win, { end_row = last }).all <= height
 end
 
 ---Draw the sidebar's view of the tree, then its header and row states.
@@ -264,11 +279,11 @@ function M.draw(kinds_key)
   hidden_note_line(buf, #text - 1, render.hidden_note(hiding, width - 1, kinds_key))
 
   vim.api.nvim_win_set_cursor(win, { lnum, 0 })
-  if lnum ~= cursor then
+  -- After the header, whose rows decide whether the cursor's row still fits under the top.
+  draw_header(buf, win, width)
+  if lnum ~= cursor and not (top == 1 and in_view_from_top(win, lnum)) then
     hold_place(win, top, lnum - cursor)
   end
-
-  draw_header(buf, win, width)
   M.paint()
 end
 

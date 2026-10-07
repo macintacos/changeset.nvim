@@ -10,6 +10,7 @@ local actions = require("changeset.actions")
 local build = require("changeset.build")
 local comment_store = require("changeset.comment_store")
 local config = require("changeset.config")
+local diff = require("changeset.diff")
 local draw = require("changeset.draw")
 local render = require("changeset.render")
 local Rows = require("changeset.rows")
@@ -51,6 +52,34 @@ local opened_id
 ---Whether the sidebar's next `WinEnter` is a step handing focus back, which mustn't land on your row and undo it.
 local stepping_back = false
 
+local DELETED = "This file was deleted on this branch"
+
+-- snacks.nvim's bigfile size: past it a buffer's synchronous treesitter parse takes noticeable time, on every pass
+-- over the row.
+local PREVIEW_MAX_BYTES = 1.5 * 1024 * 1024
+
+---Preview what `row`'s file held at `tree`'s base before the branch deleted it, else the notice that it was deleted.
+---git answers later, by when the cursor may have left the row, or you the window you asked from; either then previews
+---nothing, rather than swap the buffer of a window you have since entered.
+---@param tree changeset.Tree
+---@param row changeset.Row
+local function preview_deleted(tree, row)
+  local band = draw.band_for(row, bound_keys.jump)
+  local from = vim.api.nvim_get_current_win()
+  diff.blob(tree.base .. ":" .. row.path, tree.root, function(text)
+    local still = draw.row_at_cursor()
+    if not (still and still.id == row.id and vim.api.nvim_get_current_win() == from) then
+      return
+    end
+    -- A NUL is git's own test for a binary file.
+    if text and #text <= PREVIEW_MAX_BYTES and not text:find("\0", 1, true) then
+      window.preview_deleted(row.path, text, band)
+    else
+      window.preview_notice(DELETED, band)
+    end
+  end)
+end
+
 local function preview_current()
   local state = sidebar_state.current()
   local row = draw.row_at_cursor()
@@ -60,10 +89,10 @@ local function preview_current()
     return
   end
   assert(state, "changeset: no tree built yet")
-  local gone = row.kind == "file" and row.status == "deleted"
-    or row.kind == "comment" and vim.fn.filereadable(state.tree.root .. "/" .. row.path) == 0
-  if gone then
-    window.preview_notice("This file was deleted on this branch", draw.band_for(row, bound_keys.jump))
+  if row.kind == "file" and row.status == "deleted" then
+    preview_deleted(state.tree, row)
+  elseif row.kind == "comment" and vim.fn.filereadable(state.tree.root .. "/" .. row.path) == 0 then
+    window.preview_notice(DELETED, draw.band_for(row, bound_keys.jump))
   elseif row.kind == "comment" or (row.lnum and row.kind ~= "file") then
     window.preview(
       state.tree.root .. "/" .. row.path,

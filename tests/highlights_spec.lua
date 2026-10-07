@@ -210,13 +210,20 @@ describe("changeset row highlights", function()
     assert.same({ path = "other.lua", lnum = 1 }, recorded_here())
   end)
 
-  it("does not count a deleted file's notice as being in that file", function()
+  it("does not count a deleted file's preview as being in that file", function()
     Fixture.git({ "rm", "-q", "other.lua" }, tmp)
     Fixture.commit("drop other", tmp)
     vim.cmd.edit("mod.lua")
     vim.api.nvim_win_set_cursor(0, { 5, 0 })
     open_sidebar()
     Sidebar.cursor_to("other.lua")
+    local target = vim.fn.win_getid(vim.fn.winnr("#"))
+    assert(
+      vim.wait(2000, function()
+        return vim.bo[vim.api.nvim_win_get_buf(target)].buftype == "nofile"
+      end, 10),
+      "the deleted file's preview never landed"
+    )
 
     vim.cmd.wincmd("p")
 

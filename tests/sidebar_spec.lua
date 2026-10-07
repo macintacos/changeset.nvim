@@ -157,6 +157,70 @@ describe("changeset sidebar", function()
     assert.truthy(vim.api.nvim_win_call(assert(window.win()), vim.fn.winsaveview).topfill > 0)
   end)
 
+  describe("as the Comments section arrives above the cursor", function()
+    local comment_store = require("changeset.comment_store")
+    local columns
+
+    before_each(function()
+      os.remove(comment_store.path())
+      columns = vim.o.columns
+    end)
+
+    after_each(function()
+      vim.o.columns = columns
+      os.remove(comment_store.path())
+    end)
+
+    it("keeps the top of a tree that fits in view, totals and all", function()
+      -- Wide enough for the tree to stand beside the files, at the editor's height.
+      vim.o.columns = 200
+      local buf = open_sidebar()
+      local win = assert(window.win())
+      vim.api.nvim_win_set_cursor(win, { line_of(buf, "other.lua"), 0 })
+
+      comment_store.keep(build.current().root, { path = "mod.lua", line = 4, body = "why 2" })
+
+      assert.equal(1, line_of(buf, "Comments"))
+      assert.equal(line_of(buf, "other.lua"), vim.api.nvim_win_get_cursor(win)[1])
+      local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+      assert.same({ 1, 2 }, { view.topline, view.topfill })
+    end)
+
+    it(
+      "keeps the cursor's row in place once the section would push its 'scrolloff' rows out of view from the top",
+      function()
+        vim.o.columns = 200
+        local buf = open_sidebar()
+        local win = assert(window.win())
+        vim.wo[win].scrolloff = 10
+        local before = line_of(buf, "Implementation") + 1
+        vim.api.nvim_win_set_cursor(win, { before, 0 })
+        -- Room under the top for the section and the cursor's row, but not for 'scrolloff' rows below it as well.
+        vim.api.nvim_win_set_height(win, before + 6)
+
+        comment_store.keep(build.current().root, { path = "mod.lua", line = 4, body = "why 2" })
+
+        local after = line_of(buf, "Implementation") + 1
+        assert.equal(after, vim.api.nvim_win_get_cursor(win)[1])
+        assert.equal(1 + after - before, vim.api.nvim_win_call(win, vim.fn.winsaveview).topline)
+      end
+    )
+
+    it("keeps the cursor's row in place once the section would push it out of view from the top", function()
+      -- At 80 columns the tree stands in a drawer below the files, which it fills.
+      local buf = open_sidebar()
+      local win = assert(window.win())
+      local before = line_of(buf, "other.lua")
+      vim.api.nvim_win_set_cursor(win, { before, 0 })
+
+      comment_store.keep(build.current().root, { path = "mod.lua", line = 4, body = "why 2" })
+
+      local after = line_of(buf, "other.lua")
+      assert.equal(after, vim.api.nvim_win_get_cursor(win)[1])
+      assert.equal(1 + after - before, vim.fn.line("w0", win))
+    end)
+  end)
+
   it("redraws the tree across the bottom of the editor once it narrows", function()
     local columns = vim.o.columns
     vim.o.columns = 200
@@ -1040,16 +1104,24 @@ describe("changeset sidebar", function()
   end)
 
   describe("on a file the branch deleted", function()
+    local diff = require("changeset.diff")
+    local real_blob = diff.blob
+
     before_each(function()
       Fixture.git({ "rm", "-q", "other.lua" }, tmp)
       Fixture.commit("drop other", tmp)
     end)
 
-    ---Open the sidebar from `mod.lua` and move its cursor onto the deleted row.
+    after_each(function()
+      diff.blob = real_blob
+    end)
+
+    ---Open the sidebar from `mod.lua`, move its cursor onto the deleted row, and wait for its preview.
     ---@return integer target The window the preview goes to.
     local function on_deleted_row()
       vim.cmd.edit("mod.lua")
       local target = vim.api.nvim_get_current_win()
+      local from = vim.api.nvim_get_current_buf()
       local buf = open_sidebar()
       local lnum
       for i, line in ipairs(lines_of(buf)) do
@@ -1063,6 +1135,12 @@ describe("changeset sidebar", function()
       vim.api.nvim_set_current_win(win)
       vim.api.nvim_win_set_cursor(0, { lnum, 0 })
       vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+      assert(
+        vim.wait(2000, function()
+          return vim.api.nvim_win_get_buf(target) ~= from
+        end, 10),
+        "the deleted row previewed nothing"
+      )
       return target
     end
 
@@ -1076,11 +1154,79 @@ describe("changeset sidebar", function()
       return false
     end
 
-    it("previews a notice that the file was deleted", function()
+    it("previews what the file held at the base, under a band saying it was deleted", function()
+      local target = on_deleted_row()
+
+      assert.same({ "return { a = 1 }" }, lines_of(vim.api.nvim_win_get_buf(target)))
+      local band = vim.api.nvim_eval_statusline(vim.wo[target].winbar, { winid = target, use_winbar = true }).str
+      assert.truthy(band:find("deleted", 1, true), "the band reads: " .. band)
+    end)
+
+    it("previews a notice that the file was deleted when git can't read it at the base", function()
+      diff.blob = function(_, _, callback)
+        callback(nil)
+      end
+
       local target = on_deleted_row()
 
       local text = table.concat(lines_of(vim.api.nvim_win_get_buf(target)), "\n")
       assert.truthy(text:find("deleted", 1, true))
+    end)
+
+    for what, text in pairs({
+      binary = "a\0b\n",
+      ["too big to read"] = ("x"):rep(80) .. ("\n" .. ("x"):rep(80)):rep(20000),
+    }) do
+      it("previews a notice that the file was deleted when what it held is " .. what, function()
+        diff.blob = function(spec, root, callback)
+          if not vim.endswith(spec, ":other.lua") then
+            return real_blob(spec, root, callback)
+          end
+          callback(text)
+        end
+
+        local target = on_deleted_row()
+
+        local shown = table.concat(lines_of(vim.api.nvim_win_get_buf(target)), "\n")
+        assert.truthy(shown:find("deleted", 1, true))
+      end)
+    end
+
+    it("leaves the next row's preview standing when git answers after the cursor moved on", function()
+      vim.cmd.edit("mod.lua")
+      local target = vim.api.nvim_get_current_win()
+      local buf = open_sidebar()
+      local answer
+      diff.blob = function(_, _, callback)
+        answer = callback
+      end
+      vim.api.nvim_set_current_win((assert(window.win())))
+      vim.api.nvim_win_set_cursor(0, { line_of(buf, "other.lua"), 0 })
+      vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+      vim.api.nvim_win_set_cursor(0, { line_of(buf, "mod.lua"), 0 })
+      vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+
+      answer("return { a = 1 }\n")
+
+      assert.equal("mod.lua", vim.fs.basename(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(target))))
+    end)
+
+    it("leaves the window you went to alone when git answers after you left the sidebar for it", function()
+      vim.cmd.edit("mod.lua")
+      local target = vim.api.nvim_get_current_win()
+      local buf = open_sidebar()
+      local answer
+      diff.blob = function(_, _, callback)
+        answer = callback
+      end
+      vim.api.nvim_set_current_win((assert(window.win())))
+      vim.api.nvim_win_set_cursor(0, { line_of(buf, "other.lua"), 0 })
+      vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+      vim.api.nvim_set_current_win(target)
+
+      answer("return { a = 1 }\n")
+
+      assert.equal("mod.lua", vim.fs.basename(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(target))))
     end)
 
     it("opens nothing for the deleted file on <CR>", function()
@@ -1091,15 +1237,15 @@ describe("changeset sidebar", function()
       assert.is_false(deleted_file_loaded())
     end)
 
-    it("chooses nothing when the cursor moves into the notice", function()
+    it("chooses nothing when the cursor moves into its preview", function()
       local target = on_deleted_row()
-      local notice = vim.api.nvim_win_get_buf(target)
+      local previewed = vim.api.nvim_win_get_buf(target)
       local listed = #vim.fn.getbufinfo({ buflisted = 1 })
 
       vim.cmd.wincmd("p")
 
       assert.equal(target, vim.api.nvim_get_current_win())
-      assert.equal(notice, vim.api.nvim_win_get_buf(target))
+      assert.equal(previewed, vim.api.nvim_win_get_buf(target))
       assert.equal(listed, #vim.fn.getbufinfo({ buflisted = 1 }))
     end)
   end)

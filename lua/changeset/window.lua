@@ -20,7 +20,7 @@ local NAME = "changeset://"
 ---@type table<string, string>
 local SPLIT_CMD = { vsplit = "vsplit", split = "split", tab = "tabnew" }
 
-local notice_ns = vim.api.nvim_create_namespace("changeset.notice")
+local stand_in_ns = vim.api.nvim_create_namespace("changeset.stand_in")
 
 -- Normal and visual mode only: the filter prompt on the command line still needs
 -- a cursor to type at.
@@ -36,8 +36,7 @@ local NO_CURSOR = "n-v:" .. render.NO_CURSOR_HL
 ---Beside the files, or below them as a drawer.
 ---@alias changeset.Layout "sidebar"|"drawer"
 
--- `notice_buf` outlives close() and is reused.
----@type { win: integer?, buf: integer?, notice_buf: integer?, layout: changeset.Layout?, borrowed: table<integer, changeset.Snapshot> }
+---@type { win: integer?, buf: integer?, layout: changeset.Layout?, borrowed: table<integer, changeset.Snapshot> }
 local sidebar = { borrowed = {} }
 
 ---@param columns integer The editor's width.
@@ -115,7 +114,7 @@ function M._clamp(lnum, line_count)
   return math.max(1, math.min(lnum, line_count))
 end
 
----A window a preview can go to: still open, not the sidebar, not a float, and holding a file or the sidebar's notice.
+---A window a preview can go to: still open, not the sidebar, not a float, and holding a file or a stand-in for one.
 ---@param win integer
 ---@return boolean
 local function usable(win)
@@ -126,7 +125,7 @@ local function usable(win)
     return false
   end
   local buf = vim.api.nvim_win_get_buf(win)
-  return buf == sidebar.notice_buf or vim.bo[buf].buftype == ""
+  return vim.b[buf].changeset_stand_in or vim.bo[buf].buftype == ""
 end
 
 ---Windows in this tabpage that can hold a file. A float is not one of them, and
@@ -442,23 +441,46 @@ function M._centred(text, width, height)
   return lines, row
 end
 
+---A buffer to stand in for a file that can't be opened. A new one each time, so no filetype carries over from the
+---last, which goes once no window shows it.
+---@return integer buf
+local function new_stand_in()
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].bufhidden = "wipe"
+  vim.b[buf].changeset_stand_in = true
+  return buf
+end
+
 ---Show `text` where a file preview would go, in place of a file.
 ---@param text string
 ---@param band changeset.Band What the band over the window says about the row.
 function M.preview_notice(text, band)
-  local buf = sidebar.notice_buf
-  if not (buf and vim.api.nvim_buf_is_valid(buf)) then
-    buf = vim.api.nvim_create_buf(false, true)
-    sidebar.notice_buf = buf
-  end
+  local buf = new_stand_in()
   local info = vim.fn.getwininfo(borrow(buf, band))[1]
   local lines, row = M._centred(text, info.width - info.textoff, info.height)
-  vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
   local line = lines[row + 1]
-  vim.api.nvim_buf_clear_namespace(buf, notice_ns, 0, -1)
-  vim.api.nvim_buf_set_extmark(buf, notice_ns, row, #line - #text, { end_col = #line, hl_group = render.META_HL })
+  vim.api.nvim_buf_set_extmark(buf, stand_in_ns, row, #line - #text, { end_col = #line, hl_group = render.META_HL })
+end
+
+---Show `text`, what `path` held before the branch deleted it, where a file preview would go: highlighted as its
+---filetype, and every line tinted as the unified diff tints a deleted one.
+---@param path string Names the filetype.
+---@param text string
+---@param band changeset.Band What the band over the window says about the row.
+function M.preview_deleted(path, text, band)
+  local buf = new_stand_in()
+  local lines = vim.split((text:gsub("\n$", "")), "\n", { plain = true })
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].modifiable = false
+  vim.api.nvim_buf_set_extmark(buf, stand_in_ns, 0, 0, { end_row = #lines - 1, line_hl_group = render.DIFF_DELETE_HL })
+  -- Named before it is shown, as `buffers.load` names a file's, so its `FileType` handlers set nothing on the window.
+  local filetype = vim.filetype.match({ buf = buf, filename = path })
+  if filetype then
+    vim.bo[buf].filetype = filetype
+  end
+  borrow(buf, band)
 end
 
 ---Make `buf` the chosen contents of `win`: focus it, leave `<C-o>` pointing where
@@ -523,8 +545,8 @@ function M.claim()
   local win = vim.api.nvim_get_current_win()
   local snapshot = M.is_visible() and sidebar.borrowed[win]
   local buf = vim.api.nvim_win_get_buf(win)
-  -- A notice stands in for a file that cannot be opened, so there is nothing to choose.
-  if not snapshot or snapshot.standing_buf == buf or buf == sidebar.notice_buf then
+  -- A stand-in is for a file that cannot be opened, so there is nothing to choose.
+  if not snapshot or snapshot.standing_buf == buf or vim.b[buf].changeset_stand_in then
     return
   end
   -- The user may have scrolled the preview before reaching it; the swaps inside

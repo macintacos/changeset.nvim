@@ -219,7 +219,7 @@ describe("changeset preview band", function()
       Fixture.commit("drop other", tmp)
     end)
 
-    it("comes off the notice when the cursor moves into it", function()
+    it("comes off its preview when the cursor moves into it", function()
       local file = open_sidebar()
       local win = assert(window.win())
       vim.api.nvim_set_current_win(win)
@@ -231,20 +231,32 @@ describe("changeset preview band", function()
       end
       vim.api.nvim_win_set_cursor(0, { assert(lnum), 0 })
       vim.api.nvim_exec_autocmds("CursorMoved", { buffer = window.buf() })
-      assert.is_true(banded(file), "the notice never landed")
+      assert.is_true(
+        vim.wait(2000, function()
+          return banded(file)
+        end, 10),
+        "the preview never landed"
+      )
 
       vim.cmd.wincmd("p")
 
       assert_unbanded_here()
     end)
 
-    it("stays off the notice reached with ]g from the file window", function()
+    it("stays off its preview reached with ]g from the file window", function()
       open_sidebar()
 
       for _ = 1, 6 do
         step(1)
         assert_unbanded_here()
       end
+      assert.is_true(
+        vim.wait(2000, function()
+          return vim.bo.buftype == "nofile"
+        end, 10),
+        "the preview never landed"
+      )
+      assert_unbanded_here()
     end)
   end)
 end)

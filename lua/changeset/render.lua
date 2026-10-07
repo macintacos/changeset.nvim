@@ -46,7 +46,7 @@ local symbols = require("changeset.symbols")
 ---@field icon string       Glyph for the previewed file's type.
 ---@field icon_hl string    Group to draw it in, from `band_icon`.
 ---@field path string       Repo-relative path of the previewed file.
----@field destination string? What the jump key lands on; absent for a row that names nothing.
+---@field destination string? What the right edge says: where the jump key lands, or why it opens nothing; absent for a row that names nothing.
 ---@field jump (string|false)? The jump key the sidebar bound; absent or `false` for none.
 
 ---@class changeset.Empty
