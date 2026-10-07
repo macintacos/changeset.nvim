@@ -915,6 +915,54 @@ A parent guessed from the refs, such as the branch whose tip is nearest, isn't t
 costs a merge-base per branch on every build, and any branch sharing that history can
 claim it.
 
+## Every file shows its diff inline
+
+Once the sidebar has opened, every file window shows gitsigns' unified diff, the view
+`:Gitsigns diffthis unified=true` draws: the base's removed lines as virtual lines above
+what replaced them, the added lines lit. The sidebar maps where the branch changed, and
+this keeps those changes in sight in the file being worked on, long after the sidebar has
+closed. Opening the sidebar is the switch rather than an option, because a session that
+opens it is reading a branch, and one that never does is left as gitsigns left it. It
+compares against gitsigns' own base, the fork point under PR Review Mode, so the gutter and
+the inline lines always agree.
+
+gitsigns keeps one view per window and drops it when the buffer leaves the window, so
+changeset opens one wherever a file comes to be shown: a window taking a buffer, a buffer or
+window entered, which covers a split of a window already showing it, and a preview, whose
+buffer swap fires no autocommand and so opens its own. A file gitsigns has not read yet
+gets its view on its `GitSignsUpdate`, once the base text is in. The same event, and
+entering the window, reopen a view whose base gitsigns has since replaced, as PR Review
+Mode's arrival does moments after the sidebar opens. A move that leaves the counts alone
+publishes nothing, so its view follows on the next entry.
+
+It doesn't run `diffthis`. That takes the current window only once it has made the buffer
+holding the base, which can wait on git, and from a preview or a `GitSignsUpdate` the
+current window by then is the sidebar or another file. changeset makes that buffer and
+shows the view in the window it meant, with the two gitsigns functions `diffthis` is built
+from, reaching into gitsigns' internals as PR Review Mode does. Without gitsigns, or with
+one too old to have unified views, nothing happens. Skipping `diffthis` also gives a
+conflicted file a view in its own window, instead of the three-way split `diffthis` opens
+for one.
+
+Closing one of changeset's views in any window, with gitsigns' toggle or by switching to
+its split diff, turns it off for every file opened later, until Neovim exits; views already
+open stay until closed. Nothing writes it down, so the next session's first sidebar turns it
+on again. A view counts as closed by the user when it is gone as focus leaves its buffer or
+window with that buffer still in it: before gitsigns' `BufWinLeave` drops a view on a
+buffer leaving its window. A reload (`:e!`) takes the view with the buffer's unload, so an
+unload forgets the views still standing on it, or on its base, and they reopen on the
+reloaded file. A closed view is gone by the time its base unloads, so that unload doesn't
+excuse it. `GitSignsUpdate` can't tell: a buffer being deleted loses its view, then
+publishes a last update mid-unload, with its status already cleared and no buffer allowed
+to change. So a vanished view is never reopened from there, and a buffer without a status
+never gets one.
+
+Review comments draw their virtual lines at column 0, which Neovim draws ahead of gitsigns'
+deleted lines under the same line. So the review comment window's room and a line's blocks
+stay directly under their line, the deleted lines after them. A parked block's rows are
+counted from the head of the filler above the next line rather than its end, since the
+deleted lines over the next line sit between the stack and that line.
+
 ## What it remembers
 
 The tree is built the first time something asks for it — `:Changeset`, the picker

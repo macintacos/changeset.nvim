@@ -51,8 +51,8 @@ Each optional integration adds a feature:
 - which-key: `?` opens its popup instead of a float, and its popup shows an icon beside
   each default key.
 - mini.pick (once set up): the [Picker](#picker).
-- gitsigns: [PR Review Mode](#pr-review-mode), and the colours of the status rail (the
-  `▎` bar beside each file).
+- gitsigns: [PR Review Mode](#pr-review-mode), the [unified diff](#unified-diff) in each
+  file, and the colours of the status rail (the `▎` bar beside each file).
 
 ## Installation
 
@@ -62,7 +62,7 @@ With `vim.pack`:
 vim.pack.add({
   "https://github.com/macintacos/changeset.nvim",
   -- Optional:
-  "https://github.com/lewis6991/gitsigns.nvim", -- PR Review Mode, status rail colours
+  "https://github.com/lewis6991/gitsigns.nvim", -- PR Review Mode, unified diff, status rail colours
   "https://github.com/nvim-mini/mini.icons", -- icons, once set up
   "https://github.com/nvim-mini/mini.pick", -- the Picker, once set up
   "https://github.com/folke/which-key.nvim", -- `?` opens its popup
@@ -76,7 +76,7 @@ With lazy.nvim:
   "macintacos/changeset.nvim",
   dependencies = {
     -- Optional:
-    { "lewis6991/gitsigns.nvim", opts = {} }, -- PR Review Mode, status rail colours
+    { "lewis6991/gitsigns.nvim", opts = {} }, -- PR Review Mode, unified diff, status rail colours
     { "nvim-mini/mini.icons", opts = {} }, -- icons
     { "nvim-mini/mini.pick", opts = {} }, -- the Picker
     { "folke/which-key.nvim", opts = {} }, -- `?` opens its popup
@@ -245,6 +245,19 @@ It turns itself on for every branch except the default. `:Changeset review mode`
 or back on, for the current branch until Neovim exits.
 
 It works without the sidebar, and the sidebar works without it.
+
+## Unified diff
+
+Once the sidebar has opened, every file you open shows gitsigns' unified diff, as
+`:Gitsigns diffthis unified=true` draws it: the lines removed since gitsigns' base sit
+inline above the lines that replaced them, and the added lines are highlighted. It compares
+against the same base as gitsigns' gutter, the branch's fork point under
+[PR Review Mode](#pr-review-mode) and the index otherwise, follows that base as it moves,
+and stays on after the sidebar closes. It needs gitsigns, and does nothing without it.
+
+Closing it in any window, with `:Gitsigns diffthis unified=true`, turns it off for every
+file you open afterwards, until Neovim exits. Files already showing it keep it until you
+close it there too. The next session turns it on again the first time the sidebar opens.
 
 ## Review comments
 
@@ -563,6 +576,7 @@ deferred. It installs nothing, starts no language server and makes no network re
 - Sessions: `:mksession` restores the sidebar when `'sessionoptions'` contains `blank`
   (the default), and its cursor row too when it also contains `globals`.
 - Folds: kept in memory per repository until Neovim exits.
+- Turning the [unified diff](#unified-diff) off: kept in memory until Neovim exits.
 
 <!-- panvimdoc-ignore-start -->
 
