@@ -286,10 +286,28 @@ function M.delete()
   drop(repository, comment)
 end
 
+---"1 draft", "2 drafts".
+---@param n integer
+---@return string
+local function drafts_label(n)
+  return n == 1 and "1 draft" or ("%d drafts"):format(n)
+end
+
+---`comments` split into the saved ones and how many are drafts.
+---@param comments changeset.ReviewComment[]
+---@return changeset.ReviewComment[] saved, integer drafts
+local function split_drafts(comments)
+  local saved = vim.tbl_filter(function(comment)
+    return not comment.draft
+  end, comments)
+  return saved, #comments - #saved
+end
+
 ---Asks, then deletes every review comment of the repository.
 function M.abandon()
   local repository = root()
-  local count = #comment_store.list(repository)
+  local comments = comment_store.list(repository)
+  local count, drafts = #comments, select(2, split_drafts(comments))
   if count == 0 then
     return say(vim.log.levels.INFO, "no review to abandon in %s", repository)
   end
@@ -298,8 +316,14 @@ function M.abandon()
     title = "Abandon the review",
     body = {
       {
-        text = count == 1 and ("Deletes the review comment in %s. It can't be brought back."):format(name)
-          or ("Deletes all %d review comments in %s. They can't be brought back."):format(count, name),
+        text = count == 1 and ("Deletes the %sreview comment in %s. It can't be brought back."):format(
+          drafts == 1 and "draft " or "",
+          name
+        ) or ("Deletes all %d review comments in %s%s. They can't be brought back."):format(
+          count,
+          name,
+          drafts == 0 and "" or ("; %d %s a draft"):format(drafts, drafts == 1 and "is" or "are")
+        ),
       },
     },
     action = "Abandon",
@@ -395,13 +419,18 @@ local function reader(repository)
   end
 end
 
----Pastes the repository's review comments into an agent's prompt through herdr, then deletes the ones pasted.
+---Pastes the repository's saved review comments into an agent's prompt through herdr, then deletes the ones pasted.
+---Drafts stay.
 function M.submit()
   local repository = root()
-  local comments = comment_store.list(repository)
+  local comments, drafts = split_drafts(comment_store.list(repository))
   if #comments == 0 then
+    if drafts > 0 then
+      return say(vim.log.levels.INFO, "nothing saved to submit, only %s", drafts_label(drafts))
+    end
     return say(vim.log.levels.INFO, "no review comments to submit")
   end
+  local staying = drafts > 0 and ("; %s %s"):format(drafts_label(drafts), drafts == 1 and "stays" or "stay") or ""
   require("changeset.herdr").send(M._review_text(comments, reader(repository)), function(err, agent)
     if err then
       return say(vim.log.levels.WARN, "can't submit the review: %s", err)
@@ -420,7 +449,7 @@ function M.submit()
         comment_store.path()
       )
     end
-    say(vim.log.levels.INFO, "submitted the review to %s: its %s in the prompt", agent, count)
+    say(vim.log.levels.INFO, "submitted the review to %s: its %s in the prompt%s", agent, count, staying)
   end)
 end
 
@@ -587,7 +616,7 @@ function M.list()
       filename = vim.fs.joinpath(repository, comment.path),
       lnum = first_line(comment),
       end_lnum = comment.line,
-      text = #body > 1 and body[1] .. " …" or body[1],
+      text = (comment.draft and "[draft] " or "") .. (#body > 1 and body[1] .. " …" or body[1]),
     }
   end, comments)
   local action = vim.fn.getqflist({ title = 0 }).title == QF_TITLE and "r" or " "
@@ -595,11 +624,14 @@ function M.list()
   vim.cmd.copen()
 end
 
----Copies the review, as `submit` would paste it, as `Paths.put` does, keeping the comments.
+---Copies the review's saved comments, as `submit` would paste them, as `Paths.put` does, keeping the comments.
 function M.yank()
   local repository = root()
-  local comments = comment_store.list(repository)
+  local comments, drafts = split_drafts(comment_store.list(repository))
   if #comments == 0 then
+    if drafts > 0 then
+      return say(vim.log.levels.INFO, "nothing saved to copy, only %s", drafts_label(drafts))
+    end
     return say(vim.log.levels.INFO, "no review comments to copy")
   end
   local where = Paths.put(M._review_text(comments, reader(repository)))

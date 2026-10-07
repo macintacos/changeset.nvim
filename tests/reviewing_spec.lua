@@ -356,6 +356,20 @@ describe("changeset.reviewing", function()
   end)
 
   describe("abandon", function()
+    it("deletes drafts too, saying how many of the comments are drafts", function()
+      edit_file()
+      comment_store.keep(dir, comment())
+      comment_store.keep(dir, comment({ line = 7, draft = true }))
+
+      reviewing.abandon()
+      assert.truthy(table.concat(Dialog.lines(), " "):gsub("%s+", " "):find("1 is a draft", 1, true))
+      reply("A", function()
+        return #comment_store.list(dir) == 0
+      end)
+
+      assert.same({}, comment_store.list(dir))
+    end)
+
     it("says there is no review, without asking", function()
       edit_file()
 
@@ -516,6 +530,29 @@ describe("changeset.reviewing", function()
       reviewing.submit()
 
       assert.equal("gone.lua:4\nhi", sent[1])
+    end)
+
+    it("sends only saved comments, keeping the drafts and saying how many stay", function()
+      edit_file()
+      comment_store.keep(dir, comment())
+      comment_store.keep(dir, comment({ line = 7, body = "draft", draft = true }))
+      answer = { nil, "claude" }
+
+      reviewing.submit()
+
+      assert.equal("a.lua:4\n```lua\nx\n```\nhi", sent[1])
+      assert.same({ comment({ line = 7, body = "draft", draft = true }) }, comment_store.list(dir))
+      assert.truthy(notes[#notes].msg:find("1 draft stays", 1, true), notes[#notes].msg)
+    end)
+
+    it("sends nothing with only drafts, counting them", function()
+      edit_file()
+      comment_store.keep(dir, comment({ draft = true }))
+
+      reviewing.submit()
+
+      assert.same({}, sent)
+      assert.truthy(notes[1].msg:find("1 draft", 1, true), notes[1].msg)
     end)
 
     it("removes only the sent comments once sent, and says who got them", function()
@@ -768,6 +805,15 @@ describe("changeset.reviewing", function()
       assert.equal(dir .. "/a.lua", vim.fs.normalize(vim.api.nvim_buf_get_name(qf.items[1].bufnr)))
     end)
 
+    it("marks a draft's item", function()
+      edit_file()
+      comment_store.keep(dir, comment({ body = "unsure", draft = true }))
+
+      reviewing.list()
+
+      assert.equal("[draft] unsure", vim.fn.getqflist()[1].text)
+    end)
+
     it("replaces its own list on a rerun rather than adding one", function()
       edit_file()
       comment_store.keep(dir, comment())
@@ -822,6 +868,32 @@ describe("changeset.reviewing", function()
         assert.truthy(notes[1].msg:find('"', 1, true))
       end
     )
+
+    it("copies only saved comments", function()
+      vim.fn.has = function(feature)
+        return feature == "clipboard" and 0 or has(feature)
+      end
+      edit_file()
+      comment_store.keep(dir, comment())
+      comment_store.keep(dir, comment({ line = 7, body = "draft", draft = true }))
+      vim.fn.setreg('"', "")
+
+      reviewing.yank()
+
+      assert.is_nil(vim.fn.getreg('"'):find("draft", 1, true))
+      assert.truthy(vim.fn.getreg('"'):find("hi", 1, true))
+    end)
+
+    it("copies nothing with only drafts, counting them", function()
+      edit_file()
+      comment_store.keep(dir, comment({ draft = true }))
+      vim.fn.setreg('"', "")
+
+      reviewing.yank()
+
+      assert.equal("", vim.fn.getreg('"'))
+      assert.truthy(notes[1].msg:find("1 draft", 1, true), notes[1].msg)
+    end)
 
     it("says when there is nothing to copy", function()
       edit_file()
