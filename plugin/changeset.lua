@@ -263,7 +263,7 @@ local keys = {
     desc = "Abandon the review",
     icon = { cat = "directory", name = "Trash" },
   },
-  { lhs = "<C-g>t", name = "toggle", desc = "Toggle the changeset sidebar", icon = { cat = "filetype", name = "git" } },
+  { lhs = "<C-g>g", name = "toggle", desc = "Toggle the changeset sidebar", icon = { cat = "filetype", name = "git" } },
   {
     lhs = "<C-g>r",
     name = "refresh",
