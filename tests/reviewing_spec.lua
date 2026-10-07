@@ -254,7 +254,15 @@ describe("changeset.reviewing", function()
       reviewing.comment_here()
 
       assert.equal(3, window().comment.line)
-      assert.is_nil(window().icon)
+    end)
+
+    it("heads a line's window with the bubble that marks its line", function()
+      edit_file()
+      vim.api.nvim_win_set_cursor(0, { 3, 0 })
+
+      reviewing.comment_here()
+
+      assert.same({ require("changeset.review_comments").glyph(window().comment) }, window().icon)
     end)
   end)
 
@@ -344,6 +352,15 @@ describe("changeset.reviewing", function()
 
       assert.equal("hi", window().body)
       assert.truthy(window().title:lower():find("draft"), window().title)
+    end)
+
+    it("heads a draft's window with the draft's own bubble", function()
+      edit_file()
+      comment_store.keep(dir, comment({ draft = true }))
+
+      reviewing.comment(4, 4)
+
+      assert.equal(require("changeset.render").REVIEW_COMMENT_DRAFT_HL, window().icon[2])
     end)
   end)
 

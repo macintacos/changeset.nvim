@@ -103,13 +103,15 @@ function M.ask_delete(comment)
   end)
 end
 
----The file's icon for a whole file's window, which heads its title so it reads apart from a line's; nil for a line's.
+---The glyph heading `comment`'s window: the file's icon for a whole file's, else the bubble that marks its lines, so
+---the two read apart.
 ---@param comment changeset.ReviewComment
----@return [string, string]?
+---@return [string, string]
 local function icon_of(comment)
   if not comment.line then
     return { icons.get("file", comment.path) }
   end
+  return { review_comments.glyph(comment) }
 end
 
 ---Notified, not echoed, so a notifier keeps it.

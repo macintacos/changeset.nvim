@@ -25,7 +25,7 @@ end
 ---@class changeset.ReviewCommentWindowOpts
 ---@field line integer The current window's buffer line it opens under, 1-based.
 ---@field title string The whole title, e.g. "Review comment · line 42".
----@field icon [string, string]? A glyph and the icon plugin's group for it, drawn ahead of the title.
+---@field icon [string, string]? A glyph and the group it comes in, drawn ahead of the title on the title's background.
 ---@field keys string[] Keys that save, in insert and normal mode.
 ---@field save_desc string The save keys' `desc`, which `?` lists.
 ---@field close_desc string The `desc` of the keys that close without saving, which `?` lists.
@@ -171,7 +171,16 @@ function M.open(opts)
   if opts.body then
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(opts.body, "\n"))
   end
-  local hint = " " .. vim.fn.keytrans(vim.keycode(opts.keys[1])) .. " save · q draft "
+  local hint = {
+    { " " },
+    { " " .. vim.fn.keytrans(vim.keycode(opts.keys[1])) .. " ", render.KEYCAP_HL },
+    { " save  " },
+    { " q ", render.KEYCAP_HL },
+    { " draft " },
+  }
+  local hint_width = vim.iter(hint):fold(0, function(cells, chunk)
+    return cells + vim.fn.strdisplaywidth(chunk[1])
+  end)
 
   ---Its line, held to the source's end should edits there shorten it.
   local function line()
@@ -196,7 +205,7 @@ function M.open(opts)
       col = GAP,
       width = width,
       -- Neovim cuts a footer too wide from its left, which would name another key.
-      footer = vim.fn.strdisplaywidth(hint) <= width and hint or "",
+      footer = hint_width <= width and hint or "",
       -- A float is never clipped to its anchor window: off its line, it would cover other text.
       hide = not under_in_view(source, line()),
     }

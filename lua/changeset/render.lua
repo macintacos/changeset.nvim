@@ -206,6 +206,10 @@ M.BUTTON_DANGER_HL = "ChangesetButtonDanger"
 ---@type string
 M.BUTTON_DANGER_FOCUS_HL = "ChangesetButtonDangerFocus"
 
+---Group for a key the review comment window's footer names, drawn as a keycap. Created by `define_highlights`.
+---@type string
+M.KEYCAP_HL = "ChangesetKeycap"
+
 ---Group laid over the letter that presses a dialog's button. Created by `define_highlights`.
 ---@type string
 M.BUTTON_KEY_HL = "ChangesetButtonKey"
@@ -1035,6 +1039,8 @@ function M.define_highlights()
   set_default(M.BUTTON_FOCUS_HL, { fg = accent, reverse = true, bold = true })
   set_default(M.BUTTON_DANGER_FOCUS_HL, { fg = danger, reverse = true, bold = true })
   set_default(M.BUTTON_KEY_HL, { underline = true })
+  -- A dialog's button already reads as something to press, on a float's border as in its body.
+  set_default(M.KEYCAP_HL, { link = M.BUTTON_HL })
   set_default(M.DIALOG_SELECTED_HL, { bg = mix(float_bg, accent, SELECTED_TINT) })
   -- A block is the review comment window collapsed, so it wears the float's colours.
   set_default(M.BLOCK_BORDER_HL, { link = "FloatBorder" })

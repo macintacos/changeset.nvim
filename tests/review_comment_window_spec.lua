@@ -106,15 +106,29 @@ describe("review_comment_window", function()
     end, vim.api.nvim_win_get_config(win).footer))
   end
 
-  it("names its first save key, alone, at the right of the footer", function()
+  ---The keys the footer draws as keycaps, in order.
+  local function keycaps(win)
+    return vim
+      .iter(vim.api.nvim_win_get_config(win).footer)
+      :filter(function(chunk)
+        return chunk[2] == require("changeset.render").KEYCAP_HL
+      end)
+      :map(function(chunk)
+        return vim.trim(chunk[1])
+      end)
+      :totable()
+  end
+
+  it("names its first save key, alone, then q, as keycaps at the right of the footer", function()
     local win = open({ keys = { "<C-CR>", "<C-s>" } })
-    assert.equal(" <C-CR> save · q draft ", footer(win))
+    assert.same({ "<C-CR>", "q" }, keycaps(win))
+    assert.truthy(footer(win):find("save.+draft"), footer(win))
     assert.equal("right", vim.api.nvim_win_get_config(win).footer_pos)
   end)
 
   it("writes the save key in Neovim's own notation", function()
     local win = open({ keys = { "<c-enter>" } })
-    assert.truthy(vim.endswith(footer(win), " <C-CR> save · q draft "), footer(win))
+    assert.same({ "<C-CR>", "q" }, keycaps(win))
   end)
 
   it("drops the save key from a footer too narrow for it, rather than cut it to another key", function()

@@ -40,11 +40,19 @@ local BUBBLE = "󰍩"
 -- The outline of the saved bubble: the same note, not yet filled in.
 local DRAFT_BUBBLE = "󰍪"
 
+---`comment`'s bubble, the outline for a draft, and its group.
+---@param comment changeset.ReviewComment
+---@return string glyph
+---@return string hl
+function M.glyph(comment)
+  return comment.draft and DRAFT_BUBBLE or BUBBLE, render.review_comment_hl(comment)
+end
+
 ---@param buf integer
 ---@param comment changeset.ReviewComment
 local function mark(buf, comment)
   local row = (comment.start_line or comment.line) - 1
-  local hl = render.review_comment_hl(comment)
+  local bubble, hl = M.glyph(comment)
   local circle = comment.draft and render.REVIEW_COMMENT_DRAFT_CIRCLE or render.REVIEW_COMMENT_CIRCLE
   vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
     end_row = comment.line - 1,
@@ -62,7 +70,7 @@ local function mark(buf, comment)
     -- `sign_text` the mark takes no cell but keeps its group, which `M.bubble` answers from.
     vim.api.nvim_buf_set_extmark(buf, sign_ns, row, 0, {
       id = existing and existing[1],
-      sign_text = config.get().review_comment.sign and (comment.draft and DRAFT_BUBBLE or BUBBLE) or nil,
+      sign_text = config.get().review_comment.sign and bubble or nil,
       sign_hl_group = hl,
     })
   end
