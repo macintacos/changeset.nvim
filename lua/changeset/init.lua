@@ -103,22 +103,31 @@ local function track()
   draw.paint()
 end
 
----Keep where you are and the sidebar's cursor row in a global `:mksession` saves, so
----every session write carries them without work of its own at write time.
+---Keep where you are and the sidebar's cursor row and scroll in a global `:mksession`
+---saves, so every session write carries them without work of its own at write time.
 local function remember()
   local state = sidebar_state.current()
-  local saved = state and state.position:saved(draw.row_at_cursor())
+  local win = window.win()
+  local offset = win and vim.api.nvim_win_get_cursor(win)[1] - vim.fn.line("w0", win)
+  local saved = state and state.position:saved(draw.row_at_cursor(), offset)
   if saved then
     vim.g[POSITION_GLOBAL] = vim.json.encode(saved)
   end
 end
 
----Put the sidebar's cursor on the line `position` chose, when it chose one, and repaint the row marks.
+---Put the sidebar's cursor on the line `position` chose, when it chose one, with `offset` lines above it on screen
+---when it chose that too, and repaint the row marks.
 ---@param lnum integer?
-local function apply(lnum)
+---@param offset integer?
+local function apply(lnum, offset)
   local win = window.win()
   if lnum and win then
     vim.api.nvim_win_set_cursor(win, { lnum, 0 })
+    if offset then
+      vim.api.nvim_win_call(win, function()
+        vim.fn.winrestview({ topline = math.max(1, lnum - offset) })
+      end)
+    end
   end
   draw.paint()
 end
@@ -597,11 +606,12 @@ function M.toggle()
   end
 end
 
--- Fires: every buffer or window switch and cursor move, sidebar open or not, so
--- "you are here" is current whenever the sidebar shows. Scheduled because a
--- preview swaps its buffer inside `nvim_win_call`, which fires these with the
--- borrowed window current; by the next tick focus is back where the user is.
-vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter", "CursorMoved", "CursorMovedI" }, {
+-- Fires: every buffer or window switch, cursor move and scroll, sidebar open or not,
+-- so "you are here" is current whenever the sidebar shows, and the sidebar's scroll
+-- whenever a session is written. Scheduled because a preview swaps its buffer inside
+-- `nvim_win_call`, which fires these with the borrowed window current; by the next
+-- tick focus is back where the user is.
+vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter", "CursorMoved", "CursorMovedI", "WinScrolled" }, {
   group = vim.api.nvim_create_augroup("changeset.track", { clear = true }),
   desc = "changeset: track the file and line the cursor is in",
   callback = function()
@@ -622,6 +632,18 @@ vim.api.nvim_create_autocmd({ "WinEnter", "BufWinEnter" }, {
   group = vim.api.nvim_create_augroup("changeset.unband", { clear = true }),
   desc = "changeset: keep the preview band off the window the cursor is in",
   callback = window.unband,
+})
+
+-- Fires: a session starting to load. It lays its windows out from the focused one, and
+-- the sidebar's would take a file with the sidebar's window options still on it.
+vim.api.nvim_create_autocmd("SessionLoadPre", {
+  group = vim.api.nvim_create_augroup("changeset.session", { clear = true }),
+  desc = "changeset: close the sidebar before a session lays out its windows",
+  callback = function()
+    if window.buf() then
+      M.close()
+    end
+  end,
 })
 
 return M

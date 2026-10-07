@@ -99,6 +99,51 @@ describe("changeset position in a session", function()
     assert.truthy(Sidebar.cursor_line():find("other.lua", 1, true))
   end)
 
+  it("brings the sidebar back scrolled as it was", function()
+    vim.cmd.edit("mod.lua")
+    changeset.open()
+    Sidebar.settle()
+    Sidebar.cursor_to("L8")
+    local win = assert(window.win())
+    local lnum = vim.api.nvim_win_get_cursor(win)[1]
+    vim.api.nvim_win_call(win, function()
+      vim.fn.winrestview({ topline = lnum - 1 })
+    end)
+    -- Neovim fires WinScrolled from its main loop, which a spec never reaches.
+    vim.api.nvim_exec_autocmds("WinScrolled", { group = "changeset.track", pattern = tostring(win) })
+    Sidebar.flush()
+    local recorded = vim.g.ChangesetPosition
+    changeset.close()
+    focus_terminal()
+
+    restore_session(recorded)
+    Sidebar.settle()
+    Sidebar.flush()
+
+    assert.truthy(Sidebar.cursor_line():find("L8", 1, true))
+    assert.equal(lnum - 1, vim.fn.line("w0", window.win()))
+  end)
+
+  it("keeps the sidebar's window options out of a session laid out while it has focus", function()
+    local function options()
+      local wo = vim.wo[0]
+      return { wo.winfixwidth, wo.signcolumn, wo.wrap, wo.statusline }
+    end
+    vim.cmd.edit("mod.lua")
+    local before = options()
+    changeset.open()
+    Sidebar.settle()
+    local sidebar = assert(window.win())
+    vim.api.nvim_set_current_win(sidebar)
+
+    -- How a session file starts: it closes every window but the focused one and opens its first file there.
+    vim.api.nvim_exec_autocmds("SessionLoadPre", {})
+    vim.cmd("silent only")
+    vim.cmd.edit("plain.lua")
+
+    assert.same(before, options())
+  end)
+
   it("keeps the sidebar a session refills over an open one", function()
     vim.cmd.edit("mod.lua")
     changeset.open()
@@ -229,6 +274,30 @@ describe("changeset position in a session", function()
 
     after_each(function()
       resolve.start = real_start
+    end)
+
+    it("keeps the sidebar's cursor on the recorded row's file until its symbols resolve", function()
+      vim.cmd.edit("other.lua")
+      focus_terminal()
+
+      restore_session({ row = { id = row_id("mod.lua", "step"), path = "mod.lua" } })
+      Sidebar.await_diff()
+      Sidebar.flush()
+
+      assert.truthy(Sidebar.cursor_line():find("mod.lua", 1, true))
+    end)
+
+    it("scrolls the recorded row back into place once its file's symbols resolve", function()
+      vim.cmd.edit("other.lua")
+      focus_terminal()
+
+      restore_session({ row = { id = row_id("mod.lua", "step"), path = "mod.lua", offset = 0 } })
+      Sidebar.await_diff()
+      answer("mod.lua", { symbol("step", 7, 9) })
+      Sidebar.flush()
+
+      local win = assert(window.win())
+      assert.equal(vim.api.nvim_win_get_cursor(win)[1], vim.fn.line("w0", win))
     end)
 
     it("applies the recorded position once its file's symbols resolve", function()

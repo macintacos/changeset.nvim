@@ -259,12 +259,29 @@ describe("changeset.position", function()
       assert.same({ { kind = "here", lnum = 4 } }, p:marks(view(ROWS)))
     end)
 
-    it("puts the cursor on the restored row once the tree has decided its file", function()
+    it("puts the cursor on a restored row's file while its symbols are read, then on the row", function()
       local p = position.new()
 
-      assert.is_nil(p:restore({ row = { id = LOAD, path = "mod.lua" } }, view(READING), reading))
+      assert.equal(2, p:restore({ row = { id = LOAD, path = "mod.lua" } }, view(READING), reading))
 
-      assert.equal(4, p:rebuilt(view(ROWS), MOD, decided))
+      assert.equal(4, p:rebuilt(view(ROWS, { cursor = 2 }), MOD, decided))
+    end)
+
+    it("puts a restored row back as far down the window as it was recorded", function()
+      local p = position.new()
+      p:restore({ row = { id = LOAD, path = "mod.lua", offset = 3 } }, view(READING), reading)
+
+      local lnum, offset = p:rebuilt(view(ROWS, { cursor = 2 }), MOD, decided)
+
+      assert.same({ 4, 3 }, { lnum, offset })
+    end)
+
+    it("ignores a recorded offset that is not a number", function()
+      local p = position.new()
+
+      local lnum, offset = p:restore({ row = { id = LOAD, path = "mod.lua", offset = "3" } }, view(ROWS), decided)
+
+      assert.same({ 4 }, { lnum, offset })
     end)
 
     it("puts a restored row on the copy it recorded of a file shown in two sections", function()
@@ -282,21 +299,23 @@ describe("changeset.position", function()
       assert.equal(5, p:rebuilt(view(ROWS, { cursor = 2, focused = true }), MOD, decided))
     end)
 
-    it("keeps a restored row waiting through a rebuild the landing follows", function()
+    it("keeps the cursor on a restored row, not the landing, while its file is read", function()
       local p = position.new()
       p:track({ path = "mod.lua", lnum = 5 })
       p:entered(view(READING, { focused = true }))
-      p:restore(
-        { row = { id = OTHER_ORPHANS, path = "other.lua" } },
-        view(READING, { cursor = 2, focused = true }),
-        reading
+      assert.equal(
+        4,
+        p:restore(
+          { row = { id = OTHER_ORPHANS, path = "other.lua" } },
+          view(READING, { cursor = 2, focused = true }),
+          reading
+        )
       )
       local mod_decided = function(path)
         return path == "mod.lua"
       end
-      assert.equal(4, p:rebuilt(view(ROWS, { cursor = 2, focused = true }), MOD, mod_decided))
 
-      assert.equal(9, p:rebuilt(view(ROWS, { cursor = 4, focused = true }), LOAD, decided))
+      assert.equal(9, p:rebuilt(view(ROWS, { cursor = 9, focused = true }), OTHER_ORPHANS, mod_decided))
     end)
 
     it("does not pull the cursor off a restored row to follow an earlier landing", function()
@@ -367,11 +386,14 @@ describe("changeset.position", function()
   end)
 
   describe("saved", function()
-    it("records where you are and the row under the sidebar's cursor", function()
+    it("records where you are, the row under the sidebar's cursor, and how far down the window it sits", function()
       local p = position.new()
       p:track({ path = "mod.lua", lnum = 5 })
 
-      assert.same({ here = { path = "mod.lua", lnum = 5 }, row = { id = LOAD, path = "mod.lua" } }, p:saved(row(LOAD)))
+      assert.same(
+        { here = { path = "mod.lua", lnum = 5 }, row = { id = LOAD, path = "mod.lua", offset = 3 } },
+        p:saved(row(LOAD), 3)
+      )
     end)
 
     it("records nothing while a restored position waits", function()
