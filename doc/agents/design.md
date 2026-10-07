@@ -507,7 +507,7 @@ end of its first line sits `●`, the config's own current-item mark, in the sam
 followed by the body's first line in `ChangesetReviewCommentBody`, `Comment` and italic:
 the § Three levels "not content" idiom, since the body is not the file's text. Two review
 comments on one line show as two circles, each with its own body, in the order the store
-lists them; their ranges' number colours merge.
+lists them; their ranges' number colours merge. Their blocks stack in that order too.
 
 The marks are drawn in every loaded buffer of a repository with review comments, sidebar
 or not, once changeset is loaded: `plugin/changeset.lua` requires nothing, so a session
@@ -570,33 +570,41 @@ as a missing-glyph box, as the header's glyphs do.
   4    return x
 
   3 󰍩 local x = compute()
-     ╭ Review comment · line 3 ─────╮      parked: border and title in the accent,
-     │ cache this per root?         │      the keys in the bottom border
-     ╰ <CR> edit · d delete ────────╯
+     ╭ Review comment · line 3 ─╮    parked: border green, title a reversed
+     │ cache this per root?     │    green pill, the keys in the bottom border
+     ╰ <CR> edit · d delete ────╯
 ```
 
 `:Changeset toggle-comments` swaps every review comment's circle and first line for a
 block: its whole text in a box drawn as virtual lines under its last line, a range's under
 the range's last. It reads as the review comment window collapsed, so it wears that
-window's clothes: a rounded border in `FloatBorder`, the window's title in `FloatTitle`,
-the text on `NormalFloat` with a cell of padding either side. It is as tall as its text and
-as wide as the longer of its text and its title, wrapped at word boundaries within the
-window's measure, 72 columns at most and 20 at least. The bubble and the lit numbers stay,
-since the sign is where the eye finds a comment. A draft's border is dashed, `┄` and `┆`.
-One switch covers every buffer, now and as files are read later, because a review is read
-whole or not at all; `review_comment.blocks` picks the state a session starts in.
+window's clothes: a rounded border in `FloatBorder`, the title in `FloatTitle`'s colour,
+the text on `NormalFloat` with a cell of padding either side. Virtual lines sit on
+`Normal`, so the title takes `NormalFloat`'s background itself, or it would show as a hole
+in the border. It is as tall as its text and as wide as the longer of its text and its
+title, wrapped at word boundaries within the window's measure, 72 columns at most. The
+bubble and the lit numbers stay, since the sign is where the eye finds a comment. A
+draft's border is dashed, `┄` and `┆`. One switch covers every buffer, now and as files
+are read later, because a review is read whole or not at all; `review_comment.blocks`
+picks the state a session starts in, read until the first toggle.
+
+Blocks under one line stack top to bottom in the order the store lists them, drawn as one
+extmark, so drawing order and stepping order are the same list.
 
 Virtual lines belong to a buffer, not a window, so a buffer in several windows takes the
-measure of the narrowest, recomputed on `WinResized` and `BufWinEnter`. A wider window
-shows the block narrower than it could; the narrow one never shows it cut.
+measure of the narrowest, recomputed when one of its windows resizes or it enters one. A
+wider window shows the block narrower than it could; the narrow one never shows it cut.
+Where even the title doesn't fit, the title is cut with `…`, never the box.
 
 A one-line move parks the cursor on a block, as if it were a line between its comment's
-last line and the next. The parked block lights its border and title in the accent the
-dialogs focus with, bold, and its bottom border lists `<CR> edit · d delete`. `<CR>` and
-`c` open it to edit, `d` asks to delete it, `<Esc>` lets go. The cursor is hidden through
-the dialogs' own `'guicursor'` entry and the window's `'cursorline'` dropped, since the
-block is what the cursor is on and the line it waits on would otherwise read as focused.
-Stacked blocks under one line are a stop each.
+last line and the next. The parked block's border turns the green of the comment marks,
+which no theme's float border uses, and its title a reversed green pill, so it reads as
+selected even on a theme whose floats have no background to tint. Its bottom border lists
+`<CR> edit · d delete`. `<CR>` and `c` open it to edit, `d` asks to delete it, `<Esc>` or
+any other key lets go. In a modified buffer `<CR>`, `c` and `d` refuse, as the line verbs
+do. The cursor is hidden through the dialogs' own `'guicursor'` entry and the window's
+local `'cursorline'` dropped, since the block is what the cursor is on and the line it
+waits on would otherwise read as focused. Each block of a stack is a stop.
 
 ### Hover answers with the review comments on a line
 
@@ -954,17 +962,26 @@ repository's deliberate choice is none of that save's business.
 
 ## Behaviour that is easy to get wrong
 
-- **Parking watches the cursor, never `j` and `k`.** Users map `j` to `gj` and much else,
-  so a map would miss moves or fight theirs. `CursorMoved` sees every move whatever key
-  made it; a move of exactly one line across a block puts the cursor back where it came
-  from and parks. While parked, the cursor waits on a real line, so the next move is
-  measured from there and corrected to read as stepping off the block: down from a block
-  parked on its line stands, up from it lands back on that line rather than the one above.
-  A count, `G` or a search moves more than one line and passes blocks by. A block under
-  the buffer's last line can't be reached by `j`, which has nowhere to move.
+- **Parking hangs off the movement keys, never `CursorMoved`.** `CursorMoved` can't tell
+  `j` from leaving insert or cmdline mode a line away, `:5`, `gg`, `<C-g>cn`, `<C-e>`, a
+  Visual `j`, `p` or `u`, and skips moves made under typeahead. So a buffer showing blocks
+  maps `j`, `k`, `<Down>`, `<Up>`, `gj` and `gk` in Normal mode. A count passes straight
+  through; otherwise the map runs the key's own motion and parks when it crossed a block,
+  or, going down, when it failed on the last line with blocks under it. While parked the
+  keys move the cursor themselves, to the next block of the stack or off it, so folds,
+  wrapped lines and the first and last lines step the same as any other.
+- **The movement maps run a `<Plug>` copy of what the key did before**, the buffer's map
+  or the global one, `expr` and callback included, because users map `j` to `gj` and the
+  like. A copy, not the key: a map whose rhs starts with its own lhs doesn't remap that
+  key, so the user's map would be lost. Hiding blocks puts the buffer's own maps back.
+- **Stacked blocks are one extmark.** Neovim draws separate extmarks' virtual lines on one
+  line newest first, which would walk a stack in the opposite order to the store's.
+- **A block is where its extmark is, not its stored line.** Unsaved edits move it, so
+  parking reads the extmark, and the parked keys refuse in a modified buffer.
 - **A parked block's keys exist only while it is parked**, buffer-local and `nowait`, and
   any buffer-local map they stood in for is put back on letting go, so `c`, `d` and `<CR>`
-  are the user's again. Any mode change, window or buffer leave or text change lets go.
+  are the user's again. Any other key lets go, seen through `vim.on_key`, since `zz`, `mx`
+  or `<C-e>` change neither mode nor text.
 - **An edit closed without a save keeps a draft.** Closing an existing review comment with
   its text unchanged leaves it alone, so a saved one stays saved. Closing it with changed
   text stores that text as a draft, which submit leaves out until it is saved again. It

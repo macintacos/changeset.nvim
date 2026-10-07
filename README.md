@@ -343,9 +343,11 @@ deleted, and mark a file as it is read. The bubble needs a Nerd Font.
 a box under its last line, as tall as the text; `review_comment.blocks` sets which the
 session starts with. The circle and first line go while blocks show; the bubble and green
 numbers stay. A one-line move, `j` or `k` however you map them, stops on a block as if it
-were a line of the file. The stopped-on block lights its border and lists its keys: `<CR>`
-or `c` edits the review comment, `d` asks to delete it, and `<Esc>` or any other key steps
-off. A count, a search or `<C-g>cn` moves past blocks.
+were a line of the file: `j`, `k`, `<Down>`, `<Up>`, `gj` and `gk` are mapped in a buffer
+showing blocks, each still doing what you mapped it to when it doesn't stop. The
+stopped-on block lights its border and lists its keys: `<CR>` or `c` edits the review
+comment, `d` asks to delete it, and `<Esc>` or any other key steps off. A count, a jump,
+a search or `<C-g>cn` moves past blocks.
 
 Hover shows them too. A file with a mark gets a language server client named `changeset`,
 which answers hover on a line with each review comment whose lines take it in, under a
@@ -494,9 +496,10 @@ The sidebar derives each group's default from your colorscheme, and derives it a
 | `ChangesetReviewCommentDraft` | A draft review comment's bubble, its circle and the line numbers it covers | `DiagnosticOk`'s colour mixed halfway to `Comment`'s |
 | `ChangesetReviewCommentBody` | A review comment's body after its circle | links to `ChangesetMeta` |
 | `ChangesetBlockBorder` | A review comment block's border | links to `FloatBorder` |
-| `ChangesetBlockTitle` | A review comment block's title | links to `FloatTitle` |
+| `ChangesetBlockTitle` | A review comment block's title | `FloatTitle`'s colour on `NormalFloat`'s background, bold |
 | `ChangesetBlockBody` | A review comment block's text | links to `NormalFloat` |
-| `ChangesetBlockParked` | The border and title of the block the cursor stopped on | `Statement`'s colour, bold |
+| `ChangesetBlockParked` | The border of the block the cursor stopped on | `DiagnosticOk`'s colour, bold |
+| `ChangesetBlockParkedTitle` | The title of the block the cursor stopped on | `DiagnosticOk`'s colour, reversed, bold |
 | `ChangesetBlockHint` | The keys that block lists in its bottom border | `Comment`'s colour, italic |
 | `ChangesetBadge` | The badge in the footer | `Directory`'s colour, reversed, bold |
 | `ChangesetFooter` | The footer's text | `Comment`'s colour on `StatusLine` |
