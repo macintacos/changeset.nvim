@@ -219,11 +219,14 @@ describe("plugin/changeset.lua", function()
     assert.equal(1, vim.g.changeset_after)
   end)
 
-  it("routes comment new the lines it is given", function()
+  it("routes comment new the lines it is given, and the cursor's place without any", function()
     local ranges = {}
     package.loaded["changeset.reviewing"] = {
       comment = function(first, last)
         table.insert(ranges, { first, last })
+      end,
+      comment_here = function()
+        table.insert(ranges, "here")
       end,
     }
     local buf = vim.api.nvim_create_buf(false, true)
@@ -238,7 +241,7 @@ describe("plugin/changeset.lua", function()
 
     vim.api.nvim_buf_delete(buf, { force = true })
     package.loaded["changeset.reviewing"] = nil
-    assert.same({ { 3, 3 }, { 2, 4 }, { 2, 3 } }, ranges)
+    assert.same({ "here", { 2, 4 }, { 2, 3 } }, ranges)
   end)
 
   it("reports words past a subcommand as an error", function()
@@ -261,7 +264,7 @@ describe("plugin/changeset.lua", function()
   it("routes each <Plug> map to its subcommand", function()
     local calls = {}
     local plugs = {
-      ["comment-new"] = "comment",
+      ["comment-new"] = "comment_here",
       ["comment-del"] = "delete",
       ["comment-last"] = "last_comment",
       ["comment-list"] = "list",
@@ -419,15 +422,17 @@ describe("plugin/changeset.lua", function()
     local function pause_after(keys)
       local typed = "lua vim.o.timeoutlen = 50;"
         .. " vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.split(('x'):rep(10, '\\n'), '\\n'));"
-        .. " package.loaded['changeset.reviewing'] = { comment = function(a, b) io.write(a, '-', b, ' ') end };"
+        .. " package.loaded['changeset.reviewing'] = {"
+        .. " comment = function(a, b) io.write(a, '-', b, ' ') end,"
+        .. " comment_here = function() io.write('here ') end };"
         .. (" vim.api.nvim_input('%s')"):format(keys)
       local probe =
         "io.write(vim.api.nvim_get_mode().mode, ' ', table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false)))"
       return after_startup({ "-c", typed }, probe, 400)
     end
 
-    it("comments on the cursor's line in normal mode", function()
-      assert.equal("3-3 n xxxxxxxxxx", pause_after("3G<C-g>c"))
+    it("comments at the cursor in normal mode", function()
+      assert.equal("here n xxxxxxxxxx", pause_after("3G<C-g>c"))
     end)
 
     it("comments on the selection in visual mode", function()

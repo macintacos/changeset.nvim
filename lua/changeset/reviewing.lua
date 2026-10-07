@@ -7,6 +7,7 @@ local build = require("changeset.build")
 local comment_store = require("changeset.comment_store")
 local config = require("changeset.config")
 local dialog = require("changeset.dialog")
+local icons = require("changeset.icons")
 local render = require("changeset.render")
 local review_comment_window = require("changeset.review_comment_window")
 local review_comments = require("changeset.review_comments")
@@ -102,6 +103,15 @@ function M.ask_delete(comment)
   end)
 end
 
+---The file's icon for a whole file's window, which heads its title so it reads apart from a line's; nil for a line's.
+---@param comment changeset.ReviewComment
+---@return [string, string]?
+local function icon_of(comment)
+  if not comment.line then
+    return { icons.get("file", comment.path) }
+  end
+end
+
 ---Notified, not echoed, so a notifier keeps it.
 local function say_draft()
   -- Scheduled, so it comes after the message of a subcommand run from the window and replaces it, rather than
@@ -131,6 +141,7 @@ function M.open(comment)
   review_comment_window.open({
     line = last or vim.api.nvim_win_get_cursor(0)[1],
     title = kind .. lines_label(comment.start_line or last, last),
+    icon = icon_of(comment),
     save_desc = "Save the review comment",
     close_desc = "Close, keeping the text as a draft",
     keys = config.get().review_comment.save,
@@ -181,6 +192,7 @@ local function open_new(repository, comment, line)
   review_comment_window.open({
     line = line,
     title = "Review comment · " .. lines_label(comment.start_line or comment.line, comment.line),
+    icon = icon_of(comment),
     save_desc = "Save the review comment",
     close_desc = "Close, keeping the text as a draft",
     keys = config.get().review_comment.save,
@@ -216,6 +228,17 @@ local function on_file(repository, path)
   end)
 end
 
+---Opens the review comment window under the cursor's line for the whole of `path`, or its comment to edit.
+---@param repository string
+---@param path string
+local function comment_on_file(repository, path)
+  local existing = on_file(repository, path)
+  if existing then
+    return M.open(existing)
+  end
+  open_new(repository, { path = path, body = "" }, vim.api.nvim_win_get_cursor(0)[1])
+end
+
 ---Opens the review comment window under the sidebar's cursor row for the whole file it stands for, or that file's
 ---comment to edit.
 local function comment_file()
@@ -224,11 +247,21 @@ local function comment_file()
   if not path then
     return say(vim.log.levels.WARN, "run `:Changeset comment new` from a file in %s, or on a file's row", repository)
   end
-  local existing = on_file(repository, path)
-  if existing then
-    return M.open(existing)
+  comment_on_file(repository, path)
+end
+
+---The current buffer's path in `repository`, when a review comment can be written there; else warns and returns nil.
+---@param repository string
+---@return string?
+local function commentable(repository)
+  local path = file_path(repository, 0)
+  if not path then
+    return say(vim.log.levels.WARN, "run `:Changeset comment new` from a file in %s", repository)
   end
-  open_new(repository, { path = path, body = "" }, vim.api.nvim_win_get_cursor(0)[1])
+  if vim.bo.modified then
+    return say(vim.log.levels.WARN, M.UNSAVED)
+  end
+  return path
 end
 
 ---Opens the review comment window under line `last` of the current buffer, for lines `first` to `last`, or an
@@ -242,12 +275,9 @@ function M.comment(first, last)
     return comment_file()
   end
   local repository = Paths.root(0)
-  local path = file_path(repository, 0)
+  local path = commentable(repository)
   if not path then
-    return say(vim.log.levels.WARN, "run `:Changeset comment new` from a file in %s", repository)
-  end
-  if vim.bo.modified then
-    return say(vim.log.levels.WARN, M.UNSAVED)
+    return
   end
   local existing
   if first < last then
@@ -261,6 +291,19 @@ function M.comment(first, last)
     return M.open(existing)
   end
   open_new(repository, { path = path, line = last, start_line = first < last and first or nil, body = "" }, last)
+end
+
+---Opens the review comment window for the cursor's line as `comment` does, but for the whole file on its first line.
+function M.comment_here()
+  local lnum = vim.api.nvim_win_get_cursor(0)[1]
+  if lnum ~= 1 or window.is_focused() then
+    return M.comment(lnum, lnum)
+  end
+  local repository = Paths.root(0)
+  local path = commentable(repository)
+  if path then
+    comment_on_file(repository, path)
+  end
 end
 
 ---Deletes the comment being written in `open`: asks first when it is stored or holds text, else just closes.
@@ -349,13 +392,10 @@ function M.from_window(open, name, run)
   end)
 end
 
----Deletes the comment on the whole file the sidebar's cursor row stands for.
-local function delete_file()
-  local repository = root()
-  local path = sidebar_file()
-  if not path then
-    return say(vim.log.levels.WARN, "run `:Changeset comment del` from a file, or on a file's row")
-  end
+---Deletes the comment on the whole of `path`.
+---@param repository string
+---@param path string
+local function delete_on_file(repository, path)
   local comment = on_file(repository, path)
   if not comment then
     return say(vim.log.levels.INFO, "no review comment on the whole of %s", path)
@@ -363,8 +403,17 @@ local function delete_file()
   drop(repository, comment)
 end
 
----Deletes the review comment on the cursor's line, the narrowest of those covering it; from the sidebar, the one on
----the whole file the cursor's row stands for.
+---Deletes the comment on the whole file the sidebar's cursor row stands for.
+local function delete_file()
+  local path = sidebar_file()
+  if not path then
+    return say(vim.log.levels.WARN, "run `:Changeset comment del` from a file, or on a file's row")
+  end
+  delete_on_file(root(), path)
+end
+
+---Deletes the review comment on the cursor's line, the narrowest of those covering it; on the file's first line, or
+---from the sidebar on a file's row, the one on the whole file.
 function M.delete()
   if window.is_focused() then
     return delete_file()
@@ -375,6 +424,9 @@ function M.delete()
   local repository = Paths.root(0)
   local path = file_path(repository, 0)
   local lnum = vim.api.nvim_win_get_cursor(0)[1]
+  if path and lnum == 1 then
+    return delete_on_file(repository, path)
+  end
   local comment = path and at(repository, path, lnum)
   if not comment then
     return say(vim.log.levels.INFO, "no review comment on line %d", lnum)

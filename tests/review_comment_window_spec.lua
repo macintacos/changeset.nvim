@@ -83,6 +83,22 @@ describe("review_comment_window", function()
     assert.equal(" lines 4-5 ", config.title[1][1])
   end)
 
+  it("leads its title with its icon, over the title's background", function()
+    local float_title = vim.api.nvim_get_hl(0, { name = "FloatTitle" })
+    vim.api.nvim_set_hl(0, "ReviewCommentWindowSpecIcon", { fg = 0x112233 })
+    vim.api.nvim_set_hl(0, "FloatTitle", { fg = 0xeeeeee, bg = 0x445566 })
+
+    local win = open({ title = "whole file", icon = { "X", "ReviewCommentWindowSpecIcon" } })
+
+    local title = vim.api.nvim_win_get_config(win).title
+    ---@cast title [string, string][]
+    local icon = vim.api.nvim_get_hl(0, { name = title[1][2], link = false })
+    vim.api.nvim_set_hl(0, "FloatTitle", float_title --[[@as vim.api.keyset.highlight]])
+    assert.equal(" X", title[1][1])
+    assert.equal(" whole file ", title[2][1])
+    assert.same({ 0x112233, 0x445566 }, { icon.fg, icon.bg })
+  end)
+
   ---The footer's text, its chunks joined.
   local function footer(win)
     return table.concat(vim.tbl_map(function(chunk)

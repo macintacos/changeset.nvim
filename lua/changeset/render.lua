@@ -235,6 +235,11 @@ M.DIFF_DELETE_TEXT_HL = "ChangesetDiffDeleteText"
 ---@type string
 M.PREVIEW_ICON_HL = "ChangesetPreviewIcon"
 
+---Group for the file's glyph heading a whole file's review comment window. Recoloured by `title_icon` for each
+---window; defining it yourself draws every file's glyph in one colour.
+---@type string
+M.TITLE_ICON_HL = "ChangesetTitleIcon"
+
 ---Glyph heading the Comments section: the file marks' bubble, borrowed as they borrow it, since no icon plugin has a
 ---category to ask for a comment.
 ---@type string
@@ -892,15 +897,36 @@ end
 ---be followed: this one is mixed from two resolved colours rather than linked to them.
 local band_hl
 
+---@param name string
+---@param hl string
+---@param under string
+---@return string name
+local function glyph_over(name, hl, under)
+  set_default(name, {
+    fg = vim.api.nvim_get_hl(0, { name = hl, link = false }).fg,
+    bg = vim.api.nvim_get_hl(0, { name = under, link = false }).bg,
+  })
+  return name
+end
+
 ---@param hl string Group the glyph came with.
 ---@return string group
 function M.band_icon(hl)
   band_hl = hl
-  set_default(M.PREVIEW_ICON_HL, {
-    fg = vim.api.nvim_get_hl(0, { name = hl, link = false }).fg,
-    bg = vim.api.nvim_get_hl(0, { name = M.PREVIEW_HL, link = false }).bg,
-  })
-  return M.PREVIEW_ICON_HL
+  return glyph_over(M.PREVIEW_ICON_HL, hl, M.PREVIEW_HL)
+end
+
+---The group a review comment window's title glyph last came with, followed as `band_hl` is.
+---@type string?
+local title_hl
+
+---Point `TITLE_ICON_HL` at `hl`'s colour over `FloatTitle`'s background, as `band_icon` does for the band. One group
+---for every window: focus leaving one closes it, so only one is ever open.
+---@param hl string Group the glyph came with.
+---@return string group
+function M.title_icon(hl)
+  title_hl = hl
+  return glyph_over(M.TITLE_ICON_HL, hl, "FloatTitle")
 end
 
 ---The sentence shown in place of the tree when there is nothing to list.
@@ -1031,6 +1057,9 @@ function M.define_highlights()
   -- the one thing here that can come out invisible rather than merely off-key.
   if band_hl then
     M.band_icon(band_hl)
+  end
+  if title_hl then
+    M.title_icon(title_hl)
   end
 end
 

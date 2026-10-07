@@ -87,6 +87,14 @@ describe("changeset.reviewing", function()
   end
 
   describe("comment", function()
+    it("leaves a selection of the first line a comment on that line", function()
+      edit_file()
+
+      reviewing.comment(1, 1)
+
+      assert.equal(1, window().comment.line)
+    end)
+
     it("opens under the range's last line and keeps a save on the range", function()
       edit_file()
 
@@ -207,6 +215,49 @@ describe("changeset.reviewing", function()
     end)
   end)
 
+  describe("comment_here", function()
+    it("comments the whole file from its first line, keeping a save on no line", function()
+      edit_file()
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+
+      reviewing.comment_here()
+
+      assert.equal(1, window().line)
+      window().save("the file", function() end)
+      assert.same({ { path = "a.lua", body = "the file" } }, comment_store.list(dir))
+    end)
+
+    it("opens the whole file's comment to edit from its first line", function()
+      edit_file()
+      comment_store.keep(dir, comment({ line = 1, body = "line one" }))
+      comment_store.keep(dir, { path = "a.lua", body = "the file" })
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+
+      reviewing.comment_here()
+
+      assert.equal("the file", window().body)
+    end)
+
+    it("heads a whole file's window with the file's icon", function()
+      edit_file()
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+
+      reviewing.comment_here()
+
+      assert.is_table(window().icon)
+    end)
+
+    it("comments the cursor's line anywhere past the first", function()
+      edit_file()
+      vim.api.nvim_win_set_cursor(0, { 3, 0 })
+
+      reviewing.comment_here()
+
+      assert.equal(3, window().comment.line)
+      assert.is_nil(window().icon)
+    end)
+  end)
+
   describe("open", function()
     it("replaces the comment's body on a save", function()
       edit_file()
@@ -307,6 +358,17 @@ describe("changeset.reviewing", function()
 
       assert.is_false(asking())
       assert.same({ comment({ start_line = 1, line = 6 }) }, comment_store.list(dir))
+    end)
+
+    it("deletes the whole file's comment from its first line", function()
+      edit_file()
+      comment_store.keep(dir, comment({ line = 1 }))
+      comment_store.keep(dir, { path = "a.lua", body = "the file" })
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+
+      reviewing.delete()
+
+      assert.same({ comment({ line = 1 }) }, comment_store.list(dir))
     end)
 
     it("says when the line has no comment", function()

@@ -1,10 +1,11 @@
 ---The markdown window a review comment is written in, under the line it is about.
 
 local help = require("changeset.help")
+local render = require("changeset.render")
 
 local M = {}
 
-local MAX_WIDTH = 72
+local MAX_WIDTH = 88
 local HEIGHT = 6
 local MIN_WIDTH = 20
 -- The float's rows and its top and bottom border.
@@ -24,6 +25,7 @@ end
 ---@class changeset.ReviewCommentWindowOpts
 ---@field line integer The current window's buffer line it opens under, 1-based.
 ---@field title string The whole title, e.g. "Review comment · line 42".
+---@field icon [string, string]? A glyph and the icon plugin's group for it, drawn ahead of the title.
 ---@field keys string[] Keys that save, in insert and normal mode.
 ---@field save_desc string The save keys' `desc`, which `?` lists.
 ---@field close_desc string The `desc` of the keys that close without saving, which `?` lists.
@@ -207,7 +209,8 @@ function M.open(opts)
       height = HEIGHT,
       style = "minimal",
       border = "rounded",
-      title = " " .. opts.title .. " ",
+      title = opts.icon and { { " " .. opts.icon[1], render.title_icon(opts.icon[2]) }, { " " .. opts.title .. " " } }
+        or " " .. opts.title .. " ",
       title_pos = "left",
       footer_pos = "right",
     })

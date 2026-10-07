@@ -40,7 +40,11 @@ local subcommands = {
     require("changeset.reviewing").abandon()
   end,
   ["comment new"] = function(opts)
-    require("changeset.reviewing").comment(opts.line1, opts.line2)
+    local reviewing = require("changeset.reviewing")
+    if opts.range == 0 then
+      return reviewing.comment_here()
+    end
+    reviewing.comment(opts.line1, opts.line2)
   end,
   ["comment del"] = function()
     require("changeset.reviewing").delete()
