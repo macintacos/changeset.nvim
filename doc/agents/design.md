@@ -423,6 +423,12 @@ from the sidebar's `n-v` one, so neither removes the other's. Leaving the window
 way cancels. Every close gives focus back to the window the dialog opened from before the
 answer runs, so whatever the answer opens or focuses is not undone by the close.
 
+Other plugins' marks stay off a dialog's text. mini.indentscope would rule a scope line
+down its margins and mini.cursorword would underline the focused label under the hidden
+cursor, so both are off in its buffer. It scrolls back to its first line whenever its
+cursor moves: scrollEOF.nvim scrolls on that to leave room past a buffer's end, which
+would push the quoted place out of a window sized to show every line.
+
 A dialog is modal, and three things hold it so:
 
 - **Its window keeps its buffer**, through `winfixbuf`. The float takes its opener's

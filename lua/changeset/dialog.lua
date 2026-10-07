@@ -270,6 +270,10 @@ local function open(lines, frame, answer)
   local width = math.max(frame.width, cells(title), footer and cells(footer) or 0)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = "wipe"
+  -- The margins read as indents, down which mini.indentscope would rule a scope line.
+  vim.b[buf].miniindentscope_disable = true
+  -- The hidden cursor sits on the focused button, whose label mini.cursorword would underline.
+  vim.b[buf].minicursorword_disable = true
   paint(buf, lines)
   local state = {
     buf = buf,
@@ -309,6 +313,17 @@ local function open(lines, frame, answer)
       -- Closing a window is not allowed while focus is leaving it.
       vim.schedule(function()
         finish(state, nil)
+      end)
+    end,
+  })
+  -- Fires: the cursor moving to a button. scrollEOF.nvim scrolls on it to leave room past a buffer's end, pushing lines
+  -- out of a window sized to show them all; its autocmd is older, so it runs first and this one undoes it.
+  vim.api.nvim_create_autocmd("CursorMoved", {
+    buffer = buf,
+    desc = "changeset: scroll a dialog back to its first line",
+    callback = function()
+      vim.api.nvim_win_call(state.win, function()
+        vim.fn.winrestview({ topline = 1 })
       end)
     end,
   })

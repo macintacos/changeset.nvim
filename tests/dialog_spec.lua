@@ -256,6 +256,31 @@ describe("changeset.dialog", function()
       assert.equal(before, vim.o.guicursor)
     end)
 
+    it("scrolls back to its first line, which a plugin keeping room past the end would push off the top", function()
+      -- Older than the dialog's, as scrollEOF.nvim's is, so it runs first.
+      local group = vim.api.nvim_create_augroup("scroll_past_end", {})
+      vim.api.nvim_create_autocmd("CursorMoved", {
+        group = group,
+        callback = function()
+          vim.fn.winrestview({ topline = 3 })
+        end,
+      })
+      ask()
+
+      -- Neovim's main loop fires CursorMoved between keys, and a spec runs none.
+      vim.api.nvim_exec_autocmds("CursorMoved", { buffer = vim.api.nvim_get_current_buf() })
+      vim.api.nvim_del_augroup_by_id(group)
+
+      assert.equal(1, vim.fn.line("w0"))
+    end)
+
+    it("turns off mini.indentscope's scope line and mini.cursorword's underline", function()
+      ask()
+
+      assert.is_true(vim.b.miniindentscope_disable)
+      assert.is_true(vim.b.minicursorword_disable)
+    end)
+
     it("centres itself on the editor", function()
       ask()
 
