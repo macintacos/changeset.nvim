@@ -97,7 +97,7 @@ _Avoid_: committed, final
 
 **Review**:
 Every review comment of a repository. The first one written starts it, and submitting or
-`:Changeset abandon` ends it.
+`:Changeset review abandon` ends it.
 _Avoid_: pending review; bare "review" where PR Review Mode (`lua/changeset/review.lua`)
 could be meant
 
@@ -108,7 +108,7 @@ _Avoid_: send, post; "submit" never means GitHub here
 
 **Block**:
 A review comment's whole text in a box drawn under its last line in its file, shown in
-place of its first line while `:Changeset toggle-comments` has blocks on.
+place of its first line while `:Changeset comment toggle` has blocks on.
 _Avoid_: box, card, inline comment
 
 **Parked block**:

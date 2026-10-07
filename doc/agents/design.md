@@ -320,7 +320,7 @@ local function greet(name)
 │                                                                        │
 │                                                                        │
 │                                                                        │
-╰ kept until :Changeset submit ─────────────────── <C-CR> save · q draft ╯
+╰ kept until :Changeset review submit ──────────── <C-CR> save · q draft ╯
   return "hello " .. name
 end
 ```
@@ -380,7 +380,7 @@ reaches the same hook and the caller discards it, never storing it.
 ╰ <CR> or 1-3 submit  q cancel ──────────────────────────╯
 ```
 
-The question before a deletion and the choice of agent for `:Changeset submit` are floats
+The question before a deletion and the choice of agent for `:Changeset review submit` are floats
 `changeset.dialog` draws, not `vim.ui.select`: a picker such as mini.pick turns a question
 into a fuzzy list under a prompt, which reads as a search rather than a decision. Neovim
 0.12's experimental `ui2` gives plugins no dialog to build on, as it only redraws
@@ -581,7 +581,7 @@ as a missing-glyph box, as the header's glyphs do.
      ╰ <CR> edit · d delete ────╯
 ```
 
-`:Changeset toggle-comments` swaps every review comment's circle and first line for a
+`:Changeset comment toggle` swaps every review comment's circle and first line for a
 block: its whole text in a box drawn as virtual lines under its last line, a range's under
 the range's last. It reads as the review comment window collapsed, so it wears that
 window's clothes: a rounded border in `FloatBorder`, the title in `FloatTitle`'s colour,
@@ -678,7 +678,7 @@ Attaching is visible to the rest of Neovim:
 
 ### Submitting hands the review to an agent
 
-`:Changeset submit` turns the review into text and pastes it into an AI agent's prompt in
+`:Changeset review submit` turns the review into text and pastes it into an AI agent's prompt in
 another pane of the same herdr workspace, through `changeset.herdr`. Each review comment
 becomes a block: its `path:line` or `path:first-last`, its lines fenced in the file's
 filetype, and its body. The lines are read as they are now, from the buffer when the file
@@ -745,7 +745,7 @@ stop on its header, a filter matches a row by its path, moving onto one previews
 A row is for finding what you wrote, so its keys act on that. `<CR>` and the split and tab
 keys jump to its line, then open it editable in the review comment window, its title and
 keys' descriptions saying edit and update. `d` asks first, in the question of § Dialogs that
-`:Changeset abandon` uses too, then deletes it.
+`:Changeset review abandon` uses too, then deletes it.
 
 ### Footer
 
@@ -835,7 +835,7 @@ because they leave nothing for `.` to repeat otherwise. The operator is `g@l` af
 lambda instead. That is a choice: `.` repeats the first count, and a count given to `.`
 itself is lost.
 
-`<C-g>c` is a prefix of `<C-g>cc`, `<C-g>cn` and `<C-g>cp`. On its own, after
+`<C-g>c` is the prefix of every `comment` key, `<C-g>cc` among them. On its own, after
 `'timeoutlen'`, it would fall through to Select mode or a pending `c`. So when changeset
 maps `<C-g>cc`, it maps `<C-g>c` to comment too.
 
@@ -1029,7 +1029,7 @@ repository's deliberate choice is none of that save's business.
   an `<expr>` map reads it before typeahead has moved it. So the command runs, and the
   delete dialog is open, before any key typed after it: a typed-ahead `D` or `<CR>` answers
   the dialog, as § Dialogs promises. A command that leaves the window open, such as a failed
-  save or `last-comment` on the comment already open, restarts insert mode at that cursor.
+  save or `comment last` on the comment already open, restarts insert mode at that cursor.
   The window skips, in insert mode only, each key `mapcheck()` finds an insert-mode map
   clashing with when it opens, its buffer's markdown maps included. A map made after
   startup counts too: the user's nvim-surround sets its insert `<C-g>s` in a

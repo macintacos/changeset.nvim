@@ -12,7 +12,7 @@ it is a breaking change.
 modules create their autocmds as they load, and a session that never opens the sidebar
 should create none. Its maps run `<Cmd>Changeset …<CR>`, so a map and the command take
 one route through `:Changeset`, with its range. The exceptions are the walking maps,
-`next`, `prev`, `next-comment` and `prev-comment`. They are `g@` operators so that `.`
+`next`, `prev`, `comment next` and `comment prev`. They are `g@` operators so that `.`
 repeats them, and their `'operatorfunc'` calls `step()` in `lua/changeset/init.lua` and
 `next_comment()` / `prev_comment()` in `lua/changeset/reviewing.lua` with the count. So
 those functions stay public, and the expr map's callback requires nothing. From the review
@@ -21,7 +21,7 @@ command's route below.
 
 `:Changeset` asks `changeset.review_comment_window`, only when that module is already
 loaded, whether the review comment window is current. If it is, every subcommand goes to
-`reviewing.from_window()`: `comment` saves, `delete` deletes the comment being written, and
+`reviewing.from_window()`: `comment new` saves, `comment del` deletes the comment being written, and
 any other closes the window, keeping a draft, then runs from the comment's line in the
 source window. That is the one place the rule lives; no verb checks for the window itself.
 The plugin records the default `<C-g>` keys it mapped globally in normal mode in
@@ -30,13 +30,17 @@ buffer, unless it equals a `review_comment.save` key. It maps them in insert mod
 only those `mapcheck()` finds no insert-mode map clashing with when the window opens, so a
 map the user makes after startup still counts.
 
-Every subcommand has a `<Plug>(changeset-<subcommand>)` map. The global keys are defaults
+Every subcommand has a `<Plug>` map of its words joined by hyphens, such as
+`<Plug>(changeset-comment-new)`. The global keys are defaults
 under `<C-g>`, mapped once startup is done. Each one is skipped when its key is already
 mapped in that mode, and all of them are off when `vim.g.changeset_no_default_maps` is
 set.
 
 A new command is a `:Changeset` subcommand, never a second user command. It gets a
-`<Plug>` map and, when it's a review verb, a mnemonic `<C-g>` default.
+`<Plug>` map and, when it's a review verb, a mnemonic `<C-g>` default. A verb that writes, walks,
+lists or shows review comments goes under `comment`, its key under `<C-g>c`. One that hands
+off or ends the whole review, or toggles PR Review Mode, goes under `review`. `:Changeset comment` and `:Changeset review` alone are
+errors that name their verbs, not defaults.
 
 `footer()` in `lua/changeset/init.lua` stays public although only the plugin calls it. The
 sidebar's statusline evaluates it from a string, `v:lua.require'changeset'.footer()`,
