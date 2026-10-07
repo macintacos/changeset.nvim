@@ -17,8 +17,14 @@ local function closed()
   return float() == nil
 end
 
+-- A user's own insert-mode <C-g>s, as nvim-surround maps it, in place before the plugin's default keys are.
+local surrounded = 0
+vim.keymap.set("i", "<C-g>s", function()
+  surrounded = surrounded + 1
+end)
+
 describe(":Changeset from the review comment window", function()
-  local dir, source, echo
+  local dir, source, echo, notify, notes
 
   before_each(function()
     if not vim.g.loaded_changeset then
@@ -29,6 +35,10 @@ describe(":Changeset from the review comment window", function()
     os.remove(comment_store.path())
     echo = vim.api.nvim_echo
     vim.api.nvim_echo = function() end
+    notify, notes = vim.notify, {}
+    vim.notify = function(msg, level)
+      table.insert(notes, { msg = msg, level = level, window_open = float() ~= nil })
+    end
     dir = vim.fn.tempname()
     vim.fn.mkdir(dir, "p")
     dir = vim.fs.normalize(assert(vim.uv.fs_realpath(dir)))
@@ -40,6 +50,7 @@ describe(":Changeset from the review comment window", function()
 
   after_each(function()
     vim.api.nvim_echo = echo
+    vim.notify = notify
     vim.cmd("silent! fclose!")
     vim.cmd.stopinsert()
     vim.cmd("silent! %bwipeout!")
@@ -143,17 +154,90 @@ describe(":Changeset from the review comment window", function()
     assert.same({ { path = "a.lua", line = 4, body = "note" } }, comment_store.list(dir))
   end)
 
-  it("leaves a default key the plugin didn't map unmapped in insert mode", function()
-    local taken = vim.fn.maparg("<C-g>y", "n", false, true)
-    vim.keymap.set("n", "<C-g>y", "<Nop>")
+  it("leaves a user's own insert-mode key under <C-g> to run in the window", function()
+    comment_store.keep(dir, { path = "a.lua", line = 3, body = "saved" })
     write(4, "")
-    local yank = insert_map("<C-g>y")
-    vim.keymap.del("n", "<C-g>y")
-    if next(taken) then
-      vim.fn.mapset(taken)
+    assert.is_nil(insert_map("<C-g>s"))
+    assert.truthy(insert_map("<C-g>cn"))
+    vim.api.nvim_feedkeys(vim.keycode("Ahi<C-g>s<Esc>"), "x", false)
+
+    assert.equal(1, surrounded)
+    assert.equal(1, #comment_store.list(dir))
+    assert.truthy(review_comment_window.current())
+  end)
+
+  it("hands keys typed ahead of <C-g>d in insert mode to the delete dialog", function()
+    write(4, "")
+    vim.api.nvim_feedkeys(vim.keycode("Ahello world<C-g>dD"), "x", false)
+
+    assert.is_true(closed())
+    assert.same({}, comment_store.list(dir))
+  end)
+
+  it("says it deleted the comment once the window has closed", function()
+    comment_store.keep(dir, { path = "a.lua", line = 4, body = "note" })
+    write(4, "note")
+    vim.api.nvim_feedkeys(vim.keycode("A<C-g>dD"), "x", false)
+
+    assert.is_true(closed())
+    local deleted = vim.iter(notes):find(function(note)
+      return note.msg:find("deleted", 1, true)
+    end)
+    assert.is_false(assert(deleted).window_open)
+  end)
+
+  it("takes a split of its buffer with it, keeping a draft", function()
+    write(4, "typing")
+    vim.cmd.stopinsert()
+    vim.cmd.split()
+
+    assert.is_true(closed())
+    vim.wait(100)
+    assert.equal(1, #vim.api.nvim_list_wins())
+    assert.same({ { path = "a.lua", line = 4, body = "typing", draft = true } }, comment_store.list(dir))
+  end)
+
+  it("refuses to show another buffer", function()
+    write(4, "typing")
+    vim.cmd.stopinsert()
+    local buf = vim.api.nvim_get_current_buf()
+
+    pcall(vim.cmd.edit, dir .. "/a.lua")
+
+    assert.equal(buf, vim.api.nvim_get_current_buf())
+  end)
+
+  it("describes its <C-g> keys under ? as they act on the comment being written", function()
+    write(4, "")
+    local function desc(lhs)
+      local keymap = vim.iter(vim.api.nvim_buf_get_keymap(0, "n")):find(function(each)
+        return vim.keycode(each.lhs) == vim.keycode(lhs)
+      end)
+      return keymap and keymap.desc
     end
 
-    assert.is_nil(yank)
-    assert.truthy(insert_map("<C-g>cn"))
+    assert.equal("Save the review comment", desc("<C-g>cc"))
+    assert.equal("Save the review comment", desc("<C-g>c"))
+    assert.equal("Delete this review comment", desc("<C-g>d"))
+    assert.equal("Keep a draft, then: Next review comment", desc("<C-g>cn"))
+  end)
+
+  describe("last-comment", function()
+    it("closes the window on another comment, keeping a draft, and opens the comment saved last", function()
+      comment_store.keep(dir, { path = "a.lua", line = 9, body = "last" })
+      write(4, "typing")
+
+      vim.cmd("Changeset last-comment")
+
+      vim.wait(500, function()
+        local current = review_comment_window.current()
+        return current ~= nil and current.comment.line == 9
+      end, 10)
+      assert.equal(9, assert(review_comment_window.current()).comment.line)
+      assert.equal(9, vim.api.nvim_win_get_cursor(source)[1])
+      assert.truthy(vim.iter(comment_store.list(dir)):find(function(comment)
+        return comment.line == 4 and comment.draft
+      end))
+    end)
   end)
 end)

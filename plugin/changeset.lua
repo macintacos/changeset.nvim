@@ -158,11 +158,25 @@ local function map_defaults()
   -- Decided before any default is mapped, which would all clash with it. A user's map that blocks `<C-g>cc` blocks it
   -- too.
   local pause = { n = not taken("<C-g>c", "n"), x = not taken("<C-g>c", "x") }
+  -- The normal-mode keys the review comment window also maps in insert mode, on its own buffer: each one the user's
+  -- insert-mode maps leave free.
+  local window_keys = {}
+  ---@param lhs string
+  ---@param name string
+  ---@param desc string
+  local function offer(lhs, name, desc)
+    if not taken(lhs, "i") then
+      window_keys[#window_keys + 1] = { lhs = lhs, name = name, desc = desc }
+    end
+  end
   for _, key in ipairs(keys) do
     local lhs = "<C-g>" .. key[1]
     for _, mode in ipairs(key[4] or { "n" }) do
       if not taken(lhs, mode) then
         vim.keymap.set(mode, lhs, ("<Plug>(changeset-%s)"):format(key[2]), { desc = key[3] })
+        if mode == "n" then
+          offer(lhs, key[2], key[3])
+        end
       end
     end
   end
@@ -171,8 +185,12 @@ local function map_defaults()
   for mode, comments in pairs(pause) do
     if comments then
       vim.keymap.set(mode, "<C-g>c", "<Plug>(changeset-comment)", { desc = keys[1][3] })
+      if mode == "n" then
+        offer("<C-g>c", "comment", keys[1][3])
+      end
     end
   end
+  vim.g.changeset_window_keys = window_keys
 end
 
 local group = vim.api.nvim_create_augroup("changeset.plugin", {})

@@ -37,7 +37,7 @@ end
 ---@field text fun(): string Its lines joined by "\n".
 ---@field save fun() As its save keys do.
 ---@field close fun(after: fun()?) As `q` does, keeping the text, then calls `after` once it has gone and insert mode with it.
----@field discard fun() Closes it keeping nothing.
+---@field discard fun(after: fun()?) Closes it keeping nothing, then calls `after` as `close` does.
 ---@field hold fun(opens: fun()) Leaves insert mode, then calls `opens`, keeping the window open while focus is in the window that opens, until focus comes back to it and its mode.
 
 ---Each open window's report, by window.
@@ -50,21 +50,24 @@ function M.current()
   return open_windows[vim.api.nvim_get_current_win()]
 end
 
----The default `<C-g>` keys `plugin/changeset.lua` mapped in normal mode, by `lhs`, each with its `<Plug>`'s
----subcommand and `desc`. A key the user took maps something else, and is left out.
+---The default `<C-g>` keys `plugin/changeset.lua` mapped in normal mode and left free in insert mode, each with its
+---subcommand and `desc`; none while the default keys are off.
 ---@return { lhs: string, name: string, desc: string }[]
 local function default_keys()
-  if vim.g.changeset_no_default_maps then
-    return {}
+  return vim.g.changeset_window_keys or {}
+end
+
+---What a default key does in the window, as `?` lists it.
+---@param key { name: string, desc: string }
+---@return string
+local function window_desc(key)
+  if key.name == "comment" then
+    return "Save the review comment"
   end
-  local found = {}
-  for _, keymap in ipairs(vim.api.nvim_get_keymap("n")) do
-    local name = (keymap.rhs or ""):match("^<Plug>%(changeset%-(.+)%)$")
-    if name and vim.startswith(keymap.lhs, "<C-G>") then
-      found[#found + 1] = { lhs = keymap.lhs, name = name, desc = keymap.desc }
-    end
+  if key.name == "delete" then
+    return "Delete this review comment"
   end
-  return found
+  return "Keep a draft, then: " .. key.desc
 end
 
 ---Where a save goes on the left, `hint` on the right, the border between them; `hint` only
@@ -191,11 +194,14 @@ function M.open(opts)
   vim.bo[buf].filetype = "markdown"
   vim.wo[win].wrap = true
   vim.wo[win].linebreak = true
+  -- An `:e` here would leave the float showing a file.
+  vim.wo[win].winfixbuf = true
 
   ---@param after fun()?
   local function close_now(after)
-    if vim.api.nvim_win_is_valid(win) then
-      vim.api.nvim_win_close(win, true)
+    -- Deleting the buffer closes every window on it, a `:split` of the float's among them.
+    if vim.api.nvim_buf_is_valid(buf) then
+      vim.api.nvim_buf_delete(buf, { force = true })
     end
     if after then
       after()
@@ -276,7 +282,8 @@ function M.open(opts)
     group = group,
     buffer = buf,
     callback = vim.schedule_wrap(function()
-      if not held and vim.api.nvim_get_current_win() ~= win then
+      -- The command-line window is a detour from the float, and nothing can close while it is open.
+      if not held and vim.fn.getcmdwintype() == "" and vim.api.nvim_get_current_win() ~= win then
         close_now()
       end
     end),
@@ -347,14 +354,27 @@ function M.open(opts)
   vim.keymap.set("i", "<S-Esc>", close, { buffer = buf, desc = opts.close_desc })
   map("<S-Esc>", close, opts.close_desc)
   map("q", close, opts.close_desc)
-  -- Typed mid-sentence, so they work in insert mode too; normal mode has the global maps.
-  local globals = {}
+  ---The cursor insert mode left at when a default key was typed in it, until the key's command has run.
+  ---@type integer[]?
+  local typed_at
   for _, key in ipairs(default_keys()) do
-    vim.keymap.set("i", key.lhs, ("<Cmd>Changeset %s<CR>"):format(key.name), { buffer = buf, desc = key.desc })
-    globals[#globals + 1] = key.lhs
+    local desc = window_desc(key)
+    local command = ("<Cmd>Changeset %s<CR>"):format(key.name)
+    -- Not `map`: its nowait would end `<C-g>c` before `<C-g>cn` could follow.
+    vim.keymap.set("n", key.lhs, command, { buffer = buf, desc = desc })
+    own[#own + 1] = key.lhs
+    -- Typed mid-sentence, so they work in insert mode too. They leave insert mode in their own keys, so the command
+    -- runs, and a dialog it opens is open, before any key typed after them.
+    vim.keymap.set("i", key.lhs, function()
+      typed_at = vim.api.nvim_win_get_cursor(win)
+      vim.schedule(function()
+        typed_at = nil
+      end)
+      return "<C-\\><C-n>" .. command
+    end, { buffer = buf, expr = true, desc = desc })
   end
   map("?", function()
-    help.show(buf, own, globals)
+    help.show(buf, own)
     -- A help window that takes focus is a look at the keys, not a move away.
     held = vim.api.nvim_get_current_win() ~= win
   end, "Show these keymaps")
@@ -365,13 +385,13 @@ function M.open(opts)
     text = text,
     save = save,
     close = close,
-    discard = function()
+    discard = function(after)
       saved = true
-      close()
+      close(after)
     end,
     hold = function(opens)
       held = true
-      resume = inserting() and vim.api.nvim_win_get_cursor(win) or nil
+      resume = inserting() and vim.api.nvim_win_get_cursor(win) or typed_at
       leave_insert(opens)
     end,
   }
