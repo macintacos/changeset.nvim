@@ -154,7 +154,7 @@ subcommand:
 | `<C-g>y` | normal | `<Plug>(changeset-review-yank)` | copy the review as text |
 | `<C-g>s` | normal | `<Plug>(changeset-review-submit)` | submit the review to an agent |
 | `<C-g>a` | normal | `<Plug>(changeset-review-abandon)` | abandon the review |
-| `<C-g>t` | normal | `<Plug>(changeset-toggle)` | toggle the sidebar |
+| `<C-g>g` | normal | `<Plug>(changeset-toggle)` | toggle the sidebar |
 | `<C-g>r` | normal | `<Plug>(changeset-refresh)` | rebuild the sidebar |
 | `<C-g>m` | normal | `<Plug>(changeset-review-mode)` | toggle PR Review Mode |
 | `]g` | normal | `<Plug>(changeset-preview-next)` | preview the next change |

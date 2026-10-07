@@ -195,7 +195,7 @@ runs its subcommand:
 
   <C-g>a     normal     <Plug>(changeset-review-abandon)   abandon the review
 
-  <C-g>t     normal     <Plug>(changeset-toggle)           toggle the sidebar
+  <C-g>g     normal     <Plug>(changeset-toggle)           toggle the sidebar
 
   <C-g>r     normal     <Plug>(changeset-refresh)          rebuild the sidebar
 
