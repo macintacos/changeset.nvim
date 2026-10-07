@@ -932,14 +932,21 @@ repository's deliberate choice is none of that save's business.
   command-line window doesn't count either: nothing can close while it is open, and
   leaving it returns to the float.
 - **The window's insert-mode `<C-g>` keys leave insert mode in their own keys.** Each runs
-  `<C-\><C-n>` ahead of its `<Cmd>`, recording the column first, so the command runs, and
-  the delete dialog is open, before any key typed after it: a typed-ahead `D` or `<CR>`
-  answers the dialog, as § Dialogs promises. `plugin/changeset.lua` records, in
-  `vim.g.changeset_window_keys`, the keys it mapped in normal mode that no insert-mode map
-  of the user's clashes with, under `taken()`'s prefix rule, so nvim-surround's insert
-  `<C-g>s` still runs in the window. The window maps them in normal mode too, on its buffer,
-  so `?` describes each as it acts there: save, delete this review comment, or keep a
-  draft, then the key's own action.
+  `<C-\><C-n>` ahead of its `<Cmd>`, noting the cursor first in a `<Cmd>` of its own, since
+  an `<expr>` map reads it before typeahead has moved it. So the command runs, and the
+  delete dialog is open, before any key typed after it: a typed-ahead `D` or `<CR>` answers
+  the dialog, as § Dialogs promises. A command that leaves the window open, such as a failed
+  save or `last-comment` on the comment already open, restarts insert mode at that cursor.
+  The window skips, in insert mode only, each key `mapcheck()` finds an insert-mode map
+  clashing with when it opens, its buffer's markdown maps included. A map made after
+  startup counts too: the user's nvim-surround sets its insert `<C-g>s` in a
+  `vim.schedule`. The window maps every default key in normal mode on its buffer, so `?`
+  describes each as it acts there: save, delete this review comment, or keep a draft, then
+  the key's own action. A key equal to a `review_comment.save` key is left out in both modes,
+  so the save key saves.
+- **The draft notice is scheduled.** A subcommand run from the window reports straight
+  after the close; notified after it, the draft notice replaces that message on a stock UI
+  instead of stacking under it into a hit-enter prompt.
 - **A saved review comment leaves insert mode before the window closes.** The save keys
   are pressed while typing and the answer comes later. `stopinsert` only takes effect on
   the next loop iteration, so the window closes on the float's own `InsertLeave`; closing

@@ -517,10 +517,11 @@ subcommand closes the window, keeping a draft, then runs from the comment’s
 line in the file, so `<C-g>cn` goes to the next review comment after it.
 `<C-g>cl` or `:Changeset last-comment` on the comment saved last stays in the
 window and says so. With the default keys on, the `<C-g>` keys the plugin
-mapped work in insert mode in the window too, except any your own insert-mode
-maps take, such as nvim-surround’s `<C-g>s`. `?` lists each as it acts in the
-window. The command-line window, opened from the review comment window, is a
-detour: the review comment window stays open behind it.
+mapped work in insert mode in the window too, except a key you map in insert
+mode yourself, at any time, such as nvim-surround’s `<C-g>s`, and a key you
+set as a `review_comment.save` key. `?` lists each as it acts in the window.
+The command-line window, opened from the review comment window, is a detour:
+the review comment window stays open behind it.
 
 
 PICKER                                                 *changeset.nvim-picker*
