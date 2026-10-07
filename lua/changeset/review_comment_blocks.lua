@@ -9,8 +9,7 @@ local M = {}
 
 local ns = vim.api.nvim_create_namespace("changeset.review_comment_blocks")
 
--- The review comment window's measure, so a block reads as that window collapsed.
-local MAX_WIDTH = 72
+local MAX_WIDTH = review_comment_window.MEASURE
 local HINT = " <CR> edit · d delete "
 local ELLIPSIS = "…"
 local SOLID = { h = "─", v = "│" }

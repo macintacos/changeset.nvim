@@ -154,6 +154,44 @@ describe(":Changeset from the review comment window", function()
     assert.same({ { path = "a.lua", line = 4, body = "note" } }, comment_store.list(dir))
   end)
 
+  it("runs keys typed straight after an insert-mode save in the file it returns to", function()
+    write(4, "")
+    local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(source), 0, -1, false)
+
+    vim.api.nvim_feedkeys(vim.keycode("Anote<C-s>:15<CR><C-g>ccnext<C-s>"), "xt", false)
+
+    assert.equal(source, vim.api.nvim_get_current_win())
+    assert.same(lines, vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(source), 0, -1, false))
+    assert.same({
+      { path = "a.lua", line = 4, body = "note" },
+      { path = "a.lua", line = 15, body = "next" },
+    }, comment_store.list(dir))
+  end)
+
+  it("asks to delete a saved comment saved blank before any key typed after the save", function()
+    comment_store.keep(dir, { path = "a.lua", line = 4, body = "note" })
+    write(4, "")
+    local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(source), 0, -1, false)
+
+    vim.api.nvim_feedkeys(vim.keycode("A<C-s>D"), "xt", false)
+
+    assert.is_true(closed())
+    assert.same(lines, vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(source), 0, -1, false))
+    assert.same({}, comment_store.list(dir))
+  end)
+
+  it("keeps the draft and runs keys typed straight after <S-Esc> in the file", function()
+    write(4, "")
+    local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(source), 0, -1, false)
+
+    vim.api.nvim_feedkeys(vim.keycode("Atext<S-Esc>dd"), "xt", false)
+
+    assert.is_true(closed())
+    assert.same({ { path = "a.lua", line = 4, body = "text", draft = true } }, comment_store.list(dir))
+    table.remove(lines, vim.api.nvim_win_get_cursor(source)[1])
+    assert.same(lines, vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(source), 0, -1, false))
+  end)
+
   it("leaves a user's own insert-mode key under <C-g> to run in the window", function()
     comment_store.keep(dir, { path = "a.lua", line = 3, body = "saved" })
     write(4, "")
@@ -311,15 +349,17 @@ describe(":Changeset from the review comment window", function()
     assert.same({ "last moreX" }, vim.api.nvim_buf_get_lines(0, 0, -1, false))
   end)
 
-  it("goes on writing after a save that fails", function()
-    write(4, "")
-    vim.fn.writefile({ "[1,2]" }, comment_store.path())
-    vim.api.nvim_feedkeys(vim.keycode("Atext<C-g>ccX<Esc>"), "x", false)
-    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-    os.remove(comment_store.path())
+  for _, key in ipairs({ "<C-g>cc", "<C-s>" }) do
+    it(("goes on writing after a save on %s that fails"):format(key), function()
+      write(4, "")
+      vim.fn.writefile({ "[1,2]" }, comment_store.path())
+      vim.api.nvim_feedkeys(vim.keycode("Atext" .. key .. "X<Esc>"), "x", false)
+      local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+      os.remove(comment_store.path())
 
-    assert.same({ "textX" }, lines)
-  end)
+      assert.same({ "textX" }, lines)
+    end)
+  end
 
   it("notifies the draft after the subcommand's own message, so it replaces it", function()
     local said = {}

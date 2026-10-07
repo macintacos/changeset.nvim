@@ -171,13 +171,8 @@ describe("the sidebar's Comments section", function()
   ---Presses the first save key in the window, as typed in insert mode.
   ---@param win integer
   local function save(win)
-    local buf = vim.api.nvim_win_get_buf(win)
-    vim
-      .iter(vim.api.nvim_buf_get_keymap(buf, "i"))
-      :find(function(keymap)
-        return keymap.lhs == "<C-S>"
-      end)
-      .callback()
+    vim.api.nvim_set_current_win(win)
+    vim.api.nvim_feedkeys(vim.keycode("a<C-s>"), "x", false)
   end
 
   it("opens a review comment's window on its line, holding its text, with <CR>", function()
@@ -196,7 +191,7 @@ describe("the sidebar's Comments section", function()
     open_with_review_comments()
     local before = #vim.api.nvim_tabpage_list_wins(0)
 
-    press_on("alpha.txt:5-6", "<C-s>")
+    press_on("alpha.txt:5-6", "<C-x>")
 
     local win = assert(comment_window())
     assert.equal("a range", text_of(win))

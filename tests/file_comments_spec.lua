@@ -101,12 +101,8 @@ describe("a review comment on a whole file", function()
   ---Presses the first save key in the window, as typed in insert mode.
   ---@param win integer
   local function save(win)
-    vim
-      .iter(vim.api.nvim_buf_get_keymap(vim.api.nvim_win_get_buf(win), "i"))
-      :find(function(keymap)
-        return keymap.lhs == "<C-S>"
-      end)
-      .callback()
+    vim.api.nvim_set_current_win(win)
+    vim.api.nvim_feedkeys(vim.keycode("a<C-s>"), "x", false)
   end
 
   it("is written from a deleted file's row, in a window under that row", function()

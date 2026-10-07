@@ -5,7 +5,8 @@ local render = require("changeset.render")
 
 local M = {}
 
-local MAX_WIDTH = 88
+---The most columns inside its border, a review comment block's too, so a block reads as this window collapsed.
+M.MEASURE = 72
 local HEIGHT = 6
 local MIN_WIDTH = 20
 -- The float's rows and its top and bottom border.
@@ -32,8 +33,9 @@ end
 ---@field save fun(body: string, done: fun(err: string?)) Called with the buffer's lines joined by "\n", never only whitespace; the window closes once `done` gets no error.
 ---@field keep fun(body: string) Called with the buffer's lines joined by "\n", empty included, whenever the buffer goes (a close, an :e in the float, quitting) except after a taken save.
 ---@field back fun() Called once a key that closes without saving has closed it, after `keep`.
+---@field blank fun(window: changeset.ReviewCommentWindow)? Called, the window still open, on a save of blank text; without it, the window closes, handing the text to `keep`.
 ---@field body string? The text it opens with.
----@field comment changeset.ReviewComment The comment it is about, as `current` reports it; a new one's body is "".
+---@field comment changeset.ReviewComment The comment it is about, as `current` reports it and its buffer is named; a new one's body is "".
 
 ---The window as `current` reports it, with what can be done to it.
 ---@class changeset.ReviewCommentWindow
@@ -42,6 +44,7 @@ end
 ---@field comment changeset.ReviewComment
 ---@field text fun(): string Its lines joined by "\n".
 ---@field save fun() As its save keys do.
+---@field back fun() As its keys that close without saving do.
 ---@field close fun(after: fun()?) Closes it keeping the text, then calls `after` once it has gone and insert mode with it.
 ---@field discard fun(after: fun()?) Closes it keeping nothing, then calls `after` as `close` does.
 ---@field resume fun() Picks writing back up where a default key typed in insert mode left it, when that key's command leaves the window open.
@@ -69,18 +72,35 @@ local function tell(window, opened)
   end
 end
 
----Where insert mode left the cursor in each window as a default key was typed there, until the key's command has
----run.
+---Where insert mode left the cursor in each window as an insert-mode key of its own was typed there, until the key's
+---command has run.
 ---@type table<integer, integer[]>
 local typed_at = {}
 
----Notes where insert mode is in the current window, for the default key being typed there.
+---Notes where insert mode is in the current window, for the insert-mode key of its own being typed there.
 function M._typed()
   local win = vim.api.nvim_get_current_win()
   typed_at[win] = vim.api.nvim_win_get_cursor(win)
   vim.schedule(function()
     typed_at[win] = nil
   end)
+end
+
+-- Leaves insert mode in the key's own keys, so what follows it runs, and a dialog that opens is open, before any key
+-- typed after it. The cursor is noted from a <Cmd> of its own first: an <expr> map reads it before typeahead has moved
+-- it.
+local LEAVE_INSERT = "<Cmd>lua require('changeset.review_comment_window')._typed()<CR><C-\\><C-n>"
+
+---Saves window `win` as its save keys do, for an insert-mode one once it has left insert mode.
+---@param win integer
+function M._save(win)
+  open_windows[win].save()
+end
+
+---Closes window `win` as its keys that close without saving do, for an insert-mode one once it has left insert mode.
+---@param win integer
+function M._back(win)
+  open_windows[win].back()
 end
 
 ---The review comment window, when it is the current window.
@@ -155,6 +175,16 @@ local function reveal(win, line)
   end)
 end
 
+---The name a statusline shows for `comment`'s window: its file and lines, under a scheme so it is never expanded into a
+---path. Never `changeset://`, by which a loaded session finds the sidebar.
+---@param comment changeset.ReviewComment
+---@return string
+local function name(comment)
+  local first, last = comment.start_line or comment.line, comment.line
+  local lines = not last and "" or first < last and (":%d-%d"):format(first, last) or ":" .. last
+  return "review-comment://" .. comment.path .. lines
+end
+
 ---Make a floating `win` taller by the room, since it has no neighbours to scroll past.
 ---@param win integer
 ---@return integer grown The rows it grew, 0 for a split.
@@ -173,8 +203,11 @@ end
 function M.open(opts)
   local source = vim.api.nvim_get_current_win()
   local source_buf = vim.api.nvim_win_get_buf(source)
+  -- Scratch, so 'nofile': no write takes its name for a file.
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = "wipe"
+  -- Protected: a reopen can race the old float's scheduled close, its buffer still holding the name.
+  pcall(vim.api.nvim_buf_set_name, buf, name(opts.comment))
   if opts.body then
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(opts.body, "\n"))
   end
@@ -202,7 +235,7 @@ function M.open(opts)
     -- bufpos anchors at the first text column, so the gutter, the gap and the border all come
     -- out of the window's width.
     local room = vim.api.nvim_win_get_width(source) - vim.fn.getwininfo(source)[1].textoff - GAP - 2
-    local width = math.max(math.min(MAX_WIDTH, room), MIN_WIDTH)
+    local width = math.max(math.min(M.MEASURE, room), MIN_WIDTH)
     return {
       relative = "win",
       win = source,
@@ -235,6 +268,8 @@ function M.open(opts)
   vim.bo[buf].filetype = "markdown"
   vim.wo[win].wrap = true
   vim.wo[win].linebreak = true
+  -- A cell between the text and the left border, as a block has. Neovim pads no window's right side.
+  vim.wo[win].statuscolumn = "%#NormalFloat# "
   -- An `:e` here would leave the float showing a file.
   vim.wo[win].winfixbuf = true
 
@@ -311,7 +346,7 @@ function M.open(opts)
     vim.cmd(cursor[2] >= #row and "startinsert!" or "startinsert")
   end
 
-  ---Picks writing back up after a default key typed in insert mode that left the window open.
+  ---Picks writing back up after an insert-mode key of its own that left the window open.
   local function resume_typing()
     if typed_at[win] and vim.api.nvim_get_current_win() == win then
       restart_insert(typed_at[win])
@@ -397,8 +432,11 @@ function M.open(opts)
     if saving then
       return
     end
-    -- Blank text never reaches `save`; the close hands it to `keep` instead.
     if not text():find("%S") then
+      -- At once, not from the close's BufUnload, so a dialog it opens is open before any key typed after the save.
+      if opts.blank then
+        return opts.blank(open_windows[win])
+      end
       return close()
     end
     saving = true
@@ -413,14 +451,16 @@ function M.open(opts)
   end
 
   local map, own = help.mapper(buf)
+  local save_typed = LEAVE_INSERT .. ("<Cmd>lua require('changeset.review_comment_window')._save(%d)<CR>"):format(win)
   for _, lhs in ipairs(opts.keys) do
-    vim.keymap.set("i", lhs, save, { buffer = buf, desc = opts.save_desc })
+    vim.keymap.set("i", lhs, save_typed, { buffer = buf, desc = opts.save_desc })
     map(lhs, save, opts.save_desc)
   end
   local function back()
     close(opts.back)
   end
-  vim.keymap.set("i", "<S-Esc>", back, { buffer = buf, desc = opts.close_desc })
+  local back_typed = LEAVE_INSERT .. ("<Cmd>lua require('changeset.review_comment_window')._back(%d)<CR>"):format(win)
+  vim.keymap.set("i", "<S-Esc>", back_typed, { buffer = buf, desc = opts.close_desc })
   for _, lhs in ipairs({ "<S-Esc>", "q", "<Esc>" }) do
     map(lhs, back, opts.close_desc)
   end
@@ -447,11 +487,8 @@ function M.open(opts)
     vim.keymap.set("n", key.lhs, command, { buffer = buf, desc = desc })
     own[#own + 1] = key.lhs
     if free[key.lhs] then
-      -- Typed mid-sentence, so they work in insert mode too. They leave insert mode in their own keys, so the command
-      -- runs, and a dialog it opens is open, before any key typed after them.
-      -- The cursor is noted from a <Cmd> of its own: an <expr> map reads it before typeahead has moved it.
-      local note = "<Cmd>lua require('changeset.review_comment_window')._typed()<CR>"
-      vim.keymap.set("i", key.lhs, note .. "<C-\\><C-n>" .. command, { buffer = buf, desc = desc })
+      -- Typed mid-sentence, so they work in insert mode too.
+      vim.keymap.set("i", key.lhs, LEAVE_INSERT .. command, { buffer = buf, desc = desc })
     end
   end
   map("?", function()
@@ -466,6 +503,7 @@ function M.open(opts)
     comment = opts.comment,
     text = text,
     save = save,
+    back = back,
     close = close,
     discard = function(after)
       saved = true

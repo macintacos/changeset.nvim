@@ -18,7 +18,10 @@ end
 
 local function press(buf, mode, lhs)
   local mapping = assert(buffer_map(buf, mode, lhs), lhs .. " is not mapped in " .. mode)
-  mapping.callback()
+  if mapping.callback then
+    return mapping.callback()
+  end
+  vim.api.nvim_feedkeys((mode == "i" and "a" or "") .. vim.keycode(lhs), "x", false)
 end
 
 describe("review_comment_window", function()
@@ -41,6 +44,7 @@ describe("review_comment_window", function()
       keep = function(body)
         kept[#kept + 1] = body
       end,
+      comment = { path = "a.lua", line = 5, body = "" },
     }, overrides or {}))
     return win, vim.api.nvim_win_get_buf(win)
   end
@@ -73,6 +77,50 @@ describe("review_comment_window", function()
       assert.same({ line - 1, 0 }, config.bufpos)
     end)
   end
+
+  it("pads its text a cell in from its left border, wrapped rows too", function()
+    local win, buf = open()
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { ("a"):rep(200) })
+    vim.cmd.redraw()
+
+    local first = vim.fn.screenpos(win, 1, 1)
+    local wrapped = vim.iter(vim.fn.range(1, 200)):find(function(col)
+      return vim.fn.screenpos(win, 1, col).row > first.row
+    end)
+    local border = vim.fn.win_screenpos(win)[2]
+    assert.equal(border + 2, first.col)
+    assert.equal(border + 2, vim.fn.screenpos(win, 1, wrapped).col)
+  end)
+
+  for name, case in pairs({
+    line = { comment = { path = "lua/a.lua", line = 5 }, want = "review-comment://lua/a.lua:5" },
+    lines = { comment = { path = "lua/a.lua", start_line = 4, line = 5 }, want = "review-comment://lua/a.lua:4-5" },
+    ["whole file"] = { comment = { path = "lua/a.lua" }, want = "review-comment://lua/a.lua" },
+  }) do
+    it(("names its buffer for its comment's file and %s, a name no write puts on disk"):format(name), function()
+      case.comment.body = ""
+      local _, buf = open({ comment = case.comment })
+
+      local written, err = pcall(function()
+        vim.cmd("write!")
+      end)
+      assert.equal(case.want, vim.api.nvim_buf_get_name(buf))
+      assert.is_false(written)
+      -- E382: refused for its 'buftype', whatever the name.
+      assert.truthy(tostring(err):find("E382", 1, true))
+    end)
+  end
+
+  it("opens again on its comment before the window it replaces has closed", function()
+    local first = open()
+    vim.cmd.stopinsert()
+    vim.cmd.wincmd("p")
+    assert.is_true(vim.api.nvim_win_is_valid(first))
+
+    local win = open()
+
+    assert.equal(win, vim.api.nvim_get_current_win())
+  end)
 
   it("holds editable markdown and labels itself", function()
     local win, buf = open({ title = "lines 4-5" })
@@ -450,6 +498,60 @@ describe("review_comment_window", function()
   it("lists <S-Esc> under ?", function()
     local _, buf = open()
     assert.truthy(buffer_map(buf, "n", "<S-Esc>").desc)
+  end)
+
+  describe("?", function()
+    local group
+
+    before_each(function()
+      group = vim.api.nvim_create_augroup("review_comment_window_spec_markdown", {})
+      -- As mkdnflow maps a markdown buffer's keys: on the current buffer, as its FileType fires.
+      vim.api.nvim_create_autocmd("FileType", {
+        group = group,
+        pattern = "markdown",
+        callback = function()
+          vim.api.nvim_buf_set_keymap(0, "n", ",ac", "<Nop>", { desc = "Align the table column" })
+        end,
+      })
+    end)
+
+    after_each(function()
+      vim.api.nvim_del_augroup_by_id(group)
+      package.loaded["which-key"] = nil
+    end)
+
+    it("hands which-key its own keys, not a markdown plugin's, and gives the buffer those back after", function()
+      local listed
+      -- which-key lists the current buffer's maps once its popup is up, whatever buffer it is handed.
+      package.loaded["which-key"] = {
+        show = function()
+          listed = vim.tbl_map(function(keymap)
+            return keymap.lhs
+          end, vim.api.nvim_buf_get_keymap(0, "n"))
+        end,
+      }
+      local _, buf = open()
+
+      press(buf, "n", "?")
+
+      assert.is_true(vim.tbl_contains(listed, "q"))
+      assert.is_false(vim.tbl_contains(listed, ",ac"))
+      assert.truthy(buffer_map(buf, "n", ",ac"))
+    end)
+
+    it("lists its own keys, not a markdown plugin's, in a float of its own without which-key", function()
+      local win, buf = open()
+
+      press(buf, "n", "?")
+
+      local shown = assert(vim.iter(vim.api.nvim_list_wins()):find(function(each)
+        return each ~= win and vim.api.nvim_win_get_config(each).relative ~= ""
+      end))
+      local text = table.concat(vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(shown), 0, -1, false), "\n")
+      vim.api.nvim_win_close(shown, true)
+      assert.truthy(text:find("Show these keymaps", 1, true))
+      assert.is_nil(text:find(",ac", 1, true))
+    end)
   end)
 
   describe("inline", function()

@@ -2,13 +2,15 @@ local help = require("changeset.help")
 
 describe("changeset.help", function()
   describe("_own", function()
-    it("drops mappings another plugin put on the sidebar's buffer", function()
+    it("tells the sidebar's mappings from those another plugin put on its buffer", function()
       local keymaps = {
         { lhs = "q", desc = "Close the tree" },
         { lhs = "]]", desc = "Next Reference" },
       }
 
-      assert.same({ { lhs = "q", desc = "Close the tree" } }, help._own(keymaps, { "q" }))
+      local mine, others = help._own(keymaps, { "q" })
+      assert.same({ { lhs = "q", desc = "Close the tree" } }, mine)
+      assert.same({ { lhs = "]]", desc = "Next Reference" } }, others)
     end)
 
     it("recognises its own key however the spelling differs", function()
@@ -18,19 +20,66 @@ describe("changeset.help", function()
     end)
   end)
 
-  describe("_stage", function()
-    it("carries the keys and their descriptions onto the buffer it stages", function()
-      local buf = help._stage({ { lhs = "q", desc = "Close the tree", callback = function() end } })
+  describe("show with which-key", function()
+    after_each(function()
+      package.loaded["which-key"] = nil
+    end)
 
-      local staged
-      for _, keymap in ipairs(vim.api.nvim_buf_get_keymap(buf, "n")) do
-        if keymap.lhs == "q" then
-          staged = keymap
-        end
+    it("gives the buffer another plugin's mappings back as they were", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(buf)
+      vim.keymap.set("n", "q", "<Nop>", { buffer = buf, desc = "Close the tree" })
+      vim.keymap.set("n", ",a", function() end, { buffer = buf, desc = "Callback" })
+      vim.keymap.set("n", ",e", function()
+        return "<Nop>"
+      end, { buffer = buf, expr = true, desc = "Expr" })
+      vim.keymap.set("n", ",n", "<Nop>", { buffer = buf, nowait = true, silent = true, desc = "Nowait" })
+      local function maps()
+        local keymaps = vim.api.nvim_buf_get_keymap(buf, "n")
+        table.sort(keymaps, function(a, b)
+          return a.lhs < b.lhs
+        end)
+        return keymaps
       end
+      local before = maps()
+      package.loaded["which-key"] = { show = function() end }
 
-      assert.not_nil(staged)
-      assert.equal("Close the tree", staged.desc)
+      help.show(buf, { "q" })
+
+      assert.same(before, maps())
+    end)
+
+    it("shows over a buffer that goes while which-key is up", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_set_current_buf(buf)
+      vim.keymap.set("n", "]]", "<Nop>", { buffer = buf, desc = "Next Reference" })
+      package.loaded["which-key"] = {
+        show = function()
+          vim.api.nvim_buf_delete(buf, { force = true })
+        end,
+      }
+
+      help.show(buf, {})
+    end)
+
+    it("gives the buffer another plugin's mappings back when which-key fails", function()
+      local buf = vim.api.nvim_get_current_buf()
+      vim.keymap.set("n", "q", "<Nop>", { buffer = buf, desc = "Close the tree" })
+      vim.keymap.set("n", "]]", "<Nop>", { buffer = buf, desc = "Next Reference" })
+      package.loaded["which-key"] = {
+        show = function()
+          error("popup failed", 0)
+        end,
+      }
+
+      assert.has_error(function()
+        help.show(buf, { "q" })
+      end, "popup failed")
+      local lhs = vim.tbl_map(function(keymap)
+        return keymap.lhs
+      end, vim.api.nvim_buf_get_keymap(buf, "n"))
+      table.sort(lhs)
+      assert.same({ "]]", "q" }, lhs)
     end)
   end)
 

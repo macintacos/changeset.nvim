@@ -8,6 +8,7 @@ local Paths = require("changeset.paths")
 
 describe("review comment blocks", function()
   local tmp, previous_dir
+  local columns = vim.o.columns
 
   before_each(function()
     tmp, previous_dir = Fixture.enter_tempdir()
@@ -29,6 +30,7 @@ describe("review comment blocks", function()
     vim.cmd("silent! nunmap j")
     vim.cmd("silent! nunmap Q")
     vim.o.cursorline = false
+    vim.o.columns = columns
     if not blocks.shown() then
       blocks.show(true)
     end
@@ -136,6 +138,30 @@ describe("review comment blocks", function()
     for i = 2, #text - 1 do
       assert.truthy(text[i]:find("^│ word"))
     end
+  end)
+
+  it("draws a long comment's box as wide as the review comment window that edits it", function()
+    vim.o.columns = 200
+    keep({ path = "alpha.txt", line = 3, body = ("x"):rep(300) })
+    local box = vim.fn.strdisplaywidth(drawn()[1].text[1])
+
+    local win = require("changeset.review_comment_window").open({
+      line = 10,
+      title = "line 10",
+      save_desc = "Save",
+      close_desc = "Close",
+      keys = { "<C-s>" },
+      save = function() end,
+      keep = function() end,
+      back = function() end,
+      comment = { path = "alpha.txt", line = 10, body = "" },
+    })
+    local width = vim.api.nvim_win_get_width(win)
+    vim.api.nvim_win_close(win, true)
+    vim.cmd.stopinsert()
+
+    -- +2 for the window's border, which its width leaves out.
+    assert.are.equal(box, width + 2)
   end)
 
   it("narrows to the narrowest window showing the buffer, cutting the title rather than the box", function()
