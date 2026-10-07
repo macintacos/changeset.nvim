@@ -155,6 +155,9 @@ restarts. With mini.icons:
 - Section headers: `MiniIcons.get("directory", …)` with `src`, `tests`, `docs`,
   `.config` and `build`, so each header wears the icon its kind of directory already has.
 - Orphan-hunk groups: the `lsp`/`Text` icon, dimmed. Not a bespoke glyph.
+- The default `<C-g>` keys in which-key's popup: a category and name per subcommand, such
+  as `filetype`/`qf` for the quickfix list, which which-key asks its own icon provider
+  for. Under devicons, which has no `directory` or `lsp` icons, those keys go without.
 
 A future icon-set change propagates everywhere at once. That is the point.
 

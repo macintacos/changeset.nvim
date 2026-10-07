@@ -48,7 +48,8 @@ Each optional integration adds a feature:
   language whose parser is installed, and needs no language server.
 - mini.icons (once set up) or nvim-web-devicons: icons. nvim-web-devicons covers files
   only.
-- which-key: `?` opens its popup instead of a float.
+- which-key: `?` opens its popup instead of a float, and its popup shows an icon beside
+  each default key.
 - mini.pick (once set up): the [Picker](#picker).
 - gitsigns: [PR Review Mode](#pr-review-mode), and the colours of the status rail (the
   `▎` bar beside each file).

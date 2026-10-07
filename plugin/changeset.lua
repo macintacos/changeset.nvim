@@ -137,6 +137,26 @@ local keys = {
   { "m", "review mode", "Toggle PR Review Mode" },
 }
 
+---Each default key's which-key icon, by subcommand: a category and name which-key asks mini.icons for, so it is drawn
+---from the user's icon set.
+local icons = {
+  ["comment new"] = { cat = "filetype", name = "messages" },
+  ["comment del"] = { cat = "directory", name = "Trash" },
+  ["comment next"] = { cat = "filetype", name = "messages" },
+  ["comment prev"] = { cat = "filetype", name = "messages" },
+  ["comment last"] = { cat = "filetype", name = "messages" },
+  ["comment list"] = { cat = "filetype", name = "qf" },
+  ["comment toggle"] = { cat = "filetype", name = "text" },
+  next = { cat = "filetype", name = "diff" },
+  prev = { cat = "filetype", name = "diff" },
+  ["review yank"] = { cat = "lsp", name = "Text" },
+  ["review submit"] = { cat = "filetype", name = "robots" },
+  ["review abandon"] = { cat = "directory", name = "Trash" },
+  toggle = { cat = "filetype", name = "git" },
+  refresh = { cat = "filetype", name = "git" },
+  ["review mode"] = { cat = "directory", name = ".github" },
+}
+
 ---The steps `.` repeats: each one's `'operatorfunc'` call, `%d` standing for the count.
 local repeatable = {
   next = "v:lua.require'changeset'.step(%d)",
@@ -197,20 +217,24 @@ local function map_defaults()
   local pause = { n = not taken("<C-g>c", "n"), x = not taken("<C-g>c", "x") }
   -- The keys mapped in normal mode, which the review comment window maps again on its own buffer.
   local window_keys = {}
+  -- Every key mapped, as which-key specs that add its icon.
+  local icon_specs = {}
+  ---@param mode string
   ---@param lhs string
   ---@param name string
   ---@param desc string
-  local function offer(lhs, name, desc)
-    window_keys[#window_keys + 1] = { lhs = lhs, name = name, desc = desc }
+  local function map(mode, lhs, name, desc)
+    vim.keymap.set(mode, lhs, plug(name), { desc = desc })
+    icon_specs[#icon_specs + 1] = { lhs, mode = mode, icon = icons[name] }
+    if mode == "n" then
+      window_keys[#window_keys + 1] = { lhs = lhs, name = name, desc = desc }
+    end
   end
   for _, key in ipairs(keys) do
     local lhs = "<C-g>" .. key[1]
     for _, mode in ipairs(key[4] or { "n" }) do
       if not taken(lhs, mode) then
-        vim.keymap.set(mode, lhs, plug(key[2]), { desc = key[3] })
-        if mode == "n" then
-          offer(lhs, key[2], key[3])
-        end
+        map(mode, lhs, key[2], key[3])
       end
     end
   end
@@ -218,13 +242,15 @@ local function map_defaults()
   -- `cn` and `cp` would see it as a clash.
   for mode, comments in pairs(pause) do
     if comments then
-      vim.keymap.set(mode, "<C-g>c", plug("comment new"), { desc = keys[1][3] })
-      if mode == "n" then
-        offer("<C-g>c", "comment new", keys[1][3])
-      end
+      map(mode, "<C-g>c", "comment new", keys[1][3])
     end
   end
   vim.g.changeset_window_keys = window_keys
+  local has_which_key, which_key = pcall(require, "which-key")
+  -- which-key v2 has no add().
+  if has_which_key and which_key.add then
+    which_key.add(icon_specs)
+  end
 end
 
 local group = vim.api.nvim_create_augroup("changeset.plugin", {})

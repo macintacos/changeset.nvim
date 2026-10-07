@@ -441,6 +441,18 @@ describe("plugin/changeset.lua", function()
     end)
   end)
 
+  it("gives which-key a mini.icons icon for each default key it maps", function()
+    local stub = "lua package.loaded['which-key'] = { add = function(spec) added = spec end }"
+    local probe = "for _, spec in ipairs(added) do"
+      .. " if vim.list_contains({ '<C-g>cc', '<C-g>cq', '<C-g>s' }, spec[1]) then"
+      .. " io.write(spec.mode, spec[1], ' ', spec.icon.cat, '/', spec.icon.name, ' ') end end"
+
+    assert.equal(
+      "n<C-g>cc filetype/messages x<C-g>cc filetype/messages n<C-g>cq filetype/qf ",
+      after_startup({ "-c", stub, "-c", "nnoremap <C-g>s :echo 1<CR>" }, probe)
+    )
+  end)
+
   it("maps no default keys when vim.g.changeset_no_default_maps is set", function()
     local probe = "io.write(vim.fn.maparg('<C-g>cc', 'n'), vim.fn.maparg('<C-g>cc', 'x'))"
 
