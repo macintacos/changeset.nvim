@@ -23,7 +23,6 @@ end
 ---@class changeset.ReviewCommentWindowOpts
 ---@field line integer The current window's buffer line it opens under, 1-based.
 ---@field title string The whole title, e.g. "Review comment · line 42".
----@field footer string Names where a save goes, e.g. "kept until :Changeset review submit".
 ---@field keys string[] Keys that save, in insert and normal mode.
 ---@field save_desc string The save keys' `desc`, which `?` lists.
 ---@field close_desc string The `desc` of the keys that close without saving, which `?` lists.
@@ -106,21 +105,6 @@ local function window_desc(key)
   return "Keep a draft, then: " .. key.desc
 end
 
----Where a save goes on the left, `hint` on the right, the border between them; `hint` only
----when both fit in `width`.
----@param where string
----@param hint string
----@param width integer
----@return [string, string][]
-local function footer(where, hint, width)
-  local left, right = " " .. where .. " ", " " .. hint .. " "
-  local gap = width - vim.fn.strdisplaywidth(left) - vim.fn.strdisplaywidth(right)
-  if gap < 1 then
-    return { { left, "FloatFooter" } }
-  end
-  return { { left, "FloatFooter" }, { ("─"):rep(gap), "FloatBorder" }, { right, "FloatFooter" } }
-end
-
 ---Rows `line` takes in `win` once wrapped, less the virtual lines above it.
 ---@param win integer
 ---@param line integer
@@ -183,7 +167,7 @@ function M.open(opts)
   if opts.body then
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(opts.body, "\n"))
   end
-  local hint = vim.fn.keytrans(vim.keycode(opts.keys[1])) .. " save · q draft"
+  local hint = " " .. vim.fn.keytrans(vim.keycode(opts.keys[1])) .. " save · q draft "
 
   ---Its line, held to the source's end should edits there shorten it.
   local function line()
@@ -207,8 +191,8 @@ function M.open(opts)
       row = rows(source, line()),
       col = 0,
       width = width,
-      -- One footer_pos per float, so the hint shares the footer, pushed right by border.
-      footer = footer(opts.footer, hint, width),
+      -- Neovim cuts a footer too wide from its left, which would name another key.
+      footer = vim.fn.strdisplaywidth(hint) <= width and hint or "",
       -- A float is never clipped to its anchor window: off its line, it would cover other text.
       hide = not under_in_view(source, line()),
     }
@@ -223,7 +207,7 @@ function M.open(opts)
       border = "rounded",
       title = " " .. opts.title .. " ",
       title_pos = "left",
-      footer_pos = "left",
+      footer_pos = "right",
     })
   )
   -- Set once the float is current, so the user's FileType settings land on it.

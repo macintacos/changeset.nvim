@@ -31,7 +31,6 @@ describe("review_comment_window", function()
     local win = review_comment_window.open(vim.tbl_extend("force", {
       line = 5,
       title = "line 5",
-      footer = "kept until review sent",
       save_desc = "Save",
       close_desc = "Close",
       keys = SAVE_KEYS,
@@ -76,13 +75,12 @@ describe("review_comment_window", function()
   end
 
   it("holds editable markdown and labels itself", function()
-    local win, buf = open({ title = "lines 4-5", footer = "kept on this machine" })
+    local win, buf = open({ title = "lines 4-5" })
     local config = vim.api.nvim_win_get_config(win)
 
     assert.equal("markdown", vim.bo[buf].filetype)
     assert.is_true(vim.bo[buf].modifiable)
     assert.equal(" lines 4-5 ", config.title[1][1])
-    assert.truthy(config.footer[1][1]:find("kept on this machine", 1, true))
   end)
 
   ---The footer's text, its chunks joined.
@@ -92,10 +90,10 @@ describe("review_comment_window", function()
     end, vim.api.nvim_win_get_config(win).footer))
   end
 
-  it("names its first save key at the right of the footer, across the border from where a save goes", function()
-    local win = open({ footer = "kept until review sent", keys = { "<C-CR>", "<C-s>" } })
-    assert.equal(72, vim.api.nvim_win_get_width(win))
-    assert.equal(" kept until review sent " .. ("─"):rep(25) .. " <C-CR> save · q draft ", footer(win))
+  it("names its first save key, alone, at the right of the footer", function()
+    local win = open({ keys = { "<C-CR>", "<C-s>" } })
+    assert.equal(" <C-CR> save · q draft ", footer(win))
+    assert.equal("right", vim.api.nvim_win_get_config(win).footer_pos)
   end)
 
   it("writes the save key in Neovim's own notation", function()
@@ -103,14 +101,14 @@ describe("review_comment_window", function()
     assert.truthy(vim.endswith(footer(win), " <C-CR> save · q draft "), footer(win))
   end)
 
-  it("drops the save key from a footer too narrow for both", function()
+  it("drops the save key from a footer too narrow for it, rather than cut it to another key", function()
     vim.cmd("vsplit")
-    vim.cmd("vertical resize 30")
-    local win = open({ footer = "kept until review sent" })
-    local text = footer(win)
+    vim.cmd("vertical resize 24")
+    local win = open()
+    local config = vim.api.nvim_win_get_config(win)
     vim.api.nvim_win_close(win, true)
     vim.cmd.close()
-    assert.equal(" kept until review sent ", text)
+    assert.is_nil(config.footer)
   end)
 
   it("describes its keys with the descriptions it is given", function()
@@ -509,18 +507,17 @@ describe("review_comment_window", function()
       assert.equal(4, padding()[1][2])
     end)
 
-    it("re-fits its width and footer to a resized source", function()
+    it("re-fits its width to a resized source", function()
       vim.cmd("vsplit")
       vim.cmd("vertical resize 40")
       source = vim.api.nvim_get_current_win()
       local win = open()
       vim.api.nvim_win_set_width(source, 60)
       notify()
-      local width, text = vim.api.nvim_win_get_width(win), footer(win)
+      local width = vim.api.nvim_win_get_width(win)
       vim.api.nvim_win_close(win, true)
       vim.cmd.close()
       assert.equal(58, width)
-      assert.equal(58, vim.fn.strdisplaywidth(text))
     end)
 
     for name, close in pairs({

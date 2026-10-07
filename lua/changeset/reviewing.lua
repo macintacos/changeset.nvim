@@ -14,8 +14,6 @@ local window = require("changeset.window")
 
 local M = {}
 
-local FOOTER = "kept until :Changeset review submit"
-
 ---The repository to act on: the tree's when the command runs from the sidebar, whose own buffer
 ---names none, else the current buffer's.
 ---@return string
@@ -127,7 +125,6 @@ function M.open(comment)
     title = kind .. lines_label(comment.start_line or last, last),
     save_desc = "Save the review comment",
     close_desc = "Close, keeping the text as a draft",
-    footer = FOOTER,
     keys = config.get().review_comment.save,
     body = comment.body,
     comment = comment,
@@ -202,7 +199,6 @@ function M.comment(first, last)
     title = "Review comment · " .. lines_label(first, last),
     save_desc = "Save the review comment",
     close_desc = "Close, keeping the text as a draft",
-    footer = FOOTER,
     keys = config.get().review_comment.save,
     comment = comment_of(""),
     keep = function(body)

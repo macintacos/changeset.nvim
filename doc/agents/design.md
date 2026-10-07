@@ -323,7 +323,7 @@ local function greet(name)
 │                                                                        │
 │                                                                        │
 │                                                                        │
-╰ kept until :Changeset review submit ──────────── <C-CR> save · q draft ╯
+╰───────────────────────────────────────────────── <C-CR> save · q draft ╯
 
   return "hello " .. name
 end
@@ -349,12 +349,11 @@ which describe a file this buffer is not. The filetype is set once the float is 
 user's markdown `FileType` settings, such as `spell`, reach it and win over the style.
 
 The border does the labelling, as the kind menu's does. The title names the line or lines.
-The footer says where a save goes and, at its right end, the first `review_comment.save`
-key in Neovim's own notation and the close that keeps a draft (`<C-CR> save · q draft`),
-since every review comment ends with one of those two, and they are the ones nobody should
-have to look up. A float takes one `footer_pos`, so both
-share a left footer padded with border to the window's width; a window too narrow for both
-drops the key. The other keys stay off the border: `?` lists them all. However a
+The footer's right end names the first `review_comment.save` key in Neovim's own notation
+and the close that keeps a draft (`<C-CR> save · q draft`), since every review comment ends
+with one of those two, and they are the ones nobody should have to look up. A window too
+narrow for it drops it: Neovim cuts a footer from its left, leaving `<CR> save`, a key that
+doesn't save. The other keys stay off the border: `?` lists them all. However a
 review comment's text goes, except the close a taken save makes, it is kept as a draft:
 `q` in normal mode, focus leaving the float, `<S-Esc>` in either mode where the terminal sends it, `:q`,
 `<C-w>c`, quitting Neovim. One `BufUnload` hook on the window's buffer catches them all:

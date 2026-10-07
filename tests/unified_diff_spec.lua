@@ -252,7 +252,6 @@ describe("changeset.unified_diff", function()
       local float = review_comment_window.open({
         line = 1,
         title = "line 1",
-        footer = "kept until review sent",
         save_desc = "Save",
         close_desc = "Close",
         keys = { "<C-s>" },
