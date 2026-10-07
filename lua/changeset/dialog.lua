@@ -62,6 +62,16 @@ local NO_CURSOR = "n:" .. render.NO_CURSOR_HL
 ---@field done boolean
 ---@field answer fun(value: any)
 
+---Hides the normal-mode cursor through a 'guicursor' entry of its own, apart from the sidebar's.
+function M.hide_cursor()
+  vim.opt.guicursor:append(NO_CURSOR)
+end
+
+---Shows the cursor `hide_cursor` hid.
+function M.show_cursor()
+  vim.opt.guicursor:remove(NO_CURSOR)
+end
+
 ---The dialog open now, until focus leaves it.
 ---@type changeset.DialogState?
 local active
@@ -100,7 +110,7 @@ end
 ---@param text string
 ---@param width integer
 ---@return string[]
-local function wrap(text, width)
+function M.wrap(text, width)
   local lines = {}
   for _, paragraph in ipairs(vim.split(text, "\n", { plain = true })) do
     local line = ""
@@ -138,7 +148,7 @@ function M._body(blocks, width)
     if block.path then
       texts = { cells(text) <= measure and text or ELLIPSIS .. tail(text, measure - cells(ELLIPSIS)) }
     else
-      texts = wrap(text, measure)
+      texts = M.wrap(text, measure)
       if block.max_lines and #texts > block.max_lines then
         texts = vim.list_slice(texts, 1, block.max_lines)
         texts[#texts] = head(texts[#texts], measure - cells(ELLIPSIS)) .. ELLIPSIS
@@ -281,7 +291,7 @@ local function open(lines, frame, answer)
     })
   )
   active = state
-  vim.opt.guicursor:append(NO_CURSOR)
+  M.hide_cursor()
   -- A row wider than the editor is cut at the border, not wrapped onto the next.
   vim.wo[state.win].wrap = false
   -- The float takes its opener's jumplist, so <C-o> would otherwise put a file in it, open and unanswerable.
@@ -295,7 +305,7 @@ local function open(lines, frame, answer)
       if active == state then
         active = nil
       end
-      vim.opt.guicursor:remove(NO_CURSOR)
+      M.show_cursor()
       -- Closing a window is not allowed while focus is leaving it.
       vim.schedule(function()
         finish(state, nil)
