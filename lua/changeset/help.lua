@@ -103,9 +103,33 @@ function M.show(buf, own, global)
   if ok then
     return wk.show({ buf = M._stage(mine), global = false })
   end
-  vim.lsp.util.open_floating_preview(M._lines(mine), "", {
+  local lines = M._lines(mine)
+  local width = math.min(vim.o.columns - 4, math.max(1, unpack(vim.tbl_map(vim.fn.strdisplaywidth, lines))))
+  local height = math.min(vim.o.lines - 4, math.max(#lines, 1))
+  local float = vim.api.nvim_create_buf(false, true)
+  vim.bo[float].bufhidden = "wipe"
+  vim.api.nvim_buf_set_lines(float, 0, -1, false, lines)
+  -- Sized to the editor, not the current window, which can be a float a few rows tall. Never focused: focus leaving
+  -- the review comment window would close it.
+  local win = vim.api.nvim_open_win(float, false, {
+    relative = "editor",
+    row = math.floor((vim.o.lines - height) / 2) - 1,
+    col = math.floor((vim.o.columns - width) / 2) - 1,
+    width = width,
+    height = height,
+    style = "minimal",
     border = "rounded",
     title = " Changeset ",
+  })
+  -- Fires: the next move, keystroke typed or window left where `?` was pressed, which is done with the list.
+  vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI", "InsertCharPre", "BufLeave", "WinLeave" }, {
+    buffer = vim.api.nvim_get_current_buf(),
+    once = true,
+    callback = function()
+      if vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_win_close(win, true)
+      end
+    end,
   })
 end
 
