@@ -186,6 +186,16 @@ describe(":Changeset from the review comment window", function()
     assert.is_false(assert(deleted).window_open)
   end)
 
+  it("notifies that it kept a draft before running the subcommand", function()
+    write(4, "typing")
+    vim.api.nvim_feedkeys(vim.keycode("A<C-g>cn"), "x", false)
+
+    assert.is_true(closed())
+    assert.truthy(vim.iter(notes):find(function(note)
+      return note.msg:find("draft", 1, true) and note.level == vim.log.levels.INFO
+    end))
+  end)
+
   it("takes a split of its buffer with it, keeping a draft", function()
     write(4, "typing")
     vim.cmd.stopinsert()
@@ -223,6 +233,20 @@ describe(":Changeset from the review comment window", function()
   end)
 
   describe("last-comment", function()
+    it("stays on the comment saved last when it is the one being written, and says so", function()
+      comment_store.keep(dir, { path = "a.lua", line = 3, body = "older" })
+      comment_store.keep(dir, { path = "a.lua", line = 9, body = "last" })
+      vim.api.nvim_win_set_cursor(source, { 9, 0 })
+      vim.cmd("9Changeset comment")
+      local win = vim.api.nvim_get_current_win()
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, { "last, edited" })
+
+      vim.cmd("Changeset last-comment")
+
+      assert.equal(win, vim.api.nvim_get_current_win())
+      assert.equal("last", comment_store.list(dir)[2].body)
+    end)
+
     it("closes the window on another comment, keeping a draft, and opens the comment saved last", function()
       comment_store.keep(dir, { path = "a.lua", line = 9, body = "last" })
       write(4, "typing")

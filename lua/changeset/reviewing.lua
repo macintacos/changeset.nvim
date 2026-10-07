@@ -98,9 +98,9 @@ function M.ask_delete(comment)
   end)
 end
 
----Echoed like the jump count, not notified, so notifier plugins don't toast every close.
+---Notified, not echoed, so the echo of a subcommand run next can't wipe it.
 local function say_draft()
-  vim.api.nvim_echo({ { "kept the review comment as a draft" } }, false, {})
+  say(vim.log.levels.INFO, "kept the review comment as a draft")
 end
 
 ---`comment` with `body`, saved, or a draft when `draft` is set.
@@ -240,12 +240,26 @@ local function delete_open(open)
       },
       action = "Delete",
     }, function()
-      open.discard()
-      if stored then
-        drop(repository, stored)
-      end
+      -- Once the window has gone, so insert mode ending in it doesn't clear the notice.
+      open.discard(function()
+        if stored then
+          drop(repository, stored)
+        end
+      end)
     end)
   end)
+end
+
+---The repository's review comment saved last: the store appends on every keep, so its last saved entry.
+---@param repository string
+---@return changeset.ReviewComment?
+local function last_saved(repository)
+  local comments = comment_store.list(repository)
+  for i = #comments, 1, -1 do
+    if not comments[i].draft then
+      return comments[i]
+    end
+  end
 end
 
 ---Runs subcommand `name` from the review comment window `open`: `comment` saves it, `delete` deletes it, and any
@@ -259,6 +273,17 @@ function M.from_window(open, name, run)
   end
   if name == "delete" then
     return delete_open(open)
+  end
+  if name == "last-comment" then
+    local last = last_saved(Paths.root(vim.api.nvim_win_get_buf(open.source)))
+    if
+      last
+      and last.path == open.comment.path
+      and last.line == open.comment.line
+      and last.start_line == open.comment.start_line
+    then
+      return vim.api.nvim_echo({ { "already editing the review comment saved last" } }, false, {})
+    end
   end
   open.close(function()
     if not vim.api.nvim_win_is_valid(open.source) then
@@ -621,17 +646,18 @@ local function jump(count)
   vim.api.nvim_echo({ { wrapped and text .. ", wrapped" or text } }, false, {})
 end
 
----Jumps to the repository's review comment saved last and opens it to edit. The store appends on every keep, so
----that is its last saved entry.
+---Jumps to the repository's review comment saved last and opens it to edit.
 function M.last_comment()
   local win, from_sidebar, repository = jump_from("last-comment")
   if not win then
     return
   end
-  local saved = split_drafts(reachable(repository))
-  local last = saved[#saved]
+  local last = last_saved(repository)
   if not last then
     return say(vim.log.levels.INFO, "no saved review comment in %s", repository)
+  end
+  if not vim.uv.fs_stat(vim.fs.joinpath(repository, last.path)) then
+    return say(vim.log.levels.WARN, "the review comment saved last is on %s, which is gone", last.path)
   end
   if not from_sidebar and vim.bo[vim.api.nvim_win_get_buf(win)].modified then
     return say(vim.log.levels.WARN, UNSAVED)
@@ -688,7 +714,8 @@ function M.yank()
   end
   local where = Paths.put(M._review_text(comments, reader(repository)))
   local count = #comments == 1 and "1 comment" or #comments .. " comments"
-  say(vim.log.levels.INFO, "copied the review's %s%s", count, where)
+  local left_out = drafts > 0 and ("; %s left out"):format(drafts_label(drafts)) or ""
+  say(vim.log.levels.INFO, "copied the review's %s%s%s", count, where, left_out)
 end
 
 return M

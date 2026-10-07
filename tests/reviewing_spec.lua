@@ -107,7 +107,7 @@ describe("changeset.reviewing", function()
       window().keep("typed")
 
       assert.same({ comment({ body = "typed", draft = true }) }, comment_store.list(dir))
-      assert.equal(1, #echoes)
+      assert.equal(vim.log.levels.INFO, notes[1].level)
     end)
 
     it("keeps nothing of a window closed blank", function()
@@ -248,7 +248,7 @@ describe("changeset.reviewing", function()
       window().keep("changed")
 
       assert.same({ comment({ body = "changed", draft = true }) }, comment_store.list(dir))
-      assert.equal(1, #echoes)
+      assert.equal(vim.log.levels.INFO, notes[1].level)
     end)
 
     it("leaves a saved comment closed unchanged saved", function()
@@ -259,7 +259,7 @@ describe("changeset.reviewing", function()
       window().keep("hi")
 
       assert.same({ comment() }, comment_store.list(dir))
-      assert.same({}, echoes)
+      assert.same({}, notes)
     end)
 
     it("saves a draft as a saved comment", function()
@@ -798,6 +798,18 @@ describe("changeset.reviewing", function()
       assert.equal("last", window().body)
     end)
 
+    it("warns, naming its file, when the file of the comment saved last is gone", function()
+      edit_file()
+      comment_store.keep(dir, comment())
+      comment_store.keep(dir, comment({ path = "gone.lua" }))
+
+      reviewing.last_comment()
+
+      assert.same({}, windows)
+      assert.equal(vim.log.levels.WARN, notes[1].level)
+      assert.truthy(notes[1].msg:find("gone.lua", 1, true))
+    end)
+
     it("says when no review comment is saved", function()
       edit_file()
       comment_store.keep(dir, comment({ draft = true }))
@@ -919,6 +931,7 @@ describe("changeset.reviewing", function()
 
       assert.is_nil(vim.fn.getreg('"'):find("draft", 1, true))
       assert.truthy(vim.fn.getreg('"'):find("hi", 1, true))
+      assert.truthy(notes[1].msg:find("1 draft left out", 1, true), notes[1].msg)
     end)
 
     it("copies nothing with only drafts, counting them", function()
