@@ -122,6 +122,26 @@ end
 ---@type string
 M.REVIEW_COMMENT_BODY_HL = "ChangesetReviewCommentBody"
 
+---Group for the border of a review comment's block in its file. Created by `define_highlights`.
+---@type string
+M.BLOCK_BORDER_HL = "ChangesetBlockBorder"
+
+---Group for the title in a review comment block's border. Created by `define_highlights`.
+---@type string
+M.BLOCK_TITLE_HL = "ChangesetBlockTitle"
+
+---Group for a review comment block's text. Created by `define_highlights`.
+---@type string
+M.BLOCK_BODY_HL = "ChangesetBlockBody"
+
+---Group for the border and title of the block the cursor is parked on. Created by `define_highlights`.
+---@type string
+M.BLOCK_PARKED_HL = "ChangesetBlockParked"
+
+---Group for the keys a parked block names in its bottom border. Created by `define_highlights`.
+---@type string
+M.BLOCK_HINT_HL = "ChangesetBlockHint"
+
 ---Group for the badge naming the sidebar in its footer. Created by `define_highlights`.
 ---@type string
 M.BADGE_HL = "ChangesetBadge"
@@ -953,6 +973,12 @@ function M.define_highlights()
   set_default(M.BUTTON_DANGER_FOCUS_HL, { fg = danger, reverse = true, bold = true })
   set_default(M.BUTTON_KEY_HL, { underline = true })
   set_default(M.DIALOG_SELECTED_HL, { bg = mix(float_bg, accent, SELECTED_TINT) })
+  -- A block is the review comment window collapsed, so it wears the float's colours; parked, the dialog's focus.
+  set_default(M.BLOCK_BORDER_HL, { link = "FloatBorder" })
+  set_default(M.BLOCK_TITLE_HL, { link = "FloatTitle" })
+  set_default(M.BLOCK_BODY_HL, { link = "NormalFloat" })
+  set_default(M.BLOCK_PARKED_HL, { fg = accent, bg = float.bg, bold = true })
+  set_default(M.BLOCK_HINT_HL, { fg = comment.fg, bg = float.bg, italic = true })
   -- Fully blended is the TUI's cue to hide the cursor outright. `nocombine` is only
   -- there to keep the group: one holding nothing but `blend` is stored as cleared.
   set_default(M.NO_CURSOR_HL, { blend = 100, nocombine = true })

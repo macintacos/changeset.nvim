@@ -4,6 +4,7 @@ local Paths = require("changeset.paths")
 local comment_store = require("changeset.comment_store")
 local config = require("changeset.config")
 local hover = require("changeset.hover")
+local review_comment_blocks = require("changeset.review_comment_blocks")
 local render = require("changeset.render")
 
 local M = {}
@@ -47,10 +48,11 @@ local function mark(buf, comment)
   vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
     end_row = comment.line - 1,
     number_hl_group = hl,
-    virt_text = {
+    -- A block already holds the whole text.
+    virt_text = not review_comment_blocks.shown() and {
       { circle .. " ", hl },
       { comment.body:match("^[^\r\n]*"), render.REVIEW_COMMENT_BODY_HL },
-    },
+    } or nil,
   })
   local existing = vim.api.nvim_buf_get_extmarks(buf, sign_ns, { row, 0 }, { row, 0 }, { limit = 1, details = true })[1]
   -- One bubble a line, and a draft's wins it: unfinished work is what should stand out.
@@ -134,14 +136,15 @@ local function mark_file(buf, root, comments)
     return false
   end
   local line_count = vim.api.nvim_buf_line_count(buf)
-  local marked = false
+  local marked = {}
   for _, comment in ipairs(comments) do
     if comment.path == path and comment.line <= line_count then
       mark(buf, comment)
-      marked = true
+      marked[#marked + 1] = comment
     end
   end
-  return marked
+  review_comment_blocks.draw(buf, marked)
+  return #marked > 0
 end
 
 ---Redraws `buf`'s marks from `by_root`, the store's comments by repository, read once a pass.
@@ -150,6 +153,7 @@ end
 local function draw(buf, by_root)
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   vim.api.nvim_buf_clear_namespace(buf, sign_ns, 0, -1)
+  review_comment_blocks.draw(buf, {})
   local root = Paths.root(buf)
   by_root[root] = by_root[root] or comment_store.list(root)
   if mark_file(buf, root, by_root[root]) then
@@ -159,7 +163,8 @@ local function draw(buf, by_root)
   end
 end
 
-local function draw_loaded()
+---Redraws every loaded buffer's marks from the store.
+function M.redraw()
   local by_root = {}
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_loaded(buf) then
@@ -179,7 +184,7 @@ vim.api.nvim_create_autocmd("ColorScheme", {
 })
 
 -- Fires: a review comment kept, dropped or cleared, so its marks follow it.
-comment_store.subscribe(draw_loaded)
+comment_store.subscribe(M.redraw)
 
 -- Fires: a file read into a buffer, which starts with none of the marks.
 vim.api.nvim_create_autocmd("BufReadPost", {
@@ -200,6 +205,6 @@ vim.api.nvim_create_autocmd("BufWritePost", {
   end,
 })
 
-draw_loaded()
+M.redraw()
 
 return M
