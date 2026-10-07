@@ -111,9 +111,10 @@ after them:
   repository.
 - `:Changeset comment new` writes a [review comment](#review-comments) on the cursor's
   line, or on the selected lines, or opens the one already there to edit it. On a file's
-  row in the sidebar, it writes one on the [whole file](#review-comments).
+  first line, or on its row in the sidebar, it writes one on the
+  [whole file](#review-comments).
 - `:Changeset comment del` deletes the [review comment](#review-comments) on the cursor's
-  line, or on a file's row in the sidebar, the one on the whole file.
+  line, or on a file's first line or its row in the sidebar, the one on the whole file.
 - `:Changeset comment next` / `:Changeset comment prev` jump to the next / previous
   [review comment](#review-comments).
 - `:Changeset comment last` jumps to the [review comment](#review-comments) you saved last
@@ -370,10 +371,12 @@ draft, which submit leaves out until you save it again.
 
 ### On a whole file
 
-On a file's row in the sidebar, `:Changeset comment new` (`<C-g>cc`) writes a review
-comment on the whole file, a file the branch deleted included. Its window opens under that
-row, titled `Review comment · whole file`. A file holds one: run it again on the row to
-edit that one, and `:Changeset comment del` on the row deletes it, without asking.
+On a file's first line, or on its row in the sidebar, `:Changeset comment new` (`<C-g>cc`)
+writes a review comment on the whole file, a file the branch deleted included. Its window
+opens under that line or row, titled `Review comment · whole file` after the file's icon. A
+file holds one: run it again there to edit that one, and `:Changeset comment del` there
+deletes it, without asking. To comment on the first line itself, select it first:
+`V<C-g>cc`, or `:1Changeset comment new`.
 
 The Comments section lists it by the file's name alone, ahead of the comments on the
 file's lines. `<CR>` on its row, and `<S-CR>` or a split or tab key, open it to edit under
@@ -553,6 +556,7 @@ The sidebar derives each group's default from your colorscheme, and derives it a
 | `ChangesetReviewComment` | A review comment's bubble, its circle and the line numbers it covers in its file | `DiagnosticOk`'s colour, bold |
 | `ChangesetReviewCommentDraft` | A draft review comment's bubble, its circle and the line numbers it covers | `DiagnosticOk`'s colour mixed halfway to `Comment`'s |
 | `ChangesetReviewCommentBody` | A review comment's body after its circle | links to `ChangesetMeta` |
+| `ChangesetTitleIcon` | The file's glyph heading a whole file's review comment window | the file icon's colour on `FloatTitle`'s background |
 | `ChangesetBlockBorder` | A review comment block's border | links to `FloatBorder` |
 | `ChangesetBlockTitle` | A review comment block's title | `FloatTitle`'s colour on `NormalFloat`'s background, bold |
 | `ChangesetBlockBody` | A review comment block's text | links to `NormalFloat` |
@@ -597,8 +601,8 @@ vim.api.nvim_create_autocmd("ColorScheme", {
 })
 ```
 
-`ChangesetPreviewIcon` is recoloured for each file, so defining it paints every file's
-glyph one colour. The status rail beside each file uses gitsigns' `GitSignsAdd`,
+`ChangesetPreviewIcon` and `ChangesetTitleIcon` are recoloured for each file, so defining
+either paints every file's glyph there one colour. The status rail beside each file uses gitsigns' `GitSignsAdd`,
 `GitSignsChange`, `GitSignsDelete` and `GitSignsUntracked`.
 
 ## Health

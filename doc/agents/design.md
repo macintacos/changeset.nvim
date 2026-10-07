@@ -341,7 +341,7 @@ Focus never returns to it from the source: leaving it closes it, keeping a draft
 off the line: it stays on the line number, as the float does.
 
 Its width is the room right of the source window's gutter, less that column and the
-border, between 20 and 72 columns, re-fitted as the source is resized: a review comment is
+border, between 20 and 88 columns, re-fitted as the source is resized: a review comment is
 prose, and prose reads at a short measure, while 20 keeps a cramped split usable. Six rows
 are room for a paragraph without pushing the code after it far away; a longer review
 comment scrolls.
@@ -367,12 +367,18 @@ A save of only whitespace is no save: it closes the window like `q`, so the blan
 reaches the same hook and the caller discards it, never storing it.
 
 A review comment on a whole file has no line to open under, and a deleted file has no
-buffer, so its window opens under a row of the sidebar instead: the file's row, or its
+buffer, so from the sidebar its window opens under a row instead: the file's row, or its
 Comments row. The sidebar is the one place every changed file has a line, a deleted one
 included, and the row above names the file the comment is about, as the line above names
 the code. Being any other source window, the sidebar gets the same room, placement and
-closing. The title names its reach as a line's names its lines: `Review comment · whole
-file`.
+closing. Inside a file it opens under the first line: `comment new` with no range there
+means the whole file, since a file is read from its top, while a selection of that line
+still means the line, so line 1 keeps its own comments. The title names its reach as a
+line's names its lines, `Review comment · whole file`, and leads with the file's icon from
+the icon plugin, the glyph its sidebar row wears, so the two kinds of window read apart at
+a glance. The glyph's group is recoloured onto `FloatTitle`'s background as the preview
+band's glyph is onto the band's, or an icon plugin's foreground-only group would punch a
+hole in the title.
 
 ### Dialogs ask in floats of changeset's own
 
