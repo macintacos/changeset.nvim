@@ -84,7 +84,16 @@ _Avoid_: kind filter
 **Review comment**:
 A note on one line or a range of lines of a file, kept on this machine for the repository's
 root until it is deleted, submitted or the review is abandoned.
-_Avoid_: bare "comment", which is a source-code comment (`changeset.comments`); draft
+_Avoid_: bare "comment", which is a source-code comment (`changeset.comments`)
+
+**Draft**:
+A review comment kept but not saved: the text of a review comment window closed any way but
+a save. Submit and yank leave it out until it is saved.
+_Avoid_: unsaved comment, pending comment
+
+**Saved**:
+A review comment stored by a save. Only saved review comments are submitted or copied.
+_Avoid_: committed, final
 
 **Review**:
 Every review comment of a repository. The first one written starts it, and submitting or

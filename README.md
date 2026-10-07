@@ -103,14 +103,16 @@ closes it. It takes one optional subcommand:
   or on the selected lines, or opens the one already there to edit it.
 - `:Changeset delete` deletes the [review comment](#review-comments) on the cursor's line.
 - `:Changeset abandon` deletes every [review comment](#review-comments) of the repository.
-- `:Changeset submit` pastes the [review comments](#review-comments) into an AI agent's
-  prompt through herdr.
+- `:Changeset submit` pastes the saved [review comments](#review-comments) into an AI
+  agent's prompt through herdr.
 - `:Changeset next` / `:Changeset prev` move the sidebar's selected row to the next /
   previous change and open it in the window you are editing in, as described below.
 - `:Changeset next-comment` / `:Changeset prev-comment` jump to the next / previous
   [review comment](#review-comments).
+- `:Changeset last-comment` jumps to the [review comment](#review-comments) you saved last
+  and opens it to edit.
 - `:Changeset list` puts the [review comments](#review-comments) in the quickfix list.
-- `:Changeset yank` copies the review to the clipboard as text, or to the unnamed register
+- `:Changeset yank` copies the review's saved comments to the clipboard as text, or to the unnamed register
   when Neovim has no clipboard provider.
 
 The sidebar opens on the right of the editor. When the editor is too narrow to leave the
@@ -127,6 +129,7 @@ subcommand:
 | `<C-g>cc` | normal, visual | `<Plug>(changeset-comment)` | comment on this line, or the selection, or edit the comment there |
 | `<C-g>cn` | normal | `<Plug>(changeset-next-comment)` | jump to the next review comment |
 | `<C-g>cp` | normal | `<Plug>(changeset-prev-comment)` | jump to the previous review comment |
+| `<C-g>cl` | normal | `<Plug>(changeset-last-comment)` | edit the review comment you saved last |
 | `<C-g>d` | normal | `<Plug>(changeset-delete)` | delete the review comment on this line |
 | `<C-g>l` | normal | `<Plug>(changeset-list)` | list the review comments in the quickfix list |
 | `<C-g>y` | normal | `<Plug>(changeset-yank)` | copy the review as text |
@@ -201,8 +204,8 @@ comment window with `review_comment.save`, in [Options](#options).
 | `x` | kind menu | hide or show the kind under the cursor, redrawing the tree at once |
 | `<CR>` / `r` / `b` | kind menu | remember this set everywhere / for this repository / for this branch, then close |
 | `q` / `<Esc>` | kind menu | close, putting the tree back to the saved set |
-| `<C-CR>` / `<C-s>` | review comment window | keep the review comment and close |
-| `q` / `<S-Esc>` | review comment window | close, keeping a new review comment's text; editing one, drop the edit |
+| `<C-CR>` / `<C-s>` / `<C-g>cc` | review comment window | save the review comment and close |
+| `q` / `<S-Esc>` | review comment window | close, keeping changed text as a draft |
 | `?` | review comment window | list its keys |
 | `f` | sidebar | filter as you type, keeping ancestors so matches stay in place and highlighting every match until you clear the filter; `<Esc>` cancels and keeps the previous filter |
 | `R` | sidebar | rebuild now |
@@ -247,9 +250,9 @@ sidebar, a PR or `gh`.
 - `:Changeset comment` opens a markdown window under the cursor's line, moving the lines
   below down, in any file of the repository. `:'<,'>Changeset comment` opens it under the
   selection and comments on the selected lines. The keys in `review_comment.save`,
-  `<C-CR>` or `<C-s>` by default, keep it and close the window. Closing it with `q`,
-  `<S-Esc>` or `:q`, or quitting Neovim with it open, keeps its text too; empty text keeps
-  nothing. It opens a review comment already there to edit instead: on one line, the
+  `<C-CR>` or `<C-s>` by default, or `<C-g>cc`, save it and close the window. Any other
+  close keeps its text as a draft: `q`, `<S-Esc>`, `:q`, focus leaving the
+  window for any other, or quitting Neovim with it open. Empty text keeps nothing. It opens a review comment already there to edit instead: on one line, the
   narrowest that covers it; on a selection, only one on exactly the selected lines. In a
   modified buffer it asks you to save first, as `:Changeset delete` does.
 - `:Changeset delete` deletes the review comment on the cursor's line, without asking.
@@ -258,14 +261,15 @@ sidebar, a PR or `gh`.
   marks move with unsaved edits, while delete goes by line number.
 - `:Changeset abandon` asks first, then deletes every review comment of the repository.
   With none, it says so.
-- `:Changeset submit` needs Neovim running in a herdr pane. With one AI agent in the
+- `:Changeset submit` sends only saved review comments, leaving drafts out, and needs
+  Neovim running in a herdr pane. With one AI agent in the
   workspace the review goes straight there, and with several it asks which, listing each
   with its status, tab and title. It pastes the review into that agent's prompt without
   pressing Enter, so you can add context first, and focuses the agent. The review comments
   are deleted once they are pasted; one written while the picker is open stays. An agent
   waiting at a permission prompt can't be picked, and one that reaches a prompt after the
-  pick refuses the paste until you answer it; the review comments stay. With none, it says
-  so.
+  pick refuses the paste until you answer it; the review comments stay. Drafts stay too,
+  and the notice says how many. With none saved, it says so, counting the drafts.
 
 These questions are changeset's own floats, centred on the editor. One before deleting names
 what goes and offers two buttons, Keep and the verb: focus starts on Keep, so an Enter typed
@@ -283,12 +287,16 @@ cursor; from the sidebar, at the first or last review comment; from a window tha
 no file, such as the quickfix list, in the window before it. Like the other verbs, they
 refuse while the file you are in, or the one they would open, has unsaved edits.
 
+`:Changeset last-comment` jumps to the review comment you saved last, passing over drafts,
+and opens it to edit, following the same rules as `:Changeset next-comment`. With none
+saved, it says so.
+
 `:Changeset list` puts every review comment in the quickfix list, those whose file is
-gone included. Run again while that list is still the current one, it replaces it;
+gone included, a draft's text starting with `[draft]`. Run again while that list is still the current one, it replaces it;
 otherwise it adds a new list.
 
-`:Changeset yank` copies the review, as `:Changeset submit` would paste it, and keeps the
-review comments. Without a clipboard provider it copies to the unnamed register and says
+`:Changeset yank` copies the review's saved comments, as `:Changeset submit` would paste
+them, and keeps the review comments. Without a clipboard provider it copies to the unnamed register and says
 so.
 
 The pasted review holds a block per review comment, by file and then line, each naming
@@ -313,26 +321,48 @@ Say what it maps.
 A block whose lines can't be read, as when its file is gone, leaves the quote out.
 
 A review comment opened to edit, titled `Edit review comment`, is replaced by a save key.
-Saving or closing it with only whitespace asks whether to delete it. Closing it any other
-way drops the edit, and it keeps its saved text.
+Saving or closing it with only whitespace asks whether to delete it. Closing it with its
+text unchanged leaves it as it was; closing it with changed text keeps that text as a
+draft, which submit leaves out until you save it again.
+
+### Drafts
+
+A draft is a review comment kept but not saved. Closing the review comment window any way
+but a save makes one, and the window closes as soon as focus leaves it, so text is never
+lost; it echoes `kept the review comment as a draft`. Reopening a draft, with
+`:Changeset comment` on its line or from its Comments row, resumes its text under the title
+`Edit draft review comment`, and saving it makes it a saved review comment. Submit and yank
+take only saved review comments; next-comment, prev-comment and list include drafts, and
+abandon deletes them too.
+
+### Commands from the review comment window
+
+The review comment window answers `:Changeset` and its `<C-g>` keys as being about the
+comment you are writing. `<C-g>cc` or `:Changeset comment` saves it. `<C-g>d` or
+`:Changeset delete` deletes it, asking first when it is stored or holds text; Keep returns
+you to the window as you left it. Every other subcommand closes the window, keeping a
+draft, then runs from the comment's line in the file, so `<C-g>cn` goes to the next review
+comment after it. With the default keys on, the `<C-g>` keys the plugin mapped work in
+insert mode in the window too.
 
 Each review comment is marked in its file's buffer: a green comment bubble, `󰍩`, fills the
 sign column on its first line over any other sign there, the line numbers it covers turn
 green, and its first line ends with a green circle and the first line of its body, drawn in
-`ChangesetReviewComment` and `ChangesetReviewCommentBody`. The marks appear in every
+`ChangesetReviewComment` and `ChangesetReviewCommentBody`. A draft gets an outline bubble,
+`󰍪`, and a dotted circle, `◌`, in a faded green, `ChangesetReviewCommentDraft`. The marks appear in every
 loaded buffer once changeset is loaded, follow each review comment written, edited or
 deleted, and mark a file as it is read. The bubble needs a Nerd Font.
 
 Hover shows them too. A file with a mark gets a language server client named `changeset`,
 which answers hover on a line with each review comment whose lines take it in, under a
-heading naming its lines. So `K`, `vim.lsp.buf.hover()` and hover plugins that ask LSP show
+heading naming its lines and whether it is a draft. So `K`, `vim.lsp.buf.hover()` and hover plugins that ask LSP show
 them beside other servers' answers; a hover UI can sort on the name to put them first. The
 client offers only hover, but `LspAttach` fires for it, so your `LspAttach` keymaps and
 statusline LSP lists reach those files too.
 
 With the sidebar open, a Comments section above Implementation lists the repository's
-review comments, one row each, by file and then line: a green `●`, the file's name and line,
-and the first line of the body. It is left out while it has nothing to list. `<CR>` on a
+review comments, one row each, by file and then line: a green `●`, or a draft's `◌`, the
+file's name and line, and the first line of the body. Its header counts the drafts. It is left out while it has nothing to list. `<CR>` on a
 row, or a split or tab key, goes to its line and opens it to edit there. `d` on a row asks,
 the way `:Changeset abandon` does, then deletes the review comment.
 
@@ -340,7 +370,8 @@ A `'statuscolumn'` can draw the bubbles somewhere else. `%s` draws every plugin'
 none, so set `review_comment.sign` to `false` to keep the bubbles out of the sign column, or
 a line shows its bubble twice. `require("changeset").bubble(buf, lnum)` returns the bubble
 on line `lnum` (1-based, as `v:lnum`) of buffer `buf` (0 for the current one) and its
-highlight group: `"󰍩", "ChangesetReviewComment"`, or nil on a line without one. It answers from the marks
+highlight group: `"󰍩", "ChangesetReviewComment"`, or `"󰍪", "ChangesetReviewCommentDraft"`
+for a draft, or nil on a line without one. It answers from the marks
 already in the buffer, so it is cheap enough for every screen row, and it answers whatever
 `review_comment.sign` is.
 
@@ -440,6 +471,7 @@ The sidebar derives each group's default from your colorscheme, and derives it a
 | `ChangesetHeaderDim` | The remote, nouns and PR on the header | `Comment`'s colour on the header |
 | `ChangesetHeaderRef` | The ref the tree is compared against | `Normal`'s colour on the header, bold |
 | `ChangesetReviewComment` | A review comment's bubble, its circle and the line numbers it covers in its file | `DiagnosticOk`'s colour, bold |
+| `ChangesetReviewCommentDraft` | A draft review comment's bubble, its circle and the line numbers it covers | `DiagnosticOk`'s colour mixed halfway to `Comment`'s |
 | `ChangesetReviewCommentBody` | A review comment's body after its circle | links to `ChangesetMeta` |
 | `ChangesetBadge` | The badge in the footer | `Directory`'s colour, reversed, bold |
 | `ChangesetFooter` | The footer's text | `Comment`'s colour on `StatusLine` |

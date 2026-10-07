@@ -122,14 +122,16 @@ sidebar closes it. It takes one optional subcommand:
     or on the selected lines, or opens the one already there to edit it.
 - `:Changeset delete` deletes the review comment |changeset.nvim-review-comments| on the cursor’s line.
 - `:Changeset abandon` deletes every review comment |changeset.nvim-review-comments| of the repository.
-- `:Changeset submit` pastes the |changeset.nvim-review-comments| into an AI agent’s
-    prompt through herdr.
+- `:Changeset submit` pastes the saved |changeset.nvim-review-comments| into an AI
+    agent’s prompt through herdr.
 - `:Changeset next` / `:Changeset prev` move the sidebar’s selected row to the next /
     previous change and open it in the window you are editing in, as described below.
 - `:Changeset next-comment` / `:Changeset prev-comment` jump to the next / previous
     review comment |changeset.nvim-review-comments|.
+- `:Changeset last-comment` jumps to the review comment |changeset.nvim-review-comments| you saved last
+    and opens it to edit.
 - `:Changeset list` puts the |changeset.nvim-review-comments| in the quickfix list.
-- `:Changeset yank` copies the review to the clipboard as text, or to the unnamed register
+- `:Changeset yank` copies the review’s saved comments to the clipboard as text, or to the unnamed register
     when Neovim has no clipboard provider.
 
 The sidebar opens on the right of the editor. When the editor is too narrow to
@@ -153,6 +155,8 @@ runs its subcommand:
   <C-g>cn    normal     <Plug>(changeset-next-comment)   jump to the next review comment
 
   <C-g>cp    normal     <Plug>(changeset-prev-comment)   jump to the previous review comment
+
+  <C-g>cl    normal     <Plug>(changeset-last-comment)   edit the review comment you saved last
 
   <C-g>d     normal     <Plug>(changeset-delete)         delete the review comment on this line
 
@@ -269,12 +273,12 @@ option, and the save keys of the review comment window with
 
   q / <Esc>   kind menu   close, putting the tree back to the saved set
 
-  <C-CR> /    review      keep the review comment and close
-  <C-s>       comment
-              window
+  <C-CR> /    review      save the review comment and close
+  <C-s> /     comment
+  <C-g>cc     window
 
-  q / <S-Esc> review      close, keeping a new review comment’s text;
-              comment     editing one, drop the edit
+  q / <S-Esc> review      close, keeping changed text as a draft
+              comment
               window
 
   ?           review      list its keys
@@ -347,9 +351,9 @@ or `:Changeset abandon` ends it. None of this needs the sidebar, a PR or `gh`.
 - `:Changeset comment` opens a markdown window under the cursor’s line, moving the lines
     below down, in any file of the repository. `:'<,'>Changeset comment` opens it under the
     selection and comments on the selected lines. The keys in `review_comment.save`,
-    `<C-CR>` or `<C-s>` by default, keep it and close the window. Closing it with `q`,
-    `<S-Esc>` or `:q`, or quitting Neovim with it open, keeps its text too; empty text keeps
-    nothing. It opens a review comment already there to edit instead: on one line, the
+    `<C-CR>` or `<C-s>` by default, or `<C-g>cc`, save it and close the window. Any other
+    close keeps its text as a draft: `q`, `<S-Esc>`, `:q`, focus leaving the
+    window for any other, or quitting Neovim with it open. Empty text keeps nothing. It opens a review comment already there to edit instead: on one line, the
     narrowest that covers it; on a selection, only one on exactly the selected lines. In a
     modified buffer it asks you to save first, as `:Changeset delete` does.
 - `:Changeset delete` deletes the review comment on the cursor’s line, without asking.
@@ -358,14 +362,15 @@ or `:Changeset abandon` ends it. None of this needs the sidebar, a PR or `gh`.
     marks move with unsaved edits, while delete goes by line number.
 - `:Changeset abandon` asks first, then deletes every review comment of the repository.
     With none, it says so.
-- `:Changeset submit` needs Neovim running in a herdr pane. With one AI agent in the
+- `:Changeset submit` sends only saved review comments, leaving drafts out, and needs
+    Neovim running in a herdr pane. With one AI agent in the
     workspace the review goes straight there, and with several it asks which, listing each
     with its status, tab and title. It pastes the review into that agent’s prompt without
     pressing Enter, so you can add context first, and focuses the agent. The review comments
     are deleted once they are pasted; one written while the picker is open stays. An agent
     waiting at a permission prompt can’t be picked, and one that reaches a prompt after the
-    pick refuses the paste until you answer it; the review comments stay. With none, it says
-    so.
+    pick refuses the paste until you answer it; the review comments stay. Drafts stay too,
+    and the notice says how many. With none saved, it says so, counting the drafts.
 
 These questions are changeset’s own floats, centred on the editor. One before
 deleting names what goes and offers two buttons, Keep and the verb: focus
@@ -385,13 +390,18 @@ comment; from a window that holds no file, such as the quickfix list, in the
 window before it. Like the other verbs, they refuse while the file you are in,
 or the one they would open, has unsaved edits.
 
-`:Changeset list` puts every review comment in the quickfix list, those whose
-file is gone included. Run again while that list is still the current one, it
-replaces it; otherwise it adds a new list.
+`:Changeset last-comment` jumps to the review comment you saved last, passing
+over drafts, and opens it to edit, following the same rules as `:Changeset
+next-comment`. With none saved, it says so.
 
-`:Changeset yank` copies the review, as `:Changeset submit` would paste it, and
-keeps the review comments. Without a clipboard provider it copies to the
-unnamed register and says so.
+`:Changeset list` puts every review comment in the quickfix list, those whose
+file is gone included, a draft’s text starting with `[draft]`. Run again
+while that list is still the current one, it replaces it; otherwise it adds a
+new list.
+
+`:Changeset yank` copies the review’s saved comments, as `:Changeset submit`
+would paste them, and keeps the review comments. Without a clipboard provider
+it copies to the unnamed register and says so.
 
 The pasted review holds a block per review comment, by file and then line, each
 naming its place, quoting its lines as they are now, unsaved edits included,
@@ -417,39 +427,69 @@ out.
 
 A review comment opened to edit, titled `Edit review comment`, is replaced by a
 save key. Saving or closing it with only whitespace asks whether to delete it.
-Closing it any other way drops the edit, and it keeps its saved text.
+Closing it with its text unchanged leaves it as it was; closing it with changed
+text keeps that text as a draft, which submit leaves out until you save it
+again.
+
+
+DRAFTS ~
+
+A draft is a review comment kept but not saved. Closing the review comment
+window any way but a save makes one, and the window closes as soon as focus
+leaves it, so text is never lost; it echoes `kept the review comment as a
+draft`. Reopening a draft, with `:Changeset comment` on its line or from its
+Comments row, resumes its text under the title `Edit draft review comment`, and
+saving it makes it a saved review comment. Submit and yank take only saved
+review comments; next-comment, prev-comment and list include drafts, and
+abandon deletes them too.
+
+
+COMMANDS FROM THE REVIEW COMMENT WINDOW ~
+
+The review comment window answers `:Changeset` and its `<C-g>` keys as being
+about the comment you are writing. `<C-g>cc` or `:Changeset comment` saves it.
+`<C-g>d` or `:Changeset delete` deletes it, asking first when it is stored or
+holds text; Keep returns you to the window as you left it. Every other
+subcommand closes the window, keeping a draft, then runs from the comment’s
+line in the file, so `<C-g>cn` goes to the next review comment after it. With
+the default keys on, the `<C-g>` keys the plugin mapped work in insert mode in
+the window too.
 
 Each review comment is marked in its file’s buffer: a green comment bubble,
 `󰍩`, fills the sign column on its first line over any other sign there, the
 line numbers it covers turn green, and its first line ends with a green circle
 and the first line of its body, drawn in `ChangesetReviewComment` and
-`ChangesetReviewCommentBody`. The marks appear in every loaded buffer once
-changeset is loaded, follow each review comment written, edited or deleted, and
-mark a file as it is read. The bubble needs a Nerd Font.
+`ChangesetReviewCommentBody`. A draft gets an outline bubble, `󰍪`, and a
+dotted circle, `◌`, in a faded green, `ChangesetReviewCommentDraft`. The
+marks appear in every loaded buffer once changeset is loaded, follow each
+review comment written, edited or deleted, and mark a file as it is read. The
+bubble needs a Nerd Font.
 
 Hover shows them too. A file with a mark gets a language server client named
 `changeset`, which answers hover on a line with each review comment whose lines
-take it in, under a heading naming its lines. So `K`, `vim.lsp.buf.hover()` and
-hover plugins that ask LSP show them beside other servers’ answers; a hover
-UI can sort on the name to put them first. The client offers only hover, but
-`LspAttach` fires for it, so your `LspAttach` keymaps and statusline LSP lists
-reach those files too.
+take it in, under a heading naming its lines and whether it is a draft. So `K`,
+`vim.lsp.buf.hover()` and hover plugins that ask LSP show them beside other
+servers’ answers; a hover UI can sort on the name to put them first. The
+client offers only hover, but `LspAttach` fires for it, so your `LspAttach`
+keymaps and statusline LSP lists reach those files too.
 
 With the sidebar open, a Comments section above Implementation lists the
 repository’s review comments, one row each, by file and then line: a green
-`●`, the file’s name and line, and the first line of the body. It is left
-out while it has nothing to list. `<CR>` on a row, or a split or tab key, goes
-to its line and opens it to edit there. `d` on a row asks, the way `:Changeset
-abandon` does, then deletes the review comment.
+`●`, or a draft’s `◌`, the file’s name and line, and the first line of
+the body. Its header counts the drafts. It is left out while it has nothing to
+list. `<CR>` on a row, or a split or tab key, goes to its line and opens it to
+edit there. `d` on a row asks, the way `:Changeset abandon` does, then deletes
+the review comment.
 
 A `'statuscolumn'` can draw the bubbles somewhere else. `%s` draws every
 plugin’s signs or none, so set `review_comment.sign` to `false` to keep the
 bubbles out of the sign column, or a line shows its bubble twice.
 `require("changeset").bubble(buf, lnum)` returns the bubble on line `lnum`
 (1-based, as `v:lnum`) of buffer `buf` (0 for the current one) and its
-highlight group: `"󰍩", "ChangesetReviewComment"`, or nil on a line without
-one. It answers from the marks already in the buffer, so it is cheap enough for
-every screen row, and it answers whatever `review_comment.sign` is.
+highlight group: `"󰍩", "ChangesetReviewComment"`, or `"󰍪",
+"ChangesetReviewCommentDraft"` for a draft, or nil on a line without one. It
+answers from the marks already in the buffer, so it is cheap enough for every
+screen row, and it answers whatever `review_comment.sign` is.
 
 This statuscolumn draws the bubble where the fold column would be, then the
 line number and the signs:
@@ -569,103 +609,107 @@ HIGHLIGHT GROUPS                             *changeset.nvim-highlight-groups*
 The sidebar derives each group’s default from your colorscheme, and derives
 it again on `:colorscheme`.
 
-  -------------------------------------------------------------------------------
-  Group                        Colours                     Default
-  ---------------------------- --------------------------- ----------------------
-  ChangesetMeta                Text that is not content:   Comment’s colour,
-                               counts, notes               italic
+  --------------------------------------------------------------------------------
+  Group                         Colours                     Default
+  ----------------------------- --------------------------- ----------------------
+  ChangesetMeta                 Text that is not content:   Comment’s colour,
+                                counts, notes               italic
 
-  ChangesetMatch               Characters a filter matched links to Search
+  ChangesetMatch                Characters a filter matched links to Search
 
-  ChangesetHidden              A kind the tree is not      Comment’s colour,
-                               showing, in the kind menu   struck through
+  ChangesetHidden               A kind the tree is not      Comment’s colour,
+                                showing, in the kind menu   struck through
 
-  ChangesetHeader              The sidebar’s header strip  TabLine’s background
+  ChangesetHeader               The sidebar’s header strip  TabLine’s background
 
-  ChangesetHeaderIcon          The branch glyph on the     Directory’s colour on
-                               header                      the header
+  ChangesetHeaderIcon           The branch glyph on the     Directory’s colour on
+                                header                      the header
 
-  ChangesetHeaderDim           The remote, nouns and PR on Comment’s colour on
-                               the header                  the header
+  ChangesetHeaderDim            The remote, nouns and PR on Comment’s colour on
+                                the header                  the header
 
-  ChangesetHeaderRef           The ref the tree is         Normal’s colour on the
-                               compared against            header, bold
+  ChangesetHeaderRef            The ref the tree is         Normal’s colour on the
+                                compared against            header, bold
 
-  ChangesetReviewComment       A review comment’s bubble,  DiagnosticOk’s colour,
-                               its circle and the line     bold
-                               numbers it covers in its
-                               file
+  ChangesetReviewComment        A review comment’s bubble,  DiagnosticOk’s colour,
+                                its circle and the line     bold
+                                numbers it covers in its
+                                file
 
-  ChangesetReviewCommentBody   A review comment’s body     links to ChangesetMeta
-                               after its circle
+  ChangesetReviewCommentDraft   A draft review comment’s    DiagnosticOk’s colour
+                                bubble, its circle and the  mixed halfway to
+                                line numbers it covers      Comment’s
 
-  ChangesetBadge               The badge in the footer     Directory’s colour,
-                                                           reversed, bold
+  ChangesetReviewCommentBody    A review comment’s body     links to ChangesetMeta
+                                after its circle
 
-  ChangesetFooter              The footer’s text           Comment’s colour on
-                                                           StatusLine
+  ChangesetBadge                The badge in the footer     Directory’s colour,
+                                                            reversed, bold
 
-  ChangesetFooterKey           Keys and the filter in the  StatusLine, bold
-                               footer
+  ChangesetFooter               The footer’s text           Comment’s colour on
+                                                            StatusLine
 
-  ChangesetSelected            The sidebar’s cursor row    Normal’s background
-                               while focused               tinted toward
-                                                           Statement
+  ChangesetFooterKey            Keys and the filter in the  StatusLine, bold
+                                footer
 
-  ChangesetHere                The row for where your      a lighter Statement
-                               cursor is                   tint
+  ChangesetSelected             The sidebar’s cursor row    Normal’s background
+                                while focused               tinted toward
+                                                            Statement
 
-  ChangesetPicked              The row last opened from    a lighter Statement
-                               the sidebar                 tint
+  ChangesetHere                 The row for where your      a lighter Statement
+                                cursor is                   tint
 
-  ChangesetSelectedIcon        The glyph on the selected   Statement’s colour
-                               row
+  ChangesetPicked               The row last opened from    a lighter Statement
+                                the sidebar                 tint
 
-  ChangesetHereIcon            The glyph on the row for    Statement’s colour
-                               where you are
+  ChangesetSelectedIcon         The glyph on the selected   Statement’s colour
+                                row
 
-  ChangesetPickedIcon          The glyph on the row last   Statement’s colour
-                               opened
+  ChangesetHereIcon             The glyph on the row for    Statement’s colour
+                                where you are
 
-  ChangesetNoCursor            The cursor while in the     fully blended
-                               sidebar, hidden
+  ChangesetPickedIcon           The glyph on the row last   Statement’s colour
+                                opened
 
-  ChangesetButton              A dialog’s button           Normal, else
-                                                           NormalFloat shaded
-                                                           toward its text where
-                                                           they share a
-                                                           background
+  ChangesetNoCursor             The cursor while in the     fully blended
+                                sidebar, hidden
 
-  ChangesetButtonFocus         A dialog’s focused button   Statement’s colour,
-                                                           reversed, bold
+  ChangesetButton               A dialog’s button           Normal, else
+                                                            NormalFloat shaded
+                                                            toward its text where
+                                                            they share a
+                                                            background
 
-  ChangesetButtonDanger        The button that deletes, in DiagnosticError’s
-                               a dialog asking first       colour on the button’s
-                                                           background
+  ChangesetButtonFocus          A dialog’s focused button   Statement’s colour,
+                                                            reversed, bold
 
-  ChangesetButtonDangerFocus   That button while focused   DiagnosticError’s
-                                                           colour, reversed, bold
+  ChangesetButtonDanger         The button that deletes, in DiagnosticError’s
+                                a dialog asking first       colour on the button’s
+                                                            background
 
-  ChangesetButtonKey           The letter that presses a   underlined
-                               button
+  ChangesetButtonDangerFocus    That button while focused   DiagnosticError’s
+                                                            colour, reversed, bold
 
-  ChangesetDialogSelected      A dialog’s focused row      NormalFloat’s
-                                                           background tinted
-                                                           toward Statement
+  ChangesetButtonKey            The letter that presses a   underlined
+                                button
 
-  ChangesetPreview             The band over a window      CursorLine’s
-                               being previewed into        background, else
-                                                           Visual’s
+  ChangesetDialogSelected       A dialog’s focused row      NormalFloat’s
+                                                            background tinted
+                                                            toward Statement
 
-  ChangesetPreviewLabel        The badge at the head of    DiagnosticWarn’s
-                               that band                   colour, reversed, bold
+  ChangesetPreview              The band over a window      CursorLine’s
+                                being previewed into        background, else
+                                                            Visual’s
 
-  ChangesetPreviewHint         The hint at the tail of     Comment’s colour on
-                               that band                   the band, italic
+  ChangesetPreviewLabel         The badge at the head of    DiagnosticWarn’s
+                                that band                   colour, reversed, bold
 
-  ChangesetPreviewIcon         The file’s glyph on that    the file icon’s colour
-                               band                        on the band
-  -------------------------------------------------------------------------------
+  ChangesetPreviewHint          The hint at the tail of     Comment’s colour on
+                                that band                   the band, italic
+
+  ChangesetPreviewIcon          The file’s glyph on that    the file icon’s colour
+                                band                        on the band
+  --------------------------------------------------------------------------------
 A colorscheme’s definition of a group wins. So does your own `nvim_set_hl`,
 until the next `:colorscheme` clears it. To keep an override across colorscheme
 changes, set it from a `ColorScheme` autocmd:

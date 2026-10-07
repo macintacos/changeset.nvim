@@ -320,7 +320,7 @@ local function greet(name)
 │                                                                        │
 │                                                                        │
 │                                                                        │
-╰ kept until :Changeset submit ────────────────────────────── <C-CR> save ╯
+╰ kept until :Changeset submit ─────────────────── <C-CR> save · q draft ╯
   return "hello " .. name
 end
 ```
@@ -330,8 +330,8 @@ as the float and its border make the room, and the float lies on them. It is att
 the window (`relative = "win"`, `bufpos`), so it moves with its line as the source
 scrolls, and `row` counts past every screen row of a wrapped line. Opening scrolls the
 source the least that shows the line with the room under it. A floating source has nothing
-to scroll past, so it grows by the room instead and shrinks back afterwards. While the row under the line is scrolled out of the source the float hides,
-and entering it scrolls the line back into view. Edits to the source never move the room
+to scroll past, so it grows by the room instead and shrinks back afterwards. While the row under the line is scrolled out of the source the float hides.
+Focus never returns to it from the source: leaving it closes it, keeping a draft. Edits to the source never move the room
 off the line: it stays on the line number, as the float does.
 
 Its width is the room right of the source window's gutter, less the border, between 20
@@ -345,12 +345,13 @@ user's markdown `FileType` settings, such as `spell`, reach it and win over the 
 
 The border does the labelling, as the kind menu's does. The title names the line or lines.
 The footer says where a save goes and, at its right end, the first `review_comment.save`
-key in Neovim's own notation (`<C-CR> save`), since every review comment ends with that key
-and it is the one nobody should have to look up. A float takes one `footer_pos`, so both
+key in Neovim's own notation and the close that keeps a draft (`<C-CR> save · q draft`),
+since every review comment ends with one of those two, and they are the ones nobody should
+have to look up. A float takes one `footer_pos`, so both
 share a left footer padded with border to the window's width; a window too narrow for both
-drops the key. The other keys stay off the border: `?` lists them all. However a new
-review comment's text goes, except the close a taken save makes, it is kept: `q` in
-normal mode, `<S-Esc>` in either mode where the terminal sends it, `:q`,
+drops the key. The other keys stay off the border: `?` lists them all. However a
+review comment's text goes, except the close a taken save makes, it is kept as a draft:
+`q` in normal mode, focus leaving the float, `<S-Esc>` in either mode where the terminal sends it, `:q`,
 `<C-w>c`, an `:e` in the float, quitting Neovim. One `BufUnload` hook on the window's buffer catches
 them all, since the buffer goes with the window (`bufhidden=wipe`), and takes the room
 under the line with it. Plain `<Esc>` still
@@ -539,6 +540,15 @@ asks on every screen row of every redraw. The bubbles live in a namespace of the
 the function as the contract rather than the namespace's fields, which leaves how a mark
 carries its bubble free to change.
 
+A draft's marks keep their places and change shape: the bubble becomes `󰍪`, nerd-font
+Material `message-text-outline`, and the circle `◌`, both in `ChangesetReviewCommentDraft`,
+which also lights its line numbers. Shape carries the difference, so it survives a
+colour-blind eye and a monochrome theme; the colour backs it up. The group is the saved
+green mixed halfway toward `Comment`'s colour and not bold: the same note, faded because
+it is not committed to yet. It means neither added, removed nor error, which the diff and
+diagnostic colours already hold. Hover heads a draft `Draft review comment`, and the
+quickfix list prefixes its text with `[draft] `.
+
 No icon plugin has a category to ask for a comment, so, like the header's branch glyph,
 the bubble is borrowed rather than looked up: `󰍩` is nerd-font Material `message-text`, the
 glyph the config's which-key spec gives its messages entry. Without a nerd font it draws
@@ -645,12 +655,13 @@ classifies no file, so its rows are not file rows, and it holds every review com
 tree's repository, one row each, by path and then line.
 
 Its header follows § Sections: an icon, the label, and a count of its rows in the meta
-colour, taken before any filter. The icon is the marks' bubble, `󰍩`, borrowed as they
+colour, taken before any filter, adding the drafts among them when there are any:
+`3 comments · 1 draft`. The icon is the marks' bubble, `󰍩`, borrowed as they
 borrow it and drawn in `ChangesetReviewComment`. It carries no `+N -N`: a review comment
 changes no line, so a stat there would mean nothing.
 
-A row speaks the marks' language. Their circle, `●` in `ChangesetReviewComment`, stands in
-the rail's column. The file's icon follows, then its name and the line or range. The
+A row speaks the marks' language. Their circle, `●` in `ChangesetReviewComment`, or a
+draft's `◌` in `ChangesetReviewCommentDraft`, stands in the rail's column. The file's icon follows, then its name and the line or range. The
 directory is left out, as the preview band and `y` both carry the whole path. The body's
 first line comes last, in `ChangesetReviewCommentBody` like the marks' body, clipped to fit.
 
@@ -899,9 +910,18 @@ repository's deliberate choice is none of that save's business.
 
 ## Behaviour that is easy to get wrong
 
-- **An edit closed without a save drops the edit.** The review comment keeps its saved
-  text, and a changed one says so. Closing it with only whitespace, by a save key or any
-  other close, asks to delete it instead, since an empty review comment is never kept.
+- **An edit closed without a save keeps a draft.** Closing an existing review comment with
+  its text unchanged leaves it alone, so a saved one stays saved. Closing it with changed
+  text stores that text as a draft, which submit leaves out until it is saved again; it
+  echoes, rather than notifies, so notifier plugins don't toast every close. Closing it
+  with only whitespace, by a save key or any other close, asks to delete it instead, since
+  an empty review comment is never kept.
+- **The review comment window closes when focus leaves it.** Its `WinLeave` checks once the
+  move lands, since a window can't close while focus is leaving it. Two windows don't
+  count: a focused `?` help and the delete dialog, which `hold()` marks before they open.
+  `hold()` also leaves insert mode first, as the dialog's keys are normal-mode, and the
+  return to the float restarts insert mode where it stopped. A `WinEnter` on the float's
+  buffer fires for a window `nvim_open_win` is still opening, so it checks the window.
 - **A saved review comment leaves insert mode before the window closes.** The save keys
   are pressed while typing and the answer comes later. `stopinsert` only takes effect on
   the next loop iteration, so the window closes on the float's own `InsertLeave`; closing

@@ -15,7 +15,17 @@ one route through `:Changeset`, with its range. The exceptions are the walking m
 `next`, `prev`, `next-comment` and `prev-comment`. They are `g@` operators so that `.`
 repeats them, and their `'operatorfunc'` calls `step()` in `lua/changeset/init.lua` and
 `next_comment()` / `prev_comment()` in `lua/changeset/reviewing.lua` with the count. So
-those functions stay public, and the expr map's callback requires nothing.
+those functions stay public, and the expr map's callback requires nothing. From the review
+comment window the expr map returns `<Cmd>Changeset …<CR>` instead, so it takes the
+command's route below.
+
+`:Changeset` asks `changeset.review_comment_window`, only when that module is already
+loaded, whether the review comment window is current. If it is, every subcommand goes to
+`reviewing.from_window()`: `comment` saves, `delete` deletes the comment being written, and
+any other closes the window, keeping a draft, then runs from the comment's line in the
+source window. That is the one place the rule lives; no verb checks for the window itself.
+The window maps, in insert mode on its own buffer, each default `<C-g>` key the plugin
+mapped globally in normal mode, read back from the global maps by their `<Plug>` target.
 
 Every subcommand has a `<Plug>(changeset-<subcommand>)` map. The global keys are defaults
 under `<C-g>`, mapped once startup is done. Each one is skipped when its key is already
@@ -30,7 +40,8 @@ sidebar's statusline evaluates it from a string, `v:lua.require'changeset'.foote
 which the type check cannot follow.
 
 `bubble()` in `lua/changeset/init.lua` is public for a user's `'statuscolumn'`, which calls
-it on every screen row of every redraw. It answers from the buffer's extmarks alone, never
+it on every screen row of every redraw. A draft answers `󰍪` in
+`ChangesetReviewCommentDraft`. It answers from the buffer's extmarks alone, never
 from the comments file or the tree.
 
 ## Adding an option
