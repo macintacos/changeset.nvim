@@ -27,7 +27,7 @@ local M = {}
 
 -- Bump when what an entry holds or how it is derived changes: an older entry's stamp still matches, so it
 -- would be read back as it was.
-local FORMAT = 3
+local FORMAT = 4
 
 ---Where the cache for the repo at `root` lives. Under `cache` rather than
 ---`state`: every entry can be read again from a server, so losing the file

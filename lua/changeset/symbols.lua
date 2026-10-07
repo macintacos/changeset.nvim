@@ -36,6 +36,22 @@ local function precedes(a, b)
   return ra.start.character < rb.start.character
 end
 
+local CALLABLE = { Function = true, Method = true, Constructor = true }
+
+-- What a callable keeps as children. Servers also list its locals, parameters and object keys, each of
+-- which would take a line of the callable's change from it.
+local IN_CALLABLE = {
+  Function = true,
+  Method = true,
+  Constructor = true,
+  Class = true,
+  Interface = true,
+  Struct = true,
+  Enum = true,
+  Module = true,
+  Namespace = true,
+}
+
 ---One level of the tree, in document order, after filtering.
 ---
 ---A node whose kind is filtered out is replaced by its own children rather than
@@ -43,15 +59,16 @@ end
 ---`Object`, would lose every function declared inside one.
 ---@param nodes table[]
 ---@param kinds table<string, true>?
+---@param in_callable boolean? `nodes` are the children of a callable.
 ---@return { node: table, kind: string }[]
-local function level(nodes, kinds)
+local function level(nodes, kinds, in_callable)
   local rows = {}
   for _, node in ipairs(nodes) do
     local kind = vim.lsp.protocol.SymbolKind[node.kind] or "Unknown"
-    if kinds == nil or kinds[kind] then
+    if kinds == nil or (kinds[kind] and (not in_callable or IN_CALLABLE[kind])) then
       rows[#rows + 1] = { node = node, kind = kind }
     else
-      vim.list_extend(rows, level(node.children or {}, kinds))
+      vim.list_extend(rows, level(node.children or {}, kinds, in_callable))
     end
   end
   table.sort(rows, precedes)
@@ -80,16 +97,18 @@ end
 ---@param nodes table[]
 ---@param kinds table<string, true>?
 ---@param depth integer
-local function walk(out, nodes, kinds, depth)
-  for _, row in ipairs(level(nodes, kinds)) do
+---@param in_callable boolean?
+local function walk(out, nodes, kinds, depth, in_callable)
+  for _, row in ipairs(level(nodes, kinds, in_callable)) do
     out[#out + 1] = to_item(row, depth)
-    walk(out, row.node.children or {}, kinds, depth + 1)
+    walk(out, row.node.children or {}, kinds, depth + 1, CALLABLE[row.kind])
   end
 end
 
 ---Flatten a `textDocument/documentSymbol` response into `changeset.Symbol`s.
 ---@param response table[] `DocumentSymbol[]` or `SymbolInformation[]`.
----@param kinds table<string, true>? Kinds to keep. Others are dropped and their children promoted. Default: keep everything.
+---@param kinds table<string, true>? Kinds to keep. Others are dropped and their children promoted, as is
+---anything under a function, method or constructor but a callable or a type. Default: keep everything.
 ---@return changeset.Symbol[]
 function M.flatten(response, kinds)
   local out = {}

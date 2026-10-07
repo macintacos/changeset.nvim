@@ -20,6 +20,24 @@ local function sym(name, kind, depth, first, last)
   }
 end
 
+---A `DocumentSymbol` as a server answers it, its body spanning `first..last`.
+---@param name string
+---@param kind string
+---@param first integer
+---@param last integer
+---@param children table[]?
+---@return table
+local function lsp_sym(name, kind, first, last, children)
+  local range = { start = { line = first - 1, character = 0 }, ["end"] = { line = last - 1, character = 0 } }
+  return {
+    name = name,
+    kind = vim.lsp.protocol.SymbolKind[kind],
+    range = range,
+    selectionRange = range,
+    children = children,
+  }
+end
+
 ---A `git diff --unified=0` hunk: `count` new lines replacing `removed` old ones.
 ---@param lnum integer
 ---@param count integer
@@ -328,6 +346,27 @@ describe("changeset.rows", function()
           assert.equal(case[3], touched)
         end)
       end
+
+      it("gives a method its whole body's stat when its server also lists the method's locals", function()
+        local response = {
+          lsp_sym("SessionStore", "Class", 3, 20, {
+            lsp_sym("sweep", "Method", 5, 16, {
+              lsp_sym("dropped", "Variable", 6, 6),
+              lsp_sym("id", "Variable", 7, 7),
+              lsp_sym("session", "Variable", 8, 8),
+            }),
+          }),
+        }
+        local flat =
+          require("changeset.symbols").flatten(response, require("changeset.kinds").for_filetype("typescript"))
+
+        local class = Rows.files(Rows.build({ file(PATH, { hunk(5, 12) }) }, { [PATH] = flat }))[1].children[1]
+        local sweep = class.children[1]
+
+        assert.same({ "sweep" }, names(class.children))
+        assert.equal(12, sweep.added)
+        assert.same({}, sweep.children)
+      end)
     end)
 
     describe("orphan hunks", function()

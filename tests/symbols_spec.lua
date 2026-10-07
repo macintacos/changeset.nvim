@@ -78,6 +78,48 @@ describe("changeset.symbols", function()
       assert.same({ 0 }, field(items, "depth"))
     end)
 
+    describe("under a callable", function()
+      -- Keeps every kind used here, so only the nesting can drop one.
+      local CODE =
+        { Class = true, Constructor = true, Function = true, Method = true, Property = true, Variable = true }
+
+      for _, kind in ipairs({ "Function", "Method", "Constructor" }) do
+        it("drops a " .. kind .. "'s locals, parameters and object keys", function()
+          local items = symbols.flatten({
+            sym("callable", KIND[kind], 0, { sym("token", KIND.Variable, 1), sym("status", KIND.Property, 2) }),
+          }, CODE)
+
+          assert.same({ "callable" }, field(items, "name"))
+        end)
+      end
+
+      it("keeps the callables and types a function declares", function()
+        local items = symbols.flatten({
+          sym("outer", KIND.Function, 0, { sym("helper", KIND.Function, 1), sym("Local", KIND.Class, 2) }),
+        }, CODE)
+
+        assert.same({ "outer", "helper", "Local" }, field(items, "name"))
+        assert.same({ 0, 1, 1 }, field(items, "depth"))
+      end)
+
+      it("keeps a callable declared inside a local it drops", function()
+        local items = symbols.flatten({
+          sym("outer", KIND.Function, 0, { sym("handler", KIND.Variable, 1, { sym("inner", KIND.Function, 2) }) }),
+        }, CODE)
+
+        assert.same({ "outer", "inner" }, field(items, "name"))
+        assert.same({ 0, 1 }, field(items, "depth"))
+      end)
+
+      it("keeps the members of a class declared inside a function", function()
+        local items = symbols.flatten({
+          sym("outer", KIND.Function, 0, { sym("Local", KIND.Class, 1, { sym("field", KIND.Property, 2) }) }),
+        }, CODE)
+
+        assert.same({ "outer", "Local", "field" }, field(items, "name"))
+      end)
+    end)
+
     it("reads a flat SymbolInformation response", function()
       local items = symbols.flatten({
         {
