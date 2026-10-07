@@ -183,18 +183,8 @@ end
 ---@type { lhs: string, prior: vim.api.keyset.get_keymap? }[]
 local step_bindings = {}
 
----Remove the step keys and put back what they replaced. Safe to repeat: `close` also runs with no sidebar open.
-function M.unbind_step_keys()
-  -- Newest first: a key bound twice records changeset's own first mapping as the second's prior.
-  for i = #step_bindings, 1, -1 do
-    local binding = step_bindings[i]
-    pcall(vim.keymap.del, "n", binding.lhs)
-    if binding.prior then
-      vim.fn.mapset(binding.prior)
-    end
-  end
-  step_bindings = {}
-end
+local NEXT_DESC = "Next change (Changeset)"
+local PREV_DESC = "Previous change (Changeset)"
 
 ---The global normal-mode mapping for `lhs`, if any.
 ---@param lhs string
@@ -204,6 +194,23 @@ local function global_mapping(lhs)
   return vim.iter(vim.api.nvim_get_keymap("n")):find(function(keymap)
     return vim.keycode(keymap.lhs) == vim.keycode(lhs)
   end)
+end
+
+---Remove the step keys and put back what they replaced; a map set over one since stays. Safe to repeat: `close` also
+---runs with no sidebar open.
+function M.unbind_step_keys()
+  -- Newest first: a key bound twice records changeset's own first mapping as the second's prior.
+  for i = #step_bindings, 1, -1 do
+    local binding = step_bindings[i]
+    local current = global_mapping(binding.lhs)
+    if not current or current.desc == NEXT_DESC or current.desc == PREV_DESC then
+      pcall(vim.keymap.del, "n", binding.lhs)
+      if binding.prior then
+        vim.fn.mapset(binding.prior)
+      end
+    end
+  end
+  step_bindings = {}
 end
 
 ---@param lhs (string|false)?
@@ -223,10 +230,10 @@ end
 ---@param preview fun() Preview the row under the sidebar's cursor.
 function M.bind_step_keys(keys, preview)
   M.unbind_step_keys()
-  bind_step_key(keys.next, "Next change (Changeset)", function()
+  bind_step_key(keys.next, NEXT_DESC, function()
     step(1, preview)
   end)
-  bind_step_key(keys.prev, "Previous change (Changeset)", function()
+  bind_step_key(keys.prev, PREV_DESC, function()
     step(-1, preview)
   end)
 end

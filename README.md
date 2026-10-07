@@ -478,7 +478,7 @@ Any `keymaps` entry can be `false` to leave that key unbound.
 
 The step keys, `keymaps.next` and `keymaps.prev`, are off by default. Once set, they work
 from any window, but only while the sidebar is open. Whatever they replaced comes back
-when it closes.
+when it closes, unless the key was mapped again in the meantime: that map stays.
 
 Each `setup()` call starts from the defaults, not from the previous call. The sidebar
 picks up its options the next time it opens. Turning on `pr_review.enabled` takes effect

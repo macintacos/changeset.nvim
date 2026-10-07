@@ -192,6 +192,16 @@ describe("changeset setup", function()
     assert.equal("user ]h", global_map("]h").desc)
   end)
 
+  it("keeps a mapping made over its key while open, rather than the one it replaced", function()
+    vim.keymap.set("n", "]h", function() end, { desc = "user ]h" })
+    changeset.setup({ keymaps = { next = "]h" } })
+    open_sidebar()
+    vim.keymap.set("n", "]h", function() end, { desc = "later ]h" })
+
+    changeset.close()
+    assert.equal("later ]h", global_map("]h").desc)
+  end)
+
   it("puts back the user's mapping when the sidebar is closed with :q", function()
     vim.keymap.set("n", "]h", function() end, { desc = "user ]h" })
     changeset.setup({ keymaps = { next = "]h" } })
