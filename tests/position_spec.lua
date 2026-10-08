@@ -283,6 +283,15 @@ describe("changeset.position", function()
       assert.equal(4, p:rebuilt(view(ROWS, { cursor = 2 }), MOD, decided))
     end)
 
+    it("keeps a restored row waiting while no window shows the sidebar", function()
+      local p = position.new()
+      p:restore({ row = { id = LOAD, path = "mod.lua" } }, view(READING), reading)
+
+      p:rebuilt({ rows = ROWS, visible = shown(ROWS), focused = false }, MOD, decided)
+
+      assert.equal(4, p:rebuilt(view(ROWS, { cursor = 2 }), MOD, decided))
+    end)
+
     it("puts a restored row back as far down the window as it was recorded", function()
       local p = position.new()
       p:restore({ row = { id = LOAD, path = "mod.lua", offset = 3 } }, view(READING), reading)

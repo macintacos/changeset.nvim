@@ -112,7 +112,8 @@ function Position:settle(view, decided, lnum)
   end
   if wanted and wanted.row then
     local shown = view.cursor and nearest(view.visible, wanted.row.id)
-    if decided(wanted.row.path) then
+    -- Only while a window shows the sidebar: a row decided with none waits for one.
+    if decided(wanted.row.path) and view.cursor then
       if shown and Rows.find(view.rows, wanted.row.id) then
         lnum, offset = shown, wanted.row.offset
         -- Else a pending landing's follow would pull the cursor back off it.
