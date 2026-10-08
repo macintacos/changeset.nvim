@@ -382,6 +382,19 @@ describe("changeset tree", function()
         assert.is_false(window.is_visible())
       end)
 
+      it("builds for the branch HEAD moved to before the re-measure landed", function()
+        hold()
+        changeset.open()
+        vim.system, vim.fn.systemlist = real_system, real_systemlist
+        Fixture.git({ "checkout", "-q", "-b", "feature2" }, tmp)
+
+        release()
+
+        assert.is_true(vim.wait(5000, function()
+          return build.current().branch == "feature2"
+        end, 25))
+      end)
+
       it("keeps the tree a build for another branch made before the re-measure landed", function()
         hold()
         changeset.open()

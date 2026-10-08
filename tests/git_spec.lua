@@ -227,6 +227,71 @@ describe("changeset.git", function()
       assert.is_nil(Git.parent(tmp, "feature"))
     end)
   end)
+  describe("async", function()
+    ---Run `fn` through `Git.async`, waiting for what it returns.
+    ---@param fn fun(): any
+    ---@return any
+    local function run(fn)
+      local done, result = false, nil
+      Git.async(fn, function(value)
+        done, result = true, value
+      end)
+      assert.is_true(vim.wait(5000, function()
+        return done
+      end, 10))
+      return result
+    end
+
+    before_each(function()
+      Fixture.init_repo("main", tmp)
+    end)
+
+    it("reads a failed command's lines as none", function()
+      assert.same(
+        {},
+        run(function()
+          return Git.lines({ "git", "rev-parse", "--verify", "no-such-ref" }, tmp)
+        end)
+      )
+    end)
+
+    it("keeps the last line of output that ends without a newline", function()
+      local fd = assert(io.open(tmp .. "/blob", "w"))
+      fd:write("one\ntwo")
+      fd:close()
+      local oid = Fixture.git({ "hash-object", "-w", "blob" }, tmp)
+
+      assert.same(
+        { "one", "two" },
+        run(function()
+          return Git.lines({ "git", "cat-file", "blob", oid }, tmp)
+        end)
+      )
+    end)
+
+    it("tells an ancestor from a commit that is not one", function()
+      local first = Fixture.git({ "rev-parse", "HEAD" }, tmp)
+      vim.fn.writefile({ "more" }, tmp .. "/more.txt")
+      local second = Fixture.commit("more", tmp)
+
+      assert.same(
+        { true, false },
+        run(function()
+          return { Git.is_ancestor(tmp, first, second), Git.is_ancestor(tmp, second, first) }
+        end)
+      )
+    end)
+
+    it("raises an error raised inside fn, with its traceback", function()
+      local ok, err = pcall(Git.async, function()
+        error("measure failed")
+      end, function() end)
+
+      assert.is_false(ok)
+      assert.matches("measure failed.*stack traceback", err)
+    end)
+  end)
+
   describe("system", function()
     it("hands a failed spawn to on_exit on the main loop as a failed result", function()
       local real = vim.system

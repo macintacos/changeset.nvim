@@ -237,6 +237,38 @@ describe("fork_point", function()
     assert.equal("main", heard_in(root)[2].point.against)
   end)
 
+  ---@param root string
+  ---@return changeset.ForkPoint?
+  local function measured_async(root)
+    local done, point = false, nil
+    fork_point.get_async(root, "feature", function(measured)
+      done, point = true, measured
+    end)
+    assert.is_true(vim.wait(5000, function()
+      return done
+    end, 10))
+    return point
+  end
+
+  for _, case in ipairs({
+    { "the default branch", nil, nil },
+    { "the branch it was created from", "parent", nil },
+    { "its PR's target", nil, "parent" },
+  }) do
+    it("measures in the background what it measures at once, against " .. case[1], function()
+      local root = repo(case[2])
+      if case[3] then
+        vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = case[3], number = 7 })
+        fork_point.get(root, "feature")
+        assert.is_true(await_heard(root, 1))
+      end
+
+      local point = fork_point.get(root, "feature")
+
+      assert.same(point, measured_async(root))
+    end)
+  end
+
   it("measures again in the background when gh names a target while it measures", function()
     vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
     vim.env.FAKE_GH_DELAY = "0.5"
