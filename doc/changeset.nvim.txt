@@ -707,8 +707,9 @@ statusline can name it, and no write can save it to disk.
                    only leaves Insert mode.
   ?                List the window's keys.
 
-Any other way of leaving keeps the text as a draft too: `:q`, focus moving to
-another window, scrolling the comment's line out of view, or quitting Neovim.
+Any other way of leaving keeps the text as a draft too: `:q`, `:e!`, focus
+moving to another window, scrolling the comment's line out of view, closing
+the window it opened from, or quitting Neovim.
 So nothing you type is lost. The command-line window, a question the window
 asks and `?`'s list don't close it.
 
@@ -795,8 +796,9 @@ bubble and coloured numbers stay. A draft's block has a dashed border.
 A typed one-line move stops on a block as if it were a line of the file. In a
 buffer showing blocks, changeset maps `j`, `k`, `<Down>`, `<Up>`, `gj` and
 `gk`; each still does what you mapped it to when it doesn't stop. A count, a
-jump, a search, a macro or a mapping moves past blocks. The block the cursor
-stops on lights its border and lists its keys:
+jump, a search, a macro or a mapping moves past blocks, and so does any move
+past a block a closed fold hides. The block the cursor stops on lights its
+border and lists its keys:
 
   <CR>  c      Edit the review comment, or resume the draft.
   d            Ask, then delete it.
