@@ -368,6 +368,26 @@ describe("changeset.view", function()
       assert.same({ "Store", "load", "Other changes" }, vim.list_slice(show(v, ROWS), 3, 5))
     end)
 
+    it("unfolds a shut chain it folded, rather than opening the chain", function()
+      -- 1 Implementation, 2 mod.lua, 3 Store › load, whose tip has two changed children, 4 a, 5 b.
+      local rows = Rows.build({ Changes.file("mod.lua", { 5, 7 }) }, {
+        ["mod.lua"] = {
+          Changes.sym("Store", "Class", 0, 1, 10),
+          Changes.sym("load", "Method", 1, 2, 9),
+          Changes.sym("a", "Function", 2, 4, 5),
+          Changes.sym("b", "Function", 2, 6, 8),
+        },
+      })
+      local v = fresh()
+      local unfolded = show(v, rows)
+      v:step_out(3)
+      show(v, rows)
+
+      assert.is_true(v:open(3))
+
+      assert.same(unfolded, show(v, rows))
+    end)
+
     it("folds an opened chain's head, then steps out of it, leaving the chain open", function()
       local v = fresh()
       show(v, ROWS)

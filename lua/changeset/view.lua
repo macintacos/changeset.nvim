@@ -288,10 +288,10 @@ function View:open(lnum)
   end
   -- Separate axes: compression hides a chain's *intermediate* rows, folding hides
   -- a row's children.
-  if row.chain and not self.folds.chains[row.id] then
-    self.folds.chains[row.id] = true
-  else
+  if self.folds.collapsed[row.id] then
     self.folds.collapsed[row.id] = nil
+  elseif row.chain and not self.folds.chains[row.id] then
+    self.folds.chains[row.id] = true
   end
   return true
 end
