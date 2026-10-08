@@ -13,6 +13,7 @@ local comment_store = require("changeset.comment_store")
 local config = require("changeset.config")
 local diff = require("changeset.diff")
 local draw = require("changeset.draw")
+local Paths = require("changeset.paths")
 local render = require("changeset.render")
 local Rows = require("changeset.rows")
 local sidebar_state = require("changeset.sidebar_state")
@@ -151,7 +152,7 @@ local function track()
     return
   end
   local name = vim.api.nvim_buf_get_name(buf)
-  local path = name ~= "" and vim.fs.relpath(state.tree.root, vim.fs.normalize(name)) or nil
+  local path = Paths.relative(state.tree.root, name)
   state.position:track(path and { path = path, lnum = vim.api.nvim_win_get_cursor(win)[1] } or nil)
   draw.paint()
 end
@@ -277,7 +278,7 @@ local function ready(tree)
   end
   local win = window.peek_target()
   local name = win and vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win)) or ""
-  local path = name ~= "" and vim.fs.relpath(tree.root, vim.fs.normalize(name))
+  local path = Paths.relative(tree.root, name)
   return not path or decided(path)
 end
 

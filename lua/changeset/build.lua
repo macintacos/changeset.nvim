@@ -332,7 +332,7 @@ vim.api.nvim_create_autocmd("LspAttach", {
     if not (tree and memo and client and client:supports_method("textDocument/documentSymbol")) then
       return
     end
-    local path = vim.fs.relpath(tree.root, vim.fs.normalize(vim.api.nvim_buf_get_name(args.buf)))
+    local path = Paths.relative(tree.root, vim.api.nvim_buf_get_name(args.buf))
     local entry = path and memo.entries[path]
     if path and entry and entry.silent then
       memo.entries[path] = nil

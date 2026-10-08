@@ -27,4 +27,18 @@ describe("changeset.paths", function()
       assert.truthy(notes[1].msg:find('"', 1, true))
     end)
   end)
+
+  describe("relative", function()
+    it("gives a file under the root its path from the root", function()
+      assert.equal("lua/a.lua", Paths.relative("/repo", "/repo/lua/a.lua"))
+    end)
+
+    it("gives nil for a file outside the root", function()
+      assert.is_nil(Paths.relative("/repo", "/elsewhere/a.lua"))
+    end)
+
+    it("gives nil for an unnamed buffer", function()
+      assert.is_nil(Paths.relative("/repo", ""))
+    end)
+  end)
 end)

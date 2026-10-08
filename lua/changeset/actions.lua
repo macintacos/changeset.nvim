@@ -119,7 +119,7 @@ local function standing(root)
     return nil, 0
   end
   local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win))
-  local path = name ~= "" and vim.fs.relpath(root, vim.fs.normalize(name)) or nil
+  local path = Paths.relative(root, name)
   return path, vim.api.nvim_win_get_cursor(win)[1]
 end
 

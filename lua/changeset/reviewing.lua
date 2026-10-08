@@ -231,7 +231,7 @@ end
 local function file_path(repository, buf)
   local name = vim.api.nvim_buf_get_name(buf)
   -- relpath prefixes the cwd to a relative name, so a non-file buffer would pass from inside the repo.
-  return vim.bo[buf].buftype == "" and name ~= "" and vim.fs.relpath(repository, vim.fs.normalize(name)) or nil
+  return vim.bo[buf].buftype == "" and Paths.relative(repository, name) or nil
 end
 
 ---Opens the review comment window under line `line` of the current window for `comment`, new, its body "". Closing

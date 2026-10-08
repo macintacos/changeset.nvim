@@ -1,4 +1,4 @@
----Project-root lookup, and the clipboard copy behind the sidebar's `y`.
+---Project-root lookup, a buffer's path in it, and the clipboard copy behind the sidebar's `y`.
 local M = {}
 
 ---Project root for `buf` — git root via `vim.fs.root`, falling back to cwd.
@@ -7,6 +7,15 @@ local M = {}
 function M.root(buf)
   local git = vim.fs.root(buf, { ".git" })
   return vim.fs.normalize(git or assert(vim.uv.cwd()))
+end
+
+---The path of the buffer named `name` relative to `root`, nil for an unnamed buffer or one outside `root`.
+---@param root string
+---@param name string The buffer's name.
+---@return string?
+function M.relative(root, name)
+  -- relpath prefixes the cwd to a relative name, and makes "" ".".
+  return name ~= "" and vim.fs.relpath(root, vim.fs.normalize(name)) or nil
 end
 
 ---Puts `text` on the clipboard, or in the unnamed register when Neovim has no clipboard provider.

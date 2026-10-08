@@ -212,7 +212,7 @@ end
 ---@return changeset.ReviewComment[]
 local function on_lines(buf, root, comments)
   local name = vim.api.nvim_buf_get_name(buf)
-  local path = name ~= "" and vim.fs.relpath(root, vim.fs.normalize(name))
+  local path = Paths.relative(root, name)
   return vim.tbl_filter(function(comment)
     return comment.path == path and comment.line ~= nil
   end, path and comments or {})
