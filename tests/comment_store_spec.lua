@@ -249,7 +249,7 @@ describe("changeset.comment_store", function()
     it("reads a record written behind its back", function()
       comment_store.keep(ROOT, comment())
       comment_store.list(ROOT)
-      local data = jsonfile.read_object(comment_store.path())
+      local data = assert(jsonfile.read_object(comment_store.path()))
       data[ROOT][1].body = "changed"
 
       jsonfile.write(comment_store.path(), data)
