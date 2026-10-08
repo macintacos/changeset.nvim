@@ -49,16 +49,16 @@ local subcommands = {
     require("changeset.review").toggle()
   end,
   ["review submit"] = function()
-    require("changeset.reviewing").submit()
+    require("changeset.review_handoff").submit()
   end,
   ["review restore"] = function()
-    require("changeset.reviewing").restore()
+    require("changeset.review_handoff").restore()
   end,
   ["review yank"] = function()
-    require("changeset.reviewing").yank()
+    require("changeset.review_handoff").yank()
   end,
   ["review abandon"] = function()
-    require("changeset.reviewing").abandon()
+    require("changeset.review_handoff").abandon()
   end,
   ["comment new"] = function(opts)
     local reviewing = require("changeset.reviewing")
@@ -83,7 +83,7 @@ local subcommands = {
     require("changeset.reviewing").last_comment()
   end,
   ["comment list"] = function()
-    require("changeset.reviewing").list()
+    require("changeset.review_handoff").list()
   end,
   ["comment toggle"] = function()
     require("changeset.review_comments").toggle()

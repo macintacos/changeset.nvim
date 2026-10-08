@@ -215,19 +215,20 @@ describe("plugin/changeset.lua", function()
     assert.equal(1, calls.restore)
   end)
 
-  it("routes comment del, comment draft and review abandon to the reviewing module", function()
+  it("routes comment del and comment draft to the reviewing module, and review abandon to the hand-off", function()
     local calls = {}
     package.loaded["changeset.reviewing"] = {
       delete = counter(calls, "delete"),
       draft = counter(calls, "draft"),
-      abandon = counter(calls, "abandon"),
     }
+    package.loaded["changeset.review_handoff"] = { abandon = counter(calls, "abandon") }
 
     vim.cmd("Changeset comment  del")
     vim.cmd("Changeset comment draft")
     vim.cmd("Changeset review abandon | let g:changeset_after = 1")
 
     package.loaded["changeset.reviewing"] = nil
+    package.loaded["changeset.review_handoff"] = nil
     assert.same({ delete = 1, draft = 1, abandon = 1 }, calls)
     assert.equal(1, vim.g.changeset_after)
   end)
@@ -296,11 +297,13 @@ describe("plugin/changeset.lua", function()
       ["review-restore"] = "restore",
       ["review-abandon"] = "abandon",
     }
-    local reviewing = {}
+    local handoff = { list = true, yank = true, submit = true, restore = true, abandon = true }
+    local reviewing, review_handoff = {}, {}
     for _, fn in pairs(plugs) do
-      reviewing[fn] = counter(calls, fn)
+      (handoff[fn] and review_handoff or reviewing)[fn] = counter(calls, fn)
     end
     package.loaded["changeset.reviewing"] = reviewing
+    package.loaded["changeset.review_handoff"] = review_handoff
     package.loaded.changeset = { refresh = counter(calls, "refresh") }
     require("changeset.config").setup({ pr_review = { enabled = true } })
     package.loaded["changeset.review"] = { toggle = counter(calls, "review") }
@@ -311,6 +314,7 @@ describe("plugin/changeset.lua", function()
     end
 
     package.loaded["changeset.reviewing"] = nil
+    package.loaded["changeset.review_handoff"] = nil
     package.loaded.changeset = nil
     package.loaded["changeset.review"] = nil
     package.loaded["changeset.review_comments"] = nil
