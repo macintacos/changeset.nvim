@@ -41,8 +41,14 @@ local left_float = false
 ---@type changeset.Config.Keymaps
 local bound_keys = {}
 
+---The width of the sidebar's window when the tree was last drawn.
+---@type integer?
+local drawn_width
+
 ---Draw the tree, naming the keys the sidebar bound.
 local function redraw()
+  local win = window.win()
+  drawn_width = win and vim.api.nvim_win_get_width(win)
   draw.draw(bound_keys.filter_kinds)
 end
 
@@ -487,6 +493,18 @@ function M.open()
     callback = function()
       window.relayout()
       redraw()
+    end,
+  })
+  -- Fires: windows changing size. The sidebar's own, dragged or `:resize`d, needs its rows refitted to the width,
+  -- which `winfixwidth` doesn't stop.
+  vim.api.nvim_create_autocmd("WinResized", {
+    group = augroup,
+    desc = "changeset: refit the tree to its window's new width",
+    callback = function()
+      local sidebar = window.win()
+      if sidebar and vim.api.nvim_win_get_width(sidebar) ~= drawn_width then
+        redraw()
+      end
     end,
   })
   -- Fires: entering a tabpage. A sidebar standing in it missed every redraw made while it was in another.

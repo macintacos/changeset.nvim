@@ -234,6 +234,21 @@ describe("changeset sidebar", function()
     assert.equal(100, width)
   end)
 
+  it("fits its rows to the width once the sidebar's own window is resized", function()
+    local columns = vim.o.columns
+    vim.o.columns = 200
+    local buf = open_sidebar()
+    local win = assert(window.win())
+
+    vim.api.nvim_win_set_width(win, 70)
+    -- A headless editor never fires it on its own; a UI does once the screen updates.
+    vim.api.nvim_exec_autocmds("WinResized", { pattern = tostring(win) })
+    local width = vim.fn.strdisplaywidth(totals(buf))
+    vim.o.columns = columns
+
+    assert.equal(70, width)
+  end)
+
   describe("back from another tabpage", function()
     after_each(function()
       vim.cmd("silent! tabonly!")
