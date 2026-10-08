@@ -1,4 +1,4 @@
----Loading the files the sidebar reads.
+---Loading and reading the files the sidebar reads.
 ---
 ---The sidebar opens files the user did not ask for: to read their symbols, and
 ---to preview a row. Both must be silent and neither may fail loudly, so both go
@@ -28,6 +28,32 @@ function M.index()
     end
   end
   return index
+end
+
+---Lines `first` to `last` of the file at `path`, from its loaded buffer, which holds unwritten edits, else from
+---disk; fewer where the file ends first, none when it can't be read.
+---@param path string Absolute.
+---@param first integer
+---@param last integer? The file's last line when nil.
+---@param index table<string, integer>? From `index`, to find the buffer in.
+---@return string[]
+function M.lines(path, first, last, index)
+  local buf
+  if index then
+    buf = index[vim.fs.normalize(path)]
+  else
+    buf = M.loaded(path)
+  end
+  if buf then
+    return vim.api.nvim_buf_get_lines(buf, first - 1, last or -1, false)
+  end
+  local ok, read
+  if last then
+    ok, read = pcall(vim.fn.readfile, path, "", last)
+  else
+    ok, read = pcall(vim.fn.readfile, path)
+  end
+  return ok and vim.list_slice(read, first, last) or {}
 end
 
 ---Load `path` into a buffer, without disturbing one the user already has.

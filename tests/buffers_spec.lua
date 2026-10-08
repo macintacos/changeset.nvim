@@ -45,9 +45,11 @@ describe("changeset.buffers", function()
     it("finds the buffer loaded finds", function()
       local path = vim.fs.normalize(tmp .. "/a.lua")
       vim.fn.writefile({ "x" }, path)
-      assert(buffers.load(path))
+      local buf = assert(buffers.load(path))
+      local name = vim.api.nvim_buf_get_name(buf)
 
-      assert.equal(buffers.loaded(path), buffers.index()[path])
+      assert.equal(buf, buffers.loaded(name))
+      assert.equal(buf, buffers.index()[name])
     end)
 
     it("finds nothing for a file with no loaded buffer", function()
@@ -61,11 +63,59 @@ describe("changeset.buffers", function()
     it("finds the first loaded of two buffers whose names normalise alike", function()
       local path = vim.fs.normalize(tmp .. "/a.lua")
       vim.fn.writefile({ "x" }, path)
+      local name = vim.fn.resolve(path)
       local first = vim.api.nvim_create_buf(false, true)
-      vim.api.nvim_buf_set_name(first, tmp .. "//a.lua")
+      vim.api.nvim_buf_set_name(first, vim.fs.dirname(name) .. "/./a.lua")
       assert(buffers.load(path))
 
-      assert.equal(buffers.loaded(path), buffers.index()[path])
+      assert.equal(first, buffers.loaded(name))
+      assert.equal(first, buffers.index()[name])
+    end)
+  end)
+
+  describe("lines", function()
+    local path
+
+    before_each(function()
+      path = vim.fs.normalize(tmp .. "/a.lua")
+      vim.fn.writefile({ "one", "two", "three" }, path)
+      -- The name a buffer takes: the temporary directory can sit behind a symlink.
+      path = vim.fn.resolve(path)
+    end)
+
+    after_each(function()
+      vim.cmd("silent! %bwipeout!")
+    end)
+
+    it("reads a loaded buffer's unwritten edits over the file on disk", function()
+      local buf = assert(buffers.load(path))
+      vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "edited" })
+
+      assert.same({ "edited", "three" }, buffers.lines(path, 2, 3))
+    end)
+
+    it("reads a file without a loaded buffer from disk", function()
+      assert.same({ "two" }, buffers.lines(path, 2, 2))
+    end)
+
+    it("reads the lines there are of a range past the file's end", function()
+      assert.same({ "three" }, buffers.lines(path, 3, 5))
+    end)
+
+    it("reads to the file's end without a last line", function()
+      assert.same({ "two", "three" }, buffers.lines(path, 2))
+    end)
+
+    it("reads nothing of a file that is not there", function()
+      assert.same({}, buffers.lines(tmp .. "/missing.lua", 1, 2))
+    end)
+
+    it("finds the buffer in an index taken before", function()
+      local buf = assert(buffers.load(path))
+      local index = buffers.index()
+      vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "edited" })
+
+      assert.same({ "edited" }, buffers.lines(path, 1, 1, index))
     end)
   end)
 

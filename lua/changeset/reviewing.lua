@@ -704,15 +704,7 @@ end
 ---@return changeset.reviewing.ReadLines
 local function reader(repository)
   return function(path, first, last)
-    local full = vim.fs.joinpath(repository, path)
-    local buf = buffers.loaded(full)
-    local lines
-    if buf then
-      lines = vim.api.nvim_buf_get_lines(buf, first - 1, last, false)
-    else
-      local ok, read = pcall(vim.fn.readfile, full, "", last)
-      lines = ok and vim.list_slice(read, first, last) or {}
-    end
+    local lines = buffers.lines(vim.fs.joinpath(repository, path), first, last)
     if #lines == last - first + 1 then
       return lines
     end

@@ -221,7 +221,7 @@ local function pick(row)
   draw.paint()
 end
 
----What captions orphan hunks in one rebuild, looking loaded buffers up once.
+---What captions orphan hunks in one rebuild, looking loaded buffers up once and reading each file once.
 ---
 ---Prefers the buffer, which holds unwritten changes the file does not. Reading
 ---symbols is what loads a file, so a file answered from the cache has no buffer
@@ -229,19 +229,14 @@ end
 ---@param root string
 ---@return changeset.rows.Lines lines Its `text` and `tick`.
 local function captions(root)
-  local index = buffers.index()
+  local index, read = buffers.index(), {}
   return {
     text = function(path, lnum)
       if lnum < 1 then
         return nil
       end
-      local full = root .. "/" .. path
-      local buf = index[vim.fs.normalize(full)]
-      if buf then
-        return vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1]
-      end
-      local ok, lines = pcall(vim.fn.readfile, full, "", lnum)
-      return ok and lines[lnum] or nil
+      read[path] = read[path] or buffers.lines(root .. "/" .. path, 1, nil, index)
+      return read[path][lnum]
     end,
     tick = function(path)
       local buf = index[vim.fs.normalize(root .. "/" .. path)]
