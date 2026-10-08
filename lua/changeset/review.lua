@@ -206,13 +206,15 @@ end
 
 ---The repository and branch gitsigns published for `buf`, attached or not.
 ---@param buf integer
----@return string? root nil when gitsigns published nothing for `buf` or it has no branch.
+---@return string? root nil when gitsigns published nothing for `buf` or it is on no branch.
 ---@return string? branch
 local function tracked(buf)
   -- gitsigns publishes the status before it caches the buffer, so this reads the
   -- status. Its `root` is `git_obj.repo.toplevel`, the spelling `owned()` compares.
   local status = vim.b[buf].gitsigns_status_dict
-  if status and status.root and status.head and status.head ~= "" then
+  -- A detached HEAD, such as each commit of a rebase, publishes a short hash: no new branch, so what is applied stays.
+  local detached = status and status.head and (status.head == "HEAD" or status.head:match("^%x%x%x%x%x%x%x+$"))
+  if status and status.root and status.head and status.head ~= "" and not detached then
     return status.root, status.head
   end
 end
