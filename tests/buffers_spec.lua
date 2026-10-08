@@ -162,6 +162,66 @@ describe("changeset.buffers", function()
       assert.equal("lua", vim.bo[buf].filetype)
     end)
 
+    describe("with a review comment kept on the file", function()
+      local comment_store = require("changeset.comment_store")
+      local Fixture = require("support.git")
+      local repo, previous_dir, path
+
+      before_each(function()
+        require("changeset.review_comments")
+        repo, previous_dir = Fixture.enter_tempdir()
+        Fixture.init_repo("trunk", repo)
+        path = repo .. "/kept.txt"
+        vim.fn.writefile({ "one", "two" }, path)
+        os.remove(comment_store.path())
+        comment_store.keep(require("changeset.paths").root(0), { path = "kept.txt", line = 2, body = "note" })
+      end)
+
+      after_each(function()
+        os.remove(comment_store.path())
+        vim.cmd("silent! %bwipeout!")
+        vim.fn.chdir(previous_dir)
+        vim.fn.delete(repo, "rf")
+      end)
+
+      ---@param buf integer
+      ---@return integer
+      local function marks(buf)
+        local ns = vim.api.nvim_get_namespaces()["changeset.review_comments"]
+        return #vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, {})
+      end
+
+      it("draws the file's review comment marks once as it loads", function()
+        local real, reads = comment_store.comments, 0
+        comment_store.comments = function(...)
+          reads = reads + 1
+          return real(...)
+        end
+
+        local ok, buf = pcall(buffers.load, path)
+        comment_store.comments = real
+
+        assert(ok, buf)
+        assert.are.equal(1, reads)
+        assert.are.equal(1, marks(assert(buf)))
+      end)
+
+      it("draws the file's review comment marks when loaded from inside an autocommand", function()
+        local buf
+        vim.api.nvim_create_autocmd("User", {
+          pattern = "ChangesetSpecLoad",
+          once = true,
+          callback = function()
+            buf = buffers.load(path)
+          end,
+        })
+
+        vim.api.nvim_exec_autocmds("User", { pattern = "ChangesetSpecLoad" })
+
+        assert.are.equal(1, marks(assert(buf)))
+      end)
+    end)
+
     it("leaves a file no rule matches without one", function()
       local path = tmp .. "/notes.wwwww"
       vim.fn.writefile({ "hello" }, path)

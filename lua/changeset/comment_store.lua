@@ -282,10 +282,11 @@ end
 ---@param root string
 ---@return changeset.ReviewComment[] listed
 ---@return changeset.SubmittedBatch[] submitted
+---@return string? branch The branch they were read for.
 function M.comments(root)
   local data = jsonfile.read_object(M.path()) or {}
   local branch = M.branch(root)
-  return shown(data, root, branch), restorable(batches(data, root, branch))
+  return shown(data, root, branch), restorable(batches(data, root, branch)), branch
 end
 
 ---Replaces the comment at `comment`'s path and range; a blank body drops it instead.

@@ -56,6 +56,10 @@ local stale = {}
 ---@type table<integer, string>
 local drawn_for = {}
 
+---Buffers whose last draw left marks, blocks or hover on them.
+---@type table<integer, true>
+local has_marks = {}
+
 ---Marks `comment` in `buf`.
 ---@param buf integer
 ---@param comment changeset.ReviewComment
@@ -196,32 +200,66 @@ end
 ---@class changeset.RepositoryComments
 ---@field listed changeset.ReviewComment[]
 ---@field sent changeset.ReviewComment[] Those of every batch the branch submitted: no mark shows them, but edits move them.
+---@field branch string? The branch checked out as they were read.
 
----`root`'s comments, read into `by_root` on a pass's first ask.
----@param by_root table<string, changeset.RepositoryComments>
+---What one pass over the buffers has read so far, so it reads each once.
+---@class changeset.review_comments.Pass
+---@field comments table<string, changeset.RepositoryComments> By repository root.
+---@field roots table<string, string> Repository roots, by the directory of the buffer's name.
+---@field branches table<string, string|false> Checked-out branches by root; false for none.
+
+---@return changeset.review_comments.Pass
+local function new_pass()
+  return { comments = {}, roots = {}, branches = {} }
+end
+
+---`buf`'s repository root, found once a pass for each directory.
+---@param pass changeset.review_comments.Pass
+---@param buf integer
+---@return string
+local function root_of(pass, buf)
+  local name = vim.api.nvim_buf_get_name(buf)
+  local dir = name ~= "" and vim.fs.dirname(name) or ""
+  pass.roots[dir] = pass.roots[dir] or Paths.root(buf)
+  return pass.roots[dir]
+end
+
+---The branch `root` has checked out, read once a pass.
+---@param pass changeset.review_comments.Pass
+---@param root string
+---@return string?
+local function branch_of(pass, root)
+  if pass.branches[root] == nil then
+    pass.branches[root] = comment_store.branch(root) or false
+  end
+  return pass.branches[root] or nil
+end
+
+---`root`'s comments, read into the pass on its first ask.
+---@param pass changeset.review_comments.Pass
 ---@param root string
 ---@return changeset.RepositoryComments
-local function read(by_root, root)
-  if not by_root[root] then
-    local listed, submitted = comment_store.comments(root)
+local function read(pass, root)
+  if not pass.comments[root] then
+    local listed, submitted, branch = comment_store.comments(root)
+    if pass.branches[root] == nil then
+      pass.branches[root] = branch or false
+    end
     local sent = vim.iter(submitted):map(function(batch)
       return batch.comments
     end)
-    by_root[root] = { listed = listed, sent = sent:flatten():totable() }
+    pass.comments[root] = { listed = listed, sent = sent:flatten():totable(), branch = branch_of(pass, root) }
   end
-  return by_root[root]
+  return pass.comments[root]
 end
 
----Redraws `buf`'s marks from `by_root`, the store's comments by repository, read once a pass.
+---Redraws `buf`'s marks from what `pass` has read.
 ---@param buf integer
----@param by_root table<string, changeset.RepositoryComments>
-local function draw(buf, by_root)
-  vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-  vim.api.nvim_buf_clear_namespace(buf, sign_ns, 0, -1)
-  review_comment_blocks.draw(buf, {})
-  local root = Paths.root(buf)
-  local stored = read(by_root, root)
-  drawn_for[buf] = comment_store.branch(root)
+---@param pass changeset.review_comments.Pass
+local function draw(buf, pass)
+  local root = root_of(pass, buf)
+  local stored = read(pass, root)
+  drawn_for[buf] = stored.branch
   local comments = on_lines(buf, root, stored.listed)
   if vim.bo[buf].modified or stale[buf] then
     -- On the stored lines, a modified buffer's marks would leave the code its edits moved.
@@ -234,9 +272,17 @@ local function draw(buf, by_root)
       snapshots[buf], snapshot_ticks[buf] = vim.api.nvim_buf_get_lines(buf, 0, -1, false), tick
     end
   end
+  if not (has_marks[buf] or #comments > 0) then
+    return
+  end
+  vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+  vim.api.nvim_buf_clear_namespace(buf, sign_ns, 0, -1)
+  review_comment_blocks.draw(buf, {})
   if mark_file(buf, comments) then
+    has_marks[buf] = true
     attach_hover(buf, root)
   else
+    has_marks[buf] = nil
     hover.detach(buf)
   end
 end
@@ -261,9 +307,9 @@ end
 ---Stores the lines the edits written to `buf`'s file moved its comments to.
 ---@param buf integer
 local function store_moves(buf)
-  local root = Paths.root(buf)
-  local by_root = {}
-  local stored = read(by_root, root)
+  local pass = new_pass()
+  local root = root_of(pass, buf)
+  local stored = read(pass, root)
   local found = moves(buf, vim.list_extend(on_lines(buf, root, stored.listed), on_lines(buf, root, stored.sent)))
   if #found == 0 then
     -- An unreadable record lists no comments, though the edits may still move some once it reads again.
@@ -272,7 +318,7 @@ local function store_moves(buf)
       return
     end
     stale[buf] = nil
-    return draw(buf, by_root)
+    return draw(buf, pass)
   end
   -- Cleared first: a stored move redraws through the store, retaking the snapshot.
   stale[buf] = nil
@@ -287,10 +333,10 @@ end
 
 ---Redraws every loaded buffer's marks from the store.
 function M.redraw()
-  local by_root = {}
+  local pass = new_pass()
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_loaded(buf) then
-      draw(buf, by_root)
+      draw(buf, pass)
     end
   end
 end
@@ -309,10 +355,10 @@ end
 
 ---Redraws the marks of each loaded buffer whose repository has checked out another branch since they were drawn.
 local function redraw_switched()
-  local by_root = {}
+  local pass = new_pass()
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-    if vim.api.nvim_buf_is_loaded(buf) and comment_store.branch(Paths.root(buf)) ~= drawn_for[buf] then
-      draw(buf, by_root)
+    if vim.api.nvim_buf_is_loaded(buf) and branch_of(pass, root_of(pass, buf)) ~= drawn_for[buf] then
+      draw(buf, pass)
     end
   end
 end
@@ -325,7 +371,9 @@ vim.api.nvim_create_autocmd("BufReadPost", {
   group = vim.api.nvim_create_augroup("changeset.review_comments", { clear = true }),
   desc = "changeset: mark the review comments kept for a file as it is read",
   callback = function(args)
-    draw(args.buf, {})
+    -- Lets `buffers.load` tell that the read already drew these marks.
+    vim.b[args.buf].changeset_marks_drawn = true
+    draw(args.buf, new_pass())
   end,
 })
 
@@ -348,6 +396,8 @@ vim.api.nvim_create_autocmd("BufUnload", {
   desc = "changeset: forget what an unloaded buffer's review comments were drawn from",
   callback = function(args)
     snapshots[args.buf], snapshot_ticks[args.buf], drawn_for[args.buf], stale[args.buf] = nil, nil, nil, nil
+    has_marks[args.buf] = nil
+    vim.b[args.buf].changeset_marks_drawn = nil
   end,
 })
 

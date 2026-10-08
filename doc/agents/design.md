@@ -578,7 +578,7 @@ lists them; their ranges' number colours merge. Their blocks stack in that order
 The marks are drawn in every loaded buffer of a repository with review comments, sidebar
 or not, once changeset is loaded: `plugin/changeset.lua` requires nothing, so a session
 that never uses changeset marks nothing. They are redrawn after every write to the store
-and as a file is read, and a redraw reads the store once for each repository it draws.
+and as a file is read, and a redraw reads the store and the branch once for each repository it draws.
 When Neovim regains focus, or gitsigns reports a change without a buffer, which it does
 when HEAD moves and on every `:cd`, only the buffers whose repository has checked out
 another branch since they were drawn are redrawn, since either can follow a branch switch:

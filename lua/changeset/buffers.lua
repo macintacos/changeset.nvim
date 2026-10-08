@@ -105,7 +105,8 @@ function M.load(path)
   if vim.bo[buf].filetype == "" then
     vim.bo[buf].filetype = vim.filetype.match({ buf = buf }) or vim.bo[buf].filetype
   end
-  if vim.fn.exists("#changeset.review_comments#BufReadPost") == 1 then
+  -- Unless the read's own `BufReadPost` drew them, as it does outside an autocommand.
+  if vim.fn.exists("#changeset.review_comments#BufReadPost") == 1 and not vim.b[buf].changeset_marks_drawn then
     vim.api.nvim_exec_autocmds("BufReadPost", { group = "changeset.review_comments", buffer = buf, modeline = false })
   end
   return buf

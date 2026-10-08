@@ -54,4 +54,71 @@ describe("review comments in buffers", function()
 
     assert.are.same({ "󰍩", "ChangesetReviewComment" }, { changeset.bubble(keep_on_alpha(), 5) })
   end)
+
+  describe("with more of the repository's files loaded", function()
+    local others
+
+    before_each(function()
+      others = {}
+      for i = 1, 4 do
+        local path = tmp .. "/other" .. i .. ".txt"
+        vim.fn.writefile({ "x" }, path)
+        others[i] = vim.fn.bufadd(path)
+        vim.fn.bufload(others[i])
+      end
+    end)
+
+    ---How often `comment_store.branch` runs while `fn` does.
+    ---@param fn fun()
+    ---@return integer
+    local function branch_reads(fn)
+      local real, reads = comment_store.branch, 0
+      comment_store.branch = function(...)
+        reads = reads + 1
+        return real(...)
+      end
+      local ok, err = pcall(fn)
+      comment_store.branch = real
+      assert(ok, err)
+      return reads
+    end
+
+    it("reads the repository's branch once when it redraws every buffer", function()
+      keep_on_alpha()
+
+      assert.are.equal(
+        1,
+        branch_reads(function()
+          require("changeset.review_comments").redraw()
+        end)
+      )
+    end)
+
+    it("reads the repository's branch once as focus comes back", function()
+      keep_on_alpha()
+
+      assert.are.equal(
+        1,
+        branch_reads(function()
+          vim.api.nvim_exec_autocmds("FocusGained", {})
+        end)
+      )
+    end)
+
+    it("leaves the blocks of a buffer with no review comments alone as it redraws", function()
+      local alpha = keep_on_alpha()
+      local blocks = require("changeset.review_comment_blocks")
+      local real, drawn = blocks.draw, {}
+      blocks.draw = function(buf, ...)
+        drawn[buf] = true
+        return real(buf, ...)
+      end
+
+      local ok, err = pcall(require("changeset.review_comments").redraw)
+      blocks.draw = real
+
+      assert(ok, err)
+      assert.are.same({ [alpha] = true }, drawn)
+    end)
+  end)
 end)
