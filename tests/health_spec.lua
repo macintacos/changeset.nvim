@@ -13,6 +13,7 @@ describe("changeset.health", function()
     which_key = true,
     mini_pick = "set up",
     gitsigns = true,
+    gitsigns_unified = true,
     symbol_servers = { "lua_ls" },
     parsers = { { lang = "rust", found = true } },
     options = config.get(),
@@ -122,6 +123,7 @@ describe("changeset.health", function()
     assert.equal("ok", level({}, "icons from `mini.icons`"))
     assert.equal("ok", level({ icons = "nvim-web-devicons" }, "icons from `nvim-web-devicons`"))
     assert.equal("warn", level({ icons = false }, "no icon provider"))
+    assert.equal("warn", level({ icons = "installed" }, "`mini.icons` is installed but not set up"))
   end)
 
   it("reports which-key as ok when installed, info when not", function()
@@ -140,6 +142,10 @@ describe("changeset.health", function()
     assert.equal("info", level({ gitsigns = false }, "`gitsigns` not found"))
     local review = vim.tbl_deep_extend("force", config.get(), { pr_review = { enabled = true } })
     assert.equal("error", level({ gitsigns = false, options = review }, "`gitsigns` not found"))
+  end)
+
+  it("tells a gitsigns too old for the unified diff from a current one", function()
+    assert.equal("info", level({ gitsigns_unified = false }, "`gitsigns` has no unified view"))
   end)
 
   it("names the language servers that provide symbols", function()

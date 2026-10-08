@@ -23,10 +23,11 @@ local M = {}
 ---@field git boolean
 ---@field gh boolean
 ---@field herdr boolean Inside a herdr pane, with `herdr` executable.
----@field icons "mini.icons"|"nvim-web-devicons"|false|nil
+---@field icons "mini.icons"|"nvim-web-devicons"|"installed"|false|nil "installed": `mini.icons`, never set up.
 ---@field which_key boolean
 ---@field mini_pick false|"installed"|"set up"
 ---@field gitsigns boolean
+---@field gitsigns_unified boolean Has the unified view the unified diff draws with.
 ---@field symbol_servers string[]
 ---@field parsers { lang: string, found: boolean }[]
 ---@field options changeset.Options
@@ -68,10 +69,11 @@ local function probe()
     git = vim.fn.executable("git") == 1,
     gh = vim.fn.executable("gh") == 1,
     herdr = (vim.env.HERDR_WORKSPACE_ID or "") ~= "" and vim.fn.executable("herdr") == 1,
-    icons = icons.source(),
+    icons = icons.source() or (loads("mini.icons") and "installed"),
     which_key = loads("which-key"),
     mini_pick = mini_pick,
     gitsigns = loads("gitsigns"),
+    gitsigns_unified = loads("gitsigns.unified"),
     symbol_servers = symbol_servers(),
     parsers = vim.tbl_map(function(lang)
       return { lang = lang, found = vim.treesitter.language.add(lang) ~= nil }
@@ -127,6 +129,9 @@ local function icon_provider(facts)
   if facts.icons == "nvim-web-devicons" then
     return finding("ok", "icons from `nvim-web-devicons` (files only)")
   end
+  if facts.icons == "installed" then
+    return finding("warn", "`mini.icons` is installed but not set up: call `require('mini.icons').setup()` for icons")
+  end
   return finding("warn", "no icon provider: install `mini.icons` or `nvim-web-devicons`")
 end
 
@@ -151,6 +156,9 @@ end
 
 ---@param facts changeset.health.Facts
 local function gitsigns(facts)
+  if facts.gitsigns and not facts.gitsigns_unified then
+    return finding("info", "`gitsigns` has no unified view: update it for the unified diff")
+  end
   if facts.gitsigns then
     return finding("ok", "`gitsigns` found")
   end
