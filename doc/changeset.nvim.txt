@@ -582,10 +582,10 @@ FILTER                                                      *changeset-filter*
 `f` asks for a filter and narrows the tree on each keystroke. A row matches
 when its text contains what you typed, ignoring case: a file's path, a
 symbol's name, a change's line, or a review comment's file. A match keeps the
-rows above it and below it, so it stays in place, and every match is
-highlighted until you clear the filter. `<Esc>` cancels and keeps the previous
-filter, and an empty filter clears it. The filter lasts until the tree is
-built against another base or branch.
+rows above it and below it, so it stays in place, and is highlighted where it
+shows in the row until you clear the filter. `<Esc>` cancels and keeps the
+previous filter, and an empty filter clears it. The filter lasts until the
+tree is built against another base or branch.
 
 SYMBOL KIND MENU                                         *changeset-kind-menu*
 
