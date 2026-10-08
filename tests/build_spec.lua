@@ -1,5 +1,6 @@
 local build = require("changeset.build")
 local resolve = require("changeset.resolve")
+local Changes = require("support.changes")
 local Fixture = require("support.git")
 local Notify = require("support.notify")
 local symbols = require("support.symbols")
@@ -156,7 +157,7 @@ describe("changeset.build", function()
     end
 
     it("writes what it read to the cache before building in another repository", function()
-      answer({ { name = "f", kind = "Function", depth = 0, lnum = 1, range_lnum = 1, range_end_lnum = 1 } })
+      answer({ Changes.sym("f", "Function", 0, 1, 1) })
       build_and_collect()
       local root = build.current().root
       local other = vim.fn.tempname()
@@ -187,7 +188,7 @@ describe("changeset.build", function()
     end)
 
     it("does not cache the symbols read from a buffer holding unwritten edits", function()
-      answer({ { name = "f", kind = "Function", depth = 0, lnum = 1, range_lnum = 1, range_end_lnum = 1 } })
+      answer({ Changes.sym("f", "Function", 0, 1, 1) })
       vim.api.nvim_buf_set_lines(0, 0, -1, false, { "return 3" })
       build_and_collect()
 

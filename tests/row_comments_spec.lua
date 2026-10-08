@@ -1,6 +1,7 @@
 local changeset = require("changeset")
 local comment_store = require("changeset.comment_store")
 local window = require("changeset.window")
+local Changes = require("support.changes")
 local Fixture = require("support.git")
 local Notify = require("support.notify")
 local Sidebar = require("support.sidebar")
@@ -53,12 +54,7 @@ describe("a review comment from a symbol's or a change's row", function()
       return #symbols.asks > 0
     end, 25))
     for _, path in ipairs(symbols.asks[1].paths) do
-      symbols.asks[1].answer(
-        path,
-        path == "mod.lua"
-            and { { name = "M.one", kind = "Function", depth = 0, lnum = 7, range_lnum = 7, range_end_lnum = 9 } }
-          or {}
-      )
+      symbols.asks[1].answer(path, path == "mod.lua" and { Changes.sym("M.one", "Function", 0, 7, 9) } or {})
     end
     Sidebar.settle()
     return root

@@ -401,10 +401,7 @@ describe("changeset.step", function()
       source.restore()
     end)
 
-    ---@return changeset.Symbol
-    local function symbol(name, kind, depth, first, last)
-      return { name = name, kind = kind, depth = depth, lnum = first, range_lnum = first, range_end_lnum = last }
-    end
+    local symbol = require("support.changes").sym
 
     -- `Outer` holds both of mod.lua's changes, one in each method, so it is listed only for them.
     local NESTED = {

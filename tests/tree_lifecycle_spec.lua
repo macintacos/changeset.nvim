@@ -1,6 +1,7 @@
 local changeset = require("changeset")
 local build = require("changeset.build")
 local window = require("changeset.window")
+local Changes = require("support.changes")
 local Fixture = require("support.git")
 local Notify = require("support.notify")
 local Sidebar = require("support.sidebar")
@@ -355,9 +356,7 @@ describe("changeset tree", function()
         build.refresh()
         wait_for_asks(2)
 
-        asks[1].answer("mod.lua", {
-          { name = "M", kind = "Variable", depth = 0, lnum = 1, range_lnum = 1, range_end_lnum = 1 },
-        })
+        asks[1].answer("mod.lua", { Changes.sym("M", "Variable", 0, 1, 1) })
         build.refresh()
         wait_for_asks(3)
 

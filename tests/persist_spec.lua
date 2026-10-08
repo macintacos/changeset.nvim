@@ -2,6 +2,7 @@ local changeset = require("changeset")
 local render = require("changeset.render")
 local Rows = require("changeset.rows")
 local window = require("changeset.window")
+local Changes = require("support.changes")
 local Fixture = require("support.git")
 local Notify = require("support.notify")
 local Cursor = require("support.cursor")
@@ -290,21 +291,6 @@ describe("changeset position in a session", function()
     ---@type fun(path: string, items: table[]?)
     local answer
 
-    ---A top-level function spanning `first`..`last`, as a server would report it.
-    ---@param name string
-    ---@param first integer
-    ---@param last integer
-    local function symbol(name, first, last)
-      return {
-        name = name,
-        kind = "Function",
-        lnum = first,
-        depth = 0,
-        range_lnum = first,
-        range_end_lnum = last,
-      }
-    end
-
     before_each(function()
       source = Symbols.install()
       answer = source.answer
@@ -331,7 +317,7 @@ describe("changeset position in a session", function()
 
       restore_session({ row = { id = row_id("mod.lua", "step"), path = "mod.lua", offset = 0 } })
       Sidebar.await_diff()
-      answer("mod.lua", { symbol("step", 7, 9) })
+      answer("mod.lua", { Changes.sym("step", "Function", 0, 7, 9) })
       Sidebar.flush()
 
       local win = assert(window.win())
@@ -347,7 +333,7 @@ describe("changeset position in a session", function()
       })
       Sidebar.await_diff()
 
-      answer("mod.lua", { symbol("step", 7, 9) })
+      answer("mod.lua", { Changes.sym("step", "Function", 0, 7, 9) })
       Sidebar.flush()
 
       assert.truthy(Sidebar.line_with(render.HERE_HL):find("step", 1, true))

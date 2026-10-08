@@ -9,6 +9,7 @@ local PREVIEW_NEXT = vim.keycode("<Plug>(changeset-preview-next)")
 local build = require("changeset.build")
 local render = require("changeset.render")
 local window = require("changeset.window")
+local Changes = require("support.changes")
 local Fixture = require("support.git")
 local Symbols = require("support.symbols")
 local Sidebar = require("support.sidebar")
@@ -456,27 +457,14 @@ describe("changeset sidebar", function()
     ---@type fun(path: string, items: table[]?)
     local answer
 
-    ---A symbol spanning `first`..`last`, as a server would report it.
-    ---@param s { name: string, kind: string, depth: integer, first: integer, last: integer }
-    local function sym(s)
-      return {
-        name = s.name,
-        kind = s.kind,
-        lnum = s.first,
-        depth = s.depth,
-        range_lnum = s.first,
-        range_end_lnum = s.last,
-      }
-    end
-
     local SESSION = {
-      sym({ name = "load", kind = "Function", depth = 0, first = 1, last = 3 }),
-      sym({ name = "tests", kind = "Module", depth = 0, first = 5, last = 9 }),
-      sym({ name = "refreshes", kind = "Function", depth = 1, first = 6, last = 8 }),
+      Changes.sym("load", "Function", 0, 1, 3),
+      Changes.sym("tests", "Module", 0, 5, 9),
+      Changes.sym("refreshes", "Function", 1, 6, 8),
     }
     local ONLY_TESTS = {
-      sym({ name = "tests", kind = "Module", depth = 0, first = 1, last = 5 }),
-      sym({ name = "works", kind = "Function", depth = 1, first = 2, last = 4 }),
+      Changes.sym("tests", "Module", 0, 1, 5),
+      Changes.sym("works", "Function", 1, 2, 4),
     }
 
     ---@return integer

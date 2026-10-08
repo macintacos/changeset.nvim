@@ -3,23 +3,7 @@ local Symbols = require("changeset.symbols")
 
 local PATH = "src/session.ts"
 
----A flat `changeset.Symbol` as `symbols.flatten` returns it, its body spanning `first..last`.
----@param name string
----@param kind string
----@param depth integer
----@param first integer
----@param last integer
----@return table
-local function sym(name, kind, depth, first, last)
-  return {
-    name = name,
-    kind = kind,
-    lnum = first,
-    depth = depth,
-    range_lnum = first,
-    range_end_lnum = last,
-  }
-end
+local sym = require("support.changes").sym
 
 ---A `DocumentSymbol` as a server answers it, its body spanning `first..last`.
 ---@param name string

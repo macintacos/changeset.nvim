@@ -4,6 +4,7 @@ vim.cmd("runtime plugin/changeset.lua")
 -- What `]g` runs: the spec runner starts before startup is done, which maps the default keys.
 local PREVIEW_NEXT = vim.keycode("<Plug>(changeset-preview-next)")
 local window = require("changeset.window")
+local Changes = require("support.changes")
 local Fixture = require("support.git")
 local Cursor = require("support.cursor")
 local Sidebar = require("support.sidebar")
@@ -108,18 +109,6 @@ describe("changeset sidebar focus", function()
     ---@type fun(path: string, items: table[]?)
     local answer
 
-    ---A function spanning `first`..`last` of `mod.lua`, as a server would report it.
-    local function symbol(name, first, last)
-      return {
-        name = name,
-        kind = "Function",
-        lnum = first,
-        depth = 0,
-        range_lnum = first,
-        range_end_lnum = last,
-      }
-    end
-
     before_each(function()
       source = Symbols.install()
       answer = source.answer
@@ -136,7 +125,7 @@ describe("changeset sidebar focus", function()
       Sidebar.await_diff()
       assert.truthy(Sidebar.cursor_line():find("mod.lua", 1, true))
 
-      answer("mod.lua", { symbol("step", 7, 9) })
+      answer("mod.lua", { Changes.sym("step", "Function", 0, 7, 9) })
 
       assert.truthy(Sidebar.cursor_line():find("step", 1, true))
     end)
