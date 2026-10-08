@@ -741,4 +741,131 @@ describe("changeset.resolve", function()
       assert.equal(1, #assert(report.items))
     end)
   end)
+
+  describe("start, on a file edited while its text parses", function()
+    local tmp, previous_dir, real_parser
+
+    ---documentSymbol from the buffer as it stands when asked: a Function per `local function`.
+    local function symbols_for(buf)
+      local out, open = {}, nil
+      for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+        local name = line:match("^local function ([%w_]+)")
+        if name then
+          open = { name = name, start = i - 1 }
+        elseif open and line == "end" then
+          local range = { start = { line = open.start, character = 0 }, ["end"] = { line = i - 1, character = 3 } }
+          out[#out + 1] = { name = open.name, kind = 12, range = range, selectionRange = range }
+          open = nil
+        end
+      end
+      return out
+    end
+
+    local function live_server(dispatchers)
+      local id = 0
+      return {
+        request = function(method, params, callback)
+          id = id + 1
+          local result = vim.NIL
+          if method == "initialize" then
+            result = { capabilities = { documentSymbolProvider = true } }
+          elseif method == "textDocument/documentSymbol" then
+            result = symbols_for(vim.uri_to_bufnr(params.textDocument.uri))
+          end
+          vim.schedule(function()
+            callback(nil, result)
+          end)
+          return true, id
+        end,
+        notify = function(method)
+          if method == "exit" then
+            dispatchers.on_exit(0, 15)
+          end
+          return true
+        end,
+        is_closing = function()
+          return false
+        end,
+        terminate = function()
+          dispatchers.on_exit(0, 15)
+        end,
+      }
+    end
+
+    ---A module of `n` documented functions, long enough that it parses in several slices.
+    local function module(n, marker)
+      local lines = {}
+      for i = 1, n do
+        vim.list_extend(lines, { ("-- doc for f%d"):format(i), ("local function f%d(a)"):format(i) })
+        for j = 1, 20 do
+          lines[#lines + 1] = ("  local v%d = a * %d"):format(j, j)
+        end
+        vim.list_extend(lines, { "  return a", "end", "" })
+      end
+      if marker then
+        lines[#lines + 1] = "-- feature marker"
+      end
+      return lines
+    end
+
+    before_each(function()
+      tmp, previous_dir = Fixture.enter_tempdir()
+      Fixture.feature({ ["big.lua"] = module(300) }, { ["big.lua"] = module(300, true) }, tmp)
+      vim.lsp.config("live_server", { cmd = live_server, filetypes = { "lua" }, root_dir = tmp })
+      vim.lsp.enable("live_server")
+      real_parser = vim.treesitter.get_string_parser
+    end)
+
+    after_each(function()
+      vim.treesitter.get_string_parser = real_parser
+      vim.lsp.enable("live_server", false)
+      for _, client in ipairs(vim.lsp.get_clients()) do
+        client:stop(true)
+      end
+      vim.cmd("silent! %bwipeout!")
+      vim.fn.chdir(previous_dir)
+      vim.fn.delete(tmp, "rf")
+    end)
+
+    ---Resolve `big.lua`, calling `on_parse(buf)` on the tick after its text now starts parsing.
+    ---@param on_parse fun(buf: integer)
+    ---@return { items: changeset.Symbol[]?, comment_lines: changeset.Comments? }?
+    local function resolve_while(on_parse)
+      local path = tmp .. "/big.lua"
+      vim.treesitter.get_string_parser = function(text, ...)
+        if text:find("feature marker", 1, true) then
+          vim.schedule(function()
+            on_parse(vim.fn.bufnr(path))
+          end)
+        end
+        return real_parser(text, ...)
+      end
+      local file = { path = "big.lua", status = "modified", added = 1, removed = 0, hunks = {}, section = "src" }
+      local got
+      resolve.start(
+        { root = tmp, base = Fixture.git({ "merge-base", "HEAD", "trunk" }, tmp) },
+        { file },
+        function(_, items, comment_lines)
+          got = { items = items, comment_lines = comment_lines }
+        end
+      )
+      vim.wait(15000, function()
+        return got ~= nil
+      end, 10)
+      return got
+    end
+
+    it("hands back symbols and comment lines read from the same text", function()
+      local got = assert(resolve_while(function(buf)
+        vim.api.nvim_buf_set_lines(buf, 0, 0, false, { "local p1", "local p2", "local p3", "local p4", "local p5" })
+      end))
+
+      local items = assert(got.items, "no symbols")
+      local kinds = assert(got.comment_lines, "no comment lines").new
+      local documented = #vim.tbl_filter(function(item)
+        return comments.kind(kinds, item.range_lnum - 1) == "comment"
+      end, items)
+      assert.equal(#items, documented)
+    end)
+  end)
 end)

@@ -207,29 +207,39 @@ local function resolve_one(repo, file, on_done)
         return on_done(nil)
       end
       -- One snapshot for both readers: symbol lines and comment lines have to agree, and an
-      -- unwritten edit would move either away from the file on disk.
+      -- unwritten edit would move either away from the file on disk. The server is asked now,
+      -- not once the parse ends, for the same reason: it reads the buffer as it stands.
       local source = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-      read_comments(
-        not is_docs_file and source or nil,
-        path,
-        old_text,
-        file.oldpath or path,
-        function(comment_lines, parsed)
-          if not ok then
-            return on_done(nil, comment_lines)
-          end
-          -- Parsing in slices lets the buffer be wiped before the server is asked.
-          if not vim.api.nvim_buf_is_valid(bufnr) then
-            return on_done(nil)
-          end
-          request(bufnr, function(items, timed_out)
-            if items then
-              attributes.mark(items, path, source, parsed)
-            end
-            on_done(items, comment_lines, timed_out)
-          end)
+      local symbols_read, comments_read
+      local function join()
+        if not (symbols_read and comments_read) then
+          return
         end
-      )
+        if not ok then
+          return on_done(nil, comments_read.lines)
+        end
+        -- Parsing in slices lets the buffer be wiped before both answers are in.
+        if not vim.api.nvim_buf_is_valid(bufnr) then
+          return on_done(nil)
+        end
+        local items = symbols_read.items
+        if items then
+          attributes.mark(items, path, source, comments_read.parsed)
+        end
+        on_done(items, comments_read.lines, symbols_read.timed_out)
+      end
+      if ok then
+        request(bufnr, function(items, timed_out)
+          symbols_read = { items = items, timed_out = timed_out }
+          join()
+        end)
+      else
+        symbols_read = {}
+      end
+      read_comments(not is_docs_file and source or nil, path, old_text, file.oldpath or path, function(lines, parsed)
+        comments_read = { lines = lines, parsed = parsed }
+        join()
+      end)
     end)
   end)
 end
