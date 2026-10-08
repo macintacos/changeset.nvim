@@ -53,7 +53,8 @@ function M.write(file, data)
   if not fd then
     return false
   end
-  if not (fd:write(vim.json.encode(data)) and fd:close() and os.rename(tmp, file)) then
+  local wrote = fd:write(vim.json.encode(data))
+  if not (fd:close() and wrote and os.rename(tmp, file)) then
     os.remove(tmp)
     return false
   end

@@ -36,6 +36,28 @@ describe("changeset.jsonfile", function()
     assert.same({}, jsonfile.read(dir .. "/null.json"))
   end)
 
+  it("closes the file a failed write opened", function()
+    local closed = false
+    local real_open = io.open
+    io.open = function()
+      return {
+        write = function()
+          return nil, "No space left on device"
+        end,
+        close = function()
+          closed = true
+          return true
+        end,
+      }
+    end
+    local ok, written = pcall(jsonfile.write, dir .. "/full.json", {})
+    io.open = real_open
+
+    assert.is_true(ok)
+    assert.is_false(written)
+    assert.is_true(closed)
+  end)
+
   it("reports a write it could not make", function()
     vim.fn.mkdir(dir, "p")
     vim.fn.setfperm(dir, "r-xr-xr-x")
