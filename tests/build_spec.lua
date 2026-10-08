@@ -136,12 +136,13 @@ describe("changeset.build", function()
     ---Answer every file with `items` and `comment_lines` at once, counting each time `path` is asked about.
     ---@param items table[]?
     ---@param comment_lines changeset.Comments?
-    local function answer(items, comment_lines)
+    ---@param timed_out boolean?
+    local function answer(items, comment_lines, timed_out)
       asked = 0
       resolve.start = function(_, files, on_file)
         for _, file in ipairs(files) do
           asked = asked + (file.path == "mod.lua" and 1 or 0)
-          on_file(file.path, items, comment_lines)
+          on_file(file.path, items, comment_lines, timed_out)
         end
         return function() end
       end
@@ -185,6 +186,15 @@ describe("changeset.build", function()
       refresh_and_collect()
 
       assert.equal(1, #assert(build.current().symbols["mod.lua"]))
+    end)
+
+    it("asks again on the next refresh about a file whose server timed out", function()
+      answer(nil, nil, true)
+      build_and_collect()
+
+      refresh_and_collect()
+
+      assert.equal(2, asked)
     end)
 
     it("keeps each file and its symbols the same objects across a refresh over an unchanged diff", function()
@@ -314,6 +324,69 @@ describe("changeset.build", function()
       assert(vim.lsp.get_client_by_id(assert(client))):stop(true)
 
       assert.is_true(reasked)
+    end)
+
+    it("lists a file's symbols after the refresh that follows a server answering past the timeout", function()
+      source.restore()
+      -- A server still loading its project: the first answer is late, the ones after are not.
+      local ANSWER_MS, loading, id = 300, true, 0
+      vim.lsp.config("slow_symbols", {
+        filetypes = { "lua" },
+        root_dir = tmp,
+        cmd = function(dispatchers)
+          return {
+            request = function(method, _, callback)
+              local range = { start = { line = 0, character = 0 }, ["end"] = { line = 0, character = 8 } }
+              local result = method == "initialize" and { capabilities = { documentSymbolProvider = true } }
+                or method == "textDocument/documentSymbol" and {
+                  { name = "f", kind = 12, range = range, selectionRange = range },
+                }
+                or vim.NIL
+              local late = method == "textDocument/documentSymbol" and loading
+              loading = loading and not late
+              vim.defer_fn(function()
+                callback(nil, result)
+              end, late and ANSWER_MS or 0)
+              id = id + 1
+              return true, id
+            end,
+            notify = function() end,
+            is_closing = function()
+              return false
+            end,
+            terminate = function()
+              dispatchers.on_exit(0, 15)
+            end,
+          }
+        end,
+      })
+      vim.lsp.enable("slow_symbols")
+      vim.cmd("silent! %bwipeout!")
+      vim.cmd.edit("mod.lua")
+      local real_defer = vim.defer_fn
+      vim.defer_fn = function(fn, ms)
+        return real_defer(fn, ms == 10000 and 100 or ms)
+      end
+
+      local ok, err = pcall(function()
+        build_and_collect()
+        assert.is_true(vim.wait(5000, function()
+          return build.current().symbols["mod.lua"] ~= nil
+        end, 10))
+        vim.wait(2 * ANSWER_MS)
+        build.refresh()
+        vim.wait(1500, function()
+          return #(build.current().symbols["mod.lua"] or {}) > 0
+        end, 10)
+      end)
+      vim.defer_fn = real_defer
+      vim.lsp.enable("slow_symbols", false)
+      for _, client in ipairs(vim.lsp.get_clients({ name = "slow_symbols" })) do
+        client:stop(true)
+      end
+
+      assert(ok, err)
+      assert.equal(1, #(build.current().symbols["mod.lua"] or {}))
     end)
   end)
 

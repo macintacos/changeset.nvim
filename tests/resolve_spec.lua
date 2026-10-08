@@ -477,8 +477,7 @@ describe("changeset.resolve", function()
         return {
           request = function(method, params, callback)
             id = id + 1
-            on_request(method, callback, params)
-            return true, id
+            return on_request(method, callback, params) ~= false, id
           end,
           notify = function(method)
             if method == "exit" then
@@ -531,6 +530,38 @@ describe("changeset.resolve", function()
         return report ~= nil
       end, 20))
       assert.is_nil(report.items)
+    end)
+
+    ---Answers `initialize`, then hands each symbol request to `on_symbols(callback)`.
+    local function symbol_server(on_symbols)
+      return server(function(method, callback)
+        if method == "textDocument/documentSymbol" then
+          return on_symbols(callback)
+        end
+        vim.schedule(function()
+          callback(nil, method == "initialize" and { capabilities = { documentSymbolProvider = true } } or nil)
+        end)
+      end)
+    end
+
+    it("reports a server that outlasts the request timeout as timed out, not as answering nothing", function()
+      enable("silent_server", symbol_server(function() end))
+      local real_defer = vim.defer_fn
+      vim.defer_fn = function(fn, ms)
+        return real_defer(fn, ms == 10000 and 50 or ms)
+      end
+      local report
+      start(function(_, items, _, timed_out)
+        report = { items = items, timed_out = timed_out }
+      end)
+      local landed = vim.wait(3000, function()
+        return report ~= nil
+      end, 20)
+      vim.defer_fn = real_defer
+
+      assert.is_true(landed)
+      assert.is_nil(report.items)
+      assert.is_true(report.timed_out)
     end)
 
     it("reports the file when its server exits before answering", function()

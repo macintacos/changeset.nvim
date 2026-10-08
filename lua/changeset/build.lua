@@ -100,6 +100,7 @@ end
 ---@class changeset.build.Answer
 ---@field items changeset.Symbol[]? nil when no server answered.
 ---@field comments changeset.Comments?
+---@field timed_out boolean? No server answered in time, which says nothing about whether one will.
 
 ---File what was read about `path` in the symbol cache, while the cache is still `root`'s.
 ---@param root string
@@ -123,7 +124,7 @@ local function file_answer(root, path, answer, stamp)
     cache.encode(memo.entries[path])
     save_soon()
     return memo.entries[path].symbols
-  elseif not items then
+  elseif not items and not answer.timed_out then
     -- An older walk's late silence must not bury an answer about the same file state.
     local entry = memo.entries[path]
     if entry and not entry.silent and entry.stamp == stamp then
@@ -232,19 +233,24 @@ function M.refresh()
     announce("diff")
 
     local root = tree.root
-    work.cancel = resolve.start({ root = root, base = tree.base }, unknown, function(path, items, comment_lines)
-      -- Filed even once a newer refresh has replaced this one: the stamp predates
-      -- the request, so the answer still describes the file it was read from.
-      local filed = file_answer(root, path, { items = items, comments = comment_lines }, stamps[path])
-      if tree and work.request == request then
-        -- A server that answers nothing is "read, with no symbols", which is what
-        -- turns every hunk in an unsupported file into an orphan row. Leaving the key
-        -- absent would instead read as "still reading", forever.
-        tree.symbols[path] = filed or items or {}
-        tree.comments[path] = comment_lines
-        announce("symbols")
+    work.cancel = resolve.start(
+      { root = root, base = tree.base },
+      unknown,
+      function(path, items, comment_lines, timed_out)
+        -- Filed even once a newer refresh has replaced this one: the stamp predates
+        -- the request, so the answer still describes the file it was read from.
+        local filed =
+          file_answer(root, path, { items = items, comments = comment_lines, timed_out = timed_out }, stamps[path])
+        if tree and work.request == request then
+          -- A server that answers nothing is "read, with no symbols", which is what
+          -- turns every hunk in an unsupported file into an orphan row. Leaving the key
+          -- absent would instead read as "still reading", forever.
+          tree.symbols[path] = filed or items or {}
+          tree.comments[path] = comment_lines
+          announce("symbols")
+        end
       end
-    end)
+    )
   end)
 end
 

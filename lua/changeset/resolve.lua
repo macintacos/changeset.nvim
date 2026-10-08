@@ -85,7 +85,7 @@ end
 ---Flattened symbols for one loaded buffer, from the first client that listed any, else the
 ---first that answered without an error, or nil when none did.
 ---@param bufnr integer
----@param on_done fun(items: changeset.Symbol[]?)
+---@param on_done fun(items: changeset.Symbol[]?, timed_out: boolean?) `timed_out` when a client was still answering.
 local function request(bufnr, on_done)
   local method = "textDocument/documentSymbol"
   local keep = kinds.for_filetype(vim.bo[bufnr].filetype)
@@ -93,7 +93,7 @@ local function request(bufnr, on_done)
   local clients = vim.lsp.get_clients({ bufnr = bufnr, method = method })
   local waiting, answers, pending, done, autocmd = {}, {}, 0, false, nil
 
-  local function finish()
+  local function finish(timed_out)
     if done then
       return
     end
@@ -106,9 +106,10 @@ local function request(bufnr, on_done)
         return answers[client.id]
       end)
       :totable()
-    on_done(vim.iter(answered):find(function(items)
-      return #items > 0
-    end) or answered[1])
+    local items = vim.iter(answered):find(function(listed)
+      return #listed > 0
+    end) or answered[1]
+    on_done(items, timed_out and items == nil)
   end
 
   local function settle(id, items)
@@ -143,7 +144,9 @@ local function request(bufnr, on_done)
   if pending == 0 then
     return finish()
   end
-  vim.defer_fn(finish, REQUEST_TIMEOUT_MS)
+  vim.defer_fn(function()
+    finish(true)
+  end, REQUEST_TIMEOUT_MS)
 end
 
 ---The file's text at `repo.base`, or nil when it has no base side or git cannot read it.
@@ -181,7 +184,7 @@ end
 ---Load `file` without listing it, then resolve its symbols and comment lines.
 ---@param repo changeset.resolve.Repo
 ---@param file changeset.File
----@param on_done fun(items: changeset.Symbol[]?, comments: changeset.Comments?)
+---@param on_done fun(items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean?)
 local function resolve_one(repo, file, on_done)
   local path = file.path
   local bufnr = buffers.load(repo.root .. "/" .. path)
@@ -219,11 +222,11 @@ local function resolve_one(repo, file, on_done)
           if not vim.api.nvim_buf_is_valid(bufnr) then
             return on_done(nil)
           end
-          request(bufnr, function(items)
+          request(bufnr, function(items, timed_out)
             if items then
               attributes.mark(items, path, source, parsed)
             end
-            on_done(items, comment_lines)
+            on_done(items, comment_lines, timed_out)
           end)
         end
       )
@@ -235,8 +238,8 @@ end
 ---each answer as it lands. A `run` that raises before answering is reported as no symbols,
 ---so a failing step closes its lane instead of stranding it.
 ---@param queue string[]
----@param run fun(path: string, done: fun(items: changeset.Symbol[]?, comments: changeset.Comments?))
----@param on_file fun(path: string, items: changeset.Symbol[]?, comments: changeset.Comments?)
+---@param run fun(path: string, done: fun(items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean?))
+---@param on_file fun(path: string, items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean?)
 ---@return fun() cancel Starts no further file; one already in flight is still reported.
 function M._walk(queue, run, on_file)
   local next_index, cancelled = 1, false
@@ -250,12 +253,12 @@ function M._walk(queue, run, on_file)
     -- The pcall below also catches a raise arriving after `run` has answered, and
     -- pumping twice for one lane would put more than CONCURRENCY in flight.
     local answered = false
-    local function step(items, comment_lines)
+    local function step(items, comment_lines, timed_out)
       if answered then
         return
       end
       answered = true
-      on_file(path, items, comment_lines)
+      on_file(path, items, comment_lines, timed_out)
       pump()
     end
     if not pcall(run, path, step) then
@@ -280,7 +283,8 @@ end
 ---when its syntax marks it an inline test.
 ---@param repo changeset.resolve.Repo
 ---@param files changeset.File[] Only files whose symbols are read (`Rows.skips`), in display order.
----@param on_file fun(path: string, items: changeset.Symbol[]?, comments: changeset.Comments?)
+---@param on_file fun(path: string, items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean?)
+---`timed_out` when no server answered in time, as opposed to none answering at all.
 ---@return fun() cancel
 function M.start(repo, files, on_file)
   local file_by_path = {}
