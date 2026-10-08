@@ -75,5 +75,5 @@ later `setup()` call reaches it.
 `tests/docs_spec.lua` fails until `doc/changeset.nvim.txt` tags every option, `:Changeset`
 subcommand, `<Plug>` map, default key and highlight group, in the scheme `AGENTS.md` § Keeping
 docs current gives. The highlight groups are the `Changeset*` names in
-`lua/changeset/render.lua`. Add each new name to the README too when it adds a key, a command
+`lua/changeset/highlights.lua`. Add each new name to the README too when it adds a key, a command
 or an option.
