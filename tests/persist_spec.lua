@@ -79,6 +79,22 @@ describe("changeset position in a session", function()
     assert.same({ path = "mod.lua", lnum = 8 }, vim.json.decode(vim.g.ChangesetPosition).here)
   end)
 
+  it("keeps recording the sidebar's row while the cursor moves in another tabpage", function()
+    vim.cmd.edit("mod.lua")
+    changeset.open()
+    Sidebar.settle()
+    Sidebar.cursor_to("other.lua")
+    Sidebar.flush()
+
+    vim.cmd.tabnew()
+    vim.cmd.edit("mod.lua")
+    Sidebar.flush()
+    local recorded = vim.json.decode(vim.g.ChangesetPosition)
+    vim.cmd("silent! tabonly!")
+
+    assert.equal("other.lua", recorded.row.path)
+  end)
+
   it("restores where you were and the sidebar's cursor row from what it recorded", function()
     vim.cmd.edit("mod.lua")
     local file_win = vim.api.nvim_get_current_win()

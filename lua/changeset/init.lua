@@ -194,6 +194,11 @@ local function remember()
   local win = window.win()
   local offset = win and vim.api.nvim_win_get_cursor(win)[1] - vim.fn.line("w0", win)
   local saved = state and state.position:saved(draw.row_at_cursor(), offset)
+  if saved and not win and window.buf() then
+    -- The sidebar stands in another tabpage, whose cursor row can't be read, so the row recorded stays.
+    local ok, last = pcall(vim.json.decode, vim.g[POSITION_GLOBAL] or "")
+    saved.row = ok and type(last) == "table" and last.row or nil
+  end
   if saved then
     vim.g[POSITION_GLOBAL] = vim.json.encode(saved)
   end
