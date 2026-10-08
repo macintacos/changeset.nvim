@@ -174,8 +174,8 @@ one.
 `├─ └─ │` are the guides the outline picker draws, and a compressed chain joins with
 ` › `, the separator its breadcrumbs use. Both are built here rather than carried over:
 the outline picker's guides describe its own flat list, and this tree nests differently.
-The separator is the one that has to stay identical, because `symbols.fit` trims a chain
-by splitting it on its own copy. No new punctuation is introduced.
+Both `rows` and `symbols.fit` take the separator from `symbols.SEP`, because `symbols.fit`
+trims a chain by splitting it on the separator it was joined with. No new punctuation is introduced.
 
 ### Three levels of emphasis, all theme-derived
 

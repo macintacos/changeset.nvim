@@ -14,8 +14,6 @@ local M = {}
 
 local ns = vim.api.nvim_create_namespace("changeset.pick")
 
-local SEP = " › "
-
 ---@class changeset.PickItem
 ---@field text string  The trail and the row's name, which is what a query matches.
 ---@field trail string The rows holding this one, file first; "" for a file with nothing beneath it.
@@ -40,7 +38,7 @@ local function items(rows, root)
   local out = {}
   local function walk(list, trail)
     for _, row in ipairs(list) do
-      local here = trail == "" and row.name or trail .. SEP .. row.name
+      local here = trail == "" and row.name or trail .. symbols.SEP .. row.name
       if is_change(row) then
         out[#out + 1] = { text = here, trail = trail, path = root .. "/" .. row.path, lnum = row.lnum, row = row }
       end

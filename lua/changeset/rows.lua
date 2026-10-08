@@ -3,13 +3,9 @@
 local comments = require("changeset.comments")
 local comment_store = require("changeset.comment_store")
 local sections = require("changeset.sections")
+local SEP = require("changeset.symbols").SEP
 
 local M = {}
-
--- Must stay equal to `symbols.SEP`: `symbols.fit` trims a chain by splitting it on
--- its own separator, and the chains it is handed are joined with this one.
----@type string
-local SEP = " › "
 
 ---A row of the sidebar tree. Sections sit at the top with files under them; symbols, or an orphan group
 ---holding orphan hunks, nest below. The Comments section holds comment rows instead of files.

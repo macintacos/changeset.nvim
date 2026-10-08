@@ -16,7 +16,9 @@ local cells = require("changeset.cells")
 
 local M = {}
 
-local SEP = " › "
+---Joins a chain's names, and a breadcrumb's.
+---@type string
+M.SEP = " › "
 
 ---The range naming a symbol: `DocumentSymbol.selectionRange`, or the whole
 ---`SymbolInformation.location.range` for servers that answer with the flat form.
@@ -195,7 +197,7 @@ function M.fit(trail, width, sep)
     return trail
   end
 
-  sep = sep or SEP
+  sep = sep or M.SEP
   local parts = vim.split(trail, sep, { plain = true })
   while #parts > 1 do
     table.remove(parts, 1)
