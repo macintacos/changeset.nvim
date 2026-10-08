@@ -357,7 +357,7 @@ describe("changeset tree", function()
         vim.system, vim.fn.systemlist = real_system, real_systemlist
         Fixture.git({ "checkout", "-q", "-b", "feature2" }, tmp)
         build.build()
-        local tree = build.current()
+        local tree = assert(build.current())
 
         release()
         vim.wait(500)

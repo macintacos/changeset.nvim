@@ -354,9 +354,10 @@ function M.remeasure()
     remeasuring = nil
     local branch, commit = Git.head(kept.root)
     if (branch or "HEAD") ~= kept.branch then
-      return build_at(kept.root)
+      build_at(kept.root)
+    else
+      place(kept.root, kept.branch, commit, point)
     end
-    place(kept.root, kept.branch, commit, point)
   end)
 end
 

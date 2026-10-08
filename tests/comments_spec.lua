@@ -123,7 +123,7 @@ describe("comments", function()
   end)
 
   it("reads nothing for a language with no installed parser", function()
-    local called, found = false, "unset"
+    local called, found = false, nil ---@type boolean, changeset.LineKinds?
     comments.read("x", "a.unknownext", function(kinds_read)
       called, found = true, kinds_read
     end)
