@@ -1,6 +1,6 @@
----`:Changeset comment new`, `del`, `draft`, `next`, `prev`, `last` and `list` and `:Changeset review submit`,
----`restore`, `yank` and `abandon`, which write, delete, draft or save, walk, reopen, list, paste into an agent's prompt,
----bring back, copy and clear the review comments kept on this machine, and the Comments rows' open and delete.
+---`:Changeset comment new`, `del`, `draft`, `next`, `prev` and `last`, which write, delete, draft or save, walk and
+---reopen one review comment kept on this machine, the Comments rows' open and delete, and the subcommands run from the
+---review comment window.
 local Paths = require("changeset.paths")
 local Rows = require("changeset.rows")
 local buffers = require("changeset.buffers")
