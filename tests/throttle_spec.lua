@@ -42,10 +42,14 @@ describe("the sidebar's redraw after a rebuild", function()
       }, tmp)
       source = Symbols.install()
       vim.cmd.edit("a.lua")
+      local opening = vim.uv.hrtime()
       changeset.open()
       assert.is_true(vim.wait(10000, function()
         return #source.asks == 1 and window.buf() ~= nil and Sidebar.text():find("c.lua", 1, true) ~= nil
       end, 10))
+      -- On a slow machine the opening draw costs over a frame, which would hold back the first
+      -- answer's: it cost at most this long, and twice its cost is the longest it holds one back.
+      vim.wait(math.ceil(2 * (vim.uv.hrtime() - opening) / 1e6))
       real_draw, draws = draw.draw, 0
       draw.draw = function(...)
         draws = draws + 1
