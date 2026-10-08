@@ -865,6 +865,23 @@ describe("changeset.rows", function()
     end)
   end)
 
+  describe("lines", function()
+    it("answers the lines a row stands for", function()
+      assert.same({ 7, 7 }, { Rows.lines({ kind = "function", lnum = 7 }) })
+      assert.same({ 3, 9 }, { Rows.lines({ kind = "orphan", range = { 3, 9 } }) })
+      assert.same(
+        { 2, 5 },
+        { Rows.lines({ kind = "comment", review_comment = { path = "a", line = 5, start_line = 2 } }) }
+      )
+      assert.same({ 5, 5 }, { Rows.lines({ kind = "comment", review_comment = { path = "a", line = 5 } }) })
+    end)
+
+    it("answers none for a row standing for the whole file", function()
+      assert.same({}, { Rows.lines({ kind = "comment", review_comment = { path = "a" } }) })
+      assert.same({}, { Rows.lines({ kind = "file", lnum = 1 }) })
+    end)
+  end)
+
   describe("find", function()
     it("finds a row by its id at any depth", function()
       local rows = Rows.build({ file(PATH, { hunk(5, 1) }) }, { [PATH] = { sym("load", "Method", 0, 3, 8) } })

@@ -2,6 +2,7 @@
 ---`restore`, `yank` and `abandon`, which write, delete, draft or save, walk, reopen, list, paste into an agent's prompt,
 ---bring back, copy and clear the review comments kept on this machine, and the Comments rows' open and delete.
 local Paths = require("changeset.paths")
+local Rows = require("changeset.rows")
 local buffers = require("changeset.buffers")
 local build = require("changeset.build")
 local comment_store = require("changeset.comment_store")
@@ -309,24 +310,6 @@ local function comment_on_file(repository, path)
   open_new(repository, { path = path, body = "" }, vim.api.nvim_win_get_cursor(0)[1])
 end
 
----The lines sidebar row `row` stands for: a symbol's line, as `<CR>` opens it, a change's lines, or those of the
----comment a Comments row lists; none for a file's row or a whole file's comment, which stand for the whole file.
----@param row changeset.Row
----@return integer? first
----@return integer? last
-local function row_lines(row)
-  local comment = row.review_comment
-  if comment then
-    return review_comment.first(comment), comment.line
-  end
-  if row.kind == "orphan" then
-    return row.range[1], row.range[2]
-  end
-  if row.kind ~= "file" then
-    return row.lnum, row.lnum
-  end
-end
-
 ---Opens the review comment window under the sidebar's cursor row for what the row stands for, or the comment already
 ---there to edit, found as from the file.
 local function comment_row()
@@ -339,7 +322,7 @@ local function comment_row()
       repository
     )
   end
-  local first, last = row_lines(row)
+  local first, last = Rows.lines(row)
   if not (first and last) then
     return comment_on_file(repository, row.path)
   end

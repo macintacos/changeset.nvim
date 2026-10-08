@@ -656,6 +656,24 @@ function M.build(files, symbols_by_path, lines)
     :totable()
 end
 
+---The lines sidebar row `row` stands for: a symbol's line, as `<CR>` opens it, a change's lines, or those of the
+---comment a Comments row lists; none for a file's row or a whole file's comment, which stand for the whole file.
+---@param row changeset.Row
+---@return integer? first
+---@return integer? last
+function M.lines(row)
+  local comment = row.review_comment
+  if comment then
+    return review_comment.first(comment), comment.line
+  end
+  if row.kind == "orphan" then
+    return row.range[1], row.range[2]
+  end
+  if row.kind ~= "file" then
+    return row.lnum, row.lnum
+  end
+end
+
 ---The Comments section: a row per review comment, in `review_comment.before`'s order, then as listed. A row goes
 ---to its line.
 ---The header counts the rows, and carries no stat: a review comment changes no line.
