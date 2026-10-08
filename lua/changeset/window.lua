@@ -3,6 +3,7 @@
 
 local buffers = require("changeset.buffers")
 local config = require("changeset.config")
+local highlights = require("changeset.highlights")
 local render = require("changeset.render")
 local unified_diff = require("changeset.unified_diff")
 
@@ -24,7 +25,7 @@ local stand_in_ns = vim.api.nvim_create_namespace("changeset.stand_in")
 
 -- Normal and visual mode only: the filter prompt on the command line still needs
 -- a cursor to type at.
-local NO_CURSOR = "n-v:" .. render.NO_CURSOR_HL
+local NO_CURSOR = "n-v:" .. highlights.NO_CURSOR_HL
 
 ---@class changeset.Snapshot What a window held before the sidebar borrowed it.
 ---@field buf integer
@@ -510,7 +511,7 @@ function M.preview_notice(text, band)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
   local line = lines[row + 1]
-  vim.api.nvim_buf_set_extmark(buf, stand_in_ns, row, #line - #text, { end_col = #line, hl_group = render.META_HL })
+  vim.api.nvim_buf_set_extmark(buf, stand_in_ns, row, #line - #text, { end_col = #line, hl_group = highlights.META_HL })
 end
 
 ---Show `text`, what `path` held before the branch deleted it, where a file preview would go: highlighted as its
@@ -523,7 +524,13 @@ function M.preview_deleted(path, text, band)
   local lines = vim.split((text:gsub("\n$", "")), "\n", { plain = true })
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
-  vim.api.nvim_buf_set_extmark(buf, stand_in_ns, 0, 0, { end_row = #lines - 1, line_hl_group = render.DIFF_DELETE_HL })
+  vim.api.nvim_buf_set_extmark(
+    buf,
+    stand_in_ns,
+    0,
+    0,
+    { end_row = #lines - 1, line_hl_group = highlights.DIFF_DELETE_HL }
+  )
   -- Named before it is shown, as `buffers.load` names a file's, so its `FileType` handlers set nothing on the window.
   local filetype = vim.filetype.match({ buf = buf, filename = path })
   if filetype then
