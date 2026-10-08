@@ -453,7 +453,8 @@ function M.draw(kinds_key)
   local lines, lnum, blocks = state.view:show(tree, { icon = icon_for, width = width, cursor = cursor })
 
   -- Read before the lines go, which takes the header's filler rows with them.
-  local topfill = has_header(buf) and vim.api.nvim_win_call(win, vim.fn.winsaveview).topfill or nil
+  local saved = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+  local topfill = has_header(buf) and saved.topfill or nil
   -- A filter narrowing every row away leaves the lines empty: the footer names the filter, and the branch did change.
   if #tree == 0 and state.tree.collected then
     previous = nil
@@ -476,6 +477,12 @@ function M.draw(kinds_key)
   hidden_note_line(buf, vim.api.nvim_buf_line_count(buf) - 1, render.hidden_note(hiding, width - 1, kinds_key))
 
   vim.api.nvim_win_set_cursor(win, { lnum, 0 })
+  if lnum == cursor then
+    -- Replacing the run that holds the top line lets Neovim scroll, though nothing above the cursor moved.
+    vim.api.nvim_win_call(win, function()
+      vim.fn.winrestview({ topline = saved.topline, topfill = saved.topfill })
+    end)
+  end
   -- After the header, whose rows decide whether the cursor's row still fits under the top.
   draw_header(buf, win, width, state, topfill)
   if lnum ~= cursor and not (top == 1 and in_view_from_top(win, lnum)) then

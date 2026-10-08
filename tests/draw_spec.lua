@@ -2,6 +2,7 @@ vim.opt.rtp:prepend(require("support.deps").path("mini.icons"))
 require("mini.icons").setup()
 
 local changeset = require("changeset")
+local build = require("changeset.build")
 local comment_store = require("changeset.comment_store")
 local draw = require("changeset.draw")
 local sidebar_state = require("changeset.sidebar_state")
@@ -25,15 +26,22 @@ local function marks(buf)
   return out
 end
 
----The sidebar's text and marks as they stand.
----@return { text: string[], marks: string[] }
+---@alias changeset.spec.Drawn { text: string[], marks: string[], view: { topline: integer, topfill: integer, lnum: integer } }
+
+---The sidebar's text, marks and scroll as they stand.
+---@return changeset.spec.Drawn
 local function drawn()
   local buf = assert(window.buf())
-  return { text = vim.api.nvim_buf_get_lines(buf, 0, -1, false), marks = marks(buf) }
+  local view = vim.api.nvim_win_call(assert(window.win()), vim.fn.winsaveview)
+  return {
+    text = vim.api.nvim_buf_get_lines(buf, 0, -1, false),
+    marks = marks(buf),
+    view = { topline = view.topline, topfill = view.topfill, lnum = view.lnum },
+  }
 end
 
 ---The sidebar as a draw from nothing would leave it.
----@return { text: string[], marks: string[] }
+---@return changeset.spec.Drawn
 local function from_scratch()
   draw._forget()
   draw.draw()
@@ -188,6 +196,14 @@ describe("changeset draw", function()
     local queries = { "", "", "one", "de", "b.lua", "zzz" }
     local kinds = { {}, {}, { Variable = true }, { Function = true }, { Method = true, Variable = true } }
     local unanswered = vim.deepcopy(FILES)
+    local root = vim.fn.resolve(tmp)
+    local comments = {}
+    local diffs = 0
+    build.subscribe(function(event)
+      if event == "diff" then
+        diffs = diffs + 1
+      end
+    end)
 
     ---@type (fun(view: changeset.View, pick: fun(n: integer): integer))[]
     local steps = {
@@ -217,6 +233,37 @@ describe("changeset draw", function()
           answer(table.remove(unanswered, pick(#unanswered)))
         end
       end,
+      function(_, pick)
+        local buf = assert(window.buf())
+        vim.api.nvim_win_set_cursor(win, { pick(vim.api.nvim_buf_line_count(buf)), 0 })
+      end,
+      function(_, pick)
+        vim.api.nvim_win_call(win, function()
+          vim.fn.winrestview({ topline = pick(vim.api.nvim_buf_line_count(0)), topfill = pick(3) - 1 })
+        end)
+      end,
+      function(_, pick)
+        local comment = { path = FILES[pick(#FILES)], line = pick(12), body = "a review comment" }
+        comment_store.keep(root, comment)
+        comments[#comments + 1] = comment
+      end,
+      function(_, pick)
+        if #comments > 0 then
+          comment_store.drop(root, table.remove(comments, pick(#comments)))
+        end
+      end,
+      function(_, pick)
+        local path = FILES[pick(#FILES)]
+        vim.fn.writefile(Fixture.numbered(12, { [2] = true, [9] = true, [pick(12)] = true }, "rewritten"), path)
+        local before = diffs
+        build.refresh()
+        assert.is_true((vim.wait(5000, function()
+          return diffs > before
+        end, 5)))
+        if not vim.tbl_contains(unanswered, path) then
+          unanswered[#unanswered + 1] = path
+        end
+      end,
     }
 
     for seed = 1, 12 do
@@ -230,5 +277,74 @@ describe("changeset draw", function()
 
       assert.same(from_scratch(), incremental, "seed " .. seed)
     end
+  end)
+end)
+
+describe("changeset draw in a short sidebar", function()
+  local tmp, previous_dir, source
+
+  before_each(function()
+    tmp, previous_dir = Fixture.enter_tempdir()
+    for _, dir in ipairs({ "lua", "tests", "doc" }) do
+      vim.fn.mkdir(dir, "p")
+    end
+    local base, change = {}, {}
+    for _, path in ipairs({
+      "lua/a.lua",
+      "lua/b.lua",
+      "lua/c.lua",
+      "tests/a_spec.lua",
+      "tests/b_spec.lua",
+      "doc/guide.md",
+    }) do
+      base[path] = Fixture.numbered(12)
+      change[path] = Fixture.numbered(12, { [2] = true, [9] = true })
+    end
+    Fixture.feature(base, change, tmp)
+    source = Symbols.install()
+    vim.cmd.edit("lua/a.lua")
+    comment_store.keep(vim.fn.resolve(tmp), { path = "lua/a.lua", line = 2, body = "first" })
+    changeset.open()
+    assert.is_true(vim.wait(10000, function()
+      return #source.asks >= 1 and window.buf() ~= nil and Sidebar.text():find("guide.md", 1, true) ~= nil
+    end, 10))
+    -- A drawer, or a sidebar sharing its column.
+    vim.cmd("botright 12new")
+    vim.cmd.wincmd("p")
+    vim.api.nvim_win_set_height(assert(window.win()), 10)
+  end)
+
+  after_each(function()
+    source.restore()
+    changeset.close()
+    vim.cmd("silent! %bwipeout!")
+    vim.fn.chdir(previous_dir)
+    vim.fn.delete(tmp, "rf")
+    os.remove(comment_store.path())
+  end)
+
+  it("keeps its view when a redraw rewrites its top line and the cursor sits on its last screen row", function()
+    local win = assert(window.win())
+    vim.wo[win].scrolloff = 0
+    local view = sidebar_state.current().view
+    view:step_out(1) -- the Comments section, folded to its header
+    view:fold_files(sidebar_state.current().rows)
+    draw.draw()
+    Sidebar.flush()
+    vim.api.nvim_win_set_cursor(win, { 1, 0 })
+    vim.api.nvim_win_call(win, function()
+      vim.fn.winrestview({ topline = 1, topfill = 0 })
+      vim.cmd("redraw")
+      vim.api.nvim_win_set_cursor(win, { vim.fn.line("w$"), 0 })
+    end)
+    draw.draw()
+    Sidebar.flush()
+    local before = drawn().view
+
+    comment_store.keep(build.current().root, { path = "lua/b.lua", line = 9, body = "second" })
+    draw.draw()
+    Sidebar.flush()
+
+    assert.same(before, drawn().view)
   end)
 end)
