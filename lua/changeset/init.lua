@@ -118,6 +118,8 @@ end
 
 local UNPREVIEWABLE = "This file is binary or too big to preview"
 
+local SUBMODULE = "A submodule has nothing to preview"
+
 ---Whether the file at `path` is small enough to preview, and text by git's test: no NUL in its first 8000 bytes.
 ---@param path string
 ---@return boolean
@@ -147,6 +149,8 @@ local function preview_current()
     preview_deleted(state.tree, row)
   elseif not (row.kind == "comment" or row.lnum or row.kind == "file") then
     return
+  elseif (vim.uv.fs_stat(state.tree.root .. "/" .. row.path) or {}).type == "directory" then
+    window.preview_notice(SUBMODULE, draw.band_for(row, bound_keys.jump))
   elseif vim.fn.filereadable(state.tree.root .. "/" .. row.path) == 0 then
     window.preview_notice(DELETED, draw.band_for(row, bound_keys.jump))
   elseif not previewable(state.tree.root .. "/" .. row.path) then

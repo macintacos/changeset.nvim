@@ -1230,6 +1230,21 @@ describe("changeset sidebar", function()
     assert.is_true(vim.b[preview_row(buf, "other.lua")].changeset_stand_in)
   end)
 
+  it("previews a notice that a submodule's row is a submodule", function()
+    local source = vim.fn.tempname()
+    vim.fn.mkdir(source, "p")
+    Fixture.init_repo("main", source)
+    Fixture.git({ "-c", "protocol.file.allow=always", "submodule", "add", "-q", source, "sub" }, tmp)
+    Fixture.commit("add sub", tmp)
+
+    local previewed = preview_row(open_sidebar(), " sub")
+    vim.fn.delete(source, "rf")
+
+    local text = table.concat(vim.api.nvim_buf_get_lines(previewed, 0, -1, false), "\n")
+    assert.is_true(vim.b[previewed].changeset_stand_in)
+    assert.truthy(text:find("submodule", 1, true), text)
+  end)
+
   it("previews a stand-in for a changed binary file", function()
     local file = assert(io.open("blob.bin", "wb"))
     file:write("a\0b\n")
