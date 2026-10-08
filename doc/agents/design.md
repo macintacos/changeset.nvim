@@ -1034,6 +1034,7 @@ maps `<C-g>cc`, it maps `<C-g>c` to comment too.
 | Branch with no diff | `<branch> matches origin/trunk. Nothing changed yet.` |
 | Symbols still resolving | `⋯ reading symbols` under the file row |
 | No LSP for a file | nothing special — the file renders with its orphan-hunk group |
+| A filter matching no row | no lines; the footer names the filter, and the branch did change |
 
 The two sentences wrap at the sidebar's edge, which no row does: a row is trimmed to fit.
 
@@ -1386,6 +1387,10 @@ repository's deliberate choice is none of that save's business.
   stand-in has no name for a bigfile guard to match, and each pass over the row parses it
   anew. Each stand-in is a
   new buffer, wiped once no window shows it, so no filetype or highlighter carries over.
+- **A file that can't be shown previews a notice.** A live file that is binary, by the
+  same NUL test on its first 8000 bytes, or past 1.5 MiB previews a notice saying so
+  rather than loading it; a row whose file has vanished from disk previews the deleted
+  notice.
 - **`?` documents the sidebar, not its buffer.** A buffer collects mappings from whoever
   wants one — a blanket `FileType` autocmd elsewhere in a user's config is all it takes, as
   mkdnflow maps every markdown buffer, the review comment window's among them — and those
@@ -1442,10 +1447,25 @@ repository's deliberate choice is none of that save's business.
   entering one, and the autocmds that watch the sidebar all hold its window id, which
   `nvim_win_set_config` keeps. Neovim will not move the last window, so a sidebar standing
   alone stays where it is.
+- **The sidebar's window keeps its buffer**, through `winfixbuf`: a reflexive `<C-o>` there
+  would otherwise swap the tree out of its window and wipe it. Every path that puts
+  another buffer in that window — the session placeholder, the preview split, the
+  last-window close — clears it first.
+- **The sidebar's window options are set as `:setlocal`.** `vim.wo` would set the window's
+  global copy too, which the next buffer in it and every split off it would take for the
+  user's own. When the sidebar is the last window, closing it shows an empty buffer there
+  and gives each option back with `:setlocal {option}<`.
+- **A preview split off a lone sidebar closes with it.** It held nothing of the user's, so
+  `q` and the toggle close it, unless a file was opened in it or it is the last window
+  left.
+- **A redraw the sidebar missed comes on `TabEnter` and on its own `WinResized`.** A
+  sidebar in another tabpage misses the redraws made meanwhile, and `winfixwidth` doesn't
+  stop a drag or `:resize` changing its width, which its rows are sized to.
 - **A session restores the window, not its contents.** `:mksession` records the layout but
   not a scratch buffer's contents, so the sidebar comes back as an empty window. Its
   name is what survives, and it is how the tree finds that window and fills it rather
-  than splitting a second sidebar beside it. A session read over an open sidebar closes it
+  than splitting a second sidebar beside it, in whichever tabpage the session left it;
+  focus goes back to the tabpage the session left focused. A session read over an open sidebar closes it
   first: the session lays out its windows from the focused one, and the sidebar's would
   otherwise take a file with the sidebar's window options still on it.
 - **A cached file is never loaded or parsed.** Reading symbols is what puts a changed file

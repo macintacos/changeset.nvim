@@ -474,7 +474,8 @@ with the symbol's name, or with the key that opens the row. A file row
 previews its first change, where `<CR>` opens it. Previewing adds no jumplist
 entry and leaves the buffer unlisted. A window with 'winfixbuf' set takes no
 preview. When no window can take the preview, changeset splits one off beside
-the sidebar, and closes it with the sidebar unless you opened a file in it.
+the sidebar. `q` and the toggle close it with the sidebar unless you opened a
+file in it; it stays when it is the last window.
 
 A deleted file previews what it held at the base, every line tinted
 |ChangesetDiffDelete|, and the band says "deleted on this branch". A binary
