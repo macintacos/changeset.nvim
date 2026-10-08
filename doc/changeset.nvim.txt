@@ -152,7 +152,10 @@ does, measures the base again and asks `gh` about the PR again.
 `:Changeset refresh` or `R` in the sidebar rebuilds it at once.
 
 When none of them shares history with your branch, the sidebar doesn't open,
-and changeset warns "no merge base with the default branch".
+and changeset warns "no merge base with the default branch". Reopened on a
+tree kept from before, the sidebar shows it at once, then warns and closes
+once it measures the base again and finds none. A commit or rebase that
+leaves none keeps the tree as it was.
 
 ==============================================================================
 5. Commands                                               *changeset-commands*
