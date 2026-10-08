@@ -866,19 +866,31 @@ describe("changeset.rows", function()
   end)
 
   describe("lines", function()
+    ---A row of `kind` with `fields`.
+    ---@param kind string
+    ---@param fields table
+    ---@return changeset.Row
+    local function row(kind, fields)
+      return vim.tbl_extend(
+        "force",
+        { id = "", kind = kind, depth = 1, name = "", path = "a", ancestor = false, children = {} },
+        fields
+      )
+    end
+
     it("answers the lines a row stands for", function()
-      assert.same({ 7, 7 }, { Rows.lines({ kind = "function", lnum = 7 }) })
-      assert.same({ 3, 9 }, { Rows.lines({ kind = "orphan", range = { 3, 9 } }) })
+      assert.same({ 7, 7 }, { Rows.lines(row("function", { lnum = 7 })) })
+      assert.same({ 3, 9 }, { Rows.lines(row("orphan", { range = { 3, 9 } })) })
       assert.same(
         { 2, 5 },
-        { Rows.lines({ kind = "comment", review_comment = { path = "a", line = 5, start_line = 2 } }) }
+        { Rows.lines(row("comment", { review_comment = { path = "a", line = 5, start_line = 2, body = "" } })) }
       )
-      assert.same({ 5, 5 }, { Rows.lines({ kind = "comment", review_comment = { path = "a", line = 5 } }) })
+      assert.same({ 5, 5 }, { Rows.lines(row("comment", { review_comment = { path = "a", line = 5, body = "" } })) })
     end)
 
     it("answers none for a row standing for the whole file", function()
-      assert.same({}, { Rows.lines({ kind = "comment", review_comment = { path = "a" } }) })
-      assert.same({}, { Rows.lines({ kind = "file", lnum = 1 }) })
+      assert.same({}, { Rows.lines(row("comment", { review_comment = { path = "a", body = "" } })) })
+      assert.same({}, { Rows.lines(row("file", { lnum = 1 })) })
     end)
   end)
 

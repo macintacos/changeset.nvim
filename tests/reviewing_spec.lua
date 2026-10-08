@@ -29,7 +29,7 @@ describe("changeset.reviewing", function()
     package.loaded["changeset.window"] = {}
     package.loaded["changeset.origin"] = {
       current = function()
-        return { repository = focused and tree.root or Paths.root(0), sidebar = focused }
+        return { repository = focused and tree and tree.root or Paths.root(0), sidebar = focused }
       end,
     }
     package.loaded["changeset.reviewing"] = nil
