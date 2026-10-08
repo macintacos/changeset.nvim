@@ -263,15 +263,6 @@ local function in_view_from_top(win, lnum)
   return vim.api.nvim_win_text_height(win, { end_row = last }).all <= height
 end
 
----@param hl string|string[]|nil
----@return string
-local function hl_key(hl)
-  if type(hl) == "table" then
-    return table.concat(hl, "+")
-  end
-  return hl or ""
-end
-
 ---A string that two marks share only when they draw alike.
 ---@param mark changeset.Mark
 ---@return string
@@ -279,14 +270,14 @@ local function mark_key(mark)
   local parts = {
     mark.col or "",
     mark.end_col or "",
-    hl_key(mark.hl),
+    mark.hl or "",
     mark.pos or "",
     mark.hl_mode or "",
     mark.priority or "",
     mark.virt_lines and vim.inspect(mark.virt_lines) or "",
   }
   for _, chunk in ipairs(mark.virt_text or {}) do
-    parts[#parts + 1] = chunk[1] .. "\2" .. hl_key(chunk[2])
+    parts[#parts + 1] = chunk[1] .. "\2" .. (chunk[2] or "")
   end
   return table.concat(parts, "\1")
 end
