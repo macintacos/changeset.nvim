@@ -2,7 +2,7 @@
 local comment_store = require("changeset.comment_store")
 local dialog = require("changeset.dialog")
 local git = require("changeset.git")
-local render = require("changeset.render")
+local highlights = require("changeset.highlights")
 
 local M = {}
 
@@ -140,7 +140,7 @@ function M._row(agent)
   local cwd = dir(agent)
   ---@type changeset.DialogItem
   local row = {
-    icon = { STATUS, STATUS_HL[status] or render.META_HL },
+    icon = { STATUS, STATUS_HL[status] or highlights.META_HL },
     cells = {
       { M._name(agent) },
       { present(status and labels[status]) or status or "" },
