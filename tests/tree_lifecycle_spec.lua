@@ -255,6 +255,27 @@ describe("changeset tree", function()
       assert.is_true(followed)
     end)
 
+    it("stays quiet on focus changes once its repository is deleted", function()
+      build.build()
+      assert.is_true(wait_for_file("mod.lua"))
+      local errors = {}
+      local real_notify = vim.notify
+      vim.notify = function(msg, level)
+        if level == vim.log.levels.ERROR then
+          errors[#errors + 1] = msg
+        end
+      end
+      vim.cmd("silent! %bwipeout!")
+      vim.fn.chdir(previous_dir)
+      vim.fn.delete(tmp, "rf")
+
+      vim.api.nvim_exec_autocmds("FocusGained", {})
+      vim.wait(1000)
+      vim.notify = real_notify
+
+      assert.same({}, errors)
+    end)
+
     it("leaves the sidebar blank until the diff is read", function()
       changeset.open()
 

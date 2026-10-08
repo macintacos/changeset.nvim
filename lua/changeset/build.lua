@@ -338,7 +338,10 @@ local function refresh_soon()
   end
   stop(work.timer)
   work.timer = vim.defer_fn(function()
-    M.update()
+    -- A removed worktree would otherwise raise on every write and focus change; `R` still reports it.
+    if tree and vim.uv.fs_stat(tree.root) then
+      M.update()
+    end
   end, REFRESH_DEBOUNCE_MS)
 end
 
