@@ -1390,7 +1390,8 @@ repository's deliberate choice is none of that save's business.
 - **A file that can't be shown previews a notice.** A live file that is binary, by the
   same NUL test on its first 8000 bytes, or past 1.5 MiB previews a notice saying so
   rather than loading it; a row whose file has vanished from disk previews the deleted
-  notice.
+  notice. A submodule's row, a directory on disk, previews a notice that it is a submodule,
+  never that it was deleted.
 - **`?` documents the sidebar, not its buffer.** A buffer collects mappings from whoever
   wants one — a blanket `FileType` autocmd elsewhere in a user's config is all it takes, as
   mkdnflow maps every markdown buffer, the review comment window's among them — and those

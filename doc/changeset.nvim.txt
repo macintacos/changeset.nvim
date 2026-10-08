@@ -481,7 +481,7 @@ A deleted file previews what it held at the base, every line tinted
 |ChangesetDiffDelete|, and the band says "deleted on this branch". A binary
 file, one over 1.5 MiB, or one git can't read shows a notice instead. So does
 a changed file that is binary or over 1.5 MiB, and a row whose file is gone
-from disk.
+from disk. A submodule's row shows a notice that it is a submodule.
 
 Opening a row, with `<CR>` or a split or tab key, adds a jumplist entry, so
 |CTRL-O| returns to where that window was before the sidebar opened. Entering
