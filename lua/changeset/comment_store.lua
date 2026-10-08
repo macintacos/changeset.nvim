@@ -133,7 +133,7 @@ end
 ---@param batch changeset.SubmittedBatch
 ---@return changeset.SubmittedBatch
 local function as_listed(batch)
-  return { comments = vim.tbl_filter(valid, batch.comments), at = batch.at, to = batch.to }
+  return { comments = vim.deepcopy(vim.tbl_filter(valid, batch.comments)), at = batch.at, to = batch.to }
 end
 
 ---Whether `stored`, a valid batch as stored, is `batch` as `submitted` listed it: by when and to whom it went, which a
@@ -270,12 +270,40 @@ local function shown(data, root, branch)
     :totable()
 end
 
+---The record as last read, while the file is still that one: `jsonfile.write` renames a new file over it.
+---@type { key: string, data: table? }?
+local decoded
+
+---The record, for reading only: as `jsonfile.read_object` returns it, decoded again only once the file changes.
+---@return table?
+local function read_only()
+  local file = M.path()
+  local stat = vim.uv.fs_stat(file)
+  if not stat then
+    return jsonfile.read_object(file)
+  end
+  local key = table.concat({
+    file,
+    stat.dev,
+    stat.ino,
+    stat.size,
+    stat.mtime.sec,
+    stat.mtime.nsec,
+    stat.ctime.sec,
+    stat.ctime.nsec,
+  }, ":")
+  if not (decoded and decoded.key == key) then
+    decoded = { key = key, data = jsonfile.read_object(file) }
+  end
+  return decoded.data
+end
+
 ---The comments of the repository at `root` that the branch checked out shows, malformed entries skipped; none from
 ---an unreadable record.
 ---@param root string As `Paths.root` returns it.
 ---@return changeset.ReviewComment[]
 function M.list(root)
-  return shown(jsonfile.read_object(M.path()) or {}, root, M.branch(root))
+  return shown(read_only() or {}, root, M.branch(root))
 end
 
 ---What `list` and `submitted` answer, in one read; none from an unreadable record.
@@ -284,7 +312,7 @@ end
 ---@return changeset.SubmittedBatch[] submitted
 ---@return string? branch The branch they were read for.
 function M.comments(root)
-  local data = jsonfile.read_object(M.path()) or {}
+  local data = read_only() or {}
   local branch = M.branch(root)
   return shown(data, root, branch), restorable(batches(data, root, branch)), branch
 end
@@ -332,7 +360,7 @@ end
 ---@param root string
 ---@return changeset.SubmittedBatch[]?
 function M.submitted(root)
-  local data = jsonfile.read_object(M.path())
+  local data = read_only()
   if not data then
     return nil
   end

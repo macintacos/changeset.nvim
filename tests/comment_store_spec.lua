@@ -216,6 +216,58 @@ describe("changeset.comment_store", function()
     assert.same({ comment({ line = 12, start_line = nil, body = "edited" }) }, comment_store.list(ROOT))
   end)
 
+  describe("reading again", function()
+    ---How often the record is decoded while `fn` runs.
+    ---@param fn fun()
+    ---@return integer
+    local function decodes(fn)
+      local real, count = vim.json.decode, 0
+      vim.json.decode = function(...)
+        count = count + 1
+        return real(...)
+      end
+      local ok, err = pcall(fn)
+      vim.json.decode = real
+      assert(ok, err)
+      return count
+    end
+
+    it("decodes the record once for reads it was not written between", function()
+      comment_store.keep(ROOT, comment())
+      take(ROOT, { comment({ line = 9, start_line = 9 }) })
+
+      assert.equal(
+        1,
+        decodes(function()
+          comment_store.list(ROOT)
+          comment_store.comments(ROOT)
+          comment_store.submitted(ROOT)
+        end)
+      )
+    end)
+
+    it("reads a record written behind its back", function()
+      comment_store.keep(ROOT, comment())
+      comment_store.list(ROOT)
+      local data = jsonfile.read_object(comment_store.path())
+      data[ROOT][1].body = "changed"
+
+      jsonfile.write(comment_store.path(), data)
+
+      assert.same({ comment({ body = "changed" }) }, comment_store.list(ROOT))
+    end)
+
+    it("hands out comments whose changes the next read does not see", function()
+      take(ROOT, { comment() })
+      local batch = assert(comment_store.submitted(ROOT))[1]
+
+      batch.comments[1].body = "changed"
+
+      assert.same({ comment() }, assert(comment_store.submitted(ROOT))[1].comments)
+      assert.same({ comment() }, select(2, comment_store.comments(ROOT))[1].comments)
+    end)
+  end)
+
   describe("submitted", function()
     local one, two = { path = "lua/a.lua", line = 3, body = "one" }, comment({ body = "two" })
 
