@@ -180,7 +180,7 @@ describe("changeset sidebar focus", function()
     local win, tree = assert(window.win()), assert(window.buf())
     vim.api.nvim_set_current_win(win)
 
-    pcall(vim.cmd, 'execute "normal! \\<C-o>"')
+    pcall(vim.cmd.normal, { args = { vim.keycode("<C-o>") }, bang = true })
 
     assert.equal(tree, vim.api.nvim_win_get_buf(win))
   end)

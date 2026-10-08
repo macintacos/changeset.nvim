@@ -218,7 +218,7 @@ describe("changeset.window", function()
 
       local ok, err = pcall(window.open, buf)
 
-      assert.is_true(ok, err)
+      assert.is_true(ok, tostring(err))
       assert.equal(buf, vim.api.nvim_win_get_buf((assert(window.win()))))
     end)
 
