@@ -252,12 +252,14 @@ function M.draw(kinds_key)
   local width = vim.api.nvim_win_get_width(win)
   local cursor, top = vim.api.nvim_win_get_cursor(win)[1], vim.fn.line("w0", win)
   comments_section = comments_for(state.tree)
-  local lines, lnum = state.view:show(laid_out(state.rows), { icon = icon_for, width = width, cursor = cursor })
+  local tree = laid_out(state.rows)
+  local lines, lnum = state.view:show(tree, { icon = icon_for, width = width, cursor = cursor })
 
   local text = vim.tbl_map(function(line)
     return line.text
   end, lines)
-  if #text == 0 and state.tree.collected then
+  -- A filter narrowing every row away leaves the lines empty: the footer names the filter, and the branch did change.
+  if #tree == 0 and state.tree.collected then
     text = {
       render.empty_message({
         on_default_branch = state.tree.branch == state.tree.default_branch,
@@ -276,7 +278,7 @@ function M.draw(kinds_key)
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   apply_marks(buf, lines)
   local hiding = view.hiding(view.kind_counts(state.rows), state.view:hidden())
-  hidden_note_line(buf, #text - 1, render.hidden_note(hiding, width - 1, kinds_key))
+  hidden_note_line(buf, math.max(#text, 1) - 1, render.hidden_note(hiding, width - 1, kinds_key))
 
   vim.api.nvim_win_set_cursor(win, { lnum, 0 })
   -- After the header, whose rows decide whether the cursor's row still fits under the top.

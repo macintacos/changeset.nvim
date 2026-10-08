@@ -1250,6 +1250,15 @@ describe("changeset sidebar", function()
     end)
   end)
 
+  it("leaves the tree's lines empty when a filter matches no row", function()
+    local buf = open_sidebar()
+    vim.api.nvim_set_current_win((assert(window.win())))
+
+    vim.api.nvim_feedkeys(vim.keycode("fzzzz<CR>"), "xt", false)
+
+    assert.same({ "" }, lines_of(buf))
+  end)
+
   it("keeps the earlier narrowing when a later filter prompt is cancelled", function()
     local buf = open_sidebar()
     vim.api.nvim_set_current_win((assert(window.win())))
