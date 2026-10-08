@@ -177,10 +177,16 @@ local function reachable()
   )
 end
 
+---The window a commit would open into, without splitting for one; nil when there is none.
+---@return integer?
+function M.peek_target()
+  return M._pick_target(reachable(), usable)
+end
+
 ---@return integer win
 ---@return boolean? split Whether `win` was split off the sidebar for this.
 local function target()
-  local win = M._pick_target(reachable(), usable)
+  local win = M.peek_target()
   if win then
     return win
   end
@@ -194,12 +200,6 @@ local function target()
   -- Copied from the sidebar with the rest of its options.
   setlocal(split, "winfixbuf", false)
   return split, true
-end
-
----The window a commit would open into, without splitting for one; nil when there is none.
----@return integer?
-function M.peek_target()
-  return M._pick_target(reachable(), usable)
 end
 
 ---Show `buf` in `win` without recording a jumplist entry.
