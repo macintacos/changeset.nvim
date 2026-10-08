@@ -9,7 +9,7 @@ local config = require("changeset.config")
 local dialog = require("changeset.dialog")
 local icons = require("changeset.icons")
 local origin = require("changeset.origin")
-local render = require("changeset.render")
+local highlights = require("changeset.highlights")
 local review_comment = require("changeset.review_comment")
 local review_comment_blocks = require("changeset.review_comment_blocks")
 local review_comment_window = require("changeset.review_comment_window")
@@ -94,8 +94,8 @@ local function confirm_delete(comment, text, yes)
   dialog.confirm({
     title = "Delete the review comment",
     body = {
-      { text = location(comment), hl = render.META_HL, path = true },
-      { text = text, quote = render.REVIEW_COMMENT_HL, max_lines = QUOTED },
+      { text = location(comment), hl = highlights.META_HL, path = true },
+      { text = text, quote = highlights.REVIEW_COMMENT_HL, max_lines = QUOTED },
     },
     action = "Delete",
   }, yes)
@@ -823,7 +823,7 @@ local function batch_row(batch)
     cells = {
       {
         batch.at and os.date("%b %d %H:%M", batch.at) --[[@as string]] or "",
-        render.META_HL,
+        highlights.META_HL,
       },
       { batch.to or "" },
       { comments_label(#batch.comments) },
