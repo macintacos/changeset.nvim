@@ -17,11 +17,35 @@ describe("changeset.cells", function()
     it("is empty when not even the first character fits", function()
       assert.equal("", cells.head("漢字", 1))
     end)
+
+    it("keeps the longest head of a long text that fits", function()
+      assert.equal(("a"):rep(9), cells.head(("a"):rep(5000) .. ("漢"):rep(5000), 9))
+    end)
+
+    it("keeps a character's composing marks with it", function()
+      assert.equal("e\204\129", cells.head("e\204\129x", 1))
+    end)
+
+    it("measures a tab from the column it starts at", function()
+      assert.equal("a\t", cells.head("a\tb", 8))
+    end)
   end)
 
   describe("tail", function()
     it("keeps the longest tail that fits", function()
       assert.equal("字b", cells.tail("a漢字b", 4))
+    end)
+
+    it("keeps the longest tail of a long text that fits", function()
+      assert.equal(("漢"):rep(4), cells.tail(("a"):rep(5000) .. ("漢"):rep(5000), 9))
+    end)
+
+    it("keeps a character's composing marks with it", function()
+      assert.equal("e\204\129", cells.tail("xe\204\129", 1))
+    end)
+
+    it("measures a tab from the column the tail starts at", function()
+      assert.equal("b", cells.tail("a\tb", 8))
     end)
   end)
 
