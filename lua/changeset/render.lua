@@ -59,10 +59,6 @@ local symbols = require("changeset.symbols")
 
 local M = {}
 
-for name, value in pairs(highlights) do
-  M[name] = value
-end
-
 ---Glyph heading the Comments section: the file marks' bubble, borrowed as they borrow it, since no icon plugin has a
 ---category to ask for a comment.
 ---@type string
@@ -198,9 +194,9 @@ end
 ---@return vim.api.keyset.set_extmark[]
 function M.state_marks(state, width)
   local look = ({
-    selected = { M.SELECTED_HL, M.SELECTED_ICON, M.SELECTED_ICON_HL },
-    here = { M.HERE_HL, M.HERE_ICON, M.HERE_ICON_HL },
-    picked = { M.PICKED_HL, M.PICKED_ICON, M.PICKED_ICON_HL },
+    selected = { highlights.SELECTED_HL, M.SELECTED_ICON, highlights.SELECTED_ICON_HL },
+    here = { highlights.HERE_HL, M.HERE_ICON, highlights.HERE_ICON_HL },
+    picked = { highlights.PICKED_HL, M.PICKED_ICON, highlights.PICKED_ICON_HL },
   })[state]
   return {
     { hl_group = look[1], hl_eol = true, priority = TINT_PRIORITY },
@@ -281,7 +277,7 @@ local function section_line(section, opts)
     { glyph, icon_hl },
     { "  " },
     { section.name .. (" "):rep(pad) },
-    { count, M.META_HL },
+    { count, highlights.META_HL },
   }, stat)
 end
 
@@ -295,7 +291,7 @@ local function child_line(row, guides, opts)
   local room = opts.width - vim.fn.strdisplaywidth(MARGIN .. "  " .. guides .. glyph .. " ") - stat_cells(stat)
   local name, name_hl = symbols.fit(row.name, room), row.ancestor and "Comment" or nil
   if META_KINDS[row.kind] then
-    icon_hl, name, name_hl = M.META_HL, cells.clip(row.name, room), M.META_HL
+    icon_hl, name, name_hl = highlights.META_HL, cells.clip(row.name, room), highlights.META_HL
   end
   return M.compose(row, {
     { MARGIN },
@@ -317,7 +313,10 @@ local function placeholder_line(file)
     depth = file.depth + 1,
     children = {},
   })
-  return M.compose(row, { { MARGIN }, { "  " }, { "└─", "Comment" }, { "⋯ reading symbols", M.META_HL } })
+  return M.compose(
+    row,
+    { { MARGIN }, { "  " }, { "└─", "Comment" }, { "⋯ reading symbols", highlights.META_HL } }
+  )
 end
 
 ---@param out changeset.Line[]
@@ -344,12 +343,12 @@ local function comment_line(row, opts)
   local glyph, icon_hl = opts.icon(row)
   local span = review_comment.span(comment)
   local where = vim.fs.basename(row.path) .. (span and ":" .. span or "")
-  local circle = comment.draft and M.REVIEW_COMMENT_DRAFT_CIRCLE or M.REVIEW_COMMENT_CIRCLE
+  local circle = comment.draft and highlights.REVIEW_COMMENT_DRAFT_CIRCLE or highlights.REVIEW_COMMENT_CIRCLE
   local room = opts.width - vim.fn.strdisplaywidth(MARGIN .. circle .. " " .. glyph .. " ") - stat_cells(nil)
   where = cells.clip(where, room)
   local chunks = {
     { MARGIN },
-    { circle, M.review_comment_hl(comment) },
+    { circle, highlights.review_comment_hl(comment) },
     { " " },
     { glyph, icon_hl },
     { " " .. where },
@@ -358,7 +357,7 @@ local function comment_line(row, opts)
   -- The body needs its two-cell gap and a cell to show anything.
   if room >= 3 then
     local text = cells.clip(comment.body:match("^[^\r\n]*"), room - 2)
-    vim.list_extend(chunks, { { "  " }, { text, M.REVIEW_COMMENT_BODY_HL } })
+    vim.list_extend(chunks, { { "  " }, { text, highlights.REVIEW_COMMENT_BODY_HL } })
   end
   return M.compose(row, chunks)
 end
@@ -432,7 +431,8 @@ function M.lines(rows, opts)
     -- A section header never matches the filter: lighting its label would claim a match.
     if line.row.kind ~= "section" then
       for _, run in ipairs(matches(line.text, opts.query or "")) do
-        line.marks[#line.marks + 1] = { col = run[1], end_col = run[2], hl = M.MATCH_HL, priority = MATCH_PRIORITY }
+        line.marks[#line.marks + 1] =
+          { col = run[1], end_col = run[2], hl = highlights.MATCH_HL, priority = MATCH_PRIORITY }
       end
     end
   end
@@ -474,11 +474,11 @@ function M.kind_lines(rows, opts)
     local line = M.compose(nil, {
       { lead, not row.hidden and icon_hl or nil },
       { " " },
-      { glyph, row.hidden and M.HIDDEN_HL or icon_hl },
+      { glyph, row.hidden and highlights.HIDDEN_HL or icon_hl },
       { " " },
-      { row.kind, row.hidden and M.HIDDEN_HL or nil },
+      { row.kind, row.hidden and highlights.HIDDEN_HL or nil },
       { (" "):rep(math.max(gap, 1)) },
-      { count, M.META_HL },
+      { count, highlights.META_HL },
     })
     line.kind = row.kind
     out[i] = line
@@ -531,11 +531,11 @@ function M.header(summary, width)
   local ref = cells.clip(summary.ref, room)
   local remote = ref:match("^origin/") or ""
   return table.concat({
-    ("%%#%s# %s "):format(M.HEADER_ICON_HL, BRANCH_ICON),
-    ("%%#%s#%s"):format(M.HEADER_DIM_HL, remote),
-    ("%%#%s#%s"):format(M.HEADER_REF_HL, escaped(ref:sub(#remote + 1))),
-    ("%%#%s#%%="):format(M.HEADER_HL),
-    pr and ("%%#%s#%s "):format(M.HEADER_DIM_HL, pr) or "",
+    ("%%#%s# %s "):format(highlights.HEADER_ICON_HL, BRANCH_ICON),
+    ("%%#%s#%s"):format(highlights.HEADER_DIM_HL, remote),
+    ("%%#%s#%s"):format(highlights.HEADER_REF_HL, escaped(ref:sub(#remote + 1))),
+    ("%%#%s#%%="):format(highlights.HEADER_HL),
+    pr and ("%%#%s#%s "):format(highlights.HEADER_DIM_HL, pr) or "",
   })
 end
 
@@ -546,9 +546,9 @@ end
 ---@return table[] chunks
 local function counted(glyph, count, noun)
   return {
-    { glyph .. " ", M.HEADER_DIM_HL },
-    { tostring(count), M.HEADER_HL },
-    { " " .. noun .. (count == 1 and "" or "s"), M.HEADER_DIM_HL },
+    { glyph .. " ", highlights.HEADER_DIM_HL },
+    { tostring(count), highlights.HEADER_HL },
+    { " " .. noun .. (count == 1 and "" or "s"), highlights.HEADER_DIM_HL },
   }
 end
 
@@ -562,11 +562,14 @@ end
 ---@param width integer Cells the line spans; padded to fill, so the strip runs the full width.
 ---@return table[] chunks Virtual-text chunks for one line of `virt_lines`.
 function M.header_totals(summary, width)
-  local strip = M.HEADER_HL
+  local strip = highlights.HEADER_HL
   local left, right
   if summary.reading then
     left = {
-      { ("⋯ reading symbols %d/%d"):format(summary.reading.done, summary.reading.total), { strip, M.META_HL } },
+      {
+        ("⋯ reading symbols %d/%d"):format(summary.reading.done, summary.reading.total),
+        { strip, highlights.META_HL },
+      },
     }
     right = {}
   else
@@ -594,12 +597,17 @@ end
 ---@param info changeset.Footer
 ---@return string
 function M.footer(info)
-  local parts = { ("%%#%s# Changeset "):format(M.BADGE_HL) }
+  local parts = { ("%%#%s# Changeset "):format(highlights.BADGE_HL) }
   if info.file then
-    parts[#parts + 1] = ("%%#%s# file %d of %d"):format(M.FOOTER_HL, info.file, info.files)
+    parts[#parts + 1] = ("%%#%s# file %d of %d"):format(highlights.FOOTER_HL, info.file, info.files)
   end
   if info.query ~= "" then
-    parts[#parts + 1] = ("%%#%s#  %s %%#%s#%s"):format(M.FOOTER_HL, FILTER_ICON, M.FOOTER_KEY_HL, escaped(info.query))
+    parts[#parts + 1] = ("%%#%s#  %s %%#%s#%s"):format(
+      highlights.FOOTER_HL,
+      FILTER_ICON,
+      highlights.FOOTER_KEY_HL,
+      escaped(info.query)
+    )
   end
   local hints = vim
     .iter(HINTS)
@@ -607,11 +615,16 @@ function M.footer(info)
       return info.keys[hint[1]]
     end)
     :map(function(hint)
-      return ("%%#%s#%s %%#%s#%s"):format(M.FOOTER_KEY_HL, escaped(info.keys[hint[1]]), M.FOOTER_HL, hint[2])
+      return ("%%#%s#%s %%#%s#%s"):format(
+        highlights.FOOTER_KEY_HL,
+        escaped(info.keys[hint[1]]),
+        highlights.FOOTER_HL,
+        hint[2]
+      )
     end)
     :totable()
   -- `%<` before the hints: a bar too narrow for everything gives up the keys first.
-  parts[#parts + 1] = ("%%#%s#%%=%%<"):format(M.FOOTER_HL) .. table.concat(hints, "  ") .. " "
+  parts[#parts + 1] = ("%%#%s#%%=%%<"):format(highlights.FOOTER_HL) .. table.concat(hints, "  ") .. " "
   return table.concat(parts)
 end
 
@@ -628,13 +641,16 @@ end
 ---@return string
 function M.preview_winbar(band)
   return table.concat({
-    ("%%#%s# Preview "):format(M.PREVIEW_LABEL_HL),
+    ("%%#%s# Preview "):format(highlights.PREVIEW_LABEL_HL),
     -- The spaces belong to the icon's group rather than the band's, which keeps
     -- the two one highlight run and the icon one cell off the badge either way.
     ("%%#%s# %s "):format(band.icon_hl, band.icon),
-    ("%%#%s#%%<%s"):format(M.PREVIEW_HL, escaped(band.path)),
+    ("%%#%s#%%<%s"):format(highlights.PREVIEW_HL, escaped(band.path)),
     "%=",
-    ("%%#%s#%s "):format(M.PREVIEW_HINT_HL, escaped(band.destination or (band.jump and HINT:format(band.jump) or ""))),
+    ("%%#%s#%s "):format(
+      highlights.PREVIEW_HINT_HL,
+      escaped(band.destination or (band.jump and HINT:format(band.jump) or ""))
+    ),
   })
 end
 
@@ -642,7 +658,7 @@ end
 ---@param winbar string
 ---@return boolean
 function M.is_preview_winbar(winbar)
-  return winbar:find(("%%#%s# Preview "):format(M.PREVIEW_LABEL_HL), 1, true) ~= nil
+  return winbar:find(("%%#%s# Preview "):format(highlights.PREVIEW_LABEL_HL), 1, true) ~= nil
 end
 
 ---The sentence shown in place of the tree when there is nothing to list.

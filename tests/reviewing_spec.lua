@@ -364,7 +364,7 @@ describe("changeset.reviewing", function()
 
       reviewing.comment(4, 4)
 
-      assert.equal(require("changeset.render").REVIEW_COMMENT_DRAFT_HL, window().icon[2])
+      assert.equal(require("changeset.highlights").REVIEW_COMMENT_DRAFT_HL, window().icon[2])
     end)
   end)
 

@@ -7,7 +7,7 @@ vim.cmd("runtime plugin/changeset.lua")
 -- What `]g` runs: the spec runner starts before startup is done, which maps the default keys.
 local PREVIEW_NEXT = vim.keycode("<Plug>(changeset-preview-next)")
 local build = require("changeset.build")
-local render = require("changeset.render")
+local highlights = require("changeset.highlights")
 local window = require("changeset.window")
 local Changes = require("support.changes")
 local Fixture = require("support.git")
@@ -190,7 +190,7 @@ describe("changeset sidebar", function()
       end
     end
 
-    assert.equal(render.MATCH_HL, assert(top).opts.hl_group)
+    assert.equal(highlights.MATCH_HL, assert(top).opts.hl_group)
   end)
 
   it("leads a nested file's row with its filename and dims its directory", function()

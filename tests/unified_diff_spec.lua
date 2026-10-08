@@ -2,7 +2,7 @@ local Fixture = require("support.git")
 local Paths = require("changeset.paths")
 local review_comments = require("changeset.review_comments")
 local comment_store = require("changeset.comment_store")
-local render = require("changeset.render")
+local highlights = require("changeset.highlights")
 local review_comment_window = require("changeset.review_comment_window")
 local unified_diff = require("changeset.unified_diff")
 local window = require("changeset.window")
@@ -181,7 +181,7 @@ describe("changeset.unified_diff", function()
       -- As catppuccin's transparent theme paints them: one flat colour over every token on the line.
       vim.api.nvim_set_hl(0, "GitSignsAddPreview", { fg = 0x00ff00 })
       vim.api.nvim_set_hl(0, "GitSignsDeleteVirtLn", { fg = 0xff0000 })
-      render.define_highlights()
+      highlights.define_highlights()
     end)
 
     after_each(function()
@@ -234,11 +234,11 @@ describe("changeset.unified_diff", function()
 
       local deleted, added = last_cell("line 2"), last_cell("changed 5")
       assert.same(
-        { vim.api.nvim_get_hl(0, { name = render.DIFF_DELETE_HL }).bg, 0xcccccc },
+        { vim.api.nvim_get_hl(0, { name = highlights.DIFF_DELETE_HL }).bg, 0xcccccc },
         { deleted.background, deleted.foreground or 0xcccccc }
       )
       assert.same(
-        { vim.api.nvim_get_hl(0, { name = render.DIFF_ADD_HL }).bg, 0xcccccc },
+        { vim.api.nvim_get_hl(0, { name = highlights.DIFF_ADD_HL }).bg, 0xcccccc },
         { added.background, added.foreground or 0xcccccc }
       )
     end)
@@ -250,7 +250,7 @@ describe("changeset.unified_diff", function()
       row_showing("line 2")
 
       local added, tints = gutter(row_showing("changed 5"))
-      assert.same({ "4", { vim.api.nvim_get_hl(0, { name = render.DIFF_ADD_HL }).bg } }, { vim.trim(added), tints })
+      assert.same({ "4", { vim.api.nvim_get_hl(0, { name = highlights.DIFF_ADD_HL }).bg } }, { vim.trim(added), tints })
       assert.same("1", vim.trim((gutter(row_showing("line 1")))))
     end)
 

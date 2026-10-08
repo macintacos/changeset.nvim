@@ -3,7 +3,7 @@ local Notify = require("support.notify")
 local comment_store = require("changeset.comment_store")
 local review_comments = require("changeset.review_comments")
 local config = require("changeset.config")
-local render = require("changeset.render")
+local highlights = require("changeset.highlights")
 
 ---@param path string
 ---@param line integer
@@ -157,17 +157,20 @@ describe("review_comments", function()
   it("colours the range's numbers and ends the line with the body", function()
     set(all())
     local details = assert(marks(beta)[1][4])
-    assert.are.equal(render.REVIEW_COMMENT_HL, details.number_hl_group)
-    assert.are.same({ { "● ", render.REVIEW_COMMENT_HL }, { "b", render.REVIEW_COMMENT_BODY_HL } }, details.virt_text)
+    assert.are.equal(highlights.REVIEW_COMMENT_HL, details.number_hl_group)
+    assert.are.same(
+      { { "● ", highlights.REVIEW_COMMENT_HL }, { "b", highlights.REVIEW_COMMENT_BODY_HL } },
+      details.virt_text
+    )
   end)
 
   it("marks a draft with its own circle, sign and group", function()
     set({ { path = "beta.txt", line = 15, body = "b", draft = true } })
     local details = assert(marks(beta)[1][4])
-    assert.are.equal(render.REVIEW_COMMENT_DRAFT_HL, details.number_hl_group)
-    assert.are.same({ "◌ ", render.REVIEW_COMMENT_DRAFT_HL }, details.virt_text[1])
-    assert.are.same({ { 14, "󰍪 ", render.REVIEW_COMMENT_DRAFT_HL } }, signs(beta))
-    assert.are.same({ "󰍪", render.REVIEW_COMMENT_DRAFT_HL }, { review_comments.bubble(beta, 15) })
+    assert.are.equal(highlights.REVIEW_COMMENT_DRAFT_HL, details.number_hl_group)
+    assert.are.same({ "◌ ", highlights.REVIEW_COMMENT_DRAFT_HL }, details.virt_text[1])
+    assert.are.same({ { 14, "󰍪 ", highlights.REVIEW_COMMENT_DRAFT_HL } }, signs(beta))
+    assert.are.same({ "󰍪", highlights.REVIEW_COMMENT_DRAFT_HL }, { review_comments.bubble(beta, 15) })
   end)
 
   for _, order in ipairs({ "draft first", "draft last" }) do
@@ -177,15 +180,15 @@ describe("review_comments", function()
         local draft = { path = "beta.txt", line = 15, body = "d", draft = true }
         local saved = { path = "beta.txt", line = 16, start_line = 15, body = "s" }
         set(order == "draft first" and { draft, saved } or { saved, draft })
-        assert.are.same({ { 14, "󰍪 ", render.REVIEW_COMMENT_DRAFT_HL } }, signs(beta))
-        assert.are.same({ "󰍪", render.REVIEW_COMMENT_DRAFT_HL }, { review_comments.bubble(beta, 15) })
+        assert.are.same({ { 14, "󰍪 ", highlights.REVIEW_COMMENT_DRAFT_HL } }, signs(beta))
+        assert.are.same({ "󰍪", highlights.REVIEW_COMMENT_DRAFT_HL }, { review_comments.bubble(beta, 15) })
       end
     )
   end
 
   it("puts a bubble in the sign column on each review comment's first line", function()
     set(all())
-    local bubble, hl = "󰍩 ", render.REVIEW_COMMENT_HL
+    local bubble, hl = "󰍩 ", highlights.REVIEW_COMMENT_HL
     assert.are.same({ { 7, bubble, hl }, { 9, bubble, hl }, { 12, bubble, hl }, { 30, bubble, hl } }, signs(alpha))
     assert.are.same({ { 15, bubble, hl } }, signs(beta))
   end)
@@ -212,20 +215,20 @@ describe("review_comments", function()
 
   it("answers a review comment's bubble and group on its first line only", function()
     set(all())
-    assert.are.same({ "󰍩", render.REVIEW_COMMENT_HL }, { review_comments.bubble(alpha, 8) })
+    assert.are.same({ "󰍩", highlights.REVIEW_COMMENT_HL }, { review_comments.bubble(alpha, 8) })
     assert.are.same({}, { review_comments.bubble(alpha, 9) })
   end)
 
   it("answers each line's bubble when review_comment.sign is false", function()
     config.setup({ review_comment = { sign = false } })
     set(all())
-    assert.are.same({ "󰍩", render.REVIEW_COMMENT_HL }, { review_comments.bubble(beta, 16) })
+    assert.are.same({ "󰍩", highlights.REVIEW_COMMENT_HL }, { review_comments.bubble(beta, 16) })
   end)
 
   it("answers a line's bubble after text is typed at its start", function()
     set(all())
     vim.api.nvim_buf_set_text(beta, 15, 0, 15, 0, { "typed " })
-    assert.are.same({ "󰍩", render.REVIEW_COMMENT_HL }, { review_comments.bubble(beta, 16) })
+    assert.are.same({ "󰍩", highlights.REVIEW_COMMENT_HL }, { review_comments.bubble(beta, 16) })
   end)
 
   it("clears its bubbles with its marks", function()
@@ -460,6 +463,6 @@ describe("review_comments", function()
   it("defines its groups again after a colorscheme change", function()
     vim.cmd("colorscheme default")
 
-    assert.is_true(vim.api.nvim_get_hl(0, { name = render.REVIEW_COMMENT_HL }).bold)
+    assert.is_true(vim.api.nvim_get_hl(0, { name = highlights.REVIEW_COMMENT_HL }).bold)
   end)
 end)

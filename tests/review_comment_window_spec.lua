@@ -159,7 +159,7 @@ describe("review_comment_window", function()
     return vim
       .iter(vim.api.nvim_win_get_config(win).footer)
       :filter(function(chunk)
-        return chunk[2] == require("changeset.render").KEYCAP_HL
+        return chunk[2] == require("changeset.highlights").KEYCAP_HL
       end)
       :map(function(chunk)
         return vim.trim(chunk[1])

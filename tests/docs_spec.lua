@@ -61,7 +61,7 @@ describe("doc/changeset.nvim.txt", function()
   it("tags every highlight group", function()
     local groups = vim.tbl_filter(function(v)
       return type(v) == "string" and v:find("^Changeset%u") ~= nil
-    end, vim.tbl_values(require("changeset.render")))
+    end, vim.tbl_values(require("changeset.highlights")))
     assert.is_true(#groups > 0)
     for _, name in ipairs(groups) do
       assert.is_true(tagged(name), name)

@@ -1,4 +1,4 @@
-local render = require("changeset.render")
+local highlights = require("changeset.highlights")
 local window = require("changeset.window")
 
 ---What the band says is the sidebar's business; these tests only need one to pass on.
@@ -664,7 +664,7 @@ describe("changeset.window", function()
       assert.is_false(vim.bo[buf].buflisted)
       for row = 0, 2 do
         local tints = vim.tbl_filter(function(mark)
-          return mark[4].line_hl_group == render.DIFF_DELETE_HL
+          return mark[4].line_hl_group == highlights.DIFF_DELETE_HL
         end, vim.api.nvim_buf_get_extmarks(buf, -1, { row, 0 }, { row, -1 }, { details = true, overlap = true }))
         assert(#tints > 0, ("line %d is not tinted as deleted"):format(row + 1))
       end

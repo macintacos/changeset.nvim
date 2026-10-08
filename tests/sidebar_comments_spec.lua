@@ -1,5 +1,5 @@
 local build = require("changeset.build")
-local render = require("changeset.render")
+local highlights = require("changeset.highlights")
 local changeset = require("changeset")
 local comment_store = require("changeset.comment_store")
 local window = require("changeset.window")
@@ -233,7 +233,7 @@ describe("the sidebar's Comments section", function()
 
     press_on("alpha.txt:13", "<CR>")
 
-    assert.truthy(Sidebar.line_with(render.PICKED_HL):find("alpha.txt:13", 1, true))
+    assert.truthy(Sidebar.line_with(highlights.PICKED_HL):find("alpha.txt:13", 1, true))
   end)
 
   it("replaces the review comment's text when its window saves", function()
