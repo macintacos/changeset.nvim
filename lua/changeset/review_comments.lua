@@ -8,7 +8,7 @@ local hover = require("changeset.hover")
 local jsonfile = require("changeset.jsonfile")
 local review_comment = require("changeset.review_comment")
 local review_comment_blocks = require("changeset.review_comment_blocks")
-local render = require("changeset.render")
+local highlights = require("changeset.highlights")
 
 local M = {}
 
@@ -26,7 +26,7 @@ local DRAFT_BUBBLE = "󰍪"
 ---@return string glyph
 ---@return string hl
 function M.glyph(comment)
-  return comment.draft and DRAFT_BUBBLE or BUBBLE, render.review_comment_hl(comment)
+  return comment.draft and DRAFT_BUBBLE or BUBBLE, highlights.review_comment_hl(comment)
 end
 
 ---Whether blocks show, once toggled; until then `review_comment.blocks` decides.
@@ -65,7 +65,7 @@ local drawn_for = {}
 local function mark(buf, comment)
   local row = review_comment.first(comment) - 1
   local bubble, hl = M.glyph(comment)
-  local circle = comment.draft and render.REVIEW_COMMENT_DRAFT_CIRCLE or render.REVIEW_COMMENT_CIRCLE
+  local circle = comment.draft and highlights.REVIEW_COMMENT_DRAFT_CIRCLE or highlights.REVIEW_COMMENT_CIRCLE
   vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
     end_row = comment.line - 1,
     -- A line added right above the last moves the end down with the last, rather than onto the new line.
@@ -74,12 +74,12 @@ local function mark(buf, comment)
     -- A block already holds the whole text.
     virt_text = not M.shown() and {
       { circle .. " ", hl },
-      { comment.body:match("^[^\r\n]*"), render.REVIEW_COMMENT_BODY_HL },
+      { comment.body:match("^[^\r\n]*"), highlights.REVIEW_COMMENT_BODY_HL },
     } or nil,
   })
   local existing = vim.api.nvim_buf_get_extmarks(buf, sign_ns, { row, 0 }, { row, 0 }, { limit = 1, details = true })[1]
   -- One bubble a line, and a draft's wins it: unfinished work is what should stand out.
-  if not existing or (comment.draft and existing[4].sign_hl_group ~= render.REVIEW_COMMENT_DRAFT_HL) then
+  if not existing or (comment.draft and existing[4].sign_hl_group ~= highlights.REVIEW_COMMENT_DRAFT_HL) then
     -- The default priority, 4096, draws it over gitsigns' and diagnostics' signs. Without
     -- `sign_text` the mark takes no cell but keeps its group, which `M.bubble` answers from.
     vim.api.nvim_buf_set_extmark(buf, sign_ns, row, 0, {
@@ -115,7 +115,7 @@ function M.bubble(buf, lnum)
   )
   if found[1] then
     local hl = found[1][4].sign_hl_group
-    return hl == render.REVIEW_COMMENT_DRAFT_HL and DRAFT_BUBBLE or BUBBLE, hl
+    return hl == highlights.REVIEW_COMMENT_DRAFT_HL and DRAFT_BUBBLE or BUBBLE, hl
   end
 end
 
@@ -318,14 +318,14 @@ local function redraw_switched()
   end
 end
 
-render.define_highlights()
+highlights.define_highlights()
 
 -- The meta highlight is mixed from Comment's foreground, which a new colorscheme replaces. Here rather than in
 -- the sidebar's module, since a review verb loads this one without it.
 vim.api.nvim_create_autocmd("ColorScheme", {
   group = vim.api.nvim_create_augroup("changeset.highlights", { clear = true }),
   desc = "changeset: rebuild the highlight groups against the new palette",
-  callback = render.define_highlights,
+  callback = highlights.define_highlights,
 })
 
 -- Fires: a review comment kept, dropped or cleared, so its marks follow it.
