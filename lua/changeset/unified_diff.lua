@@ -247,7 +247,8 @@ function M.activate()
     group = group,
     desc = "changeset: forget the unified diff of a closed window",
     callback = function(args)
-      opened[tonumber(args.match)] = nil
+      local win = tonumber(args.match) --[[@as integer]]
+      opened[win], covered[win], opening[win] = nil, nil, nil
     end,
   })
   -- gitsigns signs a buffer and draws a view's hunks anew with no event to say so, but always redraws the window after.
