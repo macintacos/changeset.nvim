@@ -89,7 +89,10 @@ end
 ---@param path string Absolute.
 ---@return boolean
 local function unwritten(path)
-  local buf = buffers.loaded(path)
+  -- Buffer names are already absolute and simplified, so the raw name nearly always finds it without normalising each.
+  local buf = vim.iter(vim.api.nvim_list_bufs()):find(function(b)
+    return vim.api.nvim_buf_is_loaded(b) and vim.api.nvim_buf_get_name(b) == path
+  end) or buffers.loaded(path)
   return buf ~= nil and vim.bo[buf].modified
 end
 

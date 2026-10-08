@@ -219,6 +219,47 @@ describe("changeset.build", function()
       assert.equal(2, asked)
     end)
 
+    it("finds the buffer holding unwritten edits by its name, without normalising every buffer's", function()
+      vim.cmd("silent! %bwipeout!")
+      -- Ahead of mod.lua's buffer in the list, the one left after the wipe included.
+      vim.cmd.edit("filler0.lua")
+      local fillers = { vim.api.nvim_get_current_buf() }
+      for i = 1, 5 do
+        fillers[i + 1] = vim.fn.bufadd(tmp .. "/filler" .. i .. ".lua")
+        vim.fn.bufload(fillers[i + 1])
+      end
+      vim.cmd.edit("mod.lua")
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, { "return 3" })
+      local normalised, answering, real_normalize = {}, false, vim.fs.normalize
+      vim.fs.normalize = function(path, ...)
+        if answering then
+          normalised[#normalised + 1] = path
+        end
+        return real_normalize(path, ...)
+      end
+      asked = 0
+      resolve.start = function(_, files, on_file)
+        answering = true
+        for _, file in ipairs(files) do
+          asked = asked + 1
+          on_file(file.path, { Changes.sym("f", "Function", 0, 1, 1) })
+        end
+        answering = false
+        return function() end
+      end
+
+      local ok, err = pcall(build_and_collect)
+      vim.fs.normalize = real_normalize
+
+      assert(ok, err)
+      for _, buf in ipairs(fillers) do
+        assert.is_false(vim.tbl_contains(normalised, vim.api.nvim_buf_get_name(buf)))
+      end
+      -- Found, so not cached: the refresh asks again.
+      refresh_and_collect()
+      assert.equal(2, asked)
+    end)
+
     it("keeps a file's comment lines across a refresh without asking about it again", function()
       local comment_lines = { new = { comment = { { 1, 1 } }, directive = {}, blank = {} } }
       answer({}, comment_lines)
