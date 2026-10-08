@@ -188,6 +188,73 @@ describe("changeset tree", function()
       assert.not_equal(tree.base, assert(build.current()).base)
     end)
 
+    ---Rebase `feature` onto a trunk that has moved on, returning the new fork point.
+    ---@return string
+    local function rebase_onto_newer_trunk()
+      Fixture.git({ "checkout", "-q", "trunk" }, tmp)
+      vim.fn.writefile({ "trunk work" }, tmp .. "/trunk.txt")
+      Fixture.commit("trunk work", tmp)
+      Fixture.git({ "checkout", "-q", "feature" }, tmp)
+      Fixture.git({ "rebase", "-q", "trunk" }, tmp)
+      return Fixture.git({ "merge-base", "HEAD", "trunk" }, tmp)
+    end
+
+    it("measures the new fork point when gitsigns sees HEAD rebased onto a newer trunk", function()
+      build.build()
+      assert.is_true(wait_for_file("mod.lua"))
+
+      local base = rebase_onto_newer_trunk()
+      vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate" })
+
+      assert.is_true(vim.wait(5000, function()
+        return build.current().base == base and build.current().collected
+      end, 25))
+      assert.same({ "mod.lua" }, paths_of(build.current()))
+    end)
+
+    it("measures the new fork point on a refresh after a rebase onto a newer trunk", function()
+      build.build()
+      assert.is_true(wait_for_file("mod.lua"))
+
+      local base = rebase_onto_newer_trunk()
+      changeset.refresh()
+
+      assert.is_true(vim.wait(5000, function()
+        return build.current().base == base and build.current().collected
+      end, 25))
+      assert.same({ "mod.lua" }, paths_of(build.current()))
+    end)
+
+    it("follows a branch switch when R is pressed in the sidebar", function()
+      changeset.open()
+      assert.is_true(wait_for_file("mod.lua"))
+
+      Fixture.git({ "checkout", "-q", "-b", "feature2" }, tmp)
+      vim.api.nvim_set_current_win(window.win() --[[@as integer]])
+      vim.api.nvim_feedkeys("R", "x", false)
+
+      assert.equal("feature2", build.current().branch)
+    end)
+
+    it("follows a branch switch while the current buffer is outside the tree's repository", function()
+      build.build()
+      assert.is_true(wait_for_file("mod.lua"))
+      local elsewhere = vim.fn.tempname()
+      vim.fn.mkdir(elsewhere, "p")
+      vim.fn.chdir(elsewhere)
+      vim.cmd("enew")
+      vim.bo.buftype = "nofile"
+
+      Fixture.git({ "switch", "-q", "-c", "other" }, tmp)
+      vim.api.nvim_exec_autocmds("FocusGained", {})
+
+      local followed = vim.wait(3000, function()
+        return build.current().branch == "other"
+      end, 25)
+      vim.fn.delete(elsewhere, "rf")
+      assert.is_true(followed)
+    end)
+
     it("leaves the sidebar blank until the diff is read", function()
       changeset.open()
 

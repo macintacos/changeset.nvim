@@ -392,7 +392,7 @@ end
 ---Rebuild the tree now, or build the current buffer's repository's when there is none.
 function M.refresh()
   if build.current() then
-    build.refresh()
+    build.update()
   else
     built()
   end

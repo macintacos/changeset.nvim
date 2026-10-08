@@ -24,6 +24,7 @@ local M = {}
 ---@field base string
 ---@field ref string Ref the fork point was measured against, e.g. "origin/trunk".
 ---@field branch string
+---@field head string? HEAD's commit when the tree was built.
 ---@field default_branch string
 ---@field pr integer? The branch's open PR, while the tree is measured against its target.
 ---@field files changeset.File[]
@@ -205,25 +206,26 @@ end
 
 ---@param root string?
 ---@return string? branch "HEAD" when detached.
-local function head_branch(root)
-  return Git.lines({ "git", "rev-parse", "--abbrev-ref", "HEAD" }, root)[1]
+---@return string? commit
+local function head(root)
+  local out = Git.lines({ "git", "rev-parse", "HEAD", "--abbrev-ref", "HEAD" }, root)
+  return out[2], out[1]
 end
 
----Build the tree for the current buffer's repository, unless it is already built there.
----
----The buffer's repository, not Neovim's directory: with the two different, a base
----measured in the wrong one leaves every later `git diff` on a bad object.
+---Build the tree for the repository at `root`, unless it is already built there.
+---@param root string
 ---@return boolean ready false when the repository has no merge base with its default
----branch, which includes a buffer outside any repository.
-function M.build()
-  local root = Paths.root(0)
-  local branch = head_branch(root) or "HEAD"
+---branch, which includes a `root` outside any repository.
+local function build_at(root)
+  local branch, commit = head(root)
+  branch = branch or "HEAD"
   local point = fork_point.get(root, branch)
   if not point then
     return false
   end
   local base = point.base
   if tree and tree.root == root and tree.base == base and tree.branch == branch then
+    tree.head = commit
     if tree.pr ~= point.pr then
       tree.pr = point.pr
       announce("pr")
@@ -241,6 +243,7 @@ function M.build()
     base = base,
     ref = point.ref,
     branch = branch,
+    head = commit,
     default_branch = point.default_branch,
     pr = point.pr,
     files = {},
@@ -252,9 +255,39 @@ function M.build()
   return true
 end
 
+---Build the tree for the current buffer's repository, unless it is already built there.
+---
+---The buffer's repository, not Neovim's directory: with the two different, a base
+---measured in the wrong one leaves every later `git diff` on a bad object.
+---@return boolean ready false when the repository has no merge base with its default
+---branch, which includes a buffer outside any repository.
+function M.build()
+  return build_at(Paths.root(0))
+end
+
+---Rebuild the tree when its repository's HEAD has moved or landed on another branch, else refresh it.
+function M.update()
+  if not tree then
+    return
+  end
+  local branch, commit = head(tree.root)
+  -- A detached HEAD (a stopped rebase, a bisect) is not another branch.
+  if not branch or branch == "HEAD" or (branch == tree.branch and commit == tree.head) then
+    return M.refresh()
+  end
+  if commit ~= tree.head then
+    -- A moved HEAD can come with a PR retargeted, merged or closed.
+    fork_point.forget(tree.root, branch)
+  end
+  local kept = tree
+  if not build_at(tree.root) or tree == kept then
+    M.refresh()
+  end
+end
+
 -- Fires: gh answering a fork_point lookup, for any repository and branch.
 fork_point.subscribe(function(root, branch, point)
-  if not (tree and tree.root == root and tree.branch == branch and Paths.root(0) == root) then
+  if not (tree and tree.root == root and tree.branch == branch) then
     return
   end
   -- An answer that leaves no PR holds a point no fresher than the tree's; rebuilding on it would ask gh again.
@@ -264,7 +297,7 @@ fork_point.subscribe(function(root, branch, point)
   if tree.base == point.base and tree.pr == point.pr then
     return
   end
-  M.build()
+  build_at(root)
 end)
 
 ---The tree the last build() made; nil before the first.
@@ -305,19 +338,7 @@ local function refresh_soon()
   end
   stop(work.timer)
   work.timer = vim.defer_fn(function()
-    if not tree then
-      return
-    end
-    local branch = head_branch(tree.root)
-    -- build() measures the cursor's repository, so rebuild only while it is still this one.
-    -- A detached HEAD (a stopped rebase, a bisect) is not another branch.
-    if branch and branch ~= "HEAD" and branch ~= tree.branch and Paths.root(0) == tree.root then
-      if not M.build() then
-        M.refresh()
-      end
-    else
-      M.refresh()
-    end
+    M.update()
   end, REFRESH_DEBOUNCE_MS)
 end
 

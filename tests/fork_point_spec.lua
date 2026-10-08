@@ -223,6 +223,21 @@ describe("fork_point", function()
     assert.is_false(still_asking)
   end)
 
+  it("asks gh again once the target it named is forgotten", function()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
+    local root, default_base = repo()
+    fork_point.get(root, "feature")
+    assert.is_true(await_heard(root, 1))
+
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "main", number = 7 })
+    fork_point.forget(root, "feature")
+    fork_point.get(root, "feature")
+
+    assert.is_true(await_heard(root, 2))
+    assert.equal(default_base, heard_in(root)[2].point.base)
+    assert.equal("main", heard_in(root)[2].point.against)
+  end)
+
   it("stays on the default base when the PR's target shares no fork point", function()
     vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "gone", number = 7 })
     local root, default_base = repo()

@@ -101,6 +101,13 @@ function M.get(root, branch)
   return point, true
 end
 
+---Forget the PR target gh named for `branch` at `root`, so the next `get` asks gh again.
+---@param root string
+---@param branch string
+function M.forget(root, branch)
+  targets[root .. "\n" .. branch] = nil
+end
+
 ---Hear every gh answer, for any repository and branch. Subscribing `fn` again does nothing.
 ---@param fn fun(root: string, branch: string, point: changeset.ForkPoint) Called with the fork point that answer leaves.
 function M.subscribe(fn)

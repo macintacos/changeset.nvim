@@ -270,6 +270,43 @@ describe("changeset.build", function()
       end, 25))
       assert.equal(built, build.current())
     end)
+
+    it("hears the PR while the current buffer is outside the tree's repository", function()
+      vim.env.FAKE_GH_DELAY = "1"
+      local elsewhere = vim.fn.tempname()
+      vim.fn.mkdir(elsewhere, "p")
+      build_and_collect()
+      vim.fn.chdir(elsewhere)
+      vim.cmd("enew")
+      vim.bo.buftype = "nofile"
+
+      local heard = vim.wait(5000, function()
+        return vim.list_contains(events, "pr")
+      end, 25)
+      vim.env.FAKE_GH_DELAY = nil
+      vim.fn.delete(elsewhere, "rf")
+      assert.is_true(heard)
+      assert.equal(7, build.current().pr)
+    end)
+
+    it("asks gh again once HEAD moves", function()
+      build_and_collect()
+      assert.is_true(vim.wait(10000, function()
+        return vim.list_contains(events, "pr")
+      end, 25))
+      Fixture.git({ "commit", "-q", "--allow-empty", "-m", "more work" }, tmp)
+
+      local argvs = recording(function()
+        build.update()
+        vim.wait(3000, function()
+          return false
+        end, 25)
+      end)
+
+      assert.equal(1, #vim.tbl_filter(function(argv)
+        return runs(argv, "gh")
+      end, argvs))
+    end)
   end)
 
   describe("when the diff cannot be read", function()

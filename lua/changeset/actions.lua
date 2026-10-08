@@ -388,7 +388,7 @@ function M.set_keymaps(buf, keys, hooks)
       move(state.view:step_section(lnum, -1))
     end
   end, "Previous section")
-  map(keys.refresh, build.refresh, "Rebuild the tree")
+  map(keys.refresh, build.update, "Rebuild the tree")
   map(keys.yank, function()
     local row = draw.row_at_cursor()
     if not row or row.kind == "section" then
