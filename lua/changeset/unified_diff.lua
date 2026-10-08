@@ -2,7 +2,7 @@
 ---It draws the lines gone since gitsigns' base inline, as `:Gitsigns diffthis unified=true` does. Closing one in any
 ---window turns it off everywhere until Neovim exits.
 
-local render = require("changeset.render")
+local highlights = require("changeset.highlights")
 
 local M = {}
 
@@ -11,14 +11,14 @@ local GROUP = "changeset.unified_diff"
 -- The groups gitsigns draws the view with, each drawn as changeset's instead. Many themes give gitsigns' a flat
 -- foreground, which hides the syntax colouring under it; changeset's are backgrounds alone.
 local DIFF_HL = {
-  GitSignsAddPreview = render.DIFF_ADD_HL,
-  GitSignsAddInline = render.DIFF_ADD_TEXT_HL,
+  GitSignsAddPreview = highlights.DIFF_ADD_HL,
+  GitSignsAddInline = highlights.DIFF_ADD_TEXT_HL,
   -- A word changed on an added line is new text, as GitHub colours it.
-  GitSignsChangeInline = render.DIFF_ADD_TEXT_HL,
-  GitSignsDeleteInline = render.DIFF_DELETE_TEXT_HL,
-  GitSignsDeleteVirtLn = render.DIFF_DELETE_HL,
-  GitSignsDeleteVirtLnInLine = render.DIFF_DELETE_TEXT_HL,
-  GitSignsVirtLnum = render.DIFF_DELETE_HL,
+  GitSignsChangeInline = highlights.DIFF_ADD_TEXT_HL,
+  GitSignsDeleteInline = highlights.DIFF_DELETE_TEXT_HL,
+  GitSignsDeleteVirtLn = highlights.DIFF_DELETE_HL,
+  GitSignsDeleteVirtLnInLine = highlights.DIFF_DELETE_TEXT_HL,
+  GitSignsVirtLnum = highlights.DIFF_DELETE_HL,
 }
 
 ---@type "waiting"|"on"|"off"
@@ -106,7 +106,7 @@ local function cover(buf, ns, top, bot, added)
   end
   for _, hunk in ipairs(added) do
     for row = math.max(hunk.added.start - 1, top), math.min(hunk.added.start + hunk.added.count - 2, bot) do
-      want[row] = render.DIFF_ADD_HL
+      want[row] = highlights.DIFF_ADD_HL
     end
   end
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, { top, 0 }, { bot, -1 }, { details = true })) do
