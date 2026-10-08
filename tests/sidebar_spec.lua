@@ -10,6 +10,7 @@ local build = require("changeset.build")
 local render = require("changeset.render")
 local window = require("changeset.window")
 local Fixture = require("support.git")
+local Symbols = require("support.symbols")
 local Sidebar = require("support.sidebar")
 
 local ns = vim.api.nvim_get_namespaces()["changeset"]
@@ -451,8 +452,7 @@ describe("changeset sidebar", function()
   end)
 
   describe("with inline tests", function()
-    local resolve = require("changeset.resolve")
-    local real_start = resolve.start
+    local source
     ---@type fun(path: string, items: table[]?)
     local answer
 
@@ -538,14 +538,12 @@ describe("changeset sidebar", function()
       })
       write("src/only_tests.rs", { "mod tests {", "    fn works() {", "        let c = 1;", "    }", "}" })
       Fixture.commit("rust", tmp)
-      resolve.start = function(_, _, on_file)
-        answer = on_file
-        return function() end
-      end
+      source = Symbols.install()
+      answer = source.answer
     end)
 
     after_each(function()
-      resolve.start = real_start
+      source.restore()
     end)
 
     it("keeps the row under the cursor in place on screen as rows arrive above it", function()
@@ -669,24 +667,25 @@ describe("changeset sidebar", function()
           },
         },
       })
-      local asked = {}
-      resolve.start = function(_, files, on_file)
-        answer = on_file
-        for _, f in ipairs(files) do
-          asked[#asked + 1] = f.path
-        end
-        return function() end
+      local function asked()
+        return vim
+          .iter(source.asks)
+          :map(function(ask)
+            return ask.paths
+          end)
+          :flatten()
+          :totable()
       end
 
       local ok, err = pcall(function()
         open_unanswered()
-        for _, path in ipairs(asked) do
+        for _, path in ipairs(asked()) do
           answer(path, {})
         end
         Sidebar.flush()
 
         assert.truthy(tests_header() < line_of(assert(window.buf()), "load"))
-        assert.is_false(vim.tbl_contains(asked, "src/session.rs"))
+        assert.is_false(vim.tbl_contains(asked(), "src/session.rs"))
       end)
       vim.fn.delete(cache_file)
       assert(ok, err)
@@ -895,15 +894,7 @@ describe("changeset sidebar", function()
     end)
 
     it("never asks for a generated file's symbols, nor waits on them", function()
-      local resolve = require("changeset.resolve")
-      local start = resolve.start
-      local asked = {}
-      resolve.start = function(_, files)
-        for _, f in ipairs(files) do
-          asked[#asked + 1] = f.path
-        end
-        return function() end
-      end
+      local source = Symbols.install()
 
       local ok, err = pcall(function()
         -- Not open_sidebar(): it waits for `reading symbols` to clear, which this stub never answers.
@@ -919,6 +910,13 @@ describe("changeset sidebar", function()
         )
         unfold(buf)
         local lines = lines_of(buf)
+        local asked = vim
+          .iter(source.asks)
+          :map(function(ask)
+            return ask.paths
+          end)
+          :flatten()
+          :totable()
 
         assert.truthy(vim.tbl_contains(asked, "mod.lua"))
         assert.is_false(vim.tbl_contains(asked, "go.sum"))
@@ -928,7 +926,7 @@ describe("changeset sidebar", function()
         -- mod.lua, other.lua and .gitattributes stay held; go.sum and schema.txt count as read.
         assert.truthy(totals(buf):find("reading symbols 2/5", 1, true))
       end)
-      resolve.start = start
+      source.restore()
       assert(ok, err)
     end)
   end)

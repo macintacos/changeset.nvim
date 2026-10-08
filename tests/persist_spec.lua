@@ -6,6 +6,7 @@ local Fixture = require("support.git")
 local Notify = require("support.notify")
 local Cursor = require("support.cursor")
 local Sidebar = require("support.sidebar")
+local Symbols = require("support.symbols")
 
 local function focus_terminal()
   vim.cmd("new")
@@ -285,8 +286,7 @@ describe("changeset position in a session", function()
   end)
 
   describe("while symbols are still being read", function()
-    local resolve = require("changeset.resolve")
-    local real_start = resolve.start
+    local source
     ---@type fun(path: string, items: table[]?)
     local answer
 
@@ -306,14 +306,12 @@ describe("changeset position in a session", function()
     end
 
     before_each(function()
-      resolve.start = function(_, _, on_file)
-        answer = on_file
-        return function() end
-      end
+      source = Symbols.install()
+      answer = source.answer
     end)
 
     after_each(function()
-      resolve.start = real_start
+      source.restore()
     end)
 
     it("keeps the sidebar's cursor on the recorded row's file until its symbols resolve", function()

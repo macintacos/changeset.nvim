@@ -7,6 +7,7 @@ local window = require("changeset.window")
 local Fixture = require("support.git")
 local Cursor = require("support.cursor")
 local Sidebar = require("support.sidebar")
+local Symbols = require("support.symbols")
 
 ---Put the sidebar's cursor on the first line containing `text`. Headless, setting a
 ---cursor fires no `CursorMoved`, so this stands in for the user moving it without a preview.
@@ -103,8 +104,7 @@ describe("changeset sidebar focus", function()
   end)
 
   describe("while symbols are still being read", function()
-    local resolve = require("changeset.resolve")
-    local real_start = resolve.start
+    local source
     ---@type fun(path: string, items: table[]?)
     local answer
 
@@ -121,14 +121,12 @@ describe("changeset sidebar focus", function()
     end
 
     before_each(function()
-      resolve.start = function(_, _, on_file)
-        answer = on_file
-        return function() end
-      end
+      source = Symbols.install()
+      answer = source.answer
     end)
 
     after_each(function()
-      resolve.start = real_start
+      source.restore()
     end)
 
     it("lands on the file row, then follows you into your symbol once it resolves", function()
