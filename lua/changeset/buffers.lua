@@ -6,6 +6,17 @@
 
 local M = {}
 
+---The loaded buffer of the file at `path`, if any.
+---@param path string Absolute.
+---@return integer?
+function M.loaded(path)
+  local full = vim.fs.normalize(path)
+  -- Not `bufnr(path)`: it takes a pattern, and settles for another file the pattern matches.
+  return vim.iter(vim.api.nvim_list_bufs()):find(function(b)
+    return vim.api.nvim_buf_is_loaded(b) and vim.fs.normalize(vim.api.nvim_buf_get_name(b)) == full
+  end)
+end
+
 ---Load `path` into a buffer, without disturbing one the user already has.
 ---
 ---`bufadd` leaves a buffer it creates unlisted, which is what keeps the files

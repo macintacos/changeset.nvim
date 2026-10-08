@@ -1,6 +1,7 @@
 ---Marks each review comment kept on this machine in its file's buffer, at its line or range, in every loaded buffer
 ---of a repository that has comments, and answers hover on those lines.
 local Paths = require("changeset.paths")
+local buffers = require("changeset.buffers")
 local comment_store = require("changeset.comment_store")
 local config = require("changeset.config")
 local hover = require("changeset.hover")
@@ -195,36 +196,6 @@ function M.lines_label(first, last)
   return first < last and ("lines %d-%d"):format(first, last) or ("line %d"):format(last)
 end
 
----Markdown for each review comment whose lines cover line `lnum` of `fname`; nil when none does.
----@param fname string
----@param lnum integer
----@return string?
-local function hover_text(fname, lnum)
-  local buf = vim.fn.bufnr(fname)
-  if buf == -1 then
-    return
-  end
-  local root = Paths.root(buf)
-  local path = vim.fs.relpath(root, vim.fs.normalize(fname))
-  if not path then
-    return
-  end
-  local entries = {}
-  for _, comment in ipairs(comment_store.list(root)) do
-    local first, last = comment.start_line or comment.line, comment.line
-    if comment.path == path and last and first <= lnum and lnum <= last then
-      local body = comment.body:gsub("\r\n", "\n")
-      local heading = comment.draft and "Draft review comment" or "Review comment"
-      table.insert(entries, ("**%s · %s**\n\n%s"):format(heading, M.lines_label(first, last), body))
-    end
-  end
-  if #entries > 0 then
-    return table.concat(entries, "\n\n---\n\n")
-  end
-end
-
-local attach_hover = hover.serve(hover_text)
-
 ---The comments of `comments` on lines of `buf`'s file.
 ---@param buf integer
 ---@param root string
@@ -251,6 +222,37 @@ local function where_edited(buf, comments)
     return to[comment] or comment
   end, comments)
 end
+
+---Markdown for each review comment whose lines, where its marks are drawn, cover line `lnum` of `fname`; nil when
+---none does.
+---@param fname string
+---@param lnum integer
+---@return string?
+local function hover_text(fname, lnum)
+  local buf = buffers.loaded(fname)
+  if not buf then
+    return
+  end
+  local root = Paths.root(buf)
+  local comments = on_lines(buf, root, comment_store.list(root))
+  if vim.bo[buf].modified then
+    comments = where_edited(buf, comments)
+  end
+  local entries = {}
+  for _, comment in ipairs(comments) do
+    local first, last = comment.start_line or comment.line, comment.line
+    if first <= lnum and lnum <= last then
+      local body = comment.body:gsub("\r\n", "\n")
+      local heading = comment.draft and "Draft review comment" or "Review comment"
+      table.insert(entries, ("**%s · %s**\n\n%s"):format(heading, M.lines_label(first, last), body))
+    end
+  end
+  if #entries > 0 then
+    return table.concat(entries, "\n\n---\n\n")
+  end
+end
+
+local attach_hover = hover.serve(hover_text)
 
 ---Marks `comments`, line comments of `buf`'s file, answering whether it marked any.
 ---@param buf integer

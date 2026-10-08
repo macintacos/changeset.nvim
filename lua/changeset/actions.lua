@@ -391,9 +391,12 @@ function M.set_keymaps(buf, keys, hooks)
   map(keys.refresh, build.refresh, "Rebuild the tree")
   map(keys.yank, function()
     local row = draw.row_at_cursor()
-    if row and row.kind ~= "section" then
-      Paths.copy(row.lnum and ("%s:%d"):format(row.path, row.lnum) or row.path, "relative path:line")
+    if not row or row.kind == "section" then
+      return
     end
+    local first = row.review_comment and row.review_comment.start_line
+    local lines = first and ("%d-%d"):format(first, row.lnum) or row.lnum
+    Paths.copy(lines and ("%s:%s"):format(row.path, lines) or row.path, "relative path:line")
   end, "Yank path:line")
   map(keys.help, function()
     help.show(buf, own)

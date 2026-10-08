@@ -2,6 +2,7 @@
 
 local Git = require("changeset.git")
 local Paths = require("changeset.paths")
+local buffers = require("changeset.buffers")
 local cache = require("changeset.cache")
 local fork_point = require("changeset.fork_point")
 local resolve = require("changeset.resolve")
@@ -87,8 +88,8 @@ end
 ---@param path string Absolute.
 ---@return boolean
 local function unwritten(path)
-  local buf = vim.fn.bufnr(path)
-  return buf ~= -1 and vim.bo[buf].modified
+  local buf = buffers.loaded(path)
+  return buf ~= nil and vim.bo[buf].modified
 end
 
 ---What reading one file's symbols answered.

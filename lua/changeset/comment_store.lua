@@ -24,6 +24,21 @@ local subscribers = {}
 -- The record's key for the comments `take` keeps, by root then branch: no root, an absolute path, is named this.
 local TAKEN = "submitted"
 
+---Whether `a` sorts ahead of `b`: by path, then first line, then last line, a whole file's comment first.
+---@param a changeset.ReviewComment
+---@param b changeset.ReviewComment
+---@return boolean
+function M.before(a, b)
+  if a.path ~= b.path then
+    return a.path < b.path
+  end
+  local a_first, b_first = a.start_line or a.line or 0, b.start_line or b.line or 0
+  if a_first ~= b_first then
+    return a_first < b_first
+  end
+  return (a.line or 0) < (b.line or 0)
+end
+
 ---Where the record lives. Under `state`, because a comment can't be derived again.
 ---@return string
 function M.path()

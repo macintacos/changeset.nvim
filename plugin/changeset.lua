@@ -13,7 +13,7 @@ local subcommands = {
     require("changeset").toggle()
   end,
   refresh = function()
-    require("changeset.build").refresh()
+    require("changeset").refresh()
   end,
   next = function()
     require("changeset").step(1)
@@ -110,16 +110,33 @@ local function next_words(prefix)
   return names
 end
 
+---Why `fargs`, which name no subcommand, can't run.
+---@param fargs string[]
+---@return string
+local function unknown(fargs)
+  local verbs = next_words(fargs[1] .. " ")
+  if #verbs == 0 then
+    return "unknown subcommand " .. table.concat(fargs, " ")
+  end
+  if #fargs == 1 then
+    return (":Changeset %s takes a verb: %s"):format(fargs[1], table.concat(verbs, ", "))
+  end
+  local name = fargs[1] .. " " .. fargs[2]
+  if subcommands[name] then
+    return (":Changeset %s takes no arguments"):format(name)
+  end
+  return (":Changeset %s has no verb %s; its verbs: %s"):format(
+    fargs[1],
+    table.concat(fargs, " ", 2),
+    table.concat(verbs, ", ")
+  )
+end
+
 vim.api.nvim_create_user_command("Changeset", function(opts)
   local name = #opts.fargs == 0 and "toggle" or table.concat(opts.fargs, " ")
   local run = subcommands[name]
   if not run then
-    local verbs = next_words(opts.fargs[1] .. " ")
-    if #verbs > 0 then
-      local text = ("Changeset: :Changeset %s takes a verb: %s"):format(opts.fargs[1], table.concat(verbs, ", "))
-      return vim.notify(text, vim.log.levels.ERROR)
-    end
-    return vim.notify("Changeset: unknown subcommand " .. opts.args, vim.log.levels.ERROR)
+    return vim.notify("Changeset: " .. unknown(opts.fargs), vim.log.levels.ERROR)
   end
   local open = comment_window()
   if open then

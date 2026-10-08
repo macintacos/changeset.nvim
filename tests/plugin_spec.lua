@@ -39,7 +39,7 @@ local function after_startup(args, probe, wait_ms)
   return vim.system(cmd):wait(10000).stdout
 end
 
--- The cases run in order: the first real `require("changeset.build")` is the last case's,
+-- The cases run in order: the first real `require("changeset")` is the last case's,
 -- since its autocmds outlive it and the first case asserts there are none.
 describe("plugin/changeset.lua", function()
   local notify, notes
@@ -125,15 +125,13 @@ describe("plugin/changeset.lua", function()
 
   it("routes each subcommand to the module, bare :Changeset to toggle", function()
     local calls = {}
-    package.loaded.changeset = { toggle = counter(calls, "toggle") }
-    package.loaded["changeset.build"] = { refresh = counter(calls, "refresh") }
+    package.loaded.changeset = { toggle = counter(calls, "toggle"), refresh = counter(calls, "refresh") }
 
     vim.cmd("Changeset")
     vim.cmd("Changeset toggle ")
     vim.cmd("Changeset refresh")
 
     package.loaded.changeset = nil
-    package.loaded["changeset.build"] = nil
     assert.same({ toggle = 2, refresh = 1 }, calls)
   end)
 
@@ -149,11 +147,11 @@ describe("plugin/changeset.lua", function()
 
   it("runs the command after a | once the subcommand ran", function()
     local calls = {}
-    package.loaded["changeset.build"] = { refresh = counter(calls, "refresh") }
+    package.loaded.changeset = { refresh = counter(calls, "refresh") }
 
     vim.cmd("Changeset refresh | let g:changeset_after = 1")
 
-    package.loaded["changeset.build"] = nil
+    package.loaded.changeset = nil
     assert.equal(1, calls.refresh)
     assert.equal(1, vim.g.changeset_after)
   end)
@@ -173,7 +171,10 @@ describe("plugin/changeset.lua", function()
     assert.equal(vim.log.levels.ERROR, notes[1].level)
     assert.equal("Changeset: :Changeset comment takes a verb: del, last, list, new, next, prev, toggle", notes[1].msg)
     assert.equal(vim.log.levels.ERROR, notes[2].level)
-    assert.equal("Changeset: :Changeset review takes a verb: abandon, mode, restore, submit, yank", notes[2].msg)
+    assert.equal(
+      "Changeset: :Changeset review has no verb bogus; its verbs: abandon, mode, restore, submit, yank",
+      notes[2].msg
+    )
   end)
 
   it("refuses review mode while pr_review.enabled is off", function()
@@ -249,6 +250,14 @@ describe("plugin/changeset.lua", function()
     assert.same({ "here", { 2, 4 }, { 2, 3 } }, ranges)
   end)
 
+  it("says a subcommand given words past its verb takes none", function()
+    vim.cmd("Changeset review submit now")
+
+    assert.same({
+      { msg = "Changeset: :Changeset review submit takes no arguments", level = vim.log.levels.ERROR },
+    }, notes)
+  end)
+
   it("reports words past a subcommand as an error", function()
     vim.cmd("Changeset toggle extra")
     vim.cmd("Changeset comment new extra")
@@ -259,11 +268,11 @@ describe("plugin/changeset.lua", function()
   end)
 
   it("loads the module on first use", function()
-    package.loaded["changeset.build"] = nil
+    package.loaded.changeset = nil
 
     vim.cmd("Changeset refresh")
 
-    assert.truthy(package.loaded["changeset.build"])
+    assert.truthy(package.loaded.changeset)
   end)
 
   it("routes each <Plug> map to its subcommand", function()
@@ -283,7 +292,7 @@ describe("plugin/changeset.lua", function()
       reviewing[fn] = counter(calls, fn)
     end
     package.loaded["changeset.reviewing"] = reviewing
-    package.loaded["changeset.build"] = { refresh = counter(calls, "refresh") }
+    package.loaded.changeset = { refresh = counter(calls, "refresh") }
     require("changeset.config").setup({ pr_review = { enabled = true } })
     package.loaded["changeset.review"] = { toggle = counter(calls, "review") }
     package.loaded["changeset.review_comment_blocks"] = { toggle = counter(calls, "blocks") }
@@ -293,7 +302,7 @@ describe("plugin/changeset.lua", function()
     end
 
     package.loaded["changeset.reviewing"] = nil
-    package.loaded["changeset.build"] = nil
+    package.loaded.changeset = nil
     package.loaded["changeset.review"] = nil
     package.loaded["changeset.review_comment_blocks"] = nil
     require("changeset.config").setup()

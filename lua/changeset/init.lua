@@ -7,6 +7,7 @@
 ---happens in the pure modules they call.
 
 local actions = require("changeset.actions")
+local buffers = require("changeset.buffers")
 local build = require("changeset.build")
 local comment_store = require("changeset.comment_store")
 local config = require("changeset.config")
@@ -54,6 +55,8 @@ local stepping_back = false
 
 local DELETED = "This file was deleted on this branch"
 
+local NO_BASE = "no merge base with the default branch"
+
 -- snacks.nvim's bigfile size: past it a buffer's synchronous treesitter parse takes noticeable time, on every pass
 -- over the row.
 local PREVIEW_MAX_BYTES = 1.5 * 1024 * 1024
@@ -93,17 +96,10 @@ local function preview_current()
     preview_deleted(state.tree, row)
   elseif row.kind == "comment" and vim.fn.filereadable(state.tree.root .. "/" .. row.path) == 0 then
     window.preview_notice(DELETED, draw.band_for(row, bound_keys.jump))
-  elseif row.kind == "comment" or (row.lnum and row.kind ~= "file") then
+  elseif row.kind == "comment" or row.lnum or row.kind == "file" then
     window.preview(
       state.tree.root .. "/" .. row.path,
-      row.lnum,
-      draw.band_for(row, bound_keys.jump),
-      { row = row, state = state }
-    )
-  elseif row.kind == "file" then
-    window.preview(
-      state.tree.root .. "/" .. row.path,
-      1,
+      row.lnum or row.kind == "file" and 1 or nil,
       draw.band_for(row, bound_keys.jump),
       { row = row, state = state }
     )
@@ -185,8 +181,8 @@ local function line_text(path, lnum)
   end
   assert(tree, "changeset: no tree built yet")
   local full = tree.root .. "/" .. path
-  local buf = vim.fn.bufnr(full)
-  if buf ~= -1 and vim.api.nvim_buf_is_loaded(buf) then
+  local buf = buffers.loaded(full)
+  if buf then
     return vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1]
   end
   local ok, lines = pcall(vim.fn.readfile, full, "", lnum)
@@ -328,7 +324,7 @@ end
 ---@return string? err Why there is no tree yet.
 function M.rows()
   if not build.build() then
-    return nil, "no merge base with the default branch"
+    return nil, NO_BASE
   end
   -- The first ask builds the tree too, and a picker cannot fill in behind it the way the sidebar does.
   vim.wait(DIFF_WAIT_MS, function()
@@ -381,6 +377,27 @@ local function release()
   vim.api.nvim_clear_autocmds({ group = augroup })
 end
 
+---Builds the tree for the current buffer's repository, unless it is already built there, warning when it can't.
+---@return boolean ready
+local function built()
+  if not build.build() then
+    vim.notify("Changeset: " .. NO_BASE, vim.log.levels.WARN)
+    return false
+  end
+  -- The cursor is still where the user was, and nothing tracked it before a tree existed.
+  track()
+  return true
+end
+
+---Rebuild the tree now, or build the current buffer's repository's when there is none.
+function M.refresh()
+  if build.current() then
+    build.refresh()
+  else
+    built()
+  end
+end
+
 ---Open the sidebar on the current buffer's repository, drawing its tree.
 function M.open()
   -- `window.buf()`, not `window.win()`: the buffer is wiped with its window, so it is
@@ -393,13 +410,10 @@ function M.open()
     release()
   end
   local kept = build.current()
-  if not build.build() then
-    return vim.notify("Changeset: no merge base with the default branch", vim.log.levels.WARN)
+  if not built() then
+    return
   end
   bound_keys = config.get().keymaps
-
-  -- The cursor is still where the user was, and nothing tracked it before a tree existed.
-  track()
 
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].filetype = "changeset"

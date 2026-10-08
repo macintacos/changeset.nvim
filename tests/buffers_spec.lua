@@ -12,6 +12,31 @@ describe("changeset.buffers", function()
     vim.fn.delete(tmp, "rf")
   end)
 
+  describe("loaded", function()
+    after_each(function()
+      vim.cmd("silent! %bwipeout!")
+    end)
+
+    it("finds the loaded buffer of a file whose name reads as a pattern matching another's", function()
+      local loaded = {}
+      for _, name in ipairs({ "a1.lua", "a[1].lua" }) do
+        local path = vim.fs.normalize(tmp .. "/" .. name)
+        vim.fn.writefile({ "x" }, path)
+        loaded[name] = assert(buffers.load(path))
+      end
+
+      assert.equal(loaded["a[1].lua"], buffers.loaded(vim.api.nvim_buf_get_name(loaded["a[1].lua"])))
+    end)
+
+    it("finds nothing for a file with no loaded buffer, though another's name starts with it", function()
+      local path = vim.fs.normalize(tmp .. "/a.lua")
+      vim.fn.writefile({ "x" }, path .. ".orig")
+      assert(buffers.load(path .. ".orig"))
+
+      assert.is_nil(buffers.loaded(path))
+    end)
+  end)
+
   describe("load", function()
     it("loads a file's contents without listing its buffer", function()
       local path = tmp .. "/a.lua"

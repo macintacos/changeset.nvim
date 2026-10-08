@@ -548,6 +548,17 @@ describe("changeset.rows", function()
     end)
   end)
 
+  describe("comments", function()
+    it("lists a range ahead of a line inside it", function()
+      local section = assert(Rows.comments({
+        { path = "a.lua", line = 3, body = "line" },
+        { path = "a.lua", line = 4, start_line = 2, body = "range" },
+      }))
+
+      assert.equal("range", section.children[1].review_comment.body)
+    end)
+  end)
+
   describe("skips", function()
     it("skips a deleted file", function()
       assert.is_true(Rows.skips(file(PATH, { hunk(1, 0, 1) }, "deleted")))

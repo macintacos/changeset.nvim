@@ -72,6 +72,25 @@ describe("hover", function()
     assert.are.equal(1, #clients(alpha))
   end)
 
+  it("answers in a file whose name reads as a pattern matching another buffer's", function()
+    vim.fn.writefile(lines(3, "x"), dir .. "/a1.txt")
+    vim.fn.writefile(lines(3, "x"), dir .. "/a[1].txt")
+    vim.fn.bufload(vim.fn.bufadd(dir .. "/a1.txt"))
+    local buf = vim.fn.bufadd(dir .. "/a[1].txt")
+    vim.fn.bufload(buf)
+    set({ { path = "a[1].txt", line = 2, body = "bracketed" } })
+
+    assert.truthy((hover(buf, 2) or ""):find("bracketed", 1, true))
+  end)
+
+  it("answers in a modified buffer on the lines its edits moved a comment to", function()
+    set({ SINGLE })
+    vim.api.nvim_buf_set_lines(alpha, 0, 0, false, { "new", "new" })
+
+    assert.truthy((hover(alpha, 22) or ""):find("saved body", 1, true))
+    assert.is_nil(hover(alpha, 20))
+  end)
+
   it("shares one client among a repository's files", function()
     vim.cmd.edit(dir .. "/beta.txt")
     local beta = vim.api.nvim_get_current_buf()

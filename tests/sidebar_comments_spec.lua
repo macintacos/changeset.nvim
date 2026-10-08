@@ -120,6 +120,31 @@ describe("the sidebar's Comments section", function()
     assert.equal(13, vim.api.nvim_win_get_cursor(previewed)[1])
   end)
 
+  it("previews a file row at its first change, where <CR> opens it", function()
+    open_with_review_comments()
+
+    Sidebar.cursor_to("other.lua")
+
+    local previewed = vim.fn.win_getid(vim.fn.winnr("#"))
+    assert.equal("other.lua", vim.fs.basename(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(previewed))))
+    assert.equal(2, vim.api.nvim_win_get_cursor(previewed)[1])
+  end)
+
+  it("yanks a ranged comment row as its path and range", function()
+    open_with_review_comments()
+    Sidebar.cursor_to("alpha.txt:5-6")
+    local Paths = require("changeset.paths")
+    local copy, copied = Paths.copy, nil
+    Paths.copy = function(content)
+      copied = content
+    end
+
+    vim.cmd.normal("y")
+
+    Paths.copy = copy
+    assert.equal("alpha.txt:5-6", copied)
+  end)
+
   it("folds from its header, and steps to the next section", function()
     open_with_review_comments()
     local win = assert(window.win())

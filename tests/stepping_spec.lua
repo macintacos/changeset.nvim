@@ -368,9 +368,9 @@ describe("changeset.step", function()
 
       vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-next)") .. ".", "x", false)
 
-      -- The mod.lua row previews line 1, so the steps open Other changes, then L8.
+      -- The mod.lua row previews its first change, line 2, so the steps pass the rows there and open L8, then other.lua.
       assert.equal(window.win(), vim.api.nvim_get_current_win())
-      assert.same({ "mod.lua", 8 }, { shown(win) })
+      assert.same({ "other.lua", 3 }, { shown(win) })
     end)
   end)
 
@@ -448,13 +448,12 @@ describe("changeset.step", function()
 
     it("steps through the changed symbols, into collapsed files, and stops at the last", function()
       local win = open_with(NESTED, 1)
+      -- The collapsed mod.lua row previews its first change, inside `first`, so the walk goes on from there.
       press_on("mod.lua", "H", win)
 
       changeset.step(1, "symbol")
-      assert.same({ "mod.lua", 2 }, { shown(win) })
-      assert.truthy(Sidebar.cursor_line():find("first", 1, true))
-      changeset.step(1, "symbol")
       assert.same({ "mod.lua", 7 }, { shown(win) })
+      assert.truthy(Sidebar.cursor_line():find("second", 1, true))
       changeset.step(1, "symbol")
       assert.same({ "other.lua", 3 }, { shown(win) })
       changeset.step(1, "symbol")

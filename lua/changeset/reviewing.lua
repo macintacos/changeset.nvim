@@ -212,16 +212,6 @@ local function file_path(repository, buf)
   return vim.bo[buf].buftype == "" and name ~= "" and vim.fs.relpath(repository, vim.fs.normalize(name)) or nil
 end
 
----The loaded buffer of the file at `full`, if any.
----@param full string
----@return integer?
-local function loaded(full)
-  -- Not `bufnr(full)`: it takes a pattern, and settles for another file whose name `full` prefixes.
-  return vim.iter(vim.api.nvim_list_bufs()):find(function(b)
-    return vim.api.nvim_buf_is_loaded(b) and vim.fs.normalize(vim.api.nvim_buf_get_name(b)) == full
-  end)
-end
-
 ---Opens the review comment window under line `line` of the current window for `comment`, new, its body "". Closing
 ---it keeps its text, so nothing typed is lost.
 ---@param repository string
@@ -315,7 +305,7 @@ local function comment_row()
   if not (first and last) then
     return comment_on_file(repository, row.path)
   end
-  local file = loaded(vim.fs.joinpath(repository, row.path))
+  local file = buffers.loaded(vim.fs.joinpath(repository, row.path))
   if file and vim.bo[file].modified then
     return say(vim.log.levels.WARN, M.UNSAVED)
   end
@@ -482,8 +472,8 @@ local function delete_file()
   delete_on_file(root(), path)
 end
 
----Deletes the review comment on the cursor's line, the narrowest of those covering it; on the file's first line, or
----from the sidebar on a file's row, the one on the whole file.
+---Deletes the review comment on the cursor's line, the narrowest of those covering it; on the file's first line the one
+---on the whole file when there is one; from the sidebar on a file's row, the one on the whole file.
 function M.delete()
   if window.is_focused() then
     return delete_file()
@@ -494,10 +484,7 @@ function M.delete()
   local repository = Paths.root(0)
   local path = file_path(repository, 0)
   local lnum = vim.api.nvim_win_get_cursor(0)[1]
-  if path and lnum == 1 then
-    return delete_on_file(repository, path)
-  end
-  local comment = path and at(repository, path, lnum)
+  local comment = path and (lnum == 1 and on_file(repository, path) or at(repository, path, lnum))
   if not comment then
     return say(vim.log.levels.INFO, "no review comment on line %d", lnum)
   end
@@ -596,7 +583,7 @@ local function block(repository, comment, read)
   return table.concat(parts, "\n")
 end
 
----The text a review is pasted as: a block per comment, by path, then line, a whole file's first, a blank line
+---The text a review is pasted as: a block per comment, in `comment_store.before`'s order, a blank line
 ---between blocks.
 ---@param repository string
 ---@param comments changeset.ReviewComment[]
@@ -604,12 +591,7 @@ end
 ---@return string
 function M._review_text(repository, comments, read)
   local sorted = vim.list_slice(comments)
-  table.sort(sorted, function(a, b)
-    if a.path ~= b.path then
-      return a.path < b.path
-    end
-    return (a.line or 0) < (b.line or 0)
-  end)
+  table.sort(sorted, comment_store.before)
   return table.concat(
     vim.tbl_map(function(comment)
       return block(repository, comment, read)
@@ -624,7 +606,7 @@ end
 local function reader(repository)
   return function(path, first, last)
     local full = vim.fs.joinpath(repository, path)
-    local buf = loaded(full)
+    local buf = buffers.loaded(full)
     local lines
     if buf then
       lines = vim.api.nvim_buf_get_lines(buf, first - 1, last, false)
@@ -711,17 +693,12 @@ local function first_line(comment)
   return comment.start_line or comment.line or 0
 end
 
----`comments` by path, then first line, the order the Comments section lists them in.
+---`comments` in the order every view lists them in.
 ---@param comments changeset.ReviewComment[]
 ---@return changeset.ReviewComment[]
 local function in_order(comments)
   local sorted = vim.list_slice(comments)
-  table.sort(sorted, function(a, b)
-    if a.path ~= b.path then
-      return a.path < b.path
-    end
-    return first_line(a) < first_line(b)
-  end)
+  table.sort(sorted, comment_store.before)
   return sorted
 end
 
@@ -808,7 +785,7 @@ end
 ---@return boolean landed
 local function land(win, from_sidebar, repository, comment)
   local full = vim.fs.joinpath(repository, comment.path)
-  local target = loaded(full)
+  local target = buffers.loaded(full)
   if target and vim.bo[target].modified then
     say(vim.log.levels.WARN, M.UNSAVED)
     return false

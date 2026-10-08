@@ -388,6 +388,16 @@ describe("changeset.reviewing", function()
       assert.same({ comment({ line = 1 }) }, comment_store.list(dir))
     end)
 
+    it("deletes the comment on the first line when the whole file has none", function()
+      edit_file()
+      comment_store.keep(dir, comment({ line = 1 }))
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+
+      reviewing.delete()
+
+      assert.same({}, comment_store.list(dir))
+    end)
+
     it("says when the line has no comment", function()
       edit_file()
       vim.api.nvim_win_set_cursor(0, { 2, 0 })
@@ -545,6 +555,15 @@ describe("changeset.reviewing", function()
         }, "\n"),
         text
       )
+    end)
+
+    it("writes a range ahead of a line inside it", function()
+      local text = reviewing._review_text("/repo", {
+        { path = "a.lua", line = 3, body = "line" },
+        { path = "a.lua", line = 4, start_line = 2, body = "range" },
+      }, read)
+
+      assert.truthy(text:find("^/repo/a.lua:2%-4"))
     end)
 
     it("fences lines holding a fence with one more backtick than their longest run", function()
