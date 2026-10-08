@@ -263,5 +263,19 @@ describe("changeset.menu", function()
       assert.equal(16, config.row + vim.api.nvim_win_get_height(menu_win) + 2)
       assert.equal(0, config.col)
     end)
+
+    it("docks again against a sidebar that moved", function()
+      local _, menu_win = open_menu({}, { counts = { Variable = 31 } })
+      vim.api.nvim_win_set_config(
+        sidebar,
+        { relative = "editor", row = 16, col = 0, width = 60, height = 4, border = "none" }
+      )
+
+      menu.relayout()
+
+      local config = vim.api.nvim_win_get_config(menu_win)
+      assert.equal(16, config.row + vim.api.nvim_win_get_height(menu_win) + 2)
+      assert.equal(0, config.col)
+    end)
   end)
 end)

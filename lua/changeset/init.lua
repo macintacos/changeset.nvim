@@ -509,13 +509,15 @@ function M.open()
   })
   -- Fires: the editor being resized. Moves the tree below the files when the editor
   -- gets too narrow to keep it beside them, and back once it is wide enough; redrawn
-  -- either way, since rows are trimmed to the window's width.
+  -- either way, since rows are trimmed to the window's width. An open kind menu docks
+  -- against the sidebar where it now stands.
   vim.api.nvim_create_autocmd("VimResized", {
     group = augroup,
     desc = "changeset: move the tree beside or below the files as the editor's width allows",
     callback = function()
       window.relayout()
       redraw()
+      require("changeset.menu").relayout()
     end,
   })
   -- Fires: windows changing size. The sidebar's own, dragged or `:resize`d, needs its rows refitted to the width,
