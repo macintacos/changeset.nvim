@@ -108,6 +108,37 @@ describe("the sidebar's redraw after a rebuild", function()
       assert.equal("b.lua", vim.fs.basename(vim.api.nvim_buf_get_name(0)))
     end)
 
+    it("keeps following you deeper after a return to the sidebar's tabpage settles a waiting draw", function()
+      vim.cmd.edit("c.lua")
+      Sidebar.flush()
+      changeset.toggle()
+      answer("b.lua")
+      vim.cmd.tabnew("c.lua")
+      answer("c.lua")
+      vim.cmd.tabprevious()
+      assert.truthy(Sidebar.cursor_line():find("f_c", 1, true))
+
+      local asked = #source.asks
+      local buf = vim.fn.bufnr("c.lua")
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "local a = 1", "local b = 2", "return 3" })
+      vim.api.nvim_buf_call(buf, function()
+        vim.cmd("silent write")
+      end)
+      assert.is_true(vim.wait(2000, function()
+        return #source.asks > asked
+      end, 10))
+      source.answer("c.lua", {
+        Changes.sym("K", "Class", 0, 1, 3),
+        Changes.sym("m1", "Method", 1, 1, 1),
+        Changes.sym("m2", "Method", 1, 2, 3),
+      })
+      assert.is_true(vim.wait(2000, function()
+        return Sidebar.text():find("m2", 1, true) ~= nil
+      end, 10))
+
+      assert.truthy(Sidebar.cursor_line():find("m1", 1, true))
+    end)
+
     it("lists the rows of every answer while their draw waits", function()
       answer("a.lua")
       answer("b.lua")
