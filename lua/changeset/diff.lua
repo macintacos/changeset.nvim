@@ -248,7 +248,7 @@ local function git_commands(base)
   return {
     numstat = diff_cmd("--numstat", base),
     name_status = diff_cmd("--name-status", base),
-    hunks = diff_cmd("--unified=0", base),
+    hunks = diff_cmd("--unified=0", "--inter-hunk-context=0", base),
     untracked = cmd("ls-files", "--others", "--exclude-standard"),
     commits = cmd("rev-list", "--count", base .. "..HEAD"),
   }

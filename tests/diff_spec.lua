@@ -474,6 +474,21 @@ describe("changeset.diff.collect", function()
     }, collect(base, tmp))
   end)
 
+  it("keeps two edits three lines apart in separate hunks under a wider diff.interHunkContext", function()
+    Fixture.init_repo("trunk", tmp)
+    Fixture.git({ "config", "diff.interHunkContext", "5" }, tmp)
+    write("notes.txt", TWELVE_LINES)
+    local base = Fixture.commit("seed", tmp)
+    local edited = vim.list_slice(TWELVE_LINES)
+    edited[4], edited[8] = "FOUR", "EIGHT"
+    write("notes.txt", edited)
+
+    assert.same({
+      { lnum = 4, count = 1, added = 1, removed = 1, old_lnum = 4 },
+      { lnum = 8, count = 1, added = 1, removed = 1, old_lnum = 8 },
+    }, collect(base, tmp)[1].hunks)
+  end)
+
   ---Seed a one-file repo and edit it, returning the base commit.
   ---@param cwd string
   ---@return string
