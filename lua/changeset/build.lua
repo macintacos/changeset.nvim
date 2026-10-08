@@ -128,7 +128,7 @@ local function file_answer(root, path, answer, stamp)
     -- An older walk's late silence must not bury an answer about the same file state.
     local entry = memo.entries[path]
     if entry and not entry.silent and entry.stamp == stamp then
-      return nil
+      return entry.symbols
     end
     -- Not asked again on every refresh — each ask waits out the attach timeout
     -- under a "reading symbols" row — only once the file moves or a server

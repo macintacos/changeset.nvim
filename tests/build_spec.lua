@@ -188,6 +188,19 @@ describe("changeset.build", function()
       assert.equal(1, #assert(build.current().symbols["mod.lua"]))
     end)
 
+    it("shows the symbols an older walk filed when the current walk hears silence about the same file", function()
+      build_and_collect()
+      build.refresh()
+      assert.is_true(vim.wait(10000, function()
+        return #source.asks == 2
+      end, 25))
+      local items = { { name = "f", kind = "Function", depth = 0, lnum = 1, range_lnum = 1, range_end_lnum = 1 } }
+      source.asks[1].answer("mod.lua", items)
+      source.asks[2].answer("mod.lua", nil)
+
+      assert.equal(1, #assert(build.current().symbols["mod.lua"]))
+    end)
+
     it("asks again on the next refresh about a file whose server timed out", function()
       answer(nil, nil, true)
       build_and_collect()
