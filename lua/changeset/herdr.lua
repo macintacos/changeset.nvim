@@ -317,6 +317,8 @@ function M.send(text, opts, cb)
     elseif #candidates == 1 then
       return to(candidates[1])
     end
+    -- herdr answers well after the key that asked, by when the user may be typing; the picker's keys are Normal mode's.
+    vim.cmd.stopinsert()
     pick(candidates, opts, function(choice)
       if not choice then
         return cb(nil, nil)
