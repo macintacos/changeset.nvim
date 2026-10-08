@@ -2,7 +2,7 @@
 ---move reaches, as if it were a line of the file.
 local cells = require("changeset.cells")
 local dialog = require("changeset.dialog")
-local render = require("changeset.render")
+local highlights = require("changeset.highlights")
 local review_comment = require("changeset.review_comment")
 local review_comment_window = require("changeset.review_comment_window")
 
@@ -89,8 +89,8 @@ end
 ---@return [string, string][][]
 local function box(comment, widest, is_parked)
   local edge = comment.draft and DASHED or SOLID
-  local plain_border = comment.draft and render.BLOCK_DRAFT_HL or render.BLOCK_BORDER_HL
-  local border = is_parked and render.BLOCK_PARKED_HL or plain_border
+  local plain_border = comment.draft and highlights.BLOCK_DRAFT_HL or highlights.BLOCK_BORDER_HL
+  local border = is_parked and highlights.BLOCK_PARKED_HL or plain_border
   local label = review_comment.lines_label(review_comment.first(comment), comment.line)
   -- Named as hover names it.
   local title = (comment.draft and " Draft review comment · " or " Review comment · ") .. label .. " "
@@ -107,7 +107,9 @@ local function box(comment, widest, is_parked)
       { "╭", border },
       {
         title,
-        is_parked and render.BLOCK_PARKED_TITLE_HL or comment.draft and render.BLOCK_DRAFT_HL or render.BLOCK_TITLE_HL,
+        is_parked and highlights.BLOCK_PARKED_TITLE_HL
+          or comment.draft and highlights.BLOCK_DRAFT_HL
+          or highlights.BLOCK_TITLE_HL,
       },
       { edge.h:rep(inner - cells.width(title)), border },
       { "╮", border },
@@ -115,12 +117,12 @@ local function box(comment, widest, is_parked)
   }
   for _, line in ipairs(text) do
     local padded = " " .. line .. (" "):rep(math.max(inner - cells.width(line) - 1, 0))
-    lines[#lines + 1] = { { edge.v, border }, { padded, render.BLOCK_BODY_HL }, { edge.v, border } }
+    lines[#lines + 1] = { { edge.v, border }, { padded, highlights.BLOCK_BODY_HL }, { edge.v, border } }
   end
   local bottom = { { "╰", border } }
   local rest = inner
   if is_parked and cells.width(HINT) < inner then
-    bottom[#bottom + 1] = { HINT, render.BLOCK_HINT_HL }
+    bottom[#bottom + 1] = { HINT, highlights.BLOCK_HINT_HL }
     rest = inner - cells.width(HINT)
   end
   vim.list_extend(bottom, { { edge.h:rep(rest), border }, { "╯", border } })
