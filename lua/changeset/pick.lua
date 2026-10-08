@@ -5,6 +5,7 @@
 ---printed as a virtual line above the items it holds. A deleted file is left
 ---out: there is nothing to open.
 
+local highlights = require("changeset.highlights")
 local icons = require("changeset.icons")
 local pick_preview = require("changeset.pick_preview")
 local render = require("changeset.render")
@@ -115,7 +116,7 @@ local function show(buf_id, list, query)
         local glyph, hl = icons.get("file", item.row.path)
         vim.api.nvim_buf_set_extmark(buf_id, ns, i - 1, 0, {
           -- Split on "/" so a long trail sheds directories before the file or its symbols.
-          virt_lines = { { { glyph .. " ", hl }, { symbols.fit(item.trail, width - 2, "/"), render.META_HL } } },
+          virt_lines = { { { glyph .. " ", hl }, { symbols.fit(item.trail, width - 2, "/"), highlights.META_HL } } },
           virt_lines_above = true,
           priority = 199,
         })
@@ -154,7 +155,7 @@ function M.pick()
   end
   -- Here, not at require time: the sidebar defines its groups only when it opens,
   -- and nothing may touch MiniPick before the guard.
-  render.define_highlights()
+  highlights.define_highlights()
   pick_preview.setup()
   return MiniPick.start({
     source = { items = items(tree.rows, tree.root), name = "Changeset (vs " .. tree.ref .. ")", show = show },
