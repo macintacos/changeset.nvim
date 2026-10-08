@@ -154,6 +154,22 @@ describe("changeset.build", function()
       end, 25))
     end
 
+    it("writes what it read to the cache before building in another repository", function()
+      answer({ { name = "f", kind = "Function", depth = 0, lnum = 1, range_lnum = 1, range_end_lnum = 1 } })
+      build_and_collect()
+      local root = build.current().root
+      local other = vim.fn.tempname()
+      vim.fn.mkdir(other, "p")
+      Fixture.feature_one_file(other)
+      vim.cmd.edit(other .. "/mod.lua")
+
+      build.build()
+
+      local saved = require("changeset.cache").load(require("changeset.cache").path(root))
+      vim.fn.delete(other, "rf")
+      assert.is_truthy(saved["mod.lua"])
+    end)
+
     it("does not cache the symbols read from a buffer holding unwritten edits", function()
       answer({ { name = "f", kind = "Function", depth = 0, lnum = 1, range_lnum = 1, range_end_lnum = 1 } })
       vim.api.nvim_buf_set_lines(0, 0, -1, false, { "return 3" })

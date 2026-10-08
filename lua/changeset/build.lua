@@ -235,6 +235,10 @@ local function build_at(root)
   drop()
 
   if not memo or memo.root ~= root then
+    if memo and save_timer and not save_timer:is_closing() then
+      stop(save_timer)
+      cache.save(cache.path(memo.root), memo.entries)
+    end
     memo = { root = root, entries = cache.load(cache.path(root)) }
   end
 
