@@ -204,7 +204,7 @@ end
 ---What one pass over the buffers has read so far, so it reads each once.
 ---@class changeset.review_comments.Pass
 ---@field comments table<string, changeset.RepositoryComments> By repository root.
----@field roots table<string, string> Repository roots, by the directory of the buffer's name.
+---@field roots table<string, string> Repository roots, by the directory of the buffer's name, or "\0cwd" for one with 'buftype' set.
 ---@field branches table<string, string|false> Checked-out branches by root; false for none.
 
 ---@return changeset.review_comments.Pass
@@ -218,9 +218,10 @@ end
 ---@return string
 local function root_of(pass, buf)
   local name = vim.api.nvim_buf_get_name(buf)
-  local dir = name ~= "" and vim.fs.dirname(name) or ""
-  pass.roots[dir] = pass.roots[dir] or Paths.root(buf)
-  return pass.roots[dir]
+  -- `vim.fs.root` reads a buffer's name only while 'buftype' is empty, and the cwd otherwise.
+  local key = vim.bo[buf].buftype ~= "" and "\0cwd" or name ~= "" and vim.fs.dirname(name) or ""
+  pass.roots[key] = pass.roots[key] or Paths.root(buf)
+  return pass.roots[key]
 end
 
 ---The branch `root` has checked out, read once a pass.

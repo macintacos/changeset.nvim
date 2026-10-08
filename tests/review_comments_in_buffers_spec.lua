@@ -2,6 +2,7 @@ local changeset = require("changeset")
 local comment_store = require("changeset.comment_store")
 local Fixture = require("support.git")
 local Paths = require("changeset.paths")
+local review_comments = require("changeset.review_comments")
 
 describe("review comments in buffers", function()
   local tmp, previous_dir
@@ -120,5 +121,24 @@ describe("review comments in buffers", function()
       assert(ok, err)
       assert.are.same({ [alpha] = true }, drawn)
     end)
+  end)
+
+  it("keeps a file's mark through a redraw beside a buffer with 'buftype' set, the cwd elsewhere", function()
+    local root = vim.fn.resolve(tmp)
+    vim.fn.mkdir(vim.fn.stdpath("cache"), "p")
+    vim.fn.chdir(vim.fn.stdpath("cache"))
+    -- Keeps the first buffer from being reused, so the special buffer is listed ahead of the file.
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, { "scratch" })
+    -- As vim-gnupg leaves a decrypted file, or `:help` a repository's own doc file.
+    local special = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_name(special, root .. "/secret.gpg")
+    vim.bo[special].buftype = "acwrite"
+    vim.cmd.edit(root .. "/alpha.txt")
+    local alpha = vim.api.nvim_get_current_buf()
+    comment_store.keep(root, { path = "alpha.txt", line = 3, body = "note" })
+
+    review_comments.redraw()
+
+    assert.are.equal(1, #mark_details(alpha))
   end)
 end)
