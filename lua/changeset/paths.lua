@@ -21,33 +21,11 @@ function M.put(text)
   return ' in the " register, with no clipboard provider'
 end
 
----Put `content` on the clipboard, as `put` does, and notify. `content` may be a string or list of strings.
----@param content string|string[]|nil
+---Put `text` on the clipboard, as `put` does, and notify.
+---@param text string
 ---@param label string Short description used in the notification.
-function M.copy(content, label)
-  local text, count
-  if type(content) == "table" then
-    local filtered = {}
-    for _, s in ipairs(content) do
-      if s and s ~= "" then
-        table.insert(filtered, s)
-      end
-    end
-    text = table.concat(filtered, "\n")
-    count = #filtered
-  else
-    text = content
-    count = (content and content ~= "") and 1 or 0
-  end
-
-  if count == 0 then
-    vim.notify("Nothing to copy", vim.log.levels.WARN)
-    return
-  end
-
-  local where = M.put(text --[[@as string]])
-  local suffix = count > 1 and (" (%d)"):format(count) or ""
-  vim.notify(("Copied %s%s%s"):format(label, suffix, where))
+function M.copy(text, label)
+  vim.notify(("Copied %s%s"):format(label, M.put(text)))
 end
 
 return M
