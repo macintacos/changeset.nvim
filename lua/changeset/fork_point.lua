@@ -115,10 +115,15 @@ end
 ---@param branch string
 ---@param on_done fun(point: changeset.ForkPoint?)
 function M.get_async(root, branch, on_done)
-  local pr = targets[root .. "\n" .. branch]
+  local key = root .. "\n" .. branch
+  local pr = targets[key]
   Git.async(function()
     return measure(root, branch, pr)
   end, function(point)
+    -- gh answered while it measured, so `point` holds a target no longer in force.
+    if targets[key] ~= pr then
+      return M.get_async(root, branch, on_done)
+    end
     on_done((ask(root, branch, point)))
   end)
 end

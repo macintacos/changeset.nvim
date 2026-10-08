@@ -237,6 +237,37 @@ describe("fork_point", function()
     assert.equal("main", heard_in(root)[2].point.against)
   end)
 
+  it("measures again in the background when gh names a target while it measures", function()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
+    vim.env.FAKE_GH_DELAY = "0.5"
+    local root, _, parent_base = repo()
+    fork_point.get(root, "feature")
+    local real_system, held = vim.system, {}
+    vim.system = function(argv, opts, on_exit)
+      if argv[1] == "gh" then
+        return real_system(argv, opts, on_exit)
+      end
+      held[#held + 1] = { argv, opts, on_exit }
+      return {}
+    end
+    local point
+    fork_point.get_async(root, "feature", function(measured)
+      point = measured
+    end)
+    local answered = await_heard(root, 1)
+    vim.system = real_system
+    for _, process in ipairs(held) do
+      real_system(unpack(process))
+    end
+    assert.is_true(answered)
+
+    assert.is_true(vim.wait(5000, function()
+      return point ~= nil
+    end, 10))
+    assert.equal(parent_base, point.base)
+    assert.equal(7, point.pr)
+  end)
+
   it("stays on the default base when the PR's target shares no fork point", function()
     vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "gone", number = 7 })
     local root, default_base = repo()
