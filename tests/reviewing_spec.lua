@@ -87,6 +87,15 @@ describe("changeset.reviewing", function()
   end
 
   describe("comment", function()
+    it("saves a body without its leading blank lines, keeping the first line's indentation", function()
+      edit_file()
+
+      reviewing.comment(4, 4)
+      window().save("\n \n  the point\nmore", function() end)
+
+      assert.equal("  the point\nmore", comment_store.list(dir)[1].body)
+    end)
+
     it("leaves a selection of the first line a comment on that line", function()
       edit_file()
 

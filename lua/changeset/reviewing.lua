@@ -142,12 +142,14 @@ local function say_draft()
   end)
 end
 
----`comment` with `body`, saved, or a draft when `draft` is set.
+---`comment` with `body`, saved, or a draft when `draft` is set. Leading blank lines go, since every preview shows the
+---body's first line.
 ---@param comment changeset.ReviewComment
 ---@param body string
 ---@param draft true?
 ---@return changeset.ReviewComment
 local function with_body(comment, body, draft)
+  body = body:gsub("^%s*\n", "")
   return { path = comment.path, line = comment.line, start_line = comment.start_line, body = body, draft = draft }
 end
 
