@@ -116,6 +116,8 @@ local function file_answer(root, path, answer, stamp)
   local items, dirty = answer.items, unwritten(root .. "/" .. path)
   if items and not dirty then
     memo.entries[path] = { stamp = stamp, symbols = cache.project(items), comments = answer.comments }
+    -- Encoded now, a little per answer, rather than the whole cache at once on the next save.
+    cache.encode(memo.entries[path])
     save_soon()
     return memo.entries[path].symbols
   elseif not items then

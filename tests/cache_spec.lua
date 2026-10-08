@@ -105,6 +105,47 @@ describe("changeset.cache", function()
 
       assert.same({ "api.ts" }, vim.tbl_keys(cache.load(path)))
     end)
+
+    it("reads back the entries it saved", function()
+      local entries = {
+        ["api.ts"] = { stamp = "120:9", symbols = { { name = "send", lnum = 12 } } },
+        ["db.ts"] = { stamp = "80:3", symbols = {}, comments = { new = { comment = { { 1, 2 } } } } },
+      }
+      cache.encode(entries["api.ts"])
+
+      cache.save(path, entries)
+
+      assert.same(entries, cache.load(path))
+    end)
+
+    it("saves the entry filed in place of another", function()
+      local entries = { ["api.ts"] = { stamp = "120:9", symbols = { { name = "send" } } } }
+      cache.save(path, entries)
+
+      entries["api.ts"] = { stamp = "121:9", symbols = { { name = "receive" } } }
+      cache.save(path, entries)
+
+      assert.same(entries, cache.load(path))
+    end)
+
+    it("encodes an entry once, however often it is saved", function()
+      local entries = { ["api.ts"] = { stamp = "120:9", symbols = { { name = "send" } } } }
+      cache.encode(entries["api.ts"])
+      local real_encode, encoded = vim.json.encode, 0
+      vim.json.encode = function(value, ...)
+        encoded = encoded + (type(value) == "table" and 1 or 0)
+        return real_encode(value, ...)
+      end
+
+      local ok, err = pcall(function()
+        cache.save(path, entries)
+        cache.save(path, entries)
+      end)
+      vim.json.encode = real_encode
+
+      assert(ok, err)
+      assert.equal(0, encoded)
+    end)
   end)
 
   describe("path", function()

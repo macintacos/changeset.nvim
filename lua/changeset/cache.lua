@@ -96,18 +96,30 @@ function M.load(file)
   return jsonfile.read(file)
 end
 
+---Each entry's JSON, kept while the entry is: an entry filed is never changed, only replaced.
+---@type table<changeset.CacheEntry, string>
+local encoded = setmetatable({}, { __mode = "k" })
+
+---`entry` as JSON, encoded the first time it is asked for.
+---@param entry changeset.CacheEntry
+---@return string
+function M.encode(entry)
+  encoded[entry] = encoded[entry] or vim.json.encode(entry)
+  return encoded[entry]
+end
+
 ---Overwrite `file` with `entries`, leaving out the `silent` ones. A cache that cannot
 ---be written is not worth interrupting anyone over.
 ---@param file string
 ---@param entries table<string, changeset.CacheEntry>
 function M.save(file, entries)
-  local answered = {}
+  local members = {}
   for path, entry in pairs(entries) do
     if not entry.silent then
-      answered[path] = entry
+      members[#members + 1] = vim.json.encode(path) .. ":" .. M.encode(entry)
     end
   end
-  jsonfile.write(file, answered)
+  jsonfile.write(file, "{" .. table.concat(members, ",") .. "}")
 end
 
 return M

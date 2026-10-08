@@ -38,7 +38,7 @@ end
 
 ---Replace `file` with `data`, creating the directory it sits in.
 ---@param file string
----@param data table
+---@param data table|string A string is written as it is: JSON already encoded.
 ---@return boolean written
 function M.write(file, data)
   -- `mkdir` raises rather than returning false when the parent cannot be written.
@@ -53,7 +53,7 @@ function M.write(file, data)
   if not fd then
     return false
   end
-  local wrote = fd:write(vim.json.encode(data))
+  local wrote = fd:write(type(data) == "string" and data or vim.json.encode(data))
   if not (fd:close() and wrote and os.rename(tmp, file)) then
     os.remove(tmp)
     return false
