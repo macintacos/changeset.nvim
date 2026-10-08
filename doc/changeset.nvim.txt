@@ -253,6 +253,16 @@ REVIEW COMMENTS
 	row or a whole file's Comments row. In a file with unsaved edits it
 	refuses.
 
+:Changeset comment draft                            *:Changeset-comment-draft*
+<Plug>(changeset-comment-draft)              *<Plug>(changeset-comment-draft)*
+<C-g>ch                                                    *changeset-<C-g>ch*
+	Make the review comment on the cursor's line a draft, so submit
+	leaves it out, or save it when it is a draft. It finds the comment as
+	|:Changeset-comment-del| does. In the sidebar, it switches the one a
+	Comments row lists, or the one on the whole file of a file's row. In
+	the review comment window, it closes the window and keeps the text as
+	a draft (|changeset-drafts|).
+
 :Changeset comment next                              *:Changeset-comment-next*
 <Plug>(changeset-comment-next)                *<Plug>(changeset-comment-next)*
 [count]<C-g>cn                                             *changeset-<C-g>cn*
@@ -291,8 +301,8 @@ REVIEW
 
 :Changeset review restore                          *:Changeset-review-restore*
 <Plug>(changeset-review-restore)            *<Plug>(changeset-review-restore)*
-	Bring back the review comments this branch submitted last. It has no
-	default key.
+	Bring back a batch of review comments this branch submitted, asking
+	which when there are several. It has no default key.
 
 :Changeset review yank                                *:Changeset-review-yank*
 <Plug>(changeset-review-yank)                  *<Plug>(changeset-review-yank)*
@@ -331,6 +341,7 @@ Key       Mode            Runs ~
 <C-g>cc   Normal, Visual  |:Changeset-comment-new|
 <C-g>c    Normal, Visual  |:Changeset-comment-new|, after a pause
 <C-g>cd   Normal          |:Changeset-comment-del|
+<C-g>ch   Normal          |:Changeset-comment-draft|
 <C-g>cn   Normal          |:Changeset-comment-next|
 <C-g>cp   Normal          |:Changeset-comment-prev|
 <C-g>cl   Normal          |:Changeset-comment-last|
@@ -709,12 +720,17 @@ saving it makes it a saved review comment. Submit, yank and `comment last`
 take only saved comments. `comment next`, `comment prev`, `comment list` and
 abandon include drafts.
 
+To hold a saved comment back from the next submit, make it a draft with
+`:Changeset comment draft` (`<C-g>ch`); the same command saves it again.
+
                                                    *changeset-window-commands*
 In the window, `:Changeset` and its keys act on the comment you are writing:
 
 - `comment new` (`<C-g>cc`) saves it.
 - `comment del` (`<C-g>cd`) deletes it, asking first when it is saved or holds
   text. Keep returns you to the window as you left it.
+- `comment draft` (`<C-g>ch`) closes the window and keeps the text as a draft,
+  even when it is unchanged.
 - `comment last`, when this is the comment saved last, stays in the window and
   says so.
 - Any other subcommand closes the window, keeping a draft, then runs from the
@@ -802,6 +818,10 @@ texts a blank line apart, and changeset warns "merged 2 review comments on
 line 4 of a.lua". The merged comment is a draft if any of them was, and the
 warning then ends "into a draft".
 
+The submitted batches that |:Changeset-review-restore| can bring back move the
+same way, so a restore puts their comments back on the code they were about.
+They merge without a warning.
+
 Edits made outside Neovim, such as an agent's, don't move comments: they stay
 on their line numbers.
 
@@ -849,12 +869,12 @@ context first, then focuses the agent. It needs Neovim running in a herdr
 pane. With one agent in the herdr workspace, the review goes straight there;
 with several, changeset asks which (|changeset-agent-picker|).
 
-Once the paste lands, the comments pasted leave the review and become the
-branch's submitted batch, which `:Changeset review restore` brings back.
-Drafts stay, and so does a comment written or edited while the picker was
-open. The notice names the agent and what stays, as in "submitted 3 review
-comments to claude; :Changeset review restore brings them back; 1 draft
-stays".
+Once the paste lands, the comments pasted leave the review, so the next
+submit sends only what you write after it. They become one of the branch's
+submitted batches, which `:Changeset review restore` brings back. Drafts stay,
+and so does a comment written or edited while the picker was open. The
+notice names the agent and what stays, as in "submitted 3 review comments to
+claude; :Changeset review restore brings them back; 1 draft stays".
 
 An agent waiting at a permission prompt can't take the paste: the picker lists
 it dimmed, saying "answer its prompt first", and one that reaches a prompt
@@ -886,11 +906,17 @@ A click picks a row, and leaving the window cancels.
 
 RESTORE                                                    *changeset-restore*
 
-`:Changeset review restore` brings back the review comments the branch
-submitted last, as saved ones, in case the paste was lost. A comment on
-exactly the lines of a newer review comment stays submitted, for a later
-restore, and the notice says how many came back and how many stay. The next
-submit replaces the batch. Abandon leaves it.
+`:Changeset review restore` brings back a batch of review comments the branch
+submitted, as saved ones, in case a paste was lost or you want to send them
+again. The branch keeps its last 10 batches. With one, restore brings it back
+at once. With several, it asks which, newest first, each row showing when it
+was submitted, the agent it went to, how many comments it holds and its first
+comment. `<CR>` or a digit picks, and `q` cancels. A batch restored from
+another Neovim while the list was open is reported as no longer submitted.
+
+A comment on exactly the lines of a newer review comment stays in its batch,
+for a later restore, and the notice says how many came back and how many stay.
+Abandon leaves the batches.
 
 YANK                                                          *changeset-yank*
 
@@ -903,7 +929,7 @@ ABANDON                                                    *changeset-abandon*
 
 `:Changeset review abandon` (`<C-g>a`) asks, then deletes the review comments
 the branch shows: its own, drafts included, and those written before changeset
-recorded branches. Other branches' comments and the submitted batch stay.
+recorded branches. Other branches' comments and the submitted batches stay.
 
 THE PASTED REVIEW                                    *changeset-review-format*
 
@@ -1262,7 +1288,7 @@ nothing, starts no language server and makes no network request.
   `stdpath("cache")/changeset/`. You can delete it; the next build is slow
   once.
 - Hidden symbol kinds: `stdpath("state")/changeset/filters.json`.
-- Review comments, and each branch's last submitted batch:
+- Review comments, and each branch's last 10 submitted batches:
   `stdpath("state")/changeset/comments.json`.
 - Sessions: |:mksession| restores the sidebar when 'sessionoptions' contains
   `blank`, as it does by default, and its cursor row and scroll too when it

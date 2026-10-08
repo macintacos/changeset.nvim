@@ -22,8 +22,8 @@ command's route below.
 
 `:Changeset` asks `changeset.review_comment_window`, only when that module is already
 loaded, whether the review comment window is current. If it is, every subcommand goes to
-`reviewing.from_window()`: `comment new` saves, `comment del` deletes the comment being written, and
-any other closes the window, keeping a draft, then runs from the comment's line in the
+`reviewing.from_window()`: `comment new` saves, `comment del` deletes the comment being written,
+`comment draft` keeps it as a draft, and any other closes the window, keeping a draft, then runs from the comment's line in the
 source window, or from the sidebar row the window was opened under. That is the one place the rule lives; no verb checks for the window itself.
 The plugin records the default `<C-g>` keys it mapped globally in normal mode in
 `vim.g.changeset_window_keys`. The window maps each of them again in normal mode on its own

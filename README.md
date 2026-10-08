@@ -67,13 +67,15 @@ defines `:Changeset` and its keys.
    opens, a change's row on its lines, a file's row on the whole file. On a file's first line the comment covers the whole
    file; to comment on that line alone, select it first.
 2. Write the comment, then save it with `<C-s>` or `<C-CR>`. Closing the window any other
-   way keeps your text as a draft.
+   way keeps your text as a draft, which submit leaves out. `<C-g>ch` holds a saved comment
+   back as a draft, or saves a draft.
 3. Walk your comments with `<C-g>cn` and `<C-g>cp`, or list them with `<C-g>cq`.
 4. When you're done, `<C-g>s` pastes the saved comments into an AI agent's prompt and takes
-   them out of the review; drafts stay. This needs Neovim running in a herdr pane. Without
+   them out of the review; drafts stay. Submit as often as you like: each submit sends only
+   what you saved since the last one. This needs Neovim running in a herdr pane. Without
    herdr, `<C-g>y` copies the comments as text and keeps them.
-5. If the paste gets lost, `:Changeset review restore` brings the submitted comments back.
-   `<C-g>a` abandons the review.
+5. If a paste gets lost, `:Changeset review restore` brings a submitted batch back. The branch
+   keeps its last 10. `<C-g>a` abandons the review.
 
 Comments belong to the branch they were written on. They follow your edits each time you
 write the file, and they stay on this machine. `:help changeset-review-comments` covers
@@ -94,6 +96,7 @@ has a `<Plug>(changeset-…)` map named after its words, and these default keys:
 | `]g` / `[g`           | `preview next` / `preview prev` | Preview the next / previous row                         |
 | `<C-g>cc`             | `comment new`                   | Comment on the line or selection, or edit the one there |
 | `<C-g>cd`             | `comment del`                   | Delete the comment on this line                         |
+| `<C-g>ch`             | `comment draft`                 | Hold this line's comment back as a draft, or save it    |
 | `<C-g>cn` / `<C-g>cp` | `comment next` / `comment prev` | Jump to the next / previous comment                     |
 | `<C-g>cl`             | `comment last`                  | Edit the comment you saved last                         |
 | `<C-g>cq`             | `comment list`                  | List the comments in the quickfix list                  |
@@ -101,7 +104,7 @@ has a `<Plug>(changeset-…)` map named after its words, and these default keys:
 | `<C-g>s`              | `review submit`                 | Paste the review into an agent's prompt                 |
 | `<C-g>y`              | `review yank`                   | Copy the review as text                                 |
 | `<C-g>a`              | `review abandon`                | Delete this branch's comments                           |
-|                       | `review restore`                | Bring back the comments submitted last                  |
+|                       | `review restore`                | Bring back a batch of submitted comments                |
 | `<C-g>m`              | `review mode`                   | Turn PR Review Mode off or on for this branch           |
 
 - A default key that clashes with one you've mapped is left alone.

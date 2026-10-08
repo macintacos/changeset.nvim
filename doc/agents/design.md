@@ -610,7 +610,9 @@ was: the store holds one a range, which every verb that finds a review comment b
 lines relies on. A merge can't be split again, so it warns, naming the lines and saying
 when the result is a draft, which submit holds back. A moved review comment stored before
 branches were recorded is filed under the branch, as an edit files it. A draft moves as a
-saved one does; a whole file's has no lines and stays. A redraw before the write, such as
+saved one does; a whole file's has no lines and stays. So do the review comments of the
+branch's submitted batches, though no mark shows them, so that a restore puts them back on
+their code: a buffer's lines are kept for them too. A redraw before the write, such as
 one for another file's review comment, draws a modified buffer's marks where the same diff
 puts them, not back on the stored lines. Writing the buffer to another file moves nothing,
 its own file still holding the stored lines. An edit made outside Neovim moves nothing
@@ -835,16 +837,27 @@ word, and a review that vanished into a prompt would read as delivered. The pick
 but won't pick it, and delivery checks again, since a pick can be minutes old. A cancelled
 pick says nothing.
 
+Taking the comments out is also what lets a review run in rounds over a branch's life:
+comment, submit, let the agent work, comment again, submit again, each submit sending only
+what was saved since the last.
+
 A paste can still be lost after it lands: one `<C-c>` in Claude Code clears the prompt. So
-the store keeps the batch it took, per repository and branch as the comments themselves
-are, and `:Changeset review restore` brings it back as saved review comments. A batch is
-only ever the last: the next submit replaces it, so batches never pile up. Abandon leaves
-it, since its question counts only the comments still listed and can't promise the batch
-away. Restoring brings the batch back and forgets it, except any review comment whose range
-holds one written since: the store keeps one a range and the newer one is what the user
-means now, so that one stays submitted, and the notice says so, for a restore once the
-newer one is gone. Its lines are the ones stored at the submit, not moved by edits made
-since. The submit's notice keeps the picker's word and names the command, where a user who
+the store keeps each batch it took, with when it went and to which agent, per repository and
+branch as the comments themselves are, and `:Changeset review restore` brings one back as
+saved review comments. A branch keeps its last 10 batches, newest first: every redraw and
+hover reads the store, so it can't grow with every submit, and a round further back than
+that is history, not a lost paste. With one batch restore brings it back at once, as submit
+pastes straight into a lone agent; with several the chooser of § Dialogs asks, each row
+naming when the batch went, the agent, its count and its first review comment, newest
+focused. The pick names the batch by its contents, not its row: a submit landing while the
+chooser is open, which with one agent can be this Neovim's own, would shift every row, and
+a batch restored elsewhere meanwhile is reported gone rather than restored as nothing. Abandon leaves the batches, since its question counts only the comments still
+listed and can't promise them away. Restoring brings a batch back and forgets it, except any
+review comment whose range holds one written since: the store keeps one a range and the
+newer one is what the user means now, so that one stays in its batch, and the notice says
+so, for a restore once the newer one is gone. A write moves a batch's review comments as it
+moves the listed ones (§ Review comments in their files), merging
+any it brings onto one range without a warning, since nothing shows them. The submit's notice keeps the picker's word and names the command, where a user who
 just lost a paste looks: "submitted 3 review comments to sb-alpha; :Changeset review restore
 brings them back".
 
@@ -1269,6 +1282,13 @@ repository's deliberate choice is none of that save's business.
   straight after the close and would wipe an echo. Closing it
   with only whitespace, by a save key or any other close, asks to delete it instead, since
   an empty review comment is never kept.
+- **`comment draft` switches a review comment between saved and draft.** Drafts are how a
+  review holds a comment back from a submit, and before it a saved comment could only become
+  one by editing its text. It finds its comment as `comment del` does, or from the sidebar
+  the one a Comments row lists, read again from the store since the row can predate the
+  last switch. In the review comment window it means "draft this" rather than a switch:
+  it closes the window and keeps the text as a draft even when unchanged, since `comment
+  new` there already saves.
 - **The review comment window closes when focus leaves it.** Its `WinLeave` checks once the
   move lands, since a window can't close while focus is leaving it. Two windows don't
   count: a focused `?` help and the delete dialog, which `hold()` marks before they open.
@@ -1294,8 +1314,8 @@ repository's deliberate choice is none of that save's business.
   clashing with when it opens, its buffer's markdown maps included. A map made after
   startup counts too: the user's nvim-surround sets its insert `<C-g>s` in a
   `vim.schedule`. The window maps every default key in normal mode on its buffer, so `?`
-  describes each as it acts there: save, delete this review comment, or keep a draft, then
-  the key's own action. A key equal to a `review_comment.save` key is left out in both modes,
+  describes each as it acts there: save, delete this review comment, keep it as a draft, or
+  keep a draft, then the key's own action. A key equal to a `review_comment.save` key is left out in both modes,
   so the save key saves.
 - **The draft notice is scheduled.** A subcommand run from the window reports straight
   after the close; notified after it, the draft notice replaces that message on a stock UI
