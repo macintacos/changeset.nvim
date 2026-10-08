@@ -177,6 +177,10 @@ local function set_batches(data, root, branch, list)
   data[TAKEN] = next(roots) and roots or nil
 end
 
+---The record as last read, while the file is still that one: `jsonfile.write` renames a new file over it.
+---@type { key: string, data: table? }?
+local decoded
+
 ---Writes the root's list back, removing its key when the list is empty, and tells the subscribers once it lands.
 ---@param root string
 ---@param data table
@@ -185,6 +189,8 @@ end
 local function write(root, data, list)
   data[root] = #list > 0 and list or nil
   local written = jsonfile.write(M.path(), data)
+  -- Its stat alone can miss the change: a coarse clock and a reused inode make two quick writes look alike.
+  decoded = nil
   if written then
     for fn in pairs(subscribers) do
       fn()
@@ -262,10 +268,6 @@ local function shown(data, root, branch)
     end)
     :totable()
 end
-
----The record as last read, while the file is still that one: `jsonfile.write` renames a new file over it.
----@type { key: string, data: table? }?
-local decoded
 
 ---The record, for reading only: as `jsonfile.read_object` returns it, decoded again only once the file changes.
 ---@return table?

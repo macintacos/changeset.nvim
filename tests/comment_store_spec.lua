@@ -28,6 +28,27 @@ describe("changeset.comment_store", function()
     os.remove(comment_store.path())
   end)
 
+  it("lists what it wrote though the file's stat can't tell it from the last write", function()
+    comment_store.keep(ROOT, comment({ body = "one" }))
+    comment_store.list(ROOT)
+    -- As on a filesystem whose timestamps are coarser than two quick writes, and which reuses the freed inode.
+    local real, stat = vim.uv.fs_stat, vim.uv.fs_stat(comment_store.path())
+    vim.uv.fs_stat = function(path)
+      return path == comment_store.path() and stat or real(path)
+    end
+    local ok, err = pcall(comment_store.keep, ROOT, comment({ line = 9, start_line = 8, body = "two" }))
+    local listed = comment_store.list(ROOT)
+    vim.uv.fs_stat = real
+    assert(ok, err)
+
+    assert.same(
+      { "one", "two" },
+      vim.tbl_map(function(c)
+        return c.body
+      end, listed)
+    )
+  end)
+
   it("lists a kept comment for its repository", function()
     comment_store.keep(ROOT, comment())
 
