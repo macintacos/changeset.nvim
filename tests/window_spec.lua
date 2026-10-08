@@ -325,6 +325,20 @@ describe("changeset.window", function()
       assert.is_false(visible)
     end)
 
+    it("pins its buffer to its window", function()
+      window.open(vim.api.nvim_create_buf(false, true))
+
+      assert.is_true(vim.wo[assert(window.win())].winfixbuf)
+    end)
+
+    it("reports no window once another buffer replaced the tree in it", function()
+      local win = window.open(vim.api.nvim_create_buf(false, true))
+      vim.wo[win].winfixbuf = false
+      vim.api.nvim_win_set_buf(win, vim.api.nvim_create_buf(true, false))
+
+      assert.is_nil(window.win())
+    end)
+
     it("hands its window an ordinary buffer when nothing is left to fall back to", function()
       vim.cmd("only")
       local outside = vim.api.nvim_get_current_win()

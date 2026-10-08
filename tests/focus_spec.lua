@@ -172,6 +172,34 @@ describe("changeset sidebar focus", function()
     assert.is_false(Cursor.hidden())
   end)
 
+  it("keeps the tree in its window when <C-o> jumps back from the focused sidebar", function()
+    vim.cmd.edit("plain.lua")
+    vim.cmd.edit("mod.lua")
+    changeset.open()
+    Sidebar.settle()
+    local win, tree = assert(window.win()), assert(window.buf())
+    vim.api.nvim_set_current_win(win)
+
+    pcall(vim.cmd, 'execute "normal! \\<C-o>"')
+
+    assert.equal(tree, vim.api.nvim_win_get_buf(win))
+  end)
+
+  it("opens a new sidebar on toggle() from a window another buffer took from the tree", function()
+    vim.cmd.edit("mod.lua")
+    changeset.open()
+    Sidebar.settle()
+    local win = assert(window.win())
+    vim.api.nvim_set_current_win(win)
+    vim.wo[win].winfixbuf = false
+    vim.cmd.edit("other.lua")
+
+    changeset.toggle()
+
+    assert.is_true(vim.api.nvim_win_is_valid(win))
+    assert.not_equal(win, window.win())
+  end)
+
   it("closes the focused sidebar on toggle() and hands focus back", function()
     vim.cmd.edit("mod.lua")
     local file_win = vim.api.nvim_get_current_win()

@@ -155,10 +155,13 @@ local function target()
   -- Nothing left to preview into: the sidebar is the only window, so give the
   -- file a split of its own rather than borrowing the sidebar. Split from inside
   -- `nvim_win_call`, which hands focus back without a `WinEnter` on the sidebar.
-  return vim.api.nvim_win_call(sidebar.win, function()
+  local split = vim.api.nvim_win_call(sidebar.win, function()
     vim.cmd(sidebar.layout == "drawer" and "leftabove split" or "leftabove vsplit")
     return vim.api.nvim_get_current_win()
   end)
+  -- Copied from the sidebar with the rest of its options.
+  vim.wo[split].winfixbuf = false
+  return split
 end
 
 ---The window a commit would open into, without splitting for one; nil when there is none.
@@ -238,12 +241,15 @@ end
 ---Whether the sidebar is on screen where the user is standing.
 ---
 ---A window in another tabpage is not: focusing it would haul the user out of the tab
----they are in, and every caller here means "can they see it from here".
+---they are in, and every caller here means "can they see it from here". Nor is one
+---that another buffer has taken over, which is the user's window now.
 ---@return boolean
 function M.is_visible()
   return sidebar.win ~= nil
     and vim.api.nvim_win_is_valid(sidebar.win)
     and vim.tbl_contains(vim.api.nvim_tabpage_list_wins(0), sidebar.win)
+    and M.buf() ~= nil
+    and vim.api.nvim_win_get_buf(sidebar.win) == sidebar.buf
 end
 
 ---Whether the cursor is in the sidebar.
@@ -317,6 +323,8 @@ function M.open(buf)
   if placeholder then
     local stale = vim.api.nvim_win_get_buf(placeholder)
     sidebar.win = placeholder
+    -- A session saved with 'localoptions' brings it back.
+    vim.wo[placeholder].winfixbuf = false
     vim.api.nvim_win_set_buf(placeholder, buf)
     pcall(vim.api.nvim_buf_delete, stale, { force = true })
     -- Laid out as the session was saved, which `relayout` below settles for this editor.
@@ -338,6 +346,8 @@ function M.open(buf)
   wo.wrap, wo.cursorline, wo.foldcolumn = false, false, "0"
   -- For the sentence an empty tree shows, the one line `draw` lets wrap.
   wo.list, wo.linebreak = false, true
+  -- Or a reflexive `<C-o>` there swaps the tree out of its window and wipes it.
+  wo.winfixbuf = true
   M.relayout()
 
   -- Opening a window is the editor's business to settle, and 'equalalways' is
@@ -572,6 +582,7 @@ function M.close()
     else
       -- The last window cannot be closed, and leaving the tree in it would leave a
       -- panel on screen whose keys no longer answer.
+      vim.wo[win].winfixbuf = false
       vim.api.nvim_win_call(win, function()
         vim.cmd("enew")
       end)
