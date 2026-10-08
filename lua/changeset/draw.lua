@@ -263,23 +263,50 @@ local function in_view_from_top(win, lnum)
   return vim.api.nvim_win_text_height(win, { end_row = last }).all <= height
 end
 
----Whether two blocks draw the same lines and marks.
----@param a changeset.view.Block
----@param b changeset.view.Block
----@return boolean
-local function same(a, b)
-  if a == b then
-    return true
+---@param hl string|string[]|nil
+---@return string
+local function hl_key(hl)
+  if type(hl) == "table" then
+    return table.concat(hl, "+")
   end
-  if #a.lines ~= #b.lines then
-    return false
+  return hl or ""
+end
+
+---A string that two marks share only when they draw alike.
+---@param mark changeset.Mark
+---@return string
+local function mark_key(mark)
+  local parts = {
+    mark.col or "",
+    mark.end_col or "",
+    hl_key(mark.hl),
+    mark.pos or "",
+    mark.hl_mode or "",
+    mark.priority or "",
+    mark.virt_lines and vim.inspect(mark.virt_lines) or "",
+  }
+  for _, chunk in ipairs(mark.virt_text or {}) do
+    parts[#parts + 1] = chunk[1] .. "\2" .. hl_key(chunk[2])
   end
-  for i, line in ipairs(a.lines) do
-    if line.text ~= b.lines[i].text or not vim.deep_equal(line.marks, b.lines[i].marks) then
-      return false
+  return table.concat(parts, "\1")
+end
+
+---A string that two blocks share only when they draw the same lines and marks, kept on the block.
+---@param block changeset.view.Block
+---@return string
+local function block_key(block)
+  if not block.key then
+    local parts = {}
+    for _, line in ipairs(block.lines) do
+      parts[#parts + 1] = line.text
+      for _, mark in ipairs(line.marks) do
+        parts[#parts + 1] = mark_key(mark)
+      end
+      parts[#parts + 1] = "\3"
     end
+    block.key = table.concat(parts, "\4")
   end
-  return true
+  return block.key
 end
 
 ---@param blocks changeset.view.Block[]
@@ -325,7 +352,18 @@ local function replace_lines(buf, first, last_line, lines)
   )
 end
 
----Put `blocks` on `buf`, replacing only the lines from the first block that differs from the last draw's to the last.
+---Lines before each of `blocks`, and after the last.
+---@param blocks changeset.view.Block[]
+---@return integer[]
+local function offsets(blocks)
+  local out = { 0 }
+  for i, block in ipairs(blocks) do
+    out[i + 1] = out[i] + #block.lines
+  end
+  return out
+end
+
+---Put `blocks` on `buf`, replacing only the runs of blocks that differ from the last draw's.
 ---@param buf integer
 ---@param blocks changeset.view.Block[]
 local function put(buf, blocks)
@@ -334,25 +372,40 @@ local function put(buf, blocks)
       and vim.api.nvim_buf_line_count(buf) == previous.count
       and previous.blocks
     or nil
-  local lines = lines_of(blocks, 1, #blocks)
-  previous = #lines > 0 and { buf = buf, blocks = blocks, count = #lines } or nil
+  local at = offsets(blocks)
+  previous = at[#at] > 0 and { buf = buf, blocks = blocks, count = at[#at] } or nil
   if not was then
-    replace_lines(buf, 0, -1, lines)
+    replace_lines(buf, 0, -1, lines_of(blocks, 1, #blocks))
     return
   end
-  local head = 1
-  while head <= #was and head <= #blocks and same(was[head], blocks[head]) do
-    head = head + 1
+  -- Each distinct block as one diff line, so `vim.text.diff` finds the runs that changed.
+  local ids, count = {}, 0
+  local function tokens(list)
+    local out = {}
+    for i, block in ipairs(list) do
+      local key = block_key(block)
+      if not ids[key] then
+        count = count + 1
+        ids[key] = tostring(count)
+      end
+      out[i] = ids[key]
+    end
+    return #out > 0 and table.concat(out, "\n") .. "\n" or ""
   end
-  local tail = 0
-  while tail <= #was - head and tail <= #blocks - head and same(was[#was - tail], blocks[#blocks - tail]) do
-    tail = tail + 1
+  local hunks = vim.text.diff(tokens(was), tokens(blocks), { result_type = "indices" }) --[[@as integer[][] ]]
+  local was_at = offsets(was)
+  -- Last first, so the lines above each run are where the last draw left them.
+  for i = #hunks, 1, -1 do
+    local old_start, old_count, new_start, new_count = unpack(hunks[i])
+    old_start = old_count == 0 and old_start + 1 or old_start
+    new_start = new_count == 0 and new_start + 1 or new_start
+    replace_lines(
+      buf,
+      was_at[old_start],
+      was_at[old_start + old_count],
+      lines_of(blocks, new_start, new_start + new_count - 1)
+    )
   end
-  if head > #was and head > #blocks then
-    return
-  end
-  local first = #lines_of(blocks, 1, head - 1)
-  replace_lines(buf, first, #lines_of(was, 1, #was - tail), lines_of(blocks, head, #blocks - tail))
 end
 
 ---Hang the gap between sections under each section's last line.

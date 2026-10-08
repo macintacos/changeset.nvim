@@ -230,6 +230,7 @@ end
 ---everything visible under it.
 ---@field lines changeset.Line[]
 ---@field header boolean? Whether this is a section's header.
+---@field key string? What it draws, as a string, once `draw` has compared it with another.
 
 ---@class changeset.view.Drawn A row under a section, as `show` last drew it.
 ---@field laid changeset.Row? Narrowed and compressed; nil when narrowing drops it.
