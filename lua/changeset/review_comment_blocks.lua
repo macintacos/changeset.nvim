@@ -193,6 +193,10 @@ local function anchor_at(buf, line)
   if editing[buf] and editing[buf][line] then
     return
   end
+  -- Neovim draws no virtual lines under a closed fold.
+  if vim.fn.foldclosed(line) ~= -1 then
+    return
+  end
   local mark = vim.api.nvim_buf_get_extmarks(buf, ns, { line - 1, 0 }, { line - 1, -1 }, { limit = 1 })[1]
   return mark and mark[1]
 end

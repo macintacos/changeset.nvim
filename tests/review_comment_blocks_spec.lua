@@ -638,6 +638,19 @@ describe("review comment blocks", function()
       assert.are.equal(3, lnum())
     end)
 
+    it("passes a block a closed fold hides", function()
+      vim.cmd("2,3fold")
+      go(2)
+
+      press("j")
+      assert.are.equal(4, lnum())
+      assert.is_nil(parked())
+
+      press("k")
+      assert.are.equal(2, vim.fn.foldclosed(lnum()))
+      assert.is_nil(parked())
+    end)
+
     it("parks where the block sits after unsaved edits, and won't edit it then", function()
       vim.api.nvim_buf_set_lines(0, 0, 0, false, { "new" })
       go(4)
