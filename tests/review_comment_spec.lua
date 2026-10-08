@@ -147,4 +147,49 @@ describe("changeset.review_comment", function()
       assert.same({}, review_comment.moves(lines(20), inserted(lines(20), 15, { "below" }), { range }))
     end)
   end)
+  describe("step", function()
+    local comments = {
+      { path = "a.lua", line = 3, body = "" },
+      { path = "a.lua", line = 9, start_line = 7, body = "" },
+      { path = "b.lua", line = 50, body = "" },
+    }
+
+    ---@param path string?
+    ---@param lnum integer
+    local function at(path, lnum)
+      return { path = path, lnum = lnum, lines = 20 }
+    end
+
+    it("finds the next comment after the line, and the one before it backwards", function()
+      assert.same({ 2, false }, { review_comment.step(comments, at("a.lua", 3), 1) })
+      assert.same({ 1, false }, { review_comment.step(comments, at("a.lua", 7), -1) })
+    end)
+
+    it("orders another file by its path", function()
+      assert.same({ 3, false }, { review_comment.step(comments, at("a.lua", 8), 1) })
+    end)
+
+    it("wraps at either end", function()
+      assert.same({ 1, true }, { review_comment.step(comments, at("c.lua", 1), 1) })
+      assert.same({ 3, true }, { review_comment.step(comments, at("a.lua", 1), -1) })
+    end)
+
+    it("walks a count of comments, wrapping as often as it is longer than the list", function()
+      assert.same({ 3, false }, { review_comment.step(comments, at("a.lua", 1), 3) })
+      assert.same({ 1, true }, { review_comment.step(comments, at("a.lua", 1), 4) })
+      assert.same({ 2, true }, { review_comment.step(comments, at("a.lua", 1), 8) })
+    end)
+
+    it("starts from the first or last from no file", function()
+      assert.same({ 1, false }, { review_comment.step(comments, at(nil, 1), 1) })
+      assert.same({ 3, false }, { review_comment.step(comments, at(nil, 1), -1) })
+      assert.same({ 2, false }, { review_comment.step(comments, at(nil, 1), -2) })
+    end)
+
+    it("counts a comment past the file's end on its last line", function()
+      local short = { { path = "b.lua", line = 50, body = "" } }
+      assert.same({ 1, true }, { review_comment.step(short, at("b.lua", 20), 1) })
+      assert.same({ 1, false }, { review_comment.step(short, at("b.lua", 19), 1) })
+    end)
+  end)
 end)

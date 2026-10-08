@@ -837,45 +837,6 @@ function M.restore()
   end)
 end
 
----Where `comment` starts against line `lnum` of `path`, `count` lines long, in the order of `in_order`: 1 after,
-----1 before, 0 there. A comment past the end starts on the last line, where a jump to it lands.
----@param comment changeset.ReviewComment
----@param path string
----@param lnum integer
----@param count integer
----@return integer
-local function side(comment, path, lnum, count)
-  if comment.path ~= path then
-    return comment.path > path and 1 or -1
-  end
-  local first = math.min(first_line(comment), count)
-  return first > lnum and 1 or first < lnum and -1 or 0
-end
-
----Index of the comment `step` away from the cursor in `comments`, and whether it wrapped. From no file, the first
----or last.
----@param comments changeset.ReviewComment[]
----@param path string?
----@param lnum integer
----@param count integer `path`'s line count.
----@param step 1|-1
----@return integer index, boolean wrapped
-local function neighbour(comments, path, lnum, count, step)
-  local from, to = 1, #comments
-  if step == -1 then
-    from, to = to, from
-  end
-  if not path then
-    return from, false
-  end
-  for i = from, to, step do
-    if side(comments[i], path, lnum, count) == step then
-      return i, false
-    end
-  end
-  return from, true
-end
-
 ---Whether `win` is a window a jump can show a file in: a file's, not floating, its buffer free to change.
 ---@param win integer
 ---@return boolean
@@ -953,8 +914,7 @@ end
 ---end. From a window that holds no file, it jumps in the window before it.
 ---@param count integer
 local function jump(count)
-  local step = count > 0 and 1 or -1
-  local win, from_sidebar, repository = jump_from(step == 1 and "comment next" or "comment prev")
+  local win, from_sidebar, repository = jump_from(count > 0 and "comment next" or "comment prev")
   if not win then
     return
   end
@@ -968,13 +928,8 @@ local function jump(count)
   end
   local path = not from_sidebar and file_path(repository, buf) or nil
   local cursor = vim.api.nvim_win_get_cursor(win)[1]
-  local i, wrapped = neighbour(comments, path, cursor, vim.api.nvim_buf_line_count(buf), step)
-  for _ = 2, math.abs(count) do
-    i = i + step
-    if i < 1 or i > #comments then
-      i, wrapped = (i - 1) % #comments + 1, true
-    end
-  end
+  local i, wrapped =
+    review_comment.step(comments, { path = path, lnum = cursor, lines = vim.api.nvim_buf_line_count(buf) }, count)
   if not land(win, from_sidebar, repository, comments[i]) then
     return
   end

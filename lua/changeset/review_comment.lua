@@ -169,4 +169,62 @@ function M.moves(before, after, comments)
   return found
 end
 
+---Where `comment` starts against line `lnum` of `path`, `count` lines long, in the order of `before`: 1 after, -1
+---before, 0 there. A comment past the end starts on the last line, where a jump to it lands.
+---@param comment changeset.ReviewComment
+---@param path string
+---@param lnum integer
+---@param count integer
+---@return integer
+local function side(comment, path, lnum, count)
+  if comment.path ~= path then
+    return comment.path > path and 1 or -1
+  end
+  local first = math.min(M.first(comment) or 0, count)
+  return first > lnum and 1 or first < lnum and -1 or 0
+end
+
+---Index of the comment `step` away from the cursor in `comments`, and whether it wrapped. From no file, the first
+---or last.
+---@param comments changeset.ReviewComment[]
+---@param path string?
+---@param lnum integer
+---@param count integer `path`'s line count.
+---@param step 1|-1
+---@return integer index, boolean wrapped
+local function neighbour(comments, path, lnum, count, step)
+  local from, to = 1, #comments
+  if step == -1 then
+    from, to = to, from
+  end
+  if not path then
+    return from, false
+  end
+  for i = from, to, step do
+    if side(comments[i], path, lnum, count) == step then
+      return i, false
+    end
+  end
+  return from, true
+end
+
+---The comment `count` steps from line `at.lnum` of `at.path` among `comments`, sorted by `before`, wrapping at
+---either end; from no file, the first or last.
+---@param comments changeset.ReviewComment[]
+---@param at { path: string?, lnum: integer, lines: integer } `lines`: the file's line count.
+---@param count integer Down for positive.
+---@return integer index
+---@return boolean wrapped
+function M.step(comments, at, count)
+  local step = count > 0 and 1 or -1
+  local i, wrapped = neighbour(comments, at.path, at.lnum, at.lines, step)
+  for _ = 2, math.abs(count) do
+    i = i + step
+    if i < 1 or i > #comments then
+      i, wrapped = (i - 1) % #comments + 1, true
+    end
+  end
+  return i, wrapped
+end
+
 return M

@@ -1140,17 +1140,6 @@ describe("changeset.reviewing", function()
       assert.matches("review comment 3 of 3.*wrapped", echoes[2])
     end)
 
-    it("wraps past the last comment to the first", function()
-      three_comments()
-      vim.cmd.edit(dir .. "/b.lua")
-      vim.api.nvim_win_set_cursor(0, { 3, 0 })
-
-      reviewing.next_comment(1)
-
-      assert.same({ "a.lua", 2 }, { where() })
-      assert.matches("wrapped", echoes[1])
-    end)
-
     it("skips a comment whose file is gone", function()
       three_comments()
       comment_store.keep(dir, comment({ path = "gone.lua", line = 1 }))
