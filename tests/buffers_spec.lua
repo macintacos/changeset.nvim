@@ -91,5 +91,36 @@ describe("changeset.buffers", function()
       assert.is_nil(buffers.load(tmp .. "/missing.lua"))
       assert.is_nil(buffers.load(tmp))
     end)
+    describe("with swap files on, as they are by default", function()
+      local swapdir
+
+      before_each(function()
+        swapdir = tmp .. "/swap"
+        vim.fn.mkdir(swapdir, "p")
+        vim.fn.writefile({ "return 1" }, tmp .. "/mod.lua")
+        vim.o.swapfile = true
+        vim.o.directory = swapdir .. "//"
+      end)
+
+      after_each(function()
+        vim.cmd("silent! %bwipeout!")
+        vim.o.swapfile = false
+      end)
+
+      it("reads a file without leaving a swap file another Neovim would warn about", function()
+        buffers.load(tmp .. "/mod.lua")
+
+        assert.same({}, vim.fn.glob(swapdir .. "/*", true, true))
+      end)
+
+      it("gives the buffer its swap file once the user enters it", function()
+        local buf = assert(buffers.load(tmp .. "/mod.lua"))
+
+        vim.cmd.buffer(buf)
+
+        assert.is_true(vim.bo[buf].swapfile)
+        assert.equal(1, #vim.fn.glob(swapdir .. "/*", true, true))
+      end)
+    end)
   end)
 end)
