@@ -78,8 +78,8 @@ end
 ---@type table<integer, integer[]>
 local typed_at = {}
 
----Notes where insert mode is in the current window, for the insert-mode key of its own being typed there.
-function M._typed()
+---Notes where insert mode is in the current window, for the insert-mode key of its own being typed there. The window's insert-mode keys reach this from a `<Cmd>` string.
+function M.typed()
   local win = vim.api.nvim_get_current_win()
   typed_at[win] = vim.api.nvim_win_get_cursor(win)
   vim.schedule(function()
@@ -90,17 +90,17 @@ end
 -- Leaves insert mode in the key's own keys, so what follows it runs, and a dialog that opens is open, before any key
 -- typed after it. The cursor is noted from a <Cmd> of its own first: an <expr> map reads it before typeahead has moved
 -- it.
-local LEAVE_INSERT = "<Cmd>lua require('changeset.review_comment_window')._typed()<CR><C-\\><C-n>"
+local LEAVE_INSERT = "<Cmd>lua require('changeset.review_comment_window').typed()<CR><C-\\><C-n>"
 
----Saves window `win` as its save keys do, for an insert-mode one once it has left insert mode.
+---Saves window `win` as its save keys do, for an insert-mode one once it has left insert mode. The window's insert-mode keys reach this from a `<Cmd>` string.
 ---@param win integer
-function M._save(win)
+function M.save(win)
   open_windows[win].save()
 end
 
----Closes window `win` as its keys that close without saving do, for an insert-mode one once it has left insert mode.
+---Closes window `win` as its keys that close without saving do, for an insert-mode one once it has left insert mode. The window's insert-mode keys reach this from a `<Cmd>` string.
 ---@param win integer
-function M._back(win)
+function M.back(win)
   open_windows[win].back()
 end
 
@@ -465,7 +465,7 @@ function M.open(opts)
   end
 
   local map, own = help.mapper(buf)
-  local save_typed = LEAVE_INSERT .. ("<Cmd>lua require('changeset.review_comment_window')._save(%d)<CR>"):format(win)
+  local save_typed = LEAVE_INSERT .. ("<Cmd>lua require('changeset.review_comment_window').save(%d)<CR>"):format(win)
   for _, lhs in ipairs(opts.keys) do
     vim.keymap.set("i", lhs, save_typed, { buffer = buf, desc = opts.save_desc })
     map(lhs, save, opts.save_desc)
@@ -473,7 +473,7 @@ function M.open(opts)
   local function back()
     close(opts.back)
   end
-  local back_typed = LEAVE_INSERT .. ("<Cmd>lua require('changeset.review_comment_window')._back(%d)<CR>"):format(win)
+  local back_typed = LEAVE_INSERT .. ("<Cmd>lua require('changeset.review_comment_window').back(%d)<CR>"):format(win)
   vim.keymap.set("i", "<S-Esc>", back_typed, { buffer = buf, desc = opts.close_desc })
   for _, lhs in ipairs({ "<S-Esc>", "q", "<Esc>" }) do
     map(lhs, back, opts.close_desc)

@@ -84,7 +84,7 @@ describe("changeset.window", function()
     end)
   end)
 
-  describe("_reveal_cursor", function()
+  describe("reveal_cursor", function()
     local buf, win
 
     before_each(function()
@@ -109,7 +109,7 @@ describe("changeset.window", function()
     ---@return integer[] view The window's top line and the cursor's screen row.
     local function reveal(lnum)
       vim.api.nvim_win_set_cursor(win, { lnum, 0 })
-      window._reveal_cursor()
+      window.reveal_cursor()
       return { vim.fn.line("w0"), vim.fn.winline() }
     end
 
