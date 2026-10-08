@@ -804,15 +804,12 @@ Attaching is visible to the rest of Neovim:
 
 `:Changeset review submit` turns the review into text and pastes it into an AI agent's prompt in
 another pane of the same herdr workspace, through `changeset.herdr`. Each review comment
-becomes a block: its `path:line` or `path:first-last`, its lines fenced in the file's
-filetype, and its body. The path is absolute, because the agent's pane can run in another
-directory or worktree than the repository's. The lines are read as they are now, from the buffer when the file
-is loaded, so the agent sees what the comment was written against, unsaved edits included.
-Blocks go in the Comments section's order, a blank line apart.
-A whole file's block is its absolute path and its body, ahead of the blocks on its lines:
-quoting the whole file would bury the comments, and a deleted file has nothing to quote.
-A block whose lines can't be read, its file gone or its range past the end, keeps its place
-and body and drops the fence rather than quoting the wrong lines.
+becomes a block: its backticked `path:Lfirst-Llast`, `path:Lline` for one line or the bare
+path for a whole file, then `Feedback:` and its body. The path is absolute, because the
+agent's pane can run in another directory or worktree than the repository's. The block
+quotes no lines: the agent opens the path and range itself, so the paste stays short.
+Blocks go in the Comments section's order, a blank line apart, a whole file's ahead of the
+blocks on its lines.
 
 The paste is left unsent and the agent's pane focused. The review is the start of a
 conversation, not all of it: the user adds what the comments don't say, such as what to
