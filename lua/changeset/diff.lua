@@ -49,50 +49,45 @@ local function unescape(inner)
   return (inner:gsub("\\(.)", ESCAPE))
 end
 
----@param field string A path column, quoted or bare.
----@return string
-local function unquote(field)
-  local inner = field:match('^"(.*)"$')
-  return inner and unescape(inner) or field
-end
-
----The new path from a numstat path column, which is `old => new` or, when old and new share
----a prefix or suffix, `prefix/{old => new}/suffix`.
----@param field string
----@return string
-local function new_path(field)
-  local prefix, new, suffix = field:match("^(.*){.- => (.-)}(.*)$")
-  if prefix then
-    return ((prefix .. new .. suffix):gsub("//", "/"))
-  end
-  return field:match("^.- => (.+)$") or field
-end
-
----Added and removed line counts per path from `git diff --numstat -M`.
----@param lines string[]
+---Added and removed line counts per path from `git diff --numstat -M -z`, whose paths are
+---never quoted: `added\tremoved\tpath\0`, or `added\tremoved\t\0old\0new\0` for a rename.
+---@param stdout string
 ---@return table<string, changeset.diff.Stat> stats By new path; binary files count as 0/0.
-function M._parse_numstat(lines)
+function M._parse_numstat(stdout)
   local stats = {}
-  for _, line in ipairs(lines) do
-    local added, removed, field = line:match("^(%S+)\t(%S+)\t(.+)$")
-    if field then
-      stats[new_path(unquote(field))] = { added = tonumber(added) or 0, removed = tonumber(removed) or 0 }
+  local fields = vim.split(stdout, "\0", { plain = true })
+  local i = 1
+  while i <= #fields do
+    local added, removed, path = fields[i]:match("^(%S+)\t(%S+)\t(.*)$")
+    i = i + 1
+    if added then
+      if path == "" then
+        path, i = fields[i + 1], i + 2
+      end
+      stats[path] = { added = tonumber(added) or 0, removed = tonumber(removed) or 0 }
     end
   end
   return stats
 end
 
----Change status per path from `git diff --name-status -M`.
----@param lines string[]
+---Change status per path from `git diff --name-status -M -z`, whose paths are never quoted:
+---`M\0path\0`, or `R100\0old\0new\0` for a rename.
+---@param stdout string
 ---@return table<string, changeset.diff.Entry> statuses By new path.
-function M._parse_name_status(lines)
+function M._parse_name_status(stdout)
   local statuses = {}
-  for _, line in ipairs(lines) do
-    local code, from, to = line:match("^(%u)%d*\t([^\t]+)\t?([^\t]*)$")
+  local fields = vim.split(stdout, "\0", { plain = true })
+  local i = 1
+  while i <= #fields do
+    local code = fields[i]:match("^(%u)%d*$")
     if code == "R" then
-      statuses[unquote(to)] = { status = "renamed", oldpath = unquote(from) }
+      statuses[fields[i + 2]] = { status = "renamed", oldpath = fields[i + 1] }
+      i = i + 3
     elseif code then
-      statuses[unquote(from)] = { status = STATUS[code] or "modified" }
+      statuses[fields[i + 1]] = { status = STATUS[code] or "modified" }
+      i = i + 2
+    else
+      i = i + 1
     end
   end
   return statuses
@@ -116,25 +111,43 @@ local function parse_hunk_header(line)
   return { lnum = tonumber(new_start), count = added, added = added, removed = removed, old_lnum = tonumber(old_start) }
 end
 
----Hunks per path from `git diff --unified=0 -M`.
+---The path on a `--- a/<path>` or `+++ b/<path>` line, or nil for `/dev/null`. git quotes a
+---path holding `"`, `\` or a control character, and pads one holding a space with a tab.
+---@param side string The rest of the line after `--- ` or `+++ `.
+---@param prefix string `a/` or `b/`.
+---@return string?
+local function side_path(side, prefix)
+  local inner = side:match('^"(.*)"$')
+  local path = inner and unescape(inner) or side:gsub("\t$", "")
+  return vim.startswith(path, prefix) and path:sub(#prefix + 1) or nil
+end
+
+---Hunks per path from `git diff --unified=0 -M`. Each file is keyed from its `+++` line, or
+---its `---` line when it was deleted; the `diff --git` line can't be split when a path holds ` b/`.
 ---@param lines string[]
----@return table<string, changeset.Hunk[]> hunks By new path; a file with no text hunks maps to `{}`.
+---@return table<string, changeset.Hunk[]> hunks By new path; a file with no text hunks is absent.
 function M._parse_hunks(lines)
-  local hunks, current = {}, nil
+  local hunks, current, old, in_header = {}, nil, nil, false
   for _, line in ipairs(lines) do
-    local path = line:match("^diff %-%-git a/.+ b/(.+)$")
-    -- The other header shape: git quotes each side whole, so `b/` sits inside the quotes.
-    local quoted = not path and line:match('^diff %-%-git "a/.+" "b/(.+)"$')
-    if path or quoted then
+    if vim.startswith(line, "diff --git ") then
+      current, old, in_header = nil, nil, true
+    elseif in_header and vim.startswith(line, "--- ") then
+      old = side_path(line:sub(5), "a/")
+    elseif in_header and vim.startswith(line, "+++ ") then
+      local path = side_path(line:sub(5), "b/") or old
       current = {}
-      local name = path or unescape(quoted --[[@as string]])
-      hunks[name] = current
+      if path then
+        hunks[path] = current
+      end
     else
       local hunk = parse_hunk_header(line)
-      -- A hunk before any header means a shape this does not read. Dropping it costs one
-      -- file's hunks; appending it to the file before would misattribute them.
-      if hunk and current then
-        table.insert(current, hunk)
+      -- A hunk before any file's ---/+++ lines means a shape this does not read. Dropping it
+      -- costs one file's hunks; appending it to the file before would misattribute them.
+      if hunk then
+        in_header = false
+        if current then
+          table.insert(current, hunk)
+        end
       end
     end
   end
@@ -246,10 +259,10 @@ local function git_commands(base)
     return cmd("diff", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/", "-M", ...)
   end
   return {
-    numstat = diff_cmd("--numstat", base),
-    name_status = diff_cmd("--name-status", base),
+    numstat = diff_cmd("--numstat", "-z", base),
+    name_status = diff_cmd("--name-status", "-z", base),
     hunks = diff_cmd("--unified=0", "--inter-hunk-context=0", base),
-    untracked = cmd("ls-files", "--others", "--exclude-standard"),
+    untracked = cmd("ls-files", "-z", "--others", "--exclude-standard"),
     commits = cmd("rev-list", "--count", base .. "..HEAD"),
   }
 end
@@ -379,10 +392,10 @@ function M.collect(base, cwd, callback)
       return callback(nil, err)
     end
     local files = M._assemble({
-      numstat = M._parse_numstat(stdout_lines(results.numstat)),
-      statuses = M._parse_name_status(stdout_lines(results.name_status)),
+      numstat = M._parse_numstat(results.numstat.stdout),
+      statuses = M._parse_name_status(results.name_status.stdout),
       hunks = M._parse_hunks(stdout_lines(results.hunks)),
-      untracked = count_lines(stdout_lines(results.untracked), cwd),
+      untracked = count_lines(vim.split(results.untracked.stdout, "\0", { trimempty = true }), cwd),
     })
     generated_paths(files, cwd, function(marked)
       for _, file in ipairs(files) do
