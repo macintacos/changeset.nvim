@@ -4,6 +4,7 @@
 ---and width, and applies the returned marks to a buffer itself.
 
 local cells = require("changeset.cells")
+local review_comment = require("changeset.review_comment")
 local symbols = require("changeset.symbols")
 
 ---@class changeset.Mark
@@ -332,15 +333,6 @@ local function append_children(out, row, bars, opts)
   end
 end
 
----@param spanned { line: integer?, start_line: integer? }
----@return string
-local function span(spanned)
-  if spanned.start_line and spanned.start_line ~= spanned.line then
-    return ("%d-%d"):format(spanned.start_line, spanned.line)
-  end
-  return tostring(spanned.line)
-end
-
 ---A comment row: the file marks' circle in the rail's column, the file's icon, its name and line, the name alone for
 ---a whole file's, and the body's first line, quiet like the marks' and clipped to fit.
 ---@param row changeset.Row
@@ -349,7 +341,8 @@ end
 local function comment_line(row, opts)
   local comment = assert(row.review_comment, "changeset: a comment row lists nothing")
   local glyph, icon_hl = opts.icon(row)
-  local where = vim.fs.basename(row.path) .. (comment.line and ":" .. span(comment) or "")
+  local span = review_comment.span(comment)
+  local where = vim.fs.basename(row.path) .. (span and ":" .. span or "")
   local circle = comment.draft and M.REVIEW_COMMENT_DRAFT_CIRCLE or M.REVIEW_COMMENT_CIRCLE
   local room = opts.width - vim.fn.strdisplaywidth(MARGIN .. circle .. " " .. glyph .. " ") - stat_cells(nil)
   where = cells.clip(where, room)

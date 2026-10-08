@@ -3,6 +3,7 @@
 local cells = require("changeset.cells")
 local help = require("changeset.help")
 local render = require("changeset.render")
+local review_comment = require("changeset.review_comment")
 
 local M = {}
 
@@ -195,9 +196,7 @@ end
 ---@param comment changeset.ReviewComment
 ---@return string
 local function name(comment)
-  local first, last = comment.start_line or comment.line, comment.line
-  local lines = not last and "" or first < last and (":%d-%d"):format(first, last) or ":" .. last
-  return "review-comment://" .. comment.path .. lines
+  return "review-comment://" .. review_comment.location(comment)
 end
 
 ---Make a floating `win` taller by the room, since it has no neighbours to scroll past.
