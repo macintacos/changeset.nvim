@@ -2,6 +2,7 @@ local build = require("changeset.build")
 local changeset = require("changeset")
 local comment_store = require("changeset.comment_store")
 local window = require("changeset.window")
+local CommentWindow = require("support.comment_window")
 local Dialog = require("support.dialog")
 local Fixture = require("support.git")
 local Notify = require("support.notify")
@@ -80,25 +81,6 @@ describe("a review comment on a whole file", function()
     return lnum
   end
 
-  ---The review comment window, once one is open.
-  ---@return integer? win
-  local function comment_window()
-    local win
-    vim.wait(2000, function()
-      win = vim.iter(vim.api.nvim_list_wins()):find(function(w)
-        return vim.api.nvim_win_get_config(w).relative == "win"
-      end)
-      return win ~= nil
-    end, 10)
-    return win
-  end
-
-  ---@param win integer
-  ---@return string
-  local function text_of(win)
-    return table.concat(vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false), "\n")
-  end
-
   ---Presses the first save key in the window, as typed in insert mode.
   ---@param win integer
   local function save(win)
@@ -112,7 +94,7 @@ describe("a review comment on a whole file", function()
 
     vim.cmd("Changeset comment new")
 
-    local win = assert(comment_window())
+    local win = assert(CommentWindow.win())
     local config = vim.api.nvim_win_get_config(win)
     assert.equal(window.win(), config.win)
     assert.same({ lnum - 1, 0 }, config.bufpos)
@@ -135,11 +117,11 @@ describe("a review comment on a whole file", function()
 
     vim.api.nvim_feedkeys(vim.keycode("<CR>"), "x", false)
 
-    local win = assert(comment_window())
+    local win = assert(CommentWindow.win())
     local config = vim.api.nvim_win_get_config(win)
     assert.equal(window.win(), config.win)
     assert.same({ lnum - 1, 0 }, config.bufpos)
-    assert.equal("why drop it?", text_of(win))
+    assert.equal("why drop it?", CommentWindow.text(win))
   end)
 
   it("previews its deleted file's notice from its Comments row", function()
@@ -176,7 +158,7 @@ describe("a review comment on a whole file", function()
     local root = open_sidebar({ { path = "gone.lua", body = "why drop it?" } })
     cursor_to_last("gone.lua")
     vim.cmd("Changeset comment new")
-    assert(comment_window())
+    assert(CommentWindow.win())
     -- The window's buffer names no file, so only the sidebar's tree can say which repository it is in.
     local elsewhere = vim.fn.tempname()
     vim.fn.mkdir(elsewhere, "p")
@@ -195,7 +177,7 @@ describe("a review comment on a whole file", function()
     local root = open_sidebar()
     cursor_to_last("gone.lua")
     vim.cmd("Changeset comment new")
-    local win = assert(comment_window())
+    local win = assert(CommentWindow.win())
     vim.api.nvim_buf_set_lines(vim.api.nvim_win_get_buf(win), 0, -1, false, { "unsure" })
 
     vim.cmd("Changeset comment list")

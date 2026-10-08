@@ -3,6 +3,7 @@ local render = require("changeset.render")
 local changeset = require("changeset")
 local comment_store = require("changeset.comment_store")
 local window = require("changeset.window")
+local CommentWindow = require("support.comment_window")
 local Dialog = require("support.dialog")
 local Fixture = require("support.git")
 local Notify = require("support.notify")
@@ -167,25 +168,6 @@ describe("the sidebar's Comments section", function()
     assert.is_nil(changeset.footer():find("file %d"))
   end)
 
-  ---The review comment window, once one is open.
-  ---@return integer? win
-  local function comment_window()
-    local win
-    vim.wait(2000, function()
-      win = vim.iter(vim.api.nvim_list_wins()):find(function(w)
-        return vim.api.nvim_win_get_config(w).relative == "win"
-      end)
-      return win ~= nil
-    end, 10)
-    return win
-  end
-
-  ---@param win integer
-  ---@return string
-  local function text_of(win)
-    return table.concat(vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false), "\n")
-  end
-
   ---Presses `key` in the sidebar with its cursor on the first line containing `text`.
   ---@param text string
   ---@param key string
@@ -206,9 +188,9 @@ describe("the sidebar's Comments section", function()
 
     press_on("alpha.txt:13", "<CR>")
 
-    local win = assert(comment_window())
+    local win = assert(CommentWindow.win())
     local config = vim.api.nvim_win_get_config(win)
-    assert.equal("check this\nmore", text_of(win))
+    assert.equal("check this\nmore", CommentWindow.text(win))
     assert.same({ 12, 0 }, config.bufpos)
     assert.equal("alpha.txt", vim.fs.basename(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(config.win))))
   end)
@@ -219,8 +201,8 @@ describe("the sidebar's Comments section", function()
 
     press_on("alpha.txt:5-6", "<C-x>")
 
-    local win = assert(comment_window())
-    assert.equal("a range", text_of(win))
+    local win = assert(CommentWindow.win())
+    assert.equal("a range", CommentWindow.text(win))
     assert.equal(before + 2, #vim.api.nvim_tabpage_list_wins(0))
   end)
 
@@ -229,7 +211,7 @@ describe("the sidebar's Comments section", function()
 
     press_on("alpha.txt:13", "<S-CR>")
 
-    local win = assert(comment_window())
+    local win = assert(CommentWindow.win())
     assert.is_nil(window.win())
     assert.equal(win, vim.api.nvim_get_current_win())
   end)
@@ -267,7 +249,7 @@ describe("the sidebar's Comments section", function()
   it("replaces the review comment's text when its window saves", function()
     local root = open_with_review_comments()
     press_on("alpha.txt:13", "<CR>")
-    local win = assert(comment_window())
+    local win = assert(CommentWindow.win())
     vim.api.nvim_buf_set_lines(vim.api.nvim_win_get_buf(win), 0, -1, false, { "update: after", "second line" })
 
     save(win)
@@ -281,7 +263,7 @@ describe("the sidebar's Comments section", function()
   it("asks to delete the review comment when its window saves blank", function()
     local root = open_with_review_comments()
     press_on("alpha.txt:13", "<CR>")
-    local win = assert(comment_window())
+    local win = assert(CommentWindow.win())
     vim.api.nvim_buf_set_lines(vim.api.nvim_win_get_buf(win), 0, -1, false, { "" })
 
     save(win)
