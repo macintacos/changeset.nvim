@@ -3,6 +3,7 @@
 ---preview band.
 
 local comment_store = require("changeset.comment_store")
+local highlights = require("changeset.highlights")
 local icons = require("changeset.icons")
 local render = require("changeset.render")
 local Rows = require("changeset.rows")
@@ -27,7 +28,7 @@ local comments_section
 ---@return string glyph, string hl
 local function icon_for(row)
   if row.comments then
-    return render.COMMENTS_ICON, render.REVIEW_COMMENT_HL
+    return render.COMMENTS_ICON, highlights.REVIEW_COMMENT_HL
   end
   if row.kind == "section" then
     return icons.get("directory", row.icon)
@@ -61,7 +62,7 @@ function M.band_for(row, jump)
   local deleted = row.kind == "file" and row.status == "deleted"
   return {
     icon = glyph,
-    icon_hl = render.band_icon(hl),
+    icon_hl = highlights.band_icon(hl),
     path = row.path,
     -- Only a symbol row names its destination. An orphan hunk's own text is the
     -- changed line, which is not a place and does not read as one. The jump key opens
@@ -154,7 +155,7 @@ local function hidden_note_line(buf, anchor_line, note)
     -- A virtual line rather than a row: the cursor cannot reach it, so it needs no
     -- place among the view's rows and no guard in everything that reads a row off a line.
     vim.api.nvim_buf_set_extmark(buf, ns, anchor_line, 0, {
-      virt_lines = { { { "" } }, { { " " .. note, render.META_HL } } },
+      virt_lines = { { { "" } }, { { " " .. note, highlights.META_HL } } },
     })
   end
 end
