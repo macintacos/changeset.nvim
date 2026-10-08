@@ -175,6 +175,30 @@ describe("changeset.review_handoff", function()
       assert.equal(1, #assert(comment_store.submitted(dir)))
     end)
 
+    it("lets a submit through once one herdr never answered has timed out", function()
+      package.loaded["changeset.herdr"] = {
+        send = function(text)
+          table.insert(sent, text)
+        end,
+      }
+      local timeouts, real_defer_fn = {}, vim.defer_fn
+      vim.defer_fn = function(fn)
+        table.insert(timeouts, fn)
+      end
+      edit_file()
+      comment_store.keep(dir, comment())
+
+      local ok, err = pcall(function()
+        handoff.submit()
+        timeouts[1]()
+        handoff.submit()
+      end)
+      vim.defer_fn = real_defer_fn
+
+      assert(ok, err)
+      assert.equal(2, #sent)
+    end)
+
     it("titles the agent picker with what it sends, and ranks the agents by the repository", function()
       edit_file()
       comment_store.keep(dir, comment())
