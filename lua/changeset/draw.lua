@@ -161,10 +161,9 @@ local function hidden_note_line(buf, anchor_line, note)
 end
 
 ---What the header says about the branch, as the tree stands.
+---@param state changeset.SidebarState
 ---@return changeset.Summary
-local function summary()
-  local state = sidebar_state.current()
-  assert(state, "changeset: no tree built yet")
+local function summary(state)
   local added, removed, readable, pending = 0, 0, 0, 0
   for _, file in ipairs(state.tree.files) do
     added, removed = added + (file.added or 0), removed + (file.removed or 0)
@@ -210,11 +209,10 @@ end
 ---@param buf integer
 ---@param win integer
 ---@param width integer
+---@param state changeset.SidebarState
 ---@param topfill integer? The header rows showing before the redraw, kept rather than revealed when given.
-local function draw_header(buf, win, width, topfill)
-  local state = sidebar_state.current()
-  assert(state, "changeset: no tree built yet")
-  local header = summary()
+local function draw_header(buf, win, width, state, topfill)
+  local header = summary(state)
   vim.wo[win].winbar = render.header(header, width)
   -- Totals before the first diff would claim that nothing changed.
   if state.tree.collected then
@@ -302,7 +300,7 @@ function M.draw(kinds_key)
 
   vim.api.nvim_win_set_cursor(win, { lnum, 0 })
   -- After the header, whose rows decide whether the cursor's row still fits under the top.
-  draw_header(buf, win, width, topfill)
+  draw_header(buf, win, width, state, topfill)
   if lnum ~= cursor and not (top == 1 and in_view_from_top(win, lnum)) then
     hold_place(win, top, lnum - cursor)
   end
