@@ -127,6 +127,47 @@ local function walk(out, nodes, kinds, depth, in_callable)
   end
 end
 
+---@param p table LSP Position
+---@param q table LSP Position
+---@return boolean
+local function before(p, q)
+  return p.line < q.line or (p.line == q.line and p.character < q.character)
+end
+
+---@param outer table LSP Range
+---@param inner table LSP Range
+---@return boolean
+local function contains(outer, inner)
+  return not before(inner.start, outer.start) and not before(outer["end"], inner["end"])
+end
+
+---Nest a flat `SymbolInformation[]` by range containment, so each symbol sits under the
+---nearest one whose range holds it, as a `DocumentSymbol` tree would.
+---@param response table[]
+---@return table[]
+local function nest(response)
+  local nodes = vim.tbl_map(function(info)
+    return { name = info.name, kind = info.kind, location = info.location, children = {} }
+  end, response)
+  -- By start, the longer range first on a tie, so a parent always precedes what it holds.
+  table.sort(nodes, function(a, b)
+    local ra, rb = a.location.range, b.location.range
+    if before(ra.start, rb.start) or before(rb.start, ra.start) then
+      return before(ra.start, rb.start)
+    end
+    return before(rb["end"], ra["end"])
+  end)
+  local roots, stack = {}, {}
+  for _, node in ipairs(nodes) do
+    while #stack > 0 and not contains(stack[#stack].location.range, node.location.range) do
+      stack[#stack] = nil
+    end
+    table.insert(#stack > 0 and stack[#stack].children or roots, node)
+    stack[#stack + 1] = node
+  end
+  return roots
+end
+
 ---Flatten a `textDocument/documentSymbol` response into `changeset.Symbol`s.
 ---@param response table[] `DocumentSymbol[]` or `SymbolInformation[]`.
 ---@param kinds table<string, true>? Kinds to keep. Others are dropped and their children promoted, as is
@@ -134,7 +175,8 @@ end
 ---@return changeset.Symbol[]
 function M.flatten(response, kinds)
   local out = {}
-  walk(out, response, kinds, 0)
+  local flat = response[1] and response[1].location and not response[1].range
+  walk(out, flat and nest(response) or response, kinds, 0)
   return out
 end
 

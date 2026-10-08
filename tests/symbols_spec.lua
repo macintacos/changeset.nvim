@@ -180,6 +180,27 @@ describe("changeset.symbols", function()
       assert.equal(5, items[1].lnum)
       assert.equal(5, items[1].range_lnum)
     end)
+    it("nests a flat SymbolInformation response by the ranges that hold each symbol", function()
+      local function info(name, kind, first, last)
+        return {
+          name = name,
+          kind = kind,
+          location = {
+            uri = vim.uri_from_fname("/tmp/session.py"),
+            range = { start = { line = first, character = 0 }, ["end"] = { line = last, character = 0 } },
+          },
+        }
+      end
+
+      local items = symbols.flatten({
+        info("refresh", KIND.Method, 4, 9),
+        info("Session", KIND.Class, 0, 19),
+        info("TTL", KIND.Constant, 21, 21),
+      })
+
+      assert.same({ "Session", "refresh", "TTL" }, field(items, "name"))
+      assert.same({ 0, 1, 0 }, field(items, "depth"))
+    end)
   end)
 
   describe("fit", function()

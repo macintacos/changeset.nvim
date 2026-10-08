@@ -1,4 +1,5 @@
 local Rows = require("changeset.rows")
+local Symbols = require("changeset.symbols")
 
 local PATH = "src/session.ts"
 
@@ -271,6 +272,20 @@ describe("changeset.rows", function()
         assert.is_true(class.ancestor)
         assert.is_nil(class.added)
         assert.is_nil(class.removed)
+        assert.same({ "refresh" }, names(class.children))
+      end)
+
+      it("shows a class from a flat SymbolInformation answer as an ancestor of its changed method", function()
+        local function info(name, kind, first, last)
+          local range = { start = { line = first - 1, character = 0 }, ["end"] = { line = last - 1, character = 0 } }
+          return { name = name, kind = kind, location = { uri = "file:///session.ts", range = range } }
+        end
+        local KIND = vim.lsp.protocol.SymbolKind
+        local items = Symbols.flatten({ info("SessionStore", KIND.Class, 3, 20), info("refresh", KIND.Method, 5, 9) })
+
+        local class = Rows.files(Rows.build({ file(PATH, { hunk(7, 1) }) }, { [PATH] = items }))[1].children[1]
+
+        assert.is_true(class.ancestor)
         assert.same({ "refresh" }, names(class.children))
       end)
 
