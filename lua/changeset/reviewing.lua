@@ -88,6 +88,19 @@ local QUOTED = 4
 ---could act on the wrong line.
 M.UNSAVED = "save the file first: marks move with unsaved edits, review comments don't"
 
+---Whether `path` of `repository` has unsaved edits, so a verb that acts by line must refuse; warns `M.UNSAVED` when so.
+---@param repository string
+---@param path string
+---@return boolean
+function M.unsaved(repository, path)
+  local buf = buffers.loaded(vim.fs.joinpath(repository, path))
+  if buf and vim.bo[buf].modified then
+    say(vim.log.levels.WARN, M.UNSAVED)
+    return true
+  end
+  return false
+end
+
 ---Asks, then deletes `comment` of the current buffer's repository.
 ---@param comment changeset.ReviewComment
 function M.ask_delete(comment)
@@ -900,12 +913,10 @@ end
 ---@param comment changeset.ReviewComment
 ---@return boolean landed
 local function land(win, from_sidebar, repository, comment)
-  local full = vim.fs.joinpath(repository, comment.path)
-  local target = buffers.loaded(full)
-  if target and vim.bo[target].modified then
-    say(vim.log.levels.WARN, M.UNSAVED)
+  if M.unsaved(repository, comment.path) then
     return false
   end
+  local full = vim.fs.joinpath(repository, comment.path)
   local lnum = first_line(comment)
   if from_sidebar then
     return window.commit(full, lnum, "reuse")

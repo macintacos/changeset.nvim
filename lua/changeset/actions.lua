@@ -76,6 +76,16 @@ local function lists_file_comment(row)
   return row ~= nil and row.review_comment ~= nil and row.review_comment.line == nil
 end
 
+---Whether `row` lists a review comment on lines of a file with unsaved edits, where opening it would land off its
+---code; warns when so.
+---@param row changeset.Row?
+---@return boolean
+local function refuses_unsaved(row)
+  local comment = row and row.review_comment
+  local tree = build.current()
+  return comment ~= nil and comment.line ~= nil and tree ~= nil and reviewing.unsaved(tree.root, comment.path)
+end
+
 ---Opens the cursor's row `how`, then the review comment it lists; a whole file's opens under the row instead.
 ---@param how "reuse"|"vsplit"|"split"|"tab"
 ---@param hooks changeset.ActionHooks
@@ -85,6 +95,9 @@ local function jump(how, hooks)
   if row and comment and not comment.line then
     hooks.pick(row)
     return reviewing.open(comment)
+  end
+  if refuses_unsaved(row) then
+    return
   end
   open_comment(commit(how, hooks))
 end
@@ -329,6 +342,9 @@ function M.set_keymaps(buf, keys, hooks)
     -- A whole file's review comment opens under its row, which closing would take away.
     if lists_file_comment(draw.row_at_cursor()) then
       return jump("reuse", hooks)
+    end
+    if refuses_unsaved(draw.row_at_cursor()) then
+      return
     end
     local row = commit("reuse", hooks)
     hooks.close()

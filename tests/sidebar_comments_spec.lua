@@ -233,6 +233,29 @@ describe("the sidebar's Comments section", function()
     assert.equal(win, vim.api.nvim_get_current_win())
   end)
 
+  for _, key in ipairs({ "<CR>", "<C-x>", "<S-CR>" }) do
+    it(("refuses %s on a comment row whose file has unsaved edits"):format(key), function()
+      open_with_review_comments()
+      vim.api.nvim_buf_set_lines(vim.fn.bufnr("alpha.txt"), 0, 0, false, { "new 1", "new 2", "new 3" })
+      local warnings, notify = {}, vim.notify
+      vim.notify = function(msg, level)
+        if level == vim.log.levels.WARN then
+          warnings[#warnings + 1] = msg
+        end
+      end
+
+      press_on("alpha.txt:13", key)
+      vim.wait(200)
+      vim.notify = notify
+
+      assert.is_nil(vim.iter(vim.api.nvim_list_wins()):find(function(w)
+        return vim.api.nvim_win_get_config(w).relative == "win"
+      end))
+      assert.equal(1, #warnings)
+      assert.truthy(warnings[1]:find("save the file first", 1, true))
+    end)
+  end
+
   it("marks the comment row it opened as the pick", function()
     open_with_review_comments()
 
