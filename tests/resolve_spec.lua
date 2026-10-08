@@ -420,4 +420,235 @@ describe("changeset.resolve", function()
       assert.is_true(items.refreshes_token.test)
     end)
   end)
+
+  describe("start, with servers that misbehave", function()
+    local SYMBOL = {
+      name = "one",
+      kind = 12,
+      range = { start = { line = 0, character = 0 }, ["end"] = { line = 0, character = 9 } },
+      selectionRange = { start = { line = 0, character = 0 }, ["end"] = { line = 0, character = 3 } },
+    }
+
+    local root, enabled
+
+    before_each(function()
+      root = vim.fn.tempname()
+      vim.fn.mkdir(root, "p")
+      vim.fn.writefile({ "return {}" }, root .. "/mod.lua")
+    end)
+
+    after_each(function()
+      for _, client in ipairs(vim.lsp.get_clients()) do
+        client:stop(true)
+      end
+      if enabled then
+        vim.lsp.enable(enabled, false)
+        enabled = nil
+      end
+      vim.cmd("silent! %bwipeout!")
+      vim.fn.delete(root, "rf")
+    end)
+
+    ---An in-process server; `on_request(method, callback)` answers each request.
+    local function server(on_request)
+      return function(dispatchers)
+        local id = 0
+        return {
+          request = function(method, params, callback)
+            id = id + 1
+            on_request(method, callback, params)
+            return true, id
+          end,
+          notify = function(method)
+            if method == "exit" then
+              dispatchers.on_exit(0, 15)
+            end
+            return true
+          end,
+          is_closing = function()
+            return false
+          end,
+          terminate = function()
+            dispatchers.on_exit(0, 15)
+          end,
+        }
+      end
+    end
+
+    local function enable(name, cmd)
+      vim.lsp.config(name, { filetypes = { "lua" }, root_dir = root, cmd = cmd })
+      vim.lsp.enable(name)
+      enabled = name
+    end
+
+    local function start(on_file)
+      local file =
+        { path = "mod.lua", status = "added", section = "implementation", added = 1, removed = 0, hunks = {} }
+      return resolve.start({ root = root, base = "HEAD" }, { file }, on_file)
+    end
+
+    it("reports no answer, not an empty one, when the only server answers with an error", function()
+      enable(
+        "erroring",
+        server(function(method, callback)
+          vim.schedule(function()
+            if method == "initialize" then
+              callback(nil, { capabilities = { documentSymbolProvider = true } })
+            elseif method == "textDocument/documentSymbol" then
+              callback({ code = -32801, message = "content modified" }, nil)
+            else
+              callback(nil, nil)
+            end
+          end)
+        end)
+      )
+      local report
+      start(function(_, items)
+        report = { items = items }
+      end)
+      assert.is_true(vim.wait(3000, function()
+        return report ~= nil
+      end, 20))
+      assert.is_nil(report.items)
+    end)
+
+    it("reports the file when its server exits before answering", function()
+      local asked = false
+      enable(
+        "dies",
+        server(function(method, callback)
+          if method == "initialize" then
+            vim.schedule(function()
+              callback(nil, { capabilities = { documentSymbolProvider = true } })
+            end)
+          elseif method == "textDocument/documentSymbol" then
+            asked = true
+          else
+            vim.schedule(function()
+              callback(nil, nil)
+            end)
+          end
+        end)
+      )
+      local report
+      start(function(_, items)
+        report = { items = items }
+      end)
+      assert.is_true(vim.wait(3000, function()
+        return asked
+      end, 20))
+      for _, client in ipairs(vim.lsp.get_clients({ name = "dies" })) do
+        client:stop(true)
+      end
+      assert.is_true(vim.wait(5000, function()
+        return report ~= nil
+      end, 20))
+    end)
+
+    it("still hears a server attach in time when a second walk waits on the same file", function()
+      enable(
+        "slow_start",
+        server(function(method, callback)
+          local delay = method == "initialize" and 400 or 0
+          vim.defer_fn(function()
+            if method == "initialize" then
+              callback(nil, { capabilities = { documentSymbolProvider = true } })
+            elseif method == "textDocument/documentSymbol" then
+              callback(nil, { SYMBOL })
+            else
+              callback(nil, nil)
+            end
+          end, delay)
+        end)
+      )
+      local first, second
+      local cancel = start(function(_, items)
+        first = { items = items }
+      end)
+      cancel()
+      start(function(_, items)
+        second = { items = items }
+      end)
+      assert.is_true(vim.wait(4000, function()
+        return first ~= nil and second ~= nil
+      end, 20))
+      assert.truthy(second.items)
+      assert.truthy(first.items, "the first walk timed out although the server attached in time")
+    end)
+
+    it("answers when a second symbol server attaches while the first is still answering", function()
+      local respond
+      enable(
+        "first_server",
+        server(function(method, callback)
+          if method == "textDocument/documentSymbol" then
+            respond = function()
+              callback(nil, { SYMBOL })
+            end
+            return
+          end
+          vim.schedule(function()
+            callback(nil, method == "initialize" and { capabilities = { documentSymbolProvider = true } } or nil)
+          end)
+        end)
+      )
+      local report
+      start(function(_, items)
+        report = { items = items }
+      end)
+      assert.is_true(vim.wait(3000, function()
+        return respond ~= nil
+      end, 20))
+      local buf = vim.fn.bufnr(root .. "/mod.lua")
+      vim.lsp.start({
+        name = "second_server",
+        root_dir = root,
+        cmd = server(function(method, callback)
+          vim.schedule(function()
+            callback(nil, method == "initialize" and { capabilities = { documentSymbolProvider = true } } or {})
+          end)
+        end),
+      }, { bufnr = buf })
+      assert.is_true(vim.wait(2000, function()
+        return #vim.lsp.get_clients({ bufnr = buf, method = "textDocument/documentSymbol" }) == 2
+      end, 20))
+      respond()
+      assert.is_true(
+        vim.wait(3000, function()
+          return report ~= nil
+        end, 20),
+        "buf_request_all counted the late client, which was never asked, so it never answered"
+      )
+    end)
+
+    it("lists a symbol once when two servers both answer for the file", function()
+      local function answering(method, callback)
+        vim.schedule(function()
+          if method == "initialize" then
+            callback(nil, { capabilities = { documentSymbolProvider = true } })
+          elseif method == "textDocument/documentSymbol" then
+            callback(nil, { SYMBOL })
+          else
+            callback(nil, nil)
+          end
+        end)
+      end
+      enable("first_server", server(answering))
+      local buf = vim.fn.bufadd(root .. "/mod.lua")
+      vim.fn.bufload(buf)
+      vim.bo[buf].filetype = "lua"
+      vim.lsp.start({ name = "second_server", root_dir = root, cmd = server(answering) }, { bufnr = buf })
+      assert.is_true(vim.wait(2000, function()
+        return #vim.lsp.get_clients({ bufnr = buf, method = "textDocument/documentSymbol" }) == 2
+      end, 20))
+      local report
+      start(function(_, items)
+        report = { items = items }
+      end)
+      assert.is_true(vim.wait(3000, function()
+        return report ~= nil
+      end, 20))
+      assert.equal(1, #assert(report.items))
+    end)
+  end)
 end)

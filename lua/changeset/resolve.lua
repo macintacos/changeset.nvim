@@ -21,6 +21,9 @@ local CONCURRENCY = 4
 -- leave the file showing its resolving placeholder forever.
 local ATTACH_TIMEOUT_MS = 2000
 
+-- A server that never answers, a hung one say, must not strand a walk lane.
+local REQUEST_TIMEOUT_MS = 10000
+
 local M = {}
 
 ---Whether a server enabled through `vim.lsp.enable` may yet attach to `bufnr`. One
@@ -48,19 +51,19 @@ local function await_client(bufnr, on_client)
     return on_client(false)
   end
 
-  local done = false
-  local group = vim.api.nvim_create_augroup("ChangesetAttach" .. bufnr, { clear = true })
+  -- Each wait owns its autocmd: a second walk waiting on the same file must not
+  -- silence the first's.
+  local done, autocmd = false, nil
   local function finish(ok)
     if done then
       return
     end
     done = true
-    pcall(vim.api.nvim_del_augroup_by_id, group)
+    pcall(vim.api.nvim_del_autocmd, autocmd)
     on_client(ok)
   end
 
-  vim.api.nvim_create_autocmd("LspAttach", {
-    group = group,
+  autocmd = vim.api.nvim_create_autocmd("LspAttach", {
     buffer = bufnr,
     desc = "changeset: a server reached a changed file, so its symbols can be requested",
     callback = function(args)
@@ -79,19 +82,64 @@ local function await_client(bufnr, on_client)
   end, ATTACH_TIMEOUT_MS)
 end
 
----Flattened symbols for one loaded buffer.
+---Flattened symbols for one loaded buffer, from the first client that answered without an
+---error, or nil when none did.
 ---@param bufnr integer
----@param on_done fun(items: changeset.Symbol[])
+---@param on_done fun(items: changeset.Symbol[]?)
 local function request(bufnr, on_done)
+  local method = "textDocument/documentSymbol"
   local keep = kinds.for_filetype(vim.bo[bufnr].filetype)
   local params = { textDocument = vim.lsp.util.make_text_document_params(bufnr) }
-  vim.lsp.buf_request_all(bufnr, "textDocument/documentSymbol", params, function(results)
-    local items = {}
-    for _, res in pairs(results) do
-      vim.list_extend(items, symbols.flatten(res.result or {}, keep))
+  local clients = vim.lsp.get_clients({ bufnr = bufnr, method = method })
+  local waiting, answers, pending, done, autocmd = {}, {}, 0, false, nil
+
+  local function finish()
+    if done then
+      return
     end
-    on_done(items)
-  end)
+    done = true
+    pcall(vim.api.nvim_del_autocmd, autocmd)
+    for _, client in ipairs(clients) do
+      if answers[client.id] then
+        return on_done(answers[client.id])
+      end
+    end
+    on_done(nil)
+  end
+
+  local function settle(id, items)
+    if done or not waiting[id] then
+      return
+    end
+    waiting[id], answers[id], pending = nil, items, pending - 1
+    if pending == 0 then
+      finish()
+    end
+  end
+
+  -- Fires: a client leaves the buffer, which on exit drops its pending handlers
+  -- without calling them.
+  autocmd = vim.api.nvim_create_autocmd("LspDetach", {
+    buffer = bufnr,
+    desc = "changeset: stop waiting on a client that left before answering for symbols",
+    callback = function(args)
+      settle(args.data.client_id, nil)
+    end,
+  })
+  for _, client in ipairs(clients) do
+    waiting[client.id], pending = true, pending + 1
+    local sent = client:request(method, params, function(err, result)
+      local ok, items = pcall(symbols.flatten, result or {}, keep)
+      settle(client.id, not err and ok and items or nil)
+    end, bufnr)
+    if not sent then
+      settle(client.id, nil)
+    end
+  end
+  if pending == 0 then
+    return finish()
+  end
+  vim.defer_fn(finish, REQUEST_TIMEOUT_MS)
 end
 
 ---The file's text at `repo.base`, or nil when it has no base side or git cannot read it.
@@ -141,7 +189,9 @@ local function resolve_one(repo, file, on_done)
         return on_done(nil, comment_lines)
       end
       request(bufnr, function(items)
-        attributes.mark(items, path, source)
+        if items then
+          attributes.mark(items, path, source)
+        end
         on_done(items, comment_lines)
       end)
     end)

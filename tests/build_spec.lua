@@ -170,6 +170,21 @@ describe("changeset.build", function()
       assert.is_truthy(saved["mod.lua"])
     end)
 
+    it("keeps a file's symbols when an older walk reports it unanswered afterwards", function()
+      build_and_collect()
+      build.refresh()
+      assert.is_true(vim.wait(10000, function()
+        return #source.asks == 2
+      end, 25))
+      local items = { { name = "f", kind = "Function", depth = 0, lnum = 1, range_lnum = 1, range_end_lnum = 1 } }
+      source.asks[2].answer("mod.lua", items)
+      source.asks[1].answer("mod.lua", nil)
+
+      refresh_and_collect()
+
+      assert.equal(1, #assert(build.current().symbols["mod.lua"]))
+    end)
+
     it("does not cache the symbols read from a buffer holding unwritten edits", function()
       answer({ { name = "f", kind = "Function", depth = 0, lnum = 1, range_lnum = 1, range_end_lnum = 1 } })
       vim.api.nvim_buf_set_lines(0, 0, -1, false, { "return 3" })
