@@ -353,7 +353,8 @@ local META_KINDS = { orphans = true, orphan = true }
 local function compose(row, chunks, stat)
   local text, marks = "", {}
   for _, chunk in ipairs(chunks) do
-    local piece, hl = chunk[1], chunk[2]
+    -- A buffer line can't hold a line break, which a symbol name or a path can. Same byte length, so marks stay put.
+    local piece, hl = (chunk[1]:gsub("[\r\n]", " ")), chunk[2]
     if hl then
       marks[#marks + 1] = { col = #text, end_col = #text + #piece, hl = hl }
     end

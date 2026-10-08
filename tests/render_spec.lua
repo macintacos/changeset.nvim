@@ -365,6 +365,19 @@ describe("changeset.render", function()
         assert.same({ " ▎ F a.lua (src)", "   ├─S Alpha", "   └─S Beta" }, texts(file_lines(rows, opts())))
       end)
 
+      it("draws a name holding a line break on one line, its stat at the line's end", function()
+        local lines = file_lines({ file({ children = { symbol({ name = "one\ntwo" }) } }) }, opts())
+
+        assert.equal("   └─S one two", lines[2].text)
+        assert.equal(#lines[2].text, assert(stat_mark(lines[2])).col)
+      end)
+
+      it("draws a path holding a line break on one line", function()
+        local lines = file_lines({ file({ path = "new\r\nline.lua" }) }, opts())
+
+        assert.equal(" ▎ F new  line.lua", lines[1].text)
+      end)
+
       it("carries a bar down under a parent with later siblings, and blank under the last", function()
         local rows = {
           file({
