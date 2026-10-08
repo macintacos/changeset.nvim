@@ -838,7 +838,8 @@ the drafts.
   so.
 - `<CR>` or a split or tab key opens the file at the comment and opens the
   comment to edit; `<S-CR>` also closes the sidebar. A whole file's comment
-  opens under its row, without opening the file.
+  opens under its row, without opening the file. While the file has unsaved
+  edits they refuse, saying "save the file first".
 - `d` asks, then deletes the comment.
 
 WALKING AND LISTING                                *changeset-comment-walking*
@@ -875,7 +876,8 @@ submit sends only what you write after it. They become one of the branch's
 submitted batches, which `:Changeset review restore` brings back. Drafts stay,
 and so does a comment written or edited while the picker was open. The
 notice names the agent and what stays, as in "submitted 3 review comments to
-claude; :Changeset review restore brings them back; 1 draft stays".
+claude; :Changeset review restore brings them back; 1 draft stays". A second
+submit while one is still on its way is refused with a notice.
 
 An agent waiting at a permission prompt can't take the paste: the picker lists
 it dimmed, saying "answer its prompt first", and one that reaches a prompt
