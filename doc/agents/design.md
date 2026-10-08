@@ -866,10 +866,10 @@ brings them back".
 ### The Comments section lists what you wrote
 
 ```text
- 󰍩  Comments            3 comments
+ 󰍩  Comments                     3 comments
  ● 󰢱 reviewing.lua:42  say which ref failed
- ● 󰂺 README.md:12  fix the typo
- ● 󰢱 view.lua:7-9  cache this?
+ ● 󰂺 README.md:12              fix the typo
+ ● 󰢱 view.lua:7-9               cache this?
 
  󰴉  Implementation      2 files      +12 -3
 ```
@@ -886,12 +886,14 @@ Its header follows § Sections: an icon, the label, and a count of its rows in t
 colour, taken before any filter, adding the drafts among them when there are any:
 `3 comments · 1 draft`. The icon is the marks' bubble, `󰍩`, borrowed as they
 borrow it and drawn in `ChangesetReviewComment`. It carries no `+N -N`: a review comment
-changes no line, so a stat there would mean nothing.
+changes no line, so a stat there would mean nothing. The count takes the stat's place at
+the right edge instead, so the column doesn't sit empty.
 
 A row speaks the marks' language. Their circle, `●` in `ChangesetReviewComment`, or a
 draft's `◌` in `ChangesetReviewCommentDraft`, stands in the rail's column. The file's icon follows, then its name and the line or range. The
 directory is left out, as the preview band and `y` both carry the whole path. The body's
-first line comes last, in `ChangesetReviewCommentBody` like the marks' body, clipped to fit.
+first line comes last, at the right edge as the count above it is, in
+`ChangesetReviewCommentBody` like the marks' body, clipped to fit.
 
 The section is read from the store each time the sidebar draws, so it needs no PR and no
 wait, and is left out while it lists nothing. It follows every write to the store by

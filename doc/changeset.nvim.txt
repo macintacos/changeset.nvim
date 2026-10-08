@@ -849,8 +849,8 @@ THE COMMENTS SECTION                              *changeset-comments-section*
 With the sidebar open, a Comments section at the top of the tree lists the
 branch's review comments, by file, then first line, then last line, a whole
 file's first. Each row shows a `●`, or a draft's `◌`, the file's name and
-lines, and the first line of the comment. Its header counts the comments and
-the drafts.
+lines, and at its right edge the first line of the comment. Its header counts
+the comments and the drafts at its right edge.
 
 - Moving onto a row previews its line; for a file that is gone, a notice says
   so.
