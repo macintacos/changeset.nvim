@@ -1,5 +1,6 @@
 ---The markdown window a review comment is written in, under the line it is about.
 
+local cells = require("changeset.cells")
 local help = require("changeset.help")
 local render = require("changeset.render")
 
@@ -232,9 +233,7 @@ function M.open(opts)
     { " q ", render.KEYCAP_HL },
     { " draft " },
   }
-  local hint_width = vim.iter(hint):fold(0, function(cells, chunk)
-    return cells + vim.fn.strdisplaywidth(chunk[1])
-  end)
+  local hint_width = cells.chunks(hint)
 
   ---Its line, held to the source's end should edits there shorten it.
   local function line()

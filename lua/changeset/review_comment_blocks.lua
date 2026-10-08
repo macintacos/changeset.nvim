@@ -1,5 +1,6 @@
 ---Draws each review comment's whole text as a block under its last line, and parks the cursor on a block a one-line
 ---move reaches, as if it were a line of the file.
+local cells = require("changeset.cells")
 local config = require("changeset.config")
 local dialog = require("changeset.dialog")
 local render = require("changeset.render")
@@ -11,7 +12,6 @@ local ns = vim.api.nvim_create_namespace("changeset.review_comment_blocks")
 
 local MAX_WIDTH = review_comment_window.MEASURE
 local HINT = " <CR> edit · d delete "
-local ELLIPSIS = "…"
 local SOLID = { h = "─", v = "│" }
 local DASHED = { h = "┄", v = "┆" }
 
@@ -75,12 +75,6 @@ local editing = {}
 ---@type { win: integer, cursorline: boolean }?
 local released
 
----@param text string
----@return integer
-local function cells(text)
-  return vim.fn.strdisplaywidth(text)
-end
-
 ---Whether review comments show as blocks.
 ---@return boolean
 function M.shown()
@@ -113,21 +107,6 @@ local function measure(buf)
   return math.max(room - 2, 3)
 end
 
----`text` cut to at most `room` cells, ending in an ellipsis when cut.
----@param text string
----@param room integer
----@return string
-local function fit(text, room)
-  if cells(text) <= room then
-    return text
-  end
-  local n = vim.fn.strchars(text)
-  while n > 0 and cells(vim.fn.strcharpart(text, 0, n)) > room - cells(ELLIPSIS) do
-    n = n - 1
-  end
-  return vim.fn.strcharpart(text, 0, n) .. ELLIPSIS
-end
-
 ---`comment`'s box as virtual lines, at most `widest` cells inside its border.
 ---@param comment changeset.ReviewComment
 ---@param widest integer
@@ -141,13 +120,13 @@ local function box(comment, widest, is_parked)
   -- Named as hover names it.
   local title = (comment.draft and " Draft review comment · " or " Review comment · ") .. label .. " "
   local text = dialog.wrap(vim.trim((comment.body:gsub("\r\n", "\n"))), math.max(widest - 2, 1))
-  local inner = cells(title) + 1
+  local inner = cells.width(title) + 1
   for _, line in ipairs(text) do
-    inner = math.max(inner, cells(line) + 2)
+    inner = math.max(inner, cells.width(line) + 2)
   end
   inner = math.min(inner, widest)
   -- At least one cell of border after the title, so a cut one still reads as sitting in the border.
-  title = fit(title, inner - 1)
+  title = cells.clip(title, inner - 1)
   local lines = {
     {
       { "╭", border },
@@ -155,19 +134,19 @@ local function box(comment, widest, is_parked)
         title,
         is_parked and render.BLOCK_PARKED_TITLE_HL or comment.draft and render.BLOCK_DRAFT_HL or render.BLOCK_TITLE_HL,
       },
-      { edge.h:rep(inner - cells(title)), border },
+      { edge.h:rep(inner - cells.width(title)), border },
       { "╮", border },
     },
   }
   for _, line in ipairs(text) do
-    local padded = " " .. line .. (" "):rep(math.max(inner - cells(line) - 1, 0))
+    local padded = " " .. line .. (" "):rep(math.max(inner - cells.width(line) - 1, 0))
     lines[#lines + 1] = { { edge.v, border }, { padded, render.BLOCK_BODY_HL }, { edge.v, border } }
   end
   local bottom = { { "╰", border } }
   local rest = inner
-  if is_parked and cells(HINT) < inner then
+  if is_parked and cells.width(HINT) < inner then
     bottom[#bottom + 1] = { HINT, render.BLOCK_HINT_HL }
-    rest = inner - cells(HINT)
+    rest = inner - cells.width(HINT)
   end
   vim.list_extend(bottom, { { edge.h:rep(rest), border }, { "╯", border } })
   lines[#lines + 1] = bottom

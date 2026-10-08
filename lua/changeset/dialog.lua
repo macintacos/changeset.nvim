@@ -1,4 +1,5 @@
 ---Dialogs drawn as changeset's own floats: a question before a destructive action, and a choice among rows.
+local cells = require("changeset.cells")
 local render = require("changeset.render")
 
 local M = {}
@@ -12,7 +13,6 @@ local PAD = 2
 -- Above other floats and the popup menu (100), under the command line and ui2's message windows (197-200).
 local ZINDEX = 150
 local QUOTE = "▎ "
-local ELLIPSIS = "…"
 -- The button that changes nothing, first and focused so a <CR> typed ahead lands on it.
 local SAFE = "Keep"
 -- Marks the focused row, at its left edge, where a list is read from.
@@ -77,36 +77,6 @@ end
 ---@type changeset.DialogState?
 local active
 
----@param text string
----@return integer
-local function cells(text)
-  return vim.fn.strdisplaywidth(text)
-end
-
----The longest head of `text` at most `room` cells wide, and never less than its first character.
----@param text string
----@param room integer
----@return string
-local function head(text, room)
-  local n = vim.fn.strchars(text)
-  while n > 1 and cells(vim.fn.strcharpart(text, 0, n)) > room do
-    n = n - 1
-  end
-  return vim.fn.strcharpart(text, 0, n)
-end
-
----The longest tail of `text` at most `room` cells wide.
----@param text string
----@param room integer
----@return string
-local function tail(text, room)
-  local from = 0
-  while cells(vim.fn.strcharpart(text, from)) > room do
-    from = from + 1
-  end
-  return vim.fn.strcharpart(text, from)
-end
-
 ---`text` in lines at most `width` cells wide, broken between words, and inside a word wider than that. A line keeps
 ---its indentation and the spaces between its words, save those where it breaks.
 ---@param text string
@@ -117,15 +87,18 @@ function M.wrap(text, width)
   for _, paragraph in ipairs(vim.split(text, "\n", { plain = true })) do
     local line, first = "", true
     for space, word in paragraph:gmatch("(%s*)(%S+)") do
-      if line ~= "" and cells(line .. space .. word) <= width then
+      if line ~= "" and cells.width(line .. space .. word) <= width then
         line = line .. space .. word
       else
         if line ~= "" then
           lines[#lines + 1] = line
         end
         word = first and space .. word or word
-        while cells(word) > width do
-          local piece = head(word, width)
+        while cells.width(word) > width do
+          local piece = cells.head(word, width)
+          if piece == "" then
+            piece = vim.fn.strcharpart(word, 0, 1)
+          end
           lines[#lines + 1] = piece
           word = word:sub(#piece + 1)
         end
@@ -146,16 +119,19 @@ function M._body(blocks, width)
   local lines = {}
   for _, block in ipairs(blocks) do
     local bar = block.quote and QUOTE or ""
-    local measure = width - cells(bar)
+    local measure = width - cells.width(bar)
     local text = block.text:gsub("%s+$", "")
     local texts
     if block.path then
-      texts = { cells(text) <= measure and text or ELLIPSIS .. tail(text, measure - cells(ELLIPSIS)) }
+      texts = {
+        cells.width(text) <= measure and text
+          or cells.ELLIPSIS .. cells.tail(text, measure - cells.width(cells.ELLIPSIS)),
+      }
     else
       texts = M.wrap(text, measure)
       if block.max_lines and #texts > block.max_lines then
         texts = vim.list_slice(texts, 1, block.max_lines)
-        texts[#texts] = head(texts[#texts], measure - cells(ELLIPSIS)) .. ELLIPSIS
+        texts[#texts] = cells.head(texts[#texts], measure - cells.width(cells.ELLIPSIS)) .. cells.ELLIPSIS
       end
     end
     for _, line in ipairs(texts) do
@@ -225,15 +201,6 @@ local function finish(state, value)
   end)
 end
 
----Cells `line` takes.
----@param line changeset.DialogLine
----@return integer
-local function line_cells(line)
-  return cells(table.concat(vim.tbl_map(function(chunk)
-    return chunk[1]
-  end, line)))
-end
-
 ---Where a dialog `width` by `height` cells inside its border goes: cut to the editor, and centred on it.
 ---@param width integer
 ---@param height integer
@@ -271,7 +238,7 @@ local function open(lines, frame, answer)
     return nil
   end
   local title, footer = " " .. frame.title .. " ", frame.footer and " " .. frame.footer .. " "
-  local width = math.max(frame.width, cells(title), footer and cells(footer) or 0)
+  local width = math.max(frame.width, cells.width(title), footer and cells.width(footer) or 0)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = "wipe"
   -- The margins read as indents, down which mini.indentscope would rule a scope line.
@@ -406,9 +373,9 @@ function M.confirm(opts, yes)
   local labels = { SAFE, opts.action }
   local body = M._body(opts.body, math.min(MEASURE, room(PAD)))
   local row, ranges = buttons(labels, 1)
-  local width = line_cells(row)
+  local width = cells.chunks(row)
   for _, line in ipairs(body) do
-    width = math.max(width, line_cells(line))
+    width = math.max(width, cells.chunks(line))
   end
   local margin = { (" "):rep(PAD) }
   local indent = { (" "):rep(PAD + width - ranges[#ranges][2]) }
@@ -514,7 +481,7 @@ function M._rows(items)
   for _, item in ipairs(items) do
     local row = shown(item)
     for c = 1, #row - 1 do
-      widths[c] = math.max(widths[c] or 0, cells(row[c][1]))
+      widths[c] = math.max(widths[c] or 0, cells.width(row[c][1]))
     end
   end
   local lines = {}
@@ -528,7 +495,7 @@ function M._rows(items)
     for c, cell in ipairs(row) do
       line[#line + 1] = cell
       if c < #row then
-        line[#line + 1] = { (" "):rep(widths[c] - cells(cell[1]) + 2) }
+        line[#line + 1] = { (" "):rep(widths[c] - cells.width(cell[1]) + 2) }
       end
     end
     lines[i] = line
@@ -540,18 +507,18 @@ end
 ---@param line changeset.DialogLine
 ---@param width integer
 ---@return changeset.DialogLine
-local function clip(line, width)
-  if line_cells(line) <= width then
+function M._clip(line, width)
+  if cells.chunks(line) <= width then
     return line
   end
-  local out, left = {}, width - cells(ELLIPSIS)
+  local out, left = {}, width - cells.width(cells.ELLIPSIS)
   for _, chunk in ipairs(line) do
-    if cells(chunk[1]) > left then
-      out[#out + 1] = { head(chunk[1], left) .. ELLIPSIS, chunk[2] }
+    if cells.width(chunk[1]) > left then
+      out[#out + 1] = { cells.head(chunk[1], left) .. cells.ELLIPSIS, chunk[2] }
       return out
     end
     out[#out + 1] = chunk
-    left = left - cells(chunk[1])
+    left = left - cells.width(chunk[1])
   end
   return out
 end
@@ -563,11 +530,11 @@ end
 ---@param cb fun(index: integer?)
 function M.choose(opts, cb)
   local rows = vim.tbl_map(function(row)
-    return clip(row, vim.o.columns - 4)
+    return M._clip(row, vim.o.columns - 4)
   end, M._rows(opts.items))
   local width = 0
   for _, row in ipairs(rows) do
-    width = math.max(width, line_cells(row) + 2)
+    width = math.max(width, cells.chunks(row) + 2)
   end
   local digits = #opts.items == 1 and "1" or ("1-%d"):format(math.min(#opts.items, NUMBERED))
 
