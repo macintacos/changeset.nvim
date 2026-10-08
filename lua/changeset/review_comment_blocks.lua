@@ -82,19 +82,42 @@ local function measure(buf)
   return math.max(room - 2, 3)
 end
 
----`comment`'s box as virtual lines, at most `widest` cells inside its border.
+---`text` with each tab turned into the spaces that reach its tab stop, counted from screen column `from`.
+---@param text string
+---@param from integer
+---@param tabstop integer
+---@return string
+local function expand_tabs(text, from, tabstop)
+  return (
+    text:gsub("[^\n]+", function(line)
+      local out = ""
+      for run, tab in line:gmatch("([^\t]*)(\t?)") do
+        out = out .. run
+        if tab ~= "" then
+          out = out .. (" "):rep(tabstop - (from + cells.width(out)) % tabstop)
+        end
+      end
+      return out
+    end)
+  )
+end
+
+---`comment`'s box as virtual lines in `buf`, at most `widest` cells inside its border.
+---@param buf integer
 ---@param comment changeset.ReviewComment
 ---@param widest integer
 ---@param is_parked boolean
 ---@return [string, string][][]
-local function box(comment, widest, is_parked)
+local function box(buf, comment, widest, is_parked)
   local edge = comment.draft and DASHED or SOLID
   local plain_border = comment.draft and highlights.BLOCK_DRAFT_HL or highlights.BLOCK_BORDER_HL
   local border = is_parked and highlights.BLOCK_PARKED_HL or plain_border
   local label = review_comment.lines_label(review_comment.first(comment), comment.line)
   -- Named as hover names it.
   local title = (comment.draft and " Draft review comment · " or " Review comment · ") .. label .. " "
-  local text = dialog.wrap(vim.trim((comment.body:gsub("\r\n", "\n"))), math.max(widest - 2, 1))
+  -- A virtual line's tab stops count from the border, two cells before the text.
+  local body = comment.body:gsub("\r\n", "\n"):gsub("^%s*\n", ""):gsub("%s+$", "")
+  local text = dialog.wrap(expand_tabs(body, 2, vim.bo[buf].tabstop), math.max(widest - 2, 1))
   local inner = cells.width(title) + 1
   for _, line in ipairs(text) do
     inner = math.max(inner, cells.width(line) + 2)
@@ -167,7 +190,7 @@ local function paint(buf, id, parked_index)
   local lines = {}
   if not (editing[buf] and editing[buf][line]) then
     for i, comment in ipairs(blocks.anchors[id]) do
-      vim.list_extend(lines, box(comment, blocks.widest, i == parked_index))
+      vim.list_extend(lines, box(buf, comment, blocks.widest, i == parked_index))
     end
   end
   vim.api.nvim_buf_set_extmark(buf, ns, line - 1, 0, { id = id, virt_lines = lines })
@@ -239,7 +262,7 @@ local function block_rows(state, view)
   local blocks = drawn[state.buf]
   local above, height = 0, 0
   for i, comment in ipairs(blocks.anchors[state.id]) do
-    local rows = #box(comment, blocks.widest, false)
+    local rows = #box(state.buf, comment, blocks.widest, false)
     if i < state.index then
       above = above + rows
     elseif i == state.index then

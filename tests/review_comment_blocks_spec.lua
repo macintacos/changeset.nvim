@@ -125,6 +125,23 @@ describe("review comment blocks", function()
     assert.truthy(text[1]:find("^╭ Review comment · lines 4%-5 ─╮$"))
   end)
 
+  it("draws every row of a tab-indented snippet as wide as its border", function()
+    keep({ path = "alpha.txt", line = 3, body = "try:\n\tif x then\n\t\ty()\n\tend" })
+
+    local text = drawn()[1].text
+    for i = 2, #text do
+      assert.are.equal(vim.fn.strdisplaywidth(text[1]), vim.fn.strdisplaywidth(text[i]), text[i])
+    end
+  end)
+
+  it("keeps the first line's indentation, as it keeps the lines after it", function()
+    keep({ path = "alpha.txt", line = 3, body = "    foo()\n    bar()" })
+
+    local text = drawn()[1].text
+    assert.truthy(text[2]:find("^│     foo%(%)"), text[2])
+    assert.truthy(text[3]:find("^│     bar%(%)"), text[3])
+  end)
+
   it("wraps a long line at word boundaries within the review comment window's measure", function()
     keep({ path = "alpha.txt", line = 3, body = ("word "):rep(40) })
 
