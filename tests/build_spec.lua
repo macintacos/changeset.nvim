@@ -446,7 +446,7 @@ describe("changeset.build on a branch measured against its PR's target", functio
     assert.is_true(build.build())
     assert.is_true(vim.wait(5000, function()
       local tree = build.current()
-      return tree and tree.pr == 7 and tree.collected
+      return tree ~= nil and tree.pr == 7 and tree.collected
     end, 10))
     assert.equal(parent_base, build.current().base)
   end
@@ -479,7 +479,7 @@ describe("changeset.build on a branch measured against its PR's target", functio
 
   it("keeps the tree on the PR's target across a commit", function()
     build_on_pr()
-    local kept = build.current()
+    local kept = assert(build.current())
     vim.env.FAKE_GH_DELAY = "0.5"
     commit_file("more.txt")
 
@@ -527,7 +527,7 @@ describe("changeset.build on a branch measured against its PR's target", functio
     build.update()
 
     assert.is_true(vim.wait(5000, function()
-      local tree = build.current()
+      local tree = assert(build.current())
       return tree.base ~= parent_base and tree.pr == nil
     end, 25))
   end)
