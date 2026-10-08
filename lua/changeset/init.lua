@@ -819,6 +819,10 @@ local function walk(count, kind, take)
     waiting = { count = before + count, kind = kind, take = take, win = win, buf = buf }
     return vim.api.nvim_echo({ { "reading the changes…" } }, false, {})
   end
+  -- The step walks the drawn rows, and `ready()` judged the tree's; a key pressed is worth drawing now.
+  if settling.owed then
+    settle()
+  end
   take(count)
 end
 

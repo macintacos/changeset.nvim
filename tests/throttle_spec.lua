@@ -99,6 +99,15 @@ describe("the sidebar's redraw after a rebuild", function()
       assert.equal(2, draws)
     end)
 
+    it("steps over the rows of answers whose draw still waits", function()
+      answer("a.lua")
+      answer("b.lua")
+
+      changeset.step(1, "symbol")
+
+      assert.equal("b.lua", vim.fs.basename(vim.api.nvim_buf_get_name(0)))
+    end)
+
     it("lists the rows of every answer while their draw waits", function()
       answer("a.lua")
       answer("b.lua")
