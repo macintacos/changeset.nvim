@@ -12,10 +12,11 @@
 ---@field range_end_lnum integer 1-based last line of the symbol's body.
 ---@field depth integer    0 for a top-level symbol.
 
+local cells = require("changeset.cells")
+
 local M = {}
 
 local SEP = " › "
-local ELLIPSIS = "…"
 
 ---The range naming a symbol: `DocumentSymbol.selectionRange`, or the whole
 ---`SymbolInformation.location.range` for servers that answer with the flat form.
@@ -198,7 +199,7 @@ function M.fit(trail, width, sep)
   local parts = vim.split(trail, sep, { plain = true })
   while #parts > 1 do
     table.remove(parts, 1)
-    local trimmed = ELLIPSIS .. sep .. table.concat(parts, sep)
+    local trimmed = cells.ELLIPSIS .. sep .. table.concat(parts, sep)
     if vim.fn.strdisplaywidth(trimmed) <= width then
       return trimmed
     end
@@ -207,9 +208,9 @@ function M.fit(trail, width, sep)
   -- One segment, still too wide: keep its tail.
   local keep = width - 1
   if keep < 1 then
-    return ELLIPSIS
+    return cells.ELLIPSIS
   end
-  return ELLIPSIS .. vim.fn.strcharpart(parts[1], vim.fn.strchars(parts[1]) - keep)
+  return cells.ELLIPSIS .. cells.tail(parts[1], keep)
 end
 
 return M

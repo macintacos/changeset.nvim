@@ -216,6 +216,10 @@ describe("changeset.symbols", function()
       assert.equal("…ngSymbolName", symbols.fit("someVeryLongSymbolName", 13))
     end)
 
+    it("truncates a single segment of wide characters to the width", function()
+      assert.equal("…" .. ("漢"):rep(4), symbols.fit(("漢"):rep(20), 10))
+    end)
+
     it("splits on a caller-given separator", function()
       assert.equal("…/changeset", symbols.fit("lua/plugins/changeset", 15, "/"))
     end)

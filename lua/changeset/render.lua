@@ -3,6 +3,7 @@
 ---Everything here is data in, data out: the caller supplies icons, collapse state
 ---and width, and applies the returned marks to a buffer itself.
 
+local cells = require("changeset.cells")
 local symbols = require("changeset.symbols")
 
 ---@class changeset.Mark
@@ -417,17 +418,6 @@ local function stat_cells(stat)
   return total
 end
 
----Cuts `text` to `room` cells, marking the cut with an ellipsis and keeping its head.
----@param text string
----@param room integer
----@return string
-local function clip_right(text, room)
-  if vim.fn.strdisplaywidth(text) <= room then
-    return text
-  end
-  return vim.fn.strcharpart(text, 0, math.max(room - 1, 0)) .. "…"
-end
-
 ---A file row: filename first, its directory dimmed in parentheses, dropped before the name is trimmed.
 ---@param file changeset.Row
 ---@param opts changeset.RenderOpts
@@ -496,7 +486,7 @@ local function child_line(row, guides, opts)
   local room = opts.width - vim.fn.strdisplaywidth(MARGIN .. "  " .. guides .. glyph .. " ") - stat_cells(stat)
   local name, name_hl = symbols.fit(row.name, room), row.ancestor and "Comment" or nil
   if META_KINDS[row.kind] then
-    icon_hl, name, name_hl = M.META_HL, clip_right(row.name, room), M.META_HL
+    icon_hl, name, name_hl = M.META_HL, cells.clip(row.name, room), M.META_HL
   end
   return compose(row, {
     { MARGIN },
@@ -555,7 +545,7 @@ local function comment_line(row, opts)
   local where = vim.fs.basename(row.path) .. (comment.line and ":" .. span(comment) or "")
   local circle = comment.draft and M.REVIEW_COMMENT_DRAFT_CIRCLE or M.REVIEW_COMMENT_CIRCLE
   local room = opts.width - vim.fn.strdisplaywidth(MARGIN .. circle .. " " .. glyph .. " ") - stat_cells(nil)
-  where = clip_right(where, room)
+  where = cells.clip(where, room)
   local chunks = {
     { MARGIN },
     { circle, M.review_comment_hl(comment) },
@@ -566,7 +556,7 @@ local function comment_line(row, opts)
   room = room - vim.fn.strdisplaywidth(where)
   -- The body needs its two-cell gap and a cell to show anything.
   if room >= 3 then
-    local text = clip_right(comment.body:match("^[^\r\n]*"), room - 2)
+    local text = cells.clip(comment.body:match("^[^\r\n]*"), room - 2)
     vim.list_extend(chunks, { { "  " }, { text, M.REVIEW_COMMENT_BODY_HL } })
   end
   return compose(row, chunks)
@@ -737,7 +727,7 @@ function M.header(summary, width)
   local room = width
     - vim.fn.strdisplaywidth((" %s "):format(BRANCH_ICON))
     - (pr and vim.fn.strdisplaywidth(pr) + 2 or 0)
-  local ref = clip_right(summary.ref, room)
+  local ref = cells.clip(summary.ref, room)
   local remote = ref:match("^origin/") or ""
   return table.concat({
     ("%%#%s# %s "):format(M.HEADER_ICON_HL, BRANCH_ICON),
@@ -759,17 +749,6 @@ local function counted(glyph, count, noun)
     { tostring(count), M.HEADER_HL },
     { " " .. noun .. (count == 1 and "" or "s"), M.HEADER_DIM_HL },
   }
-end
-
----Width in cells of virtual-text chunks.
----@param chunks table[]
----@return integer
-local function cells(chunks)
-  local total = 0
-  for _, chunk in ipairs(chunks) do
-    total = total + vim.fn.strdisplaywidth(chunk[1])
-  end
-  return total
 end
 
 ---The header's second row, as a virtual line over the tree: the file count on the
@@ -805,7 +784,7 @@ function M.header_totals(summary, width)
   })
 
   local chunks = vim.list_extend({ { " ", strip } }, left)
-  chunks[#chunks + 1] = { (" "):rep(math.max(width - cells(chunks) - cells(right), 1)), strip }
+  chunks[#chunks + 1] = { (" "):rep(math.max(width - cells.chunks(chunks) - cells.chunks(right), 1)), strip }
   return vim.list_extend(chunks, right)
 end
 

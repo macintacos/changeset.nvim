@@ -288,6 +288,12 @@ describe("changeset.render", function()
       assert.truthy(line.text:find("…$"))
     end)
 
+    it("clips a body of wide characters to the width", function()
+      local line = render.lines({ comments({ saved({ body = ("日本語"):rep(10) }) }) }, opts({ width = 30 }))[2]
+
+      assert.is_true(vim.fn.strdisplaywidth(line.text) <= 30 - 2, line.text)
+    end)
+
     for _, width in ipairs({ 44, 30 }) do
       it(("fits a range on a long file name to width %d"):format(width), function()
         local long = saved({ path = "lua/changeset/review_comment_window.lua", line = 120, start_line = 112 })
@@ -669,6 +675,22 @@ describe("changeset.render", function()
         local lines = file_lines({ deleted }, opts({ width = 31 }))
 
         assert.equal(" ▎ F deleted_file.lua deleted", lines[1].text)
+      end)
+
+      it("trims an orphan hunk of wide characters short of its stat", function()
+        local hunk = symbol({ kind = "orphan", name = ("日本語"):rep(10) })
+        local lines = file_lines({ file({ children = { hunk } }) }, opts({ width = 31 }))
+
+        local room = 31 - (vim.fn.strdisplaywidth("+8 -1") + 3)
+        assert.is_true(vim.fn.strdisplaywidth(lines[2].text) <= room, lines[2].text)
+      end)
+
+      it("trims a symbol name of wide characters short of its stat", function()
+        local lines =
+          file_lines({ file({ children = { symbol({ name = ("名前"):rep(15) }) } }) }, opts({ width = 31 }))
+
+        local room = 31 - (vim.fn.strdisplaywidth("+8 -1") + 3)
+        assert.is_true(vim.fn.strdisplaywidth(lines[2].text) <= room, lines[2].text)
       end)
 
       it("trims an orphan hunk from the right, keeping its line range", function()
