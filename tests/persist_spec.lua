@@ -266,6 +266,32 @@ describe("changeset position in a session", function()
     assert.is_false(vim.api.nvim_buf_is_valid(stale))
   end)
 
+  it("lets go of a restored sidebar window it cannot fill when only floats stand beside it", function()
+    local outside = vim.fn.tempname()
+    vim.fn.mkdir(outside, "p")
+    vim.fn.chdir(outside)
+    vim.cmd("enew")
+    vim.api.nvim_buf_set_name(0, "changeset://tree")
+    local stale = vim.api.nvim_get_current_buf()
+    local float = vim.api.nvim_open_win(vim.api.nvim_create_buf(false, true), false, {
+      relative = "editor",
+      row = 0,
+      col = 0,
+      width = 10,
+      height = 1,
+    })
+    local _, restore_notify = Notify.capture()
+
+    local ok, err = pcall(changeset.restore)
+    restore_notify()
+    pcall(vim.api.nvim_win_close, float, true)
+    vim.fn.chdir(tmp)
+    vim.fn.delete(outside, "rf")
+
+    assert(ok, err)
+    assert.is_false(vim.api.nvim_buf_is_valid(stale))
+  end)
+
   it(
     "fills a restored sidebar window standing in another tabpage, and leaves focus where the session put it",
     function()

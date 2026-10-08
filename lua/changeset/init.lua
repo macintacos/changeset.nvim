@@ -757,7 +757,7 @@ local function fill(placeholder)
   M.open()
   if not window.is_visible() then
     local stale = vim.api.nvim_win_get_buf(placeholder)
-    if #vim.api.nvim_tabpage_list_wins(0) > 1 then
+    if #window.panes(0) > 1 then
       vim.api.nvim_win_close(placeholder, true)
     else
       vim.api.nvim_win_call(placeholder, vim.cmd.enew)
