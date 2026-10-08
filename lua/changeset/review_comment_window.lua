@@ -38,6 +38,7 @@ end
 ---@field blank fun(window: changeset.ReviewCommentWindow)? Called, the window still open, on a save of blank text; without it, the window closes, handing the text to `keep`.
 ---@field body string? The text it opens with.
 ---@field comment changeset.ReviewComment The comment it is about, as `current` reports it and its buffer is named; a new one's body is "".
+---@field routes table<string, string>? What each subcommand run in the window does instead of closing it first, by name, as `?` lists it.
 
 ---The window as `current` reports it, with what can be done to it.
 ---@class changeset.ReviewCommentWindow
@@ -121,18 +122,10 @@ end
 
 ---What a default key does in the window, as `?` lists it.
 ---@param key { name: string, desc: string }
+---@param routes table<string, string>
 ---@return string
-local function window_desc(key)
-  if key.name == "comment new" then
-    return "Save the review comment"
-  end
-  if key.name == "comment del" then
-    return "Delete this review comment"
-  end
-  if key.name == "comment draft" then
-    return "Keep this review comment as a draft"
-  end
-  return "Keep a draft, then: " .. key.desc
+local function window_desc(key, routes)
+  return routes[key.name] or ("Keep a draft, then: " .. key.desc)
 end
 
 ---Rows `line` takes in `win` once wrapped, less the virtual lines above it. For changeset's own modules.
@@ -503,7 +496,7 @@ function M.open(opts)
     free[key.lhs] = vim.fn.mapcheck(key.lhs, "i") == ""
   end
   for _, key in ipairs(keys) do
-    local desc = window_desc(key)
+    local desc = window_desc(key, opts.routes or {})
     local command = ("<Cmd>Changeset %s<CR>"):format(key.name)
     -- Not `map`: its nowait would end `<C-g>c` before `<C-g>cn` could follow.
     vim.keymap.set("n", key.lhs, command, { buffer = buf, desc = desc })

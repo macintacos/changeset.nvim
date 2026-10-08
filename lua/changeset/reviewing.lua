@@ -83,19 +83,27 @@ function M.unsaved(repository, path)
   return false
 end
 
+---Asks whether to delete `comment`, quoting `text`, and calls `yes` on a yes.
+---@param comment changeset.ReviewComment
+---@param text string
+---@param yes fun()
+local function confirm_delete(comment, text, yes)
+  dialog.confirm({
+    title = "Delete the review comment",
+    body = {
+      { text = location(comment), hl = render.META_HL, path = true },
+      { text = text, quote = render.REVIEW_COMMENT_HL, max_lines = QUOTED },
+    },
+    action = "Delete",
+  }, yes)
+end
+
 ---Asks, then deletes `comment` of `repository`, by default the current buffer's.
 ---@param comment changeset.ReviewComment
 ---@param repository string?
 function M.ask_delete(comment, repository)
   repository = repository or root()
-  dialog.confirm({
-    title = "Delete the review comment",
-    body = {
-      { text = location(comment), hl = render.META_HL, path = true },
-      { text = comment.body, quote = render.REVIEW_COMMENT_HL, max_lines = QUOTED },
-    },
-    action = "Delete",
-  }, function()
+  confirm_delete(comment, comment.body, function()
     drop(repository, comment)
   end)
 end
@@ -135,6 +143,58 @@ end
 ---@type fun(open: changeset.ReviewCommentWindow)
 local delete_open
 
+---The subcommands that act on the review comment window rather than closing it first, by name: what they do and how
+---`?` names it.
+---@type table<string, { desc: string, run: fun(open: changeset.ReviewCommentWindow) }>
+local IN_WINDOW = {
+  ["comment new"] = {
+    desc = "Save the review comment",
+    run = function(open)
+      open.save()
+    end,
+  },
+  ["comment del"] = {
+    desc = "Delete this review comment",
+    run = function(open)
+      delete_open(open)
+    end,
+  },
+  ["comment draft"] = {
+    desc = "Keep this review comment as a draft",
+    run = function(open)
+      open.draft()
+    end,
+  },
+}
+
+---What each of `IN_WINDOW` does, by name, as the window's `?` lists it.
+---@type table<string, string>
+local ROUTES = vim.tbl_map(function(route)
+  return route.desc
+end, IN_WINDOW)
+
+---Opens the review comment window for `comment` of `repository` with `opts`, the fields its openers differ in, and
+---the fields they share.
+---@param repository string
+---@param comment changeset.ReviewComment
+---@param opts { line: integer, title: string, body: string?, keep: fun(body: string, draft: true?), blank: fun(open: changeset.ReviewCommentWindow)? }
+local function open_window(repository, comment, opts)
+  review_comment_window.open(vim.tbl_extend("error", opts, {
+    icon = icon_of(comment),
+    save_desc = "Save the review comment",
+    close_desc = "Close, keeping the text as a draft, and select its block",
+    keys = config.get().review_comment.save,
+    comment = comment,
+    routes = ROUTES,
+    save = function(body, done)
+      done(keep(repository, with_body(comment, body)))
+    end,
+    back = function()
+      review_comment_blocks.select(comment)
+    end,
+  }))
+end
+
 ---Opens the window under `comment`'s lines of the current buffer, or under the cursor's line for a whole file's or
 ---from the sidebar, holding its text: a save replaces it, a blank save or close asks to delete it, and a close with
 ---changed text keeps it as a draft.
@@ -143,15 +203,10 @@ function M.open(comment)
   local repository = root()
   local last = comment.line
   local kind = comment.draft and "Edit draft review comment · " or "Edit review comment · "
-  review_comment_window.open({
+  open_window(repository, comment, {
     line = last and not window.is_focused() and last or vim.api.nvim_win_get_cursor(0)[1],
     title = kind .. lines_label(review_comment.first(comment), last),
-    icon = icon_of(comment),
-    save_desc = "Save the review comment",
-    close_desc = "Close, keeping the text as a draft, and select its block",
-    keys = config.get().review_comment.save,
     body = comment.body,
-    comment = comment,
     keep = function(body, draft)
       if not body:find("%S") then
         -- Scheduled: the question opens a window, and this one is still closing.
@@ -165,14 +220,8 @@ function M.open(comment)
         say_draft()
       end
     end,
-    save = function(body, done)
-      done(keep(repository, with_body(comment, body)))
-    end,
     blank = function(open)
       delete_open(open)
-    end,
-    back = function()
-      review_comment_blocks.select(comment)
     end,
   })
 end
@@ -218,25 +267,14 @@ end
 ---@param comment changeset.ReviewComment
 ---@param line integer
 local function open_new(repository, comment, line)
-  review_comment_window.open({
+  open_window(repository, comment, {
     line = line,
     title = "Review comment · " .. lines_label(review_comment.first(comment), comment.line),
-    icon = icon_of(comment),
-    save_desc = "Save the review comment",
-    close_desc = "Close, keeping the text as a draft, and select its block",
-    keys = config.get().review_comment.save,
-    comment = comment,
     keep = function(body)
       -- A blank keep would drop whatever was saved on this range meanwhile.
       if body:find("%S") and not keep(repository, with_body(comment, body, true)) then
         say_draft()
       end
-    end,
-    save = function(body, done)
-      done(keep(repository, with_body(comment, body)))
-    end,
-    back = function()
-      review_comment_blocks.select(comment)
     end,
   })
 end
@@ -392,18 +430,7 @@ function delete_open(open)
     return open.discard()
   end
   open.hold(function()
-    dialog.confirm({
-      title = "Delete the review comment",
-      body = {
-        { text = location(open.comment), hl = render.META_HL, path = true },
-        {
-          text = text:find("%S") and text or assert(stored).body,
-          quote = render.REVIEW_COMMENT_HL,
-          max_lines = QUOTED,
-        },
-      },
-      action = "Delete",
-    }, function()
+    confirm_delete(open.comment, text:find("%S") and text or assert(stored).body, function()
       -- Once the window has gone, so insert mode ending in it doesn't clear the notice.
       open.discard(function()
         if stored then
@@ -426,21 +453,16 @@ local function last_saved(repository)
   end
 end
 
----Runs subcommand `name` from the review comment window `open`: `comment new` saves it, `comment del` deletes it,
----`comment draft` keeps it as a draft, and any other closes it, keeping a draft, then calls `run` in the window it
----opened from, from the comment's first line, or for a whole file's, from where that window's cursor is.
+---Runs subcommand `name` from the review comment window `open`: one `IN_WINDOW` routes acts on the window, and any
+---other closes it, keeping a draft, then calls `run` in the window it opened from, from the comment's first line, or
+---for a whole file's, from where that window's cursor is.
 ---@param open changeset.ReviewCommentWindow
 ---@param name string
 ---@param run fun()
 function M.from_window(open, name, run)
-  if name == "comment new" then
-    return open.save()
-  end
-  if name == "comment del" then
-    return delete_open(open)
-  end
-  if name == "comment draft" then
-    return open.draft()
+  local route = IN_WINDOW[name]
+  if route then
+    return route.run(open)
   end
   if name == "comment last" then
     local last = last_saved(source_root(open))
@@ -715,23 +737,39 @@ local SUBMIT_TIMEOUT = 20000
 ---@type table?
 local submitting
 
+---The repository's saved review comments, how many drafts it holds, and the text they are pasted as; nothing after
+---saying why when none is saved to `verb`.
+---@param repository string
+---@param verb string
+---@return changeset.ReviewComment[]? comments
+---@return integer drafts
+---@return string text
+local function saved_review(repository, verb)
+  local comments, drafts = split_drafts(comment_store.list(repository))
+  if #comments == 0 then
+    if drafts > 0 then
+      say(vim.log.levels.INFO, "nothing saved to %s, only %s", verb, drafts_label(drafts))
+    else
+      say(vim.log.levels.INFO, "no review comments to %s", verb)
+    end
+    return nil, drafts, ""
+  end
+  return comments, drafts, M._review_text(repository, comments, reader(repository))
+end
+
 ---Pastes the repository's saved review comments into an agent's prompt through herdr, then takes the ones pasted out
 ---of the store, where `restore` can bring them back. Drafts stay.
 function M.submit()
   local repository = root()
-  local comments, drafts = split_drafts(comment_store.list(repository))
-  if #comments == 0 then
-    if drafts > 0 then
-      return say(vim.log.levels.INFO, "nothing saved to submit, only %s", drafts_label(drafts))
-    end
-    return say(vim.log.levels.INFO, "no review comments to submit")
+  local comments, drafts, text = saved_review(repository, "submit")
+  if not comments then
+    return
   end
   local staying = drafts > 0 and ("; %s %s"):format(drafts_label(drafts), drafts == 1 and "stays" or "stay") or ""
   local count = comments_label(#comments)
   if submitting then
     return say(vim.log.levels.INFO, "a submit is already going")
   end
-  local text = M._review_text(repository, comments, reader(repository))
   local this = {}
   submitting = this
   vim.defer_fn(function()
@@ -997,14 +1035,11 @@ end
 ---Copies the review's saved comments, as `submit` would paste them, as `Paths.put` does, keeping the comments.
 function M.yank()
   local repository = root()
-  local comments, drafts = split_drafts(comment_store.list(repository))
-  if #comments == 0 then
-    if drafts > 0 then
-      return say(vim.log.levels.INFO, "nothing saved to copy, only %s", drafts_label(drafts))
-    end
-    return say(vim.log.levels.INFO, "no review comments to copy")
+  local comments, drafts, text = saved_review(repository, "copy")
+  if not comments then
+    return
   end
-  local where = Paths.put(M._review_text(repository, comments, reader(repository)))
+  local where = Paths.put(text)
   local left_out = drafts > 0 and ("; %s left out"):format(drafts_label(drafts)) or ""
   say(vim.log.levels.INFO, "copied %s%s%s", comments_label(#comments), where, left_out)
 end
