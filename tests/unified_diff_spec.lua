@@ -1,6 +1,6 @@
 local Fixture = require("support.git")
 local Paths = require("changeset.paths")
-local blocks = require("changeset.review_comment_blocks")
+local review_comments = require("changeset.review_comments")
 local comment_store = require("changeset.comment_store")
 local render = require("changeset.render")
 local review_comment_window = require("changeset.review_comment_window")
@@ -345,7 +345,7 @@ describe("changeset.unified_diff", function()
     end)
 
     after_each(function()
-      blocks.show(false)
+      review_comments.show(false)
       os.remove(comment_store.path())
     end)
 
@@ -372,7 +372,7 @@ describe("changeset.unified_diff", function()
 
     it("draws a review comment's block directly under its line, the deleted line under the block", function()
       comment_store.keep(Paths.root(0), { path = "a.txt", line = 1, body = "why go?" })
-      blocks.show(true)
+      review_comments.show(true)
       vim.cmd.redraw()
 
       local rows = screen_rows():totable()

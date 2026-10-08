@@ -1,7 +1,6 @@
 ---Draws each review comment's whole text as a block under its last line, and parks the cursor on a block a one-line
 ---move reaches, as if it were a line of the file.
 local cells = require("changeset.cells")
-local config = require("changeset.config")
 local dialog = require("changeset.dialog")
 local render = require("changeset.render")
 local review_comment = require("changeset.review_comment")
@@ -54,10 +53,6 @@ local MOVES = {
 ---@field cursorline boolean The window's 'cursorline' before parking.
 ---@field maps table<string, table> The buffer's own maps the block's keys stood in for.
 
----Whether blocks show, once toggled; until then `review_comment.blocks` decides.
----@type boolean?
-local toggled
-
 ---@type table<integer, changeset.BufferBlocks>
 local drawn = {}
 
@@ -75,27 +70,6 @@ local editing = {}
 ---The window the last parked block was in and the 'cursorline' it gave back, for a split made as it let go.
 ---@type { win: integer, cursorline: boolean }?
 local released
-
----Whether review comments show as blocks.
----@return boolean
-function M.shown()
-  if toggled == nil then
-    return config.get().review_comment.blocks
-  end
-  return toggled
-end
-
----Shows review comments as blocks in every buffer, or as their marks alone.
----@param on boolean
-function M.show(on)
-  toggled = on
-  require("changeset.review_comments").redraw()
-end
-
----Switches every buffer between blocks and marks.
-function M.toggle()
-  M.show(not M.shown())
-end
 
 ---The widest box inside `buf`'s narrowest window, borders excluded.
 ---@param buf integer
@@ -626,7 +600,7 @@ function M.draw(buf, comments)
   end
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   drawn[buf] = nil
-  if not M.shown() or #comments == 0 then
+  if #comments == 0 then
     return unmap_moves(buf)
   end
   local by_line, lines = {}, {}

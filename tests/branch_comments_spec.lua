@@ -37,7 +37,7 @@ describe("review comments in a buffer after a branch switch", function()
   end)
 
   after_each(function()
-    require("changeset.review_comment_blocks").show(false)
+    require("changeset.review_comments").show(false)
     vim.cmd("silent! %bwipeout!")
     for _, client in ipairs(vim.lsp.get_clients({ name = "changeset" })) do
       client:stop(true)
@@ -79,8 +79,8 @@ describe("review comments in a buffer after a branch switch", function()
     { "gitsigns updates without a buffer", "User", { pattern = "GitSignsUpdate" } },
   }) do
     it(("keeps a block parked when %s on the same branch"):format(trigger[1]), function()
+      require("changeset.review_comments").show(true)
       local blocks = require("changeset.review_comment_blocks")
-      blocks.show(true)
       blocks.select(comment_store.list(dir)[1])
       local parked = vim.fn.maparg("<CR>", "n", false, true).desc
       assert.not_nil(parked)

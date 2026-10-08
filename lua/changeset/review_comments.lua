@@ -1,5 +1,5 @@
 ---Marks each review comment kept on this machine in its file's buffer, at its line or range, in every loaded buffer
----of a repository that has comments, and answers hover on those lines.
+---of a repository that has comments, as its first line or as a block, and answers hover on those lines.
 local Paths = require("changeset.paths")
 local buffers = require("changeset.buffers")
 local comment_store = require("changeset.comment_store")
@@ -27,6 +27,19 @@ local DRAFT_BUBBLE = "󰍪"
 ---@return string hl
 function M.glyph(comment)
   return comment.draft and DRAFT_BUBBLE or BUBBLE, render.review_comment_hl(comment)
+end
+
+---Whether blocks show, once toggled; until then `review_comment.blocks` decides.
+---@type boolean?
+local toggled
+
+---Whether review comments show as blocks.
+---@return boolean
+function M.shown()
+  if toggled == nil then
+    return config.get().review_comment.blocks
+  end
+  return toggled
 end
 
 ---Each buffer's lines as they stood when its line comments were last drawn with it unmodified, which is where the
@@ -59,7 +72,7 @@ local function mark(buf, comment)
     end_right_gravity = true,
     number_hl_group = hl,
     -- A block already holds the whole text.
-    virt_text = not review_comment_blocks.shown() and {
+    virt_text = not M.shown() and {
       { circle .. " ", hl },
       { comment.body:match("^[^\r\n]*"), render.REVIEW_COMMENT_BODY_HL },
     } or nil,
@@ -176,7 +189,7 @@ local function mark_file(buf, comments)
   for _, comment in ipairs(marked) do
     mark(buf, comment)
   end
-  review_comment_blocks.draw(buf, marked)
+  review_comment_blocks.draw(buf, M.shown() and marked or {})
   return #marked > 0
 end
 
@@ -281,6 +294,18 @@ function M.redraw()
       draw(buf, by_root)
     end
   end
+end
+
+---Shows review comments as blocks in every buffer, or as their marks alone.
+---@param on boolean
+function M.show(on)
+  toggled = on
+  M.redraw()
+end
+
+---Switches every buffer between blocks and marks.
+function M.toggle()
+  M.show(not M.shown())
 end
 
 ---Redraws the marks of each loaded buffer whose repository has checked out another branch since they were drawn.

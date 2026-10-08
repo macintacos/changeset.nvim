@@ -86,7 +86,7 @@ local subcommands = {
     require("changeset.reviewing").list()
   end,
   ["comment toggle"] = function()
-    require("changeset.review_comment_blocks").toggle()
+    require("changeset.review_comments").toggle()
   end,
 }
 

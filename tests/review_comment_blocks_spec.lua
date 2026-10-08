@@ -1,6 +1,6 @@
 local changeset = require("changeset")
 local comment_store = require("changeset.comment_store")
-local blocks = require("changeset.review_comment_blocks")
+local review_comments = require("changeset.review_comments")
 local cursor = require("support.cursor")
 local dialog = require("support.dialog")
 local Fixture = require("support.git")
@@ -27,8 +27,8 @@ describe("review comment blocks", function()
     vim.cmd("silent! nunmap Q")
     vim.o.cursorline = false
     vim.o.columns = columns
-    if not blocks.shown() then
-      blocks.show(true)
+    if not review_comments.shown() then
+      review_comments.show(true)
     end
     vim.fn.chdir(previous_dir)
     vim.fn.delete(tmp, "rf")
@@ -102,7 +102,7 @@ describe("review comment blocks", function()
   it("starts showing blocks when setup() asks for them", function()
     keep({ path = "alpha.txt", line = 3, body = "short" })
 
-    assert.is_true(blocks.shown())
+    assert.is_true(review_comments.shown())
     assert.are.equal(1, #drawn())
   end)
 
@@ -219,10 +219,10 @@ describe("review comment blocks", function()
   it("toggles between blocks and marks", function()
     keep({ path = "alpha.txt", line = 3, body = "short" })
 
-    blocks.toggle()
+    review_comments.toggle()
     assert.are.same({}, drawn())
 
-    blocks.toggle()
+    review_comments.toggle()
     assert.are.equal(1, #drawn())
   end)
 
@@ -254,10 +254,10 @@ describe("review comment blocks", function()
   ---@return any hidden
   ---@return any shown
   local function both_ways(run)
-    blocks.toggle()
+    review_comments.toggle()
     vim.cmd("silent edit!")
     local hidden = run()
-    blocks.toggle()
+    review_comments.toggle()
     vim.cmd("silent edit!")
     return hidden, run()
   end
@@ -339,9 +339,9 @@ describe("review comment blocks", function()
     keep({ path = "alpha.txt", line = 3, body = "short" })
     vim.keymap.set("n", "j", "<Nop>", { buffer = 0, desc = "later" })
 
-    blocks.toggle()
+    review_comments.toggle()
     assert.are.equal("later", vim.fn.maparg("j", "n", false, true).desc)
-    blocks.toggle()
+    review_comments.toggle()
   end)
 
   it("keeps the column a move started from after stepping off a block", function()
@@ -381,9 +381,9 @@ describe("review comment blocks", function()
     keep({ path = "alpha.txt", line = 3, body = "short" })
     assert.are.equal("Move, stopping on review comment blocks", vim.fn.maparg("j", "n", false, true).desc)
 
-    blocks.toggle()
+    review_comments.toggle()
     assert.are.equal("mine", vim.fn.maparg("j", "n", false, true).desc)
-    blocks.toggle()
+    review_comments.toggle()
   end)
 
   it("hides a line's blocks while the review comment window is open on it", function()
@@ -582,9 +582,9 @@ describe("review comment blocks", function()
         press("u")
         return { pasted, lnum() }
       end
-      blocks.toggle()
+      review_comments.toggle()
       local native = paste_and_undo()
-      blocks.toggle()
+      review_comments.toggle()
 
       assert.are.same(native, paste_and_undo())
       assert.is_nil(parked())
