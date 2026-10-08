@@ -78,9 +78,9 @@ Each optional integration adds one feature:
 - A language server that answers `textDocument/documentSymbol`: the symbol
   rows under each file. Without one, a file lists only its changes. changeset
   waits up to 2 seconds for a server enabled for the file's filetype to
-  attach, and up to 10 seconds for its answer. With two such servers, the
-  first that lists any symbols is shown, else the first that answers without
-  an error.
+  attach, and up to 10 seconds for its answer; one slower than that is asked
+  again on the next refresh. With two such servers, the first that lists any
+  symbols is shown, else the first that answers without an error.
 - Treesitter parsers: comment-only changes move to the Docs section, for any
   language whose parser is installed. The `rust`, `typescript` and `tsx`
   parsers also find tests by their syntax (|changeset-sections|).
