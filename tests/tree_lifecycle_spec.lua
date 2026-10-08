@@ -294,6 +294,79 @@ describe("changeset tree", function()
       assert.is_true(wait_for_file("new.lua"))
     end)
 
+    describe("reopened on a kept tree", function()
+      local real_system, real_systemlist, held, waited
+
+      ---Hold every `vim.system` process unstarted, and count the git processes Neovim waits on.
+      local function hold()
+        held, waited = {}, 0
+        vim.system = function(argv, opts, on_exit)
+          held[#held + 1] = { argv, opts, on_exit }
+          return {}
+        end
+        vim.fn.systemlist = function(...)
+          waited = waited + 1
+          return real_systemlist(...)
+        end
+      end
+
+      ---Start every held process, now.
+      local function release()
+        vim.system, vim.fn.systemlist = real_system, real_systemlist
+        for _, process in ipairs(held) do
+          real_system(unpack(process))
+        end
+        held = {}
+      end
+
+      before_each(function()
+        real_system, real_systemlist = vim.system, vim.fn.systemlist
+        build.build()
+        assert.is_true(wait_for_file("mod.lua"))
+      end)
+
+      after_each(function()
+        vim.system, vim.fn.systemlist = real_system, real_systemlist
+      end)
+
+      it("draws the kept tree before waiting on git", function()
+        hold()
+
+        changeset.open()
+
+        assert.equal(0, waited)
+        assert.truthy(Sidebar.text():find("mod.lua", 1, true))
+      end)
+
+      it("rebuilds the tree once its re-measured fork point has moved", function()
+        local tree = build.current()
+        hold()
+        changeset.open()
+        local base = rebase_onto_newer_trunk()
+
+        release()
+
+        assert.is_true(vim.wait(5000, function()
+          return build.current() ~= tree and build.current().base == base and build.current().collected
+        end, 25))
+      end)
+
+      it("keeps the tree a build for another branch made before the re-measure landed", function()
+        hold()
+        changeset.open()
+        vim.system, vim.fn.systemlist = real_system, real_systemlist
+        Fixture.git({ "checkout", "-q", "-b", "feature2" }, tmp)
+        build.build()
+        local tree = build.current()
+
+        release()
+        vim.wait(500)
+
+        assert.equal(tree, build.current())
+        assert.equal("feature2", tree.branch)
+      end)
+    end)
+
     it("refreshes when gitsigns reports HEAD moved, while the sidebar is closed", function()
       build.build()
       assert.is_true(wait_for_file("mod.lua"))

@@ -468,7 +468,8 @@ end
 ---@return { rows: changeset.Row[], root: string, ref: string }? tree
 ---@return string? err Why there is no tree yet.
 function M.rows()
-  if not build.build() then
+  local kept = build.kept()
+  if not (kept or build.build()) then
     return nil, NO_BASE
   end
   -- The first ask builds the tree too, and a picker cannot fill in behind it the way the sidebar does.
@@ -484,11 +485,15 @@ function M.rows()
   if #state.rows == 0 and rebuild() then
     settle()
   end
-  return {
+  local tree = {
     rows = view.by_kind(Rows.files(state.rows), state.view:hidden()),
     root = state.tree.root,
     ref = state.tree.ref,
   }
+  if kept then
+    build.remeasure()
+  end
+  return tree
 end
 
 ---Public API: the comment bubble on line `lnum` of `buf` and its highlight group, for a `'statuscolumn'` to draw;
@@ -555,8 +560,12 @@ function M.open()
     -- `WinClosed` close that would let go of it.
     release()
   end
-  local kept = build.current()
-  if not built() then
+  local previous = build.current()
+  -- A kept tree draws at once; its fork point is measured again behind it.
+  local kept = build.kept()
+  if kept then
+    track()
+  elseif not built() then
     return
   end
   bound_keys = config.get().keymaps
@@ -720,8 +729,11 @@ function M.open()
 
   redraw()
   -- A kept tree misses what nothing announced, such as a file edited outside Neovim while it kept focus.
-  if build.current() == kept then
+  if build.current() == previous then
     build.refresh()
+  end
+  if kept then
+    build.remeasure()
   end
 end
 

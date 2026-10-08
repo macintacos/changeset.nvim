@@ -72,6 +72,41 @@ function M.head(root)
   return out[2], out[1]
 end
 
+---The coroutines `async` runs.
+---@type table<thread, true>
+local async_threads = setmetatable({}, { __mode = "k" })
+
+---In a coroutine `async` runs, `args`' result, waited for without blocking Neovim; nil elsewhere.
+---@param args string[]
+---@return vim.SystemCompleted?
+local function await(args)
+  local co = coroutine.running()
+  if co and async_threads[co] then
+    return coroutine.yield(args)
+  end
+end
+
+---Run `fn` with every git command `lines` and `is_ancestor` start inside it spawned without blocking Neovim, then
+---call `on_done` on the main loop with what `fn` returns.
+---@generic T
+---@param fn fun(): T
+---@param on_done fun(result: T)
+function M.async(fn, on_done)
+  local co = coroutine.create(fn)
+  async_threads[co] = true
+  local function step(...)
+    local ok, value = coroutine.resume(co, ...)
+    if not ok then
+      error(debug.traceback(co, value))
+    end
+    if coroutine.status(co) == "dead" then
+      return on_done(value)
+    end
+    M.system(value, { text = true }, step)
+  end
+  step()
+end
+
 ---Run a git command and return its stdout lines, or an empty table if it failed.
 ---@param args string[] Command and arguments, run without a shell; `args[1]` is `git`.
 ---@param cwd string? Repository to run in. Neovim's own directory when absent, which
@@ -80,6 +115,17 @@ end
 function M.lines(args, cwd)
   if cwd then
     args = vim.list_extend({ args[1], "-C", cwd }, vim.list_slice(args, 2))
+  end
+  local result = await(args)
+  if result then
+    if result.code ~= 0 then
+      return {}
+    end
+    local out = vim.split(result.stdout, "\n", { plain = true })
+    if out[#out] == "" then
+      out[#out] = nil
+    end
+    return out
   end
   local out = vim.fn.systemlist(args)
   if vim.v.shell_error ~= 0 then
@@ -153,7 +199,12 @@ end
 ---@param commit string
 ---@return boolean
 function M.is_ancestor(cwd, ancestor, commit)
-  vim.fn.system({ "git", "-C", cwd, "merge-base", "--is-ancestor", ancestor, commit })
+  local args = { "git", "-C", cwd, "merge-base", "--is-ancestor", ancestor, commit }
+  local result = await(args)
+  if result then
+    return result.code == 0
+  end
+  vim.fn.system(args)
   return vim.v.shell_error == 0
 end
 

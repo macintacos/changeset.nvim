@@ -71,14 +71,14 @@ local function measure(root, branch, pr)
   return point
 end
 
----The fork point of `branch` at `root`. Asks gh about its PR unless gh has named a target or is being asked.
----@param root string Repository to measure in.
----@param branch string The branch checked out at `root`.
----@return changeset.ForkPoint? point nil when HEAD shares no fork point with the branch it was created from or the default branch.
----@return boolean asking Whether gh is still being asked, so subscribers will hear its answer.
-function M.get(root, branch)
+---Ask gh about `branch`'s PR unless gh has named a target or is being asked, once `point` is measured.
+---@param root string
+---@param branch string
+---@param point changeset.ForkPoint?
+---@return changeset.ForkPoint? point
+---@return boolean asking
+local function ask(root, branch, point)
   local key = root .. "\n" .. branch
-  local point = measure(root, branch, targets[key])
   if not point then
     return nil, false
   end
@@ -99,6 +99,28 @@ function M.get(root, branch)
     end
   end)
   return point, true
+end
+
+---The fork point of `branch` at `root`. Asks gh about its PR unless gh has named a target or is being asked.
+---@param root string Repository to measure in.
+---@param branch string The branch checked out at `root`.
+---@return changeset.ForkPoint? point nil when HEAD shares no fork point with the branch it was created from or the default branch.
+---@return boolean asking Whether gh is still being asked, so subscribers will hear its answer.
+function M.get(root, branch)
+  return ask(root, branch, measure(root, branch, targets[root .. "\n" .. branch]))
+end
+
+---`get`, measuring without blocking Neovim, and calling back on the main loop.
+---@param root string
+---@param branch string
+---@param on_done fun(point: changeset.ForkPoint?)
+function M.get_async(root, branch, on_done)
+  local pr = targets[root .. "\n" .. branch]
+  Git.async(function()
+    return measure(root, branch, pr)
+  end, function(point)
+    on_done((ask(root, branch, point)))
+  end)
 end
 
 ---Forget the PR target gh named for `branch` at `root`, so the next `get` asks gh again.

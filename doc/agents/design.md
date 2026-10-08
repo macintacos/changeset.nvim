@@ -1188,8 +1188,9 @@ can't answer, Generated ones aside, so those buffers and their language servers 
 ask, and a session that never asks starts none. The picker waits a moment for the diff,
 which it has no way to fill in behind. The sidebar opens at once: a tree still waiting on
 its first diff opens blank rather than claiming nothing changed. Closing the sidebar lets
-go of the window only, and opening it again draws the tree it kept and refreshes its diff
-in the background. The tree is rebuilt for a different repository, fork point or branch,
+go of the window only, and opening it again, or the picker asking again, draws the tree it
+kept while HEAD stays on its branch, and measures its fork point and refreshes its diff in
+the background; a fork point that moved replaces the tree once measured. The tree is rebuilt for a different repository, fork point or branch,
 and a build that finds no fork point keeps the tree it had. The tree knows nothing of the
 sidebar. The first time the sidebar reads a replaced tree, it starts a fresh View and
 Position: the repository's folds and opened chains carry over, and hidden kinds come back

@@ -255,6 +255,8 @@ local function drop()
   tree = nil
 end
 
+local place
+
 ---Build the tree for the repository at `root`, unless it is already built there.
 ---@param root string
 ---@return boolean ready false when the repository has no merge base with its default
@@ -262,7 +264,16 @@ end
 local function build_at(root)
   local branch, commit = Git.head(root)
   branch = branch or "HEAD"
-  local point = fork_point.get(root, branch)
+  return place(root, branch, commit, fork_point.get(root, branch))
+end
+
+---Keep the tree when `point` is the one it was built on, else build one there.
+---@param root string
+---@param branch string
+---@param commit string?
+---@param point changeset.ForkPoint?
+---@return boolean ready false without a fork point.
+place = function(root, branch, commit, point)
   if not point then
     return false
   end
@@ -310,6 +321,43 @@ end
 ---branch, which includes a buffer outside any repository.
 function M.build()
   return build_at(Paths.root(0))
+end
+
+---The tree, while it is for the current buffer's repository and HEAD is still on its branch.
+---@return changeset.Tree?
+function M.kept()
+  if not (tree and tree.root == Paths.root(0)) then
+    return nil
+  end
+  if (Git.head(tree.root) or "HEAD") == tree.branch then
+    return tree
+  end
+end
+
+---@type table? The re-measure in flight; a newer one replaces it.
+local remeasuring
+
+---Measure the tree's fork point again without blocking, then do what `build()` would with it: keep the tree on the
+---same one, else rebuild it. Dropped once the tree is replaced, the current buffer is in another repository, or a
+---newer re-measure starts.
+function M.remeasure()
+  local kept = tree
+  if not kept then
+    return
+  end
+  local request = {}
+  remeasuring = request
+  fork_point.get_async(kept.root, kept.branch, function(point)
+    if remeasuring ~= request or tree ~= kept or Paths.root(0) ~= kept.root then
+      return
+    end
+    remeasuring = nil
+    local branch, commit = Git.head(kept.root)
+    if (branch or "HEAD") ~= kept.branch then
+      return build_at(kept.root)
+    end
+    place(kept.root, kept.branch, commit, point)
+  end)
 end
 
 ---Rebuild the tree when its repository's HEAD has moved or landed on another branch, else refresh it.
