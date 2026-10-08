@@ -216,7 +216,7 @@ end
 ---@return integer lnum Where the cursor goes: the row it sat on, wherever that is now.
 function View:show(rows, layout)
   local previous_row = self.shown[layout.cursor]
-  local compressed = Rows.compress(M.by_kind(M.filter(rows, self.narrowed), self.kinds_hidden), function(id)
+  local compressed = Rows.compress(M.filter(M.by_kind(rows, self.kinds_hidden), self.narrowed), function(id)
     return self.folds.chains[id] == true
   end)
   self.laid = compressed

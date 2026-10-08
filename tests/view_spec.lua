@@ -454,6 +454,17 @@ describe("changeset.view", function()
 
       assert.same({}, show(v, ROWS))
     end)
+
+    it("keeps no file on screen for a match only a hidden kind holds", function()
+      local rows = Rows.build({ Changes.file("mod.lua", { 2, 6 }) }, {
+        ["mod.lua"] = { Changes.sym("needle", "Variable", 0, 1, 3), Changes.sym("other", "Function", 0, 5, 7) },
+      })
+      local v = fresh()
+      v:hide({ Variable = true })
+      v:narrow("needle")
+
+      assert.same({}, show(v, rows))
+    end)
   end)
 
   describe("View hide", function()
