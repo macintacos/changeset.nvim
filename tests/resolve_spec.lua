@@ -564,6 +564,60 @@ describe("changeset.resolve", function()
       assert.is_true(report.timed_out)
     end)
 
+    it("reports no answer when the client refuses to send the request", function()
+      enable(
+        "refusing",
+        server(function(method, callback)
+          if method == "textDocument/documentSymbol" then
+            return false
+          end
+          vim.schedule(function()
+            callback(nil, method == "initialize" and { capabilities = { documentSymbolProvider = true } } or nil)
+          end)
+        end)
+      )
+      local report
+      start(function(_, items, _, timed_out)
+        report = { items = items, timed_out = timed_out }
+      end)
+      assert.is_true(vim.wait(3000, function()
+        return report ~= nil
+      end, 20))
+      assert.is_nil(report.items)
+      assert.is_falsy(report.timed_out)
+    end)
+
+    it("reports no answer when no client is left to ask", function()
+      enable(
+        "leaving",
+        symbol_server(function(callback)
+          callback(nil, { SYMBOL })
+        end)
+      )
+      local real_get_clients, real_params = vim.lsp.get_clients, vim.lsp.util.make_text_document_params
+      -- The client is there while the walk waits for one and gone once the request is being made.
+      local requesting = false
+      vim.lsp.util.make_text_document_params = function(...)
+        requesting = true
+        return real_params(...)
+      end
+      vim.lsp.get_clients = function(filter)
+        return requesting and {} or real_get_clients(filter)
+      end
+      local report
+      start(function(_, items)
+        report = { items = items }
+      end)
+      local landed = vim.wait(3000, function()
+        return report ~= nil
+      end, 20)
+      vim.lsp.get_clients, vim.lsp.util.make_text_document_params = real_get_clients, real_params
+
+      assert.is_true(requesting)
+      assert.is_true(landed)
+      assert.is_nil(report.items)
+    end)
+
     it("reports the file when its server exits before answering", function()
       local asked = false
       enable(
@@ -866,6 +920,14 @@ describe("changeset.resolve", function()
         return comments.kind(kinds, item.range_lnum - 1) == "comment"
       end, items)
       assert.equal(#items, documented)
+    end)
+
+    it("reports no answer when the buffer is wiped while its text parses", function()
+      local got = assert(resolve_while(function(buf)
+        vim.api.nvim_buf_delete(buf, { force = true })
+      end))
+
+      assert.same({}, got)
     end)
   end)
 end)

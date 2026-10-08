@@ -210,6 +210,18 @@ describe("changeset.build", function()
       assert.equal(2, asked)
     end)
 
+    it("saves the symbols it filed to the cache once answers stop arriving", function()
+      answer({ Changes.sym("f", "Function", 0, 1, 1) })
+      build_and_collect()
+      local cache = require("changeset.cache")
+      local file = cache.path(build.current().root)
+
+      assert.is_true(vim.wait(3000, function()
+        return (cache.load(file)["mod.lua"] or {}).symbols ~= nil
+      end, 50))
+      assert.same(build.current().symbols["mod.lua"], cache.load(file)["mod.lua"].symbols)
+    end)
+
     it("keeps each file and its symbols the same objects across a refresh over an unchanged diff", function()
       answer({ Changes.sym("f", "Function", 0, 1, 1) })
       build_and_collect()
@@ -230,6 +242,19 @@ describe("changeset.build", function()
       refresh_and_collect()
 
       assert.not_equal(file, build.current().files[1])
+    end)
+
+    it("hands a refresh a file of its own once a hunk moves with the same totals", function()
+      vim.fn.writefile({ "return 1", "local added" }, "mod.lua")
+      build_and_collect()
+      local file = assert(build.current()).files[1]
+      vim.fn.writefile({ "local added", "return 1" }, "mod.lua")
+
+      refresh_and_collect()
+
+      local moved = build.current().files[1]
+      assert.same({ file.added, file.removed, #file.hunks }, { moved.added, moved.removed, #moved.hunks })
+      assert.not_equal(file, moved)
     end)
 
     it("does not cache the symbols read from a buffer holding unwritten edits", function()

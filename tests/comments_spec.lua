@@ -162,6 +162,58 @@ describe("comments", function()
     })
   end)
 
+  it("ignores a slice that answers after the stalled parse already did", function()
+    local real = vim.treesitter.get_string_parser
+    local late
+    vim.treesitter.get_string_parser = function(...)
+      local parser = real(...)
+      local parse = parser.parse
+      parser.parse = function(self, range, on_parse)
+        if on_parse then
+          late = function()
+            on_parse(nil, parse(self, range))
+          end
+          return nil
+        end
+        return parse(self, range)
+      end
+      return parser
+    end
+    local answers = {}
+    comments.read("-- a\nlocal x = 1", "a.lua", function(found)
+      answers[#answers + 1] = found
+    end)
+    vim.treesitter.get_string_parser = real
+
+    assert.is_true(vim.wait(10000, function()
+      return #answers > 0
+    end, 25))
+    assert(late)()
+    assert.equal(1, #answers)
+  end)
+
+  it("reads nothing when the parser raises in its first slice", function()
+    local real = vim.treesitter.get_string_parser
+    vim.treesitter.get_string_parser = function(...)
+      local parser = real(...)
+      local parse = parser.parse
+      parser.parse = function(self, range, on_parse)
+        if on_parse then
+          error("parser failed")
+        end
+        return parse(self, range)
+      end
+      return parser
+    end
+    local answers = {}
+    comments.read("-- a\nlocal x = 1", "a.lua", function(found)
+      answers[#answers + 1] = { found = found }
+    end)
+    vim.treesitter.get_string_parser = real
+
+    assert.same({ {} }, answers)
+  end)
+
   describe("a source too large to parse in one slice", function()
     local lines = {}
     for i = 1, 20000, 2 do
