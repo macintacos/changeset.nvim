@@ -727,6 +727,14 @@ local function reader(repository)
   end
 end
 
+-- How long a submit counts as in flight with no answer: past herdr's round trips, for a picker closed under
+-- `noautocmd`, whose callback never comes.
+local SUBMIT_TIMEOUT = 20000
+
+---The submit being delivered, if any; a second waits for it rather than pasting the same review twice.
+---@type table?
+local submitting
+
 ---Pastes the repository's saved review comments into an agent's prompt through herdr, then takes the ones pasted out
 ---of the store, where `restore` can bring them back. Drafts stay.
 function M.submit()
@@ -740,8 +748,21 @@ function M.submit()
   end
   local staying = drafts > 0 and ("; %s %s"):format(drafts_label(drafts), drafts == 1 and "stays" or "stay") or ""
   local count = comments_label(#comments)
+  if submitting then
+    return say(vim.log.levels.INFO, "a submit is already going")
+  end
   local text = M._review_text(repository, comments, reader(repository))
+  local this = {}
+  submitting = this
+  vim.defer_fn(function()
+    if submitting == this then
+      submitting = nil
+    end
+  end, SUBMIT_TIMEOUT)
   require("changeset.herdr").send(text, { title = "Submit " .. count, root = repository }, function(err, agent)
+    if submitting == this then
+      submitting = nil
+    end
     if err then
       return say(vim.log.levels.WARN, "can't submit the review: %s", err)
     end

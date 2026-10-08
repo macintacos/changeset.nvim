@@ -722,6 +722,28 @@ describe("changeset.reviewing", function()
       assert.equal(dir .. "/a.lua:4\n```lua\nunsaved\n```\nhi", sent[1])
     end)
 
+    it("refuses a second submit while the first is being delivered, saying so", function()
+      local held = {}
+      package.loaded["changeset.herdr"] = {
+        send = function(text, _, cb)
+          table.insert(sent, text)
+          table.insert(held, cb)
+        end,
+      }
+      edit_file()
+      comment_store.keep(dir, comment())
+
+      reviewing.submit()
+      reviewing.submit()
+      held[1](nil, "claude")
+      reviewing.submit()
+
+      assert.equal(1, #sent)
+      assert.equal(vim.log.levels.INFO, notes[1].level)
+      assert.truthy(notes[1].msg:find("already", 1, true))
+      assert.equal(1, #assert(comment_store.submitted(dir)))
+    end)
+
     it("titles the agent picker with what it sends, and ranks the agents by the repository", function()
       edit_file()
       comment_store.keep(dir, comment())
