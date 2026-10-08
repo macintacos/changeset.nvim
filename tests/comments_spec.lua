@@ -131,6 +131,37 @@ describe("comments", function()
     assert.is_nil(found)
   end)
 
+  it("still calls back once when the sliced parse never answers", function()
+    local lines = { "-- a", "local x = 1" }
+    local real = vim.treesitter.get_string_parser
+    vim.treesitter.get_string_parser = function(...)
+      local parser = real(...)
+      local parse = parser.parse
+      parser.parse = function(self, range, on_parse)
+        if on_parse then
+          return nil
+        end
+        return parse(self, range)
+      end
+      return parser
+    end
+    local answers = {}
+    comments.read(table.concat(lines, "\n"), "a.lua", function(found)
+      answers[#answers + 1] = found
+    end)
+    vim.treesitter.get_string_parser = real
+
+    assert.is_true(vim.wait(10000, function()
+      return #answers > 0
+    end, 25))
+    vim.wait(100)
+    assert.equal(1, #answers)
+    assert.same({ "comment", "code" }, {
+      comments.kind(answers[1], 1),
+      comments.kind(answers[1], 2),
+    })
+  end)
+
   describe("a source too large to parse in one slice", function()
     local lines = {}
     for i = 1, 20000, 2 do
