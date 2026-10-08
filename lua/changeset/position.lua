@@ -15,7 +15,8 @@ local M = {}
 ---What a session saved of where you were: the file you were in and the sidebar's cursor row.
 ---@class changeset.position.Saved
 ---@field here changeset.Spot? The file and line you were in.
----@field row { id: string, path: string }? The row the sidebar's cursor was on.
+---@field row { id: string, path: string, offset: integer? }? The row the sidebar's cursor was on, and how many lines
+---the window showed above it.
 
 ---@class changeset.position.Restoring : changeset.position.Saved
 ---@field at string? Id of the row under the sidebar's cursor when last checked; another means the user moved it.
@@ -51,7 +52,7 @@ local function nearest(visible, id)
   local best, best_len = nil, 0
   for lnum, row in ipairs(visible) do
     local shown = row.id
-    if #shown > best_len and vim.startswith(id, shown) and (#id == #shown or id:byte(#shown + 1) == 0) then
+    if #shown > best_len and (id == shown or Rows.under(id, shown)) then
       best, best_len = lnum, #shown
     end
   end
@@ -93,33 +94,41 @@ function Position:land(view)
 end
 
 ---Apply each half of the restored position whose file is decided, dropping a half the tree no longer holds,
----then note the row the cursor ends on.
+---then note the row the cursor ends on. Until a row's file is decided, the cursor waits on its nearest row on screen.
 ---@private
 ---@param view changeset.position.View
 ---@param decided fun(path: string): boolean
 ---@param lnum integer? Where the cursor is already going.
 ---@return integer? lnum
+---@return integer? offset How many lines to show above `lnum`, once the restored row itself is reached.
 function Position:settle(view, decided, lnum)
   local wanted = self.restoring
+  local offset
   if wanted and wanted.here and decided(wanted.here.path) then
     if Rows.locate(view.rows, wanted.here.path, wanted.here.lnum) then
       self.here = wanted.here
     end
     self:release("here")
   end
-  if wanted and wanted.row and decided(wanted.row.path) then
-    local restored = view.cursor and Rows.find(view.rows, wanted.row.id) and nearest(view.visible, wanted.row.id)
-    if restored then
-      lnum = restored
-      -- Else a pending landing's follow would pull the cursor back off it.
+  if wanted and wanted.row then
+    local shown = view.cursor and nearest(view.visible, wanted.row.id)
+    -- Only while a window shows the sidebar: a row decided with none waits for one.
+    if decided(wanted.row.path) and view.cursor then
+      if shown and Rows.find(view.rows, wanted.row.id) then
+        lnum, offset = shown, wanted.row.offset
+        -- Else a pending landing's follow would pull the cursor back off it.
+        self.landing = nil
+      end
+      self:release("row")
+    elseif shown then
+      lnum = shown
       self.landing = nil
     end
-    self:release("row")
   end
   if self.restoring then
     self.restoring.at = id_at(view.visible, lnum or view.cursor)
   end
-  return lnum
+  return lnum, offset
 end
 
 ---Note where the cursor is, which lets go of a restored "you are here".
@@ -149,6 +158,7 @@ end
 ---@param before string? Id of the row under the sidebar's cursor before the rows changed.
 ---@param decided fun(path: string): boolean Whether the tree is done growing under `path`.
 ---@return integer? lnum The line to put the sidebar's cursor on; nil leaves it.
+---@return integer? offset How many lines the window should show above `lnum`; nil leaves the scroll.
 function Position:rebuilt(view, before, decided)
   -- Before the first diff the landing and the row under the cursor are both nil, which is still "not moved".
   -- Only a rebuild follows: a fold or filter redraw brings no deeper row.
@@ -175,7 +185,11 @@ local function recorded(value)
   end
   local here, row = value.here, value.row
   here = type(here) == "table" and type(here.path) == "string" and type(here.lnum) == "number" and here or nil
-  row = type(row) == "table" and type(row.id) == "string" and type(row.path) == "string" and row or nil
+  row = type(row) == "table"
+      and type(row.id) == "string"
+      and type(row.path) == "string"
+      and { id = row.id, path = row.path, offset = type(row.offset) == "number" and row.offset or nil }
+    or nil
   return (here or row) and { here = here, row = row } or nil
 end
 
@@ -184,6 +198,7 @@ end
 ---@param view changeset.position.View
 ---@param decided fun(path: string): boolean Whether the tree is done growing under `path`.
 ---@return integer? lnum The line to put the sidebar's cursor on; nil leaves it.
+---@return integer? offset How many lines the window should show above `lnum`; nil leaves the scroll.
 function Position:restore(value, view, decided)
   self.restoring = recorded(value)
   return self:settle(view, decided)
@@ -221,10 +236,11 @@ end
 ---What a session should save of where you are; nil while a restored position waits, since the half-built tree's
 ---would replace it.
 ---@param row changeset.Row? The row under the sidebar's cursor.
+---@param offset integer? How many lines the sidebar's window shows above that row.
 ---@return changeset.position.Saved?
-function Position:saved(row)
+function Position:saved(row, offset)
   if not self.restoring then
-    return { here = self.here, row = row and { id = row.id, path = row.path } }
+    return { here = self.here, row = row and { id = row.id, path = row.path, offset = offset } }
   end
 end
 

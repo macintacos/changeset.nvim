@@ -1,30 +1,28 @@
 local diff = require("changeset.diff")
 local Fixture = require("support.git")
 
--- Real `git diff --numstat -M <base>` output. Renames appear as `old => new`, or with the
--- shared prefix/suffix folded into braces; binary files report `-` for both counts.
-local NUMSTAT = {
-  "0\t0\tdocs/{guide => tutorial}/intro.md",
-  "4\t0\tfresh.lua",
-  "0\t6\tlegacy.lua",
-  "-\t-\tlogo.png",
-  "0\t0\tlua/{a => }/x.lua",
-  "1\t1\told_name.lua => new_name.lua",
-  "3\t2\tnotes.txt",
-  "2\t3\tsrc/session.lua",
-}
+-- Real `git diff --numstat -M -z <base>` output. A rename's two paths follow an empty path field;
+-- binary files report `-` for both counts.
+local NUMSTAT = table.concat({
+  "0\t0\t\0docs/guide/intro.md\0docs/tutorial/intro.md\0",
+  "4\t0\tfresh.lua\0",
+  "0\t6\tlegacy.lua\0",
+  "-\t-\tlogo.png\0",
+  "1\t1\t\0old_name.lua\0new_name.lua\0",
+  "3\t2\tnotes.txt\0",
+  "2\t3\tsrc/session.lua\0",
+})
 
--- Real `git diff --name-status -M <base>` output for the same change as NUMSTAT.
-local NAME_STATUS = {
-  "R100\tdocs/guide/intro.md\tdocs/tutorial/intro.md",
-  "A\tfresh.lua",
-  "D\tlegacy.lua",
-  "M\tlogo.png",
-  "R100\tlua/a/x.lua\tlua/x.lua",
-  "R088\told_name.lua\tnew_name.lua",
-  "M\tnotes.txt",
-  "M\tsrc/session.lua",
-}
+-- Real `git diff --name-status -M -z <base>` output for the same change as NUMSTAT.
+local NAME_STATUS = table.concat({
+  "R100\0docs/guide/intro.md\0docs/tutorial/intro.md\0",
+  "A\0fresh.lua\0",
+  "D\0legacy.lua\0",
+  "M\0logo.png\0",
+  "R088\0old_name.lua\0new_name.lua\0",
+  "M\0notes.txt\0",
+  "M\0src/session.lua\0",
+})
 
 describe("changeset.diff._parse_numstat", function()
   local stats
@@ -39,31 +37,17 @@ describe("changeset.diff._parse_numstat", function()
     assert.same({ added = 0, removed = 6 }, stats["legacy.lua"])
   end)
 
-  it("keys a plain `old => new` rename by its new path", function()
+  it("keys a rename by its new path", function()
     assert.same({ added = 1, removed = 1 }, stats["new_name.lua"])
     assert.is_nil(stats["old_name.lua"])
-  end)
-
-  it("expands the brace form of a rename to the new path", function()
-    assert.same({ added = 0, removed = 0 }, stats["docs/tutorial/intro.md"])
-  end)
-
-  it("drops the empty side of a brace rename without leaving a double slash", function()
-    assert.same({ added = 0, removed = 0 }, stats["lua/x.lua"])
   end)
 
   it("counts a binary file's `-` placeholders as zero", function()
     assert.same({ added = 0, removed = 0 }, stats["logo.png"])
   end)
 
-  it("unquotes a path git quoted because it holds a quote character", function()
-    local stat = diff._parse_numstat({ '1\t0\t"quo\\"te.txt"' })
-
-    assert.same({ added = 1, removed = 0 }, stat['quo"te.txt'])
-  end)
-
   it("returns an empty table for an empty diff", function()
-    assert.same({}, diff._parse_numstat({}))
+    assert.same({}, diff._parse_numstat(""))
   end)
 end)
 
@@ -82,18 +66,11 @@ describe("changeset.diff._parse_name_status", function()
 
   it("keys a rename by its new path and remembers the old one", function()
     assert.same({ status = "renamed", oldpath = "old_name.lua" }, statuses["new_name.lua"])
-    assert.same({ status = "renamed", oldpath = "lua/a/x.lua" }, statuses["lua/x.lua"])
     assert.is_nil(statuses["old_name.lua"])
   end)
 
-  it("unquotes a path git quoted because it holds a quote character", function()
-    local status = diff._parse_name_status({ 'A\t"quo\\"te.txt"' })
-
-    assert.same({ status = "added" }, status['quo"te.txt'])
-  end)
-
   it("returns an empty table for an empty diff", function()
-    assert.same({}, diff._parse_name_status({}))
+    assert.same({}, diff._parse_name_status(""))
   end)
 end)
 
@@ -214,7 +191,8 @@ describe("changeset.diff._parse_hunks", function()
   end)
 
   it("keeps the first line the hunk covers on the old side", function()
-    local parsed = diff._parse_hunks({ "diff --git a/a.lua b/a.lua", "@@ -12,3 +12,2 @@" })
+    local parsed =
+      diff._parse_hunks({ "diff --git a/a.lua b/a.lua", "--- a/a.lua", "+++ b/a.lua", "@@ -12,3 +12,2 @@" })
 
     assert.equal(12, parsed["a.lua"][1].old_lnum)
   end)
@@ -222,15 +200,6 @@ describe("changeset.diff._parse_hunks", function()
   it("attributes a renamed file's hunks to its new path", function()
     assert.same({ { lnum = 5, count = 1, added = 1, removed = 1, old_lnum = 5 } }, hunks["new_name.lua"])
     assert.is_nil(hunks["old_name.lua"])
-  end)
-
-  it("lists a binary file with no hunks", function()
-    assert.same({}, hunks["logo.png"])
-  end)
-
-  it("lists a rename with no content change with no hunks", function()
-    assert.same({}, hunks["docs/tutorial/intro.md"])
-    assert.same({}, hunks["lua/x.lua"])
   end)
 
   it("keeps the spaces in a path", function()
@@ -241,10 +210,47 @@ describe("changeset.diff._parse_hunks", function()
   it("unquotes a path git quoted because it holds a quote character", function()
     local quoted = diff._parse_hunks({
       'diff --git "a/quo\\"te.txt" "b/quo\\"te.txt"',
+      '--- "a/quo\\"te.txt"',
+      '+++ "b/quo\\"te.txt"',
       "@@ -1 +1 @@",
     })
 
     assert.same({ { lnum = 1, count = 1, added = 1, removed = 1, old_lnum = 1 } }, quoted['quo"te.txt'])
+  end)
+
+  it("keys a path whose directory name ends in ' b'", function()
+    local parsed = diff._parse_hunks({
+      "diff --git a/my b/f.txt b/my b/f.txt",
+      "--- a/my b/f.txt\t",
+      "+++ b/my b/f.txt\t",
+      "@@ -1 +1 @@",
+    })
+
+    assert.same({ "my b/f.txt" }, vim.tbl_keys(parsed))
+  end)
+
+  it("keys a rename's hunks by its new path when git quotes only that side", function()
+    local parsed = diff._parse_hunks({
+      'diff --git a/plain.txt "b/pl\\tain.txt"',
+      "--- a/plain.txt",
+      '+++ "b/pl\\tain.txt"',
+      "@@ -3 +3 @@",
+    })
+
+    assert.same({ "pl\tain.txt" }, vim.tbl_keys(parsed))
+  end)
+
+  it("reads a removed line that starts with dashes as a line, not a file header", function()
+    local parsed = diff._parse_hunks({
+      "diff --git a/a.lua b/a.lua",
+      "--- a/a.lua",
+      "+++ b/a.lua",
+      "@@ -1 +0,0 @@",
+      "--- note",
+      "@@ -5 +4 @@",
+    })
+
+    assert.equal(2, #parsed["a.lua"])
   end)
 
   it("drops a hunk header that arrives before any file header", function()
@@ -474,6 +480,21 @@ describe("changeset.diff.collect", function()
     }, collect(base, tmp))
   end)
 
+  it("keeps two edits three lines apart in separate hunks under a wider diff.interHunkContext", function()
+    Fixture.init_repo("trunk", tmp)
+    Fixture.git({ "config", "diff.interHunkContext", "5" }, tmp)
+    write("notes.txt", TWELVE_LINES)
+    local base = Fixture.commit("seed", tmp)
+    local edited = vim.list_slice(TWELVE_LINES)
+    edited[4], edited[8] = "FOUR", "EIGHT"
+    write("notes.txt", edited)
+
+    assert.same({
+      { lnum = 4, count = 1, added = 1, removed = 1, old_lnum = 4 },
+      { lnum = 8, count = 1, added = 1, removed = 1, old_lnum = 8 },
+    }, collect(base, tmp)[1].hunks)
+  end)
+
   ---Seed a one-file repo and edit it, returning the base commit.
   ---@param cwd string
   ---@return string
@@ -505,6 +526,39 @@ describe("changeset.diff.collect", function()
     Fixture.git({ "config", "diff.external", "true" }, tmp)
 
     assert.same({ { lnum = 4, count = 1, added = 1, removed = 1, old_lnum = 4 } }, collect(base, tmp)[1].hunks)
+  end)
+
+  it("reads every file whose path git would quote or split at ' b/'", function()
+    Fixture.init_repo("trunk", tmp)
+    vim.fn.mkdir(vim.fs.joinpath(tmp, "my b"))
+    for _, name in ipairs({ 'q"uote.txt', "plain.txt", "my b/f.txt" }) do
+      write(name, TWELVE_LINES)
+    end
+    local base = Fixture.commit("seed", tmp)
+    local edited = vim.list_slice(TWELVE_LINES)
+    edited[4] = "FOUR"
+    Fixture.git({ "mv", 'q"uote.txt', 'renamed"q.txt' }, tmp)
+    Fixture.git({ "mv", "plain.txt", "pl\tain.txt" }, tmp)
+    for _, name in ipairs({ 'renamed"q.txt', "pl\tain.txt", "my b/f.txt" }) do
+      write(name, edited)
+    end
+    write('un"tracked.txt', { "new" })
+
+    local hunk = { { lnum = 4, count = 1, added = 1, removed = 1, old_lnum = 4 } }
+    local by_path = {}
+    for _, file in ipairs(collect(base, tmp)) do
+      by_path[file.path] = { status = file.status, oldpath = file.oldpath, added = file.added, hunks = file.hunks }
+    end
+    assert.same({
+      ["my b/f.txt"] = { status = "modified", added = 1, hunks = hunk },
+      ["pl\tain.txt"] = { status = "renamed", oldpath = "plain.txt", added = 1, hunks = hunk },
+      ['renamed"q.txt'] = { status = "renamed", oldpath = 'q"uote.txt', added = 1, hunks = hunk },
+      ['un"tracked.txt'] = {
+        status = "untracked",
+        added = 1,
+        hunks = { { lnum = 1, count = 1, added = 1, removed = 0, old_lnum = 0 } },
+      },
+    }, by_path)
   end)
 
   it("keeps a non-ASCII path as a real filename", function()

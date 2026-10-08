@@ -78,3 +78,60 @@ _Avoid_: filter state
 Symbol kinds the tree leaves out, saved for this branch, this repository or everywhere,
 narrowest first.
 _Avoid_: kind filter
+
+### Review comments
+
+**Review comment**:
+A note on one line or a range of lines of a file, kept on this machine for the repository's
+root until it is deleted, submitted or the review is abandoned.
+_Avoid_: bare "comment", which is a source-code comment (`changeset.comments`)
+
+**Draft**:
+A review comment kept but not saved: the text of a review comment window closed any way but
+a save. Submit and yank leave it out until it is saved.
+_Avoid_: unsaved comment, pending comment
+
+**Saved**:
+A review comment stored by a save. Only saved review comments are submitted or copied.
+_Avoid_: committed, final
+
+**Review**:
+Every review comment of a repository. The first one written starts it, and submitting or
+`:Changeset review abandon` ends it.
+_Avoid_: pending review; bare "review" where PR Review Mode (`lua/changeset/review.lua`)
+could be meant
+
+**Submit**:
+Pasting the review into an AI agent's prompt in another herdr pane, unsent, then deleting
+the review comments that went.
+_Avoid_: send, post; "submit" never means GitHub here
+
+**Review text**:
+What a review is pasted or copied as: a part for each saved review comment, in order. Each part gives the comment's
+place by absolute path, its lines fenced, and its body.
+_Avoid_: payload, prompt
+
+**Hand-off**:
+A verb that acts on the whole review rather than on one review comment: submit, `review restore`, `review yank`,
+`review abandon` and `comment list`.
+_Avoid_: bare "review verbs", which also covers the single-comment ones
+
+**Block**:
+A review comment's whole text in a box drawn under its last line in its file, shown in
+place of its first line while `:Changeset comment toggle` has blocks on.
+_Avoid_: box, card, inline comment
+
+**Parked block**:
+The block a one-line move stopped the cursor on, as if it were a line of the file. Its
+keys edit or delete its review comment.
+_Avoid_: selected block, which **Selected** already means for the sidebar; focused block
+
+**Origin**:
+Where a review verb runs from: the sidebar, with its selected row, or a file's window. It names the repository the
+verb acts on: the tree's from the sidebar, else the current buffer's.
+_Avoid_: context, source, caller
+
+**Comments section**:
+The sidebar's first section, listing the repository's review comments, one comment row
+each. It classifies no file.
+_Avoid_: comment list, comments panel

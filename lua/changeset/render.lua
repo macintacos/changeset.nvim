@@ -3,13 +3,16 @@
 ---Everything here is data in, data out: the caller supplies icons, collapse state
 ---and width, and applies the returned marks to a buffer itself.
 
+local cells = require("changeset.cells")
+local highlights = require("changeset.highlights")
+local review_comment = require("changeset.review_comment")
 local symbols = require("changeset.symbols")
 
 ---@class changeset.Mark
 ---@field priority? integer    Draw order against the row's other marks; `MARK_PRIORITY` stands when absent.
 ---@field col integer          0-based byte column the mark starts at.
 ---@field end_col? integer     0-based exclusive byte column; absent on virtual-text marks.
----@field hl? string           Group over `col`..`end_col`; absent on virtual-text marks, whose chunks carry their own.
+---@field hl? string|string[]  Group or groups over `col`..`end_col`; absent on virtual-text marks, whose chunks carry their own.
 ---@field virt_text? table[]   `nvim_buf_set_extmark` virtual-text chunks.
 ---@field pos? "inline"|"right_align" Where the virtual text is drawn.
 ---@field hl_mode? "combine" Lays the virtual text over the line's background instead of blanking it.
@@ -46,7 +49,7 @@ local symbols = require("changeset.symbols")
 ---@field icon string       Glyph for the previewed file's type.
 ---@field icon_hl string    Group to draw it in, from `band_icon`.
 ---@field path string       Repo-relative path of the previewed file.
----@field destination string? What the jump key lands on; absent for a row that names nothing.
+---@field destination string? What the right edge says: where the jump key lands, or why it opens nothing; absent for a row that names nothing.
 ---@field jump (string|false)? The jump key the sidebar bound; absent or `false` for none.
 
 ---@class changeset.Empty
@@ -56,93 +59,10 @@ local symbols = require("changeset.symbols")
 
 local M = {}
 
--- The highlight groups. Each is only a default: a colorscheme's or the user's own
--- definition of one wins, whenever it is made.
-
----Group for text that is not content: `Comment` with italics. Created by `define_highlights`.
+---Glyph heading the Comments section: the file marks' bubble, borrowed as they borrow it, since no icon plugin has a
+---category to ask for a comment.
 ---@type string
-M.META_HL = "ChangesetMeta"
-
----Group for the band over a window the sidebar is previewing into. Created by `define_highlights`.
----@type string
-M.PREVIEW_HL = "ChangesetPreview"
-
----Group for the badge at the head of that band. Created by `define_highlights`.
----@type string
-M.PREVIEW_LABEL_HL = "ChangesetPreviewLabel"
-
----Group for the affordance at the tail of that band. Created by `define_highlights`.
----@type string
-M.PREVIEW_HINT_HL = "ChangesetPreviewHint"
-
----Group for the run of characters a filter query matched. Created by `define_highlights`.
----@type string
-M.MATCH_HL = "ChangesetMatch"
-
----Group for a symbol kind the tree is not showing. Created by `define_highlights`.
----@type string
-M.HIDDEN_HL = "ChangesetHidden"
-
----Group for the sidebar's own header strip. Created by `define_highlights`.
----@type string
-M.HEADER_HL = "ChangesetHeader"
-
----Group for the branch glyph at the head of that strip. Created by `define_highlights`.
----@type string
-M.HEADER_ICON_HL = "ChangesetHeaderIcon"
-
----Group for what is not content on that strip: a remote, a noun, the PR. Created by `define_highlights`.
----@type string
-M.HEADER_DIM_HL = "ChangesetHeaderDim"
-
----Group for the ref the tree is compared against. Created by `define_highlights`.
----@type string
-M.HEADER_REF_HL = "ChangesetHeaderRef"
-
----Group for the badge naming the sidebar in its footer. Created by `define_highlights`.
----@type string
-M.BADGE_HL = "ChangesetBadge"
-
----Group for the footer's text. Created by `define_highlights`.
----@type string
-M.FOOTER_HL = "ChangesetFooter"
-
----Group for the keys and the filter the footer names. Created by `define_highlights`.
----@type string
-M.FOOTER_KEY_HL = "ChangesetFooterKey"
-
----Background of the row the sidebar's cursor is on, while it has focus. Created by `define_highlights`.
----@type string
-M.SELECTED_HL = "ChangesetSelected"
-
----Background of the row for the file and line the cursor is in. Created by `define_highlights`.
----@type string
-M.HERE_HL = "ChangesetHere"
-
----Background of the row last opened from the sidebar. Created by `define_highlights`.
----@type string
-M.PICKED_HL = "ChangesetPicked"
-
----Group for the selected row's glyph. Created by `define_highlights`.
----@type string
-M.SELECTED_ICON_HL = "ChangesetSelectedIcon"
-
----Group for the glyph on the row for where you are. Created by `define_highlights`.
----@type string
-M.HERE_ICON_HL = "ChangesetHereIcon"
-
----Group for the glyph on the row last opened from the sidebar. Created by `define_highlights`.
----@type string
-M.PICKED_ICON_HL = "ChangesetPickedIcon"
-
----Group 'guicursor' draws the cursor in while it is in the sidebar. Created by `define_highlights`.
----@type string
-M.NO_CURSOR_HL = "ChangesetNoCursor"
-
----Group for the filetype glyph on the preview band. Recoloured by `band_icon` for each
----file; defining it yourself draws every file's glyph in one colour.
----@type string
-M.PREVIEW_ICON_HL = "ChangesetPreviewIcon"
+M.COMMENTS_ICON = highlights.REVIEW_COMMENT_BUBBLE
 
 ---Glyph at the right edge of the selected row.
 ---@type string
@@ -161,6 +81,10 @@ M.PICKED_ICON = "•"
 ---@type integer
 M.MARK_PRIORITY = 199
 
+---The virtual line that parts two sections, hung under the first one's last line.
+---@type table[]
+M.SECTION_GAP = { { { "" } } }
+
 -- Above the marks a row already carries, so a match reads over a dimmed
 -- ancestor and a coloured symbol name alike.
 local MATCH_PRIORITY = M.MARK_PRIORITY + 1
@@ -174,9 +98,6 @@ local GLYPH_PRIORITY = MATCH_PRIORITY + 1
 
 -- Cells every row leaves at the right edge for a state glyph: a gap, then the glyph.
 local GUTTER = 2
-
--- How far each state's background moves from the window's toward the accent.
-local SELECTED_TINT, HERE_TINT, PICKED_TINT = 0.2, 0.12, 0.06
 
 -- Stands in at the tail of the preview band when the row names no destination.
 local HINT = "%s to open"
@@ -236,13 +157,14 @@ local META_KINDS = { orphans = true, orphan = true }
 
 ---Joins highlighted chunks into a line, recording each chunk's byte range as a mark.
 ---@param row changeset.Row? The row the line draws; absent on a line that draws no row.
----@param chunks { [1]: string, [2]: string? }[] Text and, optionally, the group that colours it.
+---@param chunks { [1]: string, [2]: string|string[]|nil }[] Text and, optionally, the group or groups that colour it.
 ---@param stat? table[] Virtual-text chunks to right-align on the line.
 ---@return changeset.Line
-local function compose(row, chunks, stat)
+function M.compose(row, chunks, stat)
   local text, marks = "", {}
   for _, chunk in ipairs(chunks) do
-    local piece, hl = chunk[1], chunk[2]
+    -- A buffer line can't hold a line break, which a symbol name or a path can. Same byte length, so marks stay put.
+    local piece, hl = (chunk[1]:gsub("[\r\n]", " ")), chunk[2]
     if hl then
       marks[#marks + 1] = { col = #text, end_col = #text + #piece, hl = hl }
     end
@@ -276,9 +198,9 @@ end
 ---@return vim.api.keyset.set_extmark[]
 function M.state_marks(state, width)
   local look = ({
-    selected = { M.SELECTED_HL, M.SELECTED_ICON, M.SELECTED_ICON_HL },
-    here = { M.HERE_HL, M.HERE_ICON, M.HERE_ICON_HL },
-    picked = { M.PICKED_HL, M.PICKED_ICON, M.PICKED_ICON_HL },
+    selected = { highlights.SELECTED_HL, M.SELECTED_ICON, highlights.SELECTED_ICON_HL },
+    here = { highlights.HERE_HL, M.HERE_ICON, highlights.HERE_ICON_HL },
+    picked = { highlights.PICKED_HL, M.PICKED_ICON, highlights.PICKED_ICON_HL },
   })[state]
   return {
     { hl_group = look[1], hl_eol = true, priority = TINT_PRIORITY },
@@ -291,43 +213,49 @@ function M.state_marks(state, width)
   }
 end
 
+---A memo of `vim.fn.strdisplaywidth`, for the few strings every row repeats: margins, guides, glyph prefixes, stat
+---chunks and markers. Made per render, since `'ambiwidth'` changes the width of `│ └ ─ ▎ ●`.
+---@return fun(text: string): integer
+local function width_memo()
+  local known = {}
+  return function(text)
+    local cells_wide = known[text]
+    if not cells_wide then
+      cells_wide = vim.fn.strdisplaywidth(text)
+      known[text] = cells_wide
+    end
+    return cells_wide
+  end
+end
+
 ---Cells a row gives up at the right edge: the state gutter, then a stat and the gap before it.
 ---@param stat table[]? Virtual-text chunks.
+---@param width fun(text: string): integer
 ---@return integer
-local function stat_cells(stat)
+local function stat_cells(stat, width)
   if not stat then
     return GUTTER
   end
   local total = GUTTER + 1
   for _, chunk in ipairs(stat) do
-    total = total + vim.fn.strdisplaywidth(chunk[1])
+    total = total + width(chunk[1])
   end
   return total
-end
-
----Cuts `text` to `room` cells, marking the cut with an ellipsis and keeping its head.
----@param text string
----@param room integer
----@return string
-local function clip_right(text, room)
-  if vim.fn.strdisplaywidth(text) <= room then
-    return text
-  end
-  return vim.fn.strcharpart(text, 0, math.max(room - 1, 0)) .. "…"
 end
 
 ---A file row: filename first, its directory dimmed in parentheses, dropped before the name is trimmed.
 ---@param file changeset.Row
 ---@param opts changeset.RenderOpts
+---@param width fun(text: string): integer
 ---@return changeset.Line
-local function file_line(file, opts)
+local function file_line(file, opts, width)
   local glyph, icon_hl = opts.icon(file)
   local marker = STATUS_MARKER[file.status]
   local stat = M.stat_chunks(file)
   local room = opts.width
-    - vim.fn.strdisplaywidth(MARGIN .. RAIL .. " " .. glyph .. " ")
-    - (marker and vim.fn.strdisplaywidth(marker) or 0)
-    - stat_cells(stat)
+    - width(MARGIN .. RAIL .. " " .. glyph .. " ")
+    - (marker and width(marker) or 0)
+    - stat_cells(stat, width)
   local filename, dir = vim.fs.basename(file.path), vim.fs.dirname(file.path)
   local dir_room = room - vim.fn.strdisplaywidth(filename .. " ()")
   local chunks = {
@@ -345,44 +273,50 @@ local function file_line(file, opts)
   if marker then
     chunks[#chunks + 1] = { marker, "Comment" }
   end
-  return compose(file, chunks, stat)
+  return M.compose(file, chunks, stat)
 end
 
 -- Cells a section label is padded to, so every section header's count starts in one column.
 local LABEL_CELLS = 20
 
----A section header: icon, label, file count, and the section's stat at the right edge. No rail.
+---A section header: icon, label, a count of its files or comments, and the section's stat at the right edge. No rail.
 ---@param section changeset.Row
 ---@param opts changeset.RenderOpts
+---@param width fun(text: string): integer
 ---@return changeset.Line
-local function section_line(section, opts)
+local function section_line(section, opts, width)
   local glyph, icon_hl = opts.icon(section)
   local stat = M.stat_chunks(section)
-  local count = ("%d file%s"):format(section.files, section.files == 1 and "" or "s")
-  local fixed_cells = vim.fn.strdisplaywidth(MARGIN .. glyph .. "  " .. section.name .. count) + stat_cells(stat)
+  local n, noun = section.comments or section.files, section.comments and "comment" or "file"
+  local count = ("%d %s%s"):format(n, noun, n == 1 and "" or "s")
+  if (section.drafts or 0) > 0 then
+    count = ("%s · %d draft%s"):format(count, section.drafts, section.drafts == 1 and "" or "s")
+  end
+  local fixed_cells = vim.fn.strdisplaywidth(MARGIN .. glyph .. "  " .. section.name .. count) + stat_cells(stat, width)
   local pad = math.max(1, math.min(LABEL_CELLS - vim.fn.strdisplaywidth(section.name), opts.width - fixed_cells))
-  return compose(section, {
+  return M.compose(section, {
     { MARGIN },
     { glyph, icon_hl },
     { "  " },
     { section.name .. (" "):rep(pad) },
-    { count, M.META_HL },
+    { count, highlights.META_HL },
   }, stat)
 end
 
 ---@param row changeset.Row
 ---@param guides string Tree connectors for the row, e.g. "│ └─".
 ---@param opts changeset.RenderOpts
+---@param width fun(text: string): integer
 ---@return changeset.Line
-local function child_line(row, guides, opts)
+local function child_line(row, guides, opts, width)
   local glyph, icon_hl = opts.icon(row)
   local stat = M.stat_chunks(row)
-  local room = opts.width - vim.fn.strdisplaywidth(MARGIN .. "  " .. guides .. glyph .. " ") - stat_cells(stat)
+  local room = opts.width - width(MARGIN .. "  " .. guides .. glyph .. " ") - stat_cells(stat, width)
   local name, name_hl = symbols.fit(row.name, room), row.ancestor and "Comment" or nil
   if META_KINDS[row.kind] then
-    icon_hl, name, name_hl = M.META_HL, clip_right(row.name, room), M.META_HL
+    icon_hl, name, name_hl = highlights.META_HL, cells.clip(row.name, room), highlights.META_HL
   end
-  return compose(row, {
+  return M.compose(row, {
     { MARGIN },
     { "  " },
     { guides, "Comment" },
@@ -402,28 +336,63 @@ local function placeholder_line(file)
     depth = file.depth + 1,
     children = {},
   })
-  return compose(row, { { MARGIN }, { "  " }, { "└─", "Comment" }, { "⋯ reading symbols", M.META_HL } })
+  return M.compose(
+    row,
+    { { MARGIN }, { "  " }, { "└─", "Comment" }, { "⋯ reading symbols", highlights.META_HL } }
+  )
 end
 
 ---@param out changeset.Line[]
 ---@param row changeset.Row
 ---@param bars string Ancestor bars this level's connectors hang off.
 ---@param opts changeset.RenderOpts
-local function append_children(out, row, bars, opts)
+---@param width fun(text: string): integer
+local function append_children(out, row, bars, opts, width)
   for i, child in ipairs(row.children) do
     local is_last = i == #row.children
-    out[#out + 1] = child_line(child, bars .. (is_last and "└─" or "├─"), opts)
+    out[#out + 1] = child_line(child, bars .. (is_last and "└─" or "├─"), opts, width)
     if not opts.collapsed(child.id) then
-      append_children(out, child, bars .. (is_last and "  " or "│ "), opts)
+      append_children(out, child, bars .. (is_last and "  " or "│ "), opts, width)
     end
   end
+end
+
+---A comment row: the file marks' circle in the rail's column, the file's icon, its name and line, the name alone for
+---a whole file's, and the body's first line, quiet like the marks' and clipped to fit.
+---@param row changeset.Row
+---@param opts changeset.RenderOpts
+---@param width fun(text: string): integer
+---@return changeset.Line
+local function comment_line(row, opts, width)
+  local comment = assert(row.review_comment, "changeset: a comment row lists nothing")
+  local glyph, icon_hl = opts.icon(row)
+  local span = review_comment.span(comment)
+  local where = vim.fs.basename(row.path) .. (span and ":" .. span or "")
+  local circle = comment.draft and highlights.REVIEW_COMMENT_DRAFT_CIRCLE or highlights.REVIEW_COMMENT_CIRCLE
+  local room = opts.width - width(MARGIN .. circle .. " " .. glyph .. " ") - stat_cells(nil, width)
+  where = cells.clip(where, room)
+  local chunks = {
+    { MARGIN },
+    { circle, highlights.review_comment_hl(comment) },
+    { " " },
+    { glyph, icon_hl },
+    { " " .. where },
+  }
+  room = room - vim.fn.strdisplaywidth(where)
+  -- The body needs its two-cell gap and a cell to show anything.
+  if room >= 3 then
+    local text = cells.clip(comment.body:match("^[^\r\n]*"), room - 2)
+    vim.list_extend(chunks, { { "  " }, { text, highlights.REVIEW_COMMENT_BODY_HL } })
+  end
+  return M.compose(row, chunks)
 end
 
 ---@param out changeset.Line[]
 ---@param file changeset.Row
 ---@param opts changeset.RenderOpts
-local function append_file(out, file, opts)
-  out[#out + 1] = file_line(file, opts)
+---@param width fun(text: string): integer
+local function append_file(out, file, opts, width)
+  out[#out + 1] = file_line(file, opts, width)
   if opts.collapsed(file.id) then
     return
   end
@@ -433,7 +402,7 @@ local function append_file(out, file, opts)
   if file.read == "reading" then
     out[#out + 1] = placeholder_line(file)
   else
-    append_children(out, file, "", opts)
+    append_children(out, file, "", opts, width)
   end
 end
 
@@ -462,32 +431,72 @@ local function matches(text, query)
   end
 end
 
+---@param out changeset.Line[]
+---@param row changeset.Row A row under a section: a file or a comment.
+---@param opts changeset.RenderOpts
+---@param width fun(text: string): integer
+local function append_child(out, row, opts, width)
+  if row.kind == "comment" then
+    out[#out + 1] = comment_line(row, opts, width)
+  else
+    append_file(out, row, opts, width)
+  end
+end
+
+---Mark every match of `query` on `lines`.
+---@param lines changeset.Line[]
+---@param query string
+local function mark_matches(lines, query)
+  for _, line in ipairs(lines) do
+    -- A section header never matches the filter: lighting its label would claim a match.
+    if line.row.kind ~= "section" then
+      for _, run in ipairs(matches(line.text, query)) do
+        line.marks[#line.marks + 1] =
+          { col = run[1], end_col = run[2], hl = highlights.MATCH_HL, priority = MATCH_PRIORITY }
+      end
+    end
+  end
+end
+
 ---Render section rows and everything visible under them, one buffer line per row.
 ---@param rows changeset.Row[] Section rows, children nested.
 ---@param opts changeset.RenderOpts
 ---@return changeset.Line[]
 function M.lines(rows, opts)
-  local out = {}
+  local out, width = {}, width_memo()
   for i, section in ipairs(rows) do
     if i > 1 then
       local marks = out[#out].marks
-      marks[#marks + 1] = { col = 0, virt_lines = { { { "" } } } }
+      marks[#marks + 1] = { col = 0, virt_lines = M.SECTION_GAP }
     end
-    out[#out + 1] = section_line(section, opts)
+    out[#out + 1] = section_line(section, opts, width)
     if not opts.collapsed(section.id) then
-      for _, file in ipairs(section.children) do
-        append_file(out, file, opts)
+      for _, child in ipairs(section.children) do
+        append_child(out, child, opts, width)
       end
     end
   end
-  for _, line in ipairs(out) do
-    -- A section header never matches the filter: lighting its label would claim a match.
-    if line.row.kind ~= "section" then
-      for _, span in ipairs(matches(line.text, opts.query or "")) do
-        line.marks[#line.marks + 1] = { col = span[1], end_col = span[2], hl = M.MATCH_HL, priority = MATCH_PRIORITY }
-      end
-    end
-  end
+  mark_matches(out, opts.query or "")
+  return out
+end
+
+---A section's header line, as `lines` draws it, without the gap above it.
+---@param section changeset.Row
+---@param opts changeset.RenderOpts
+---@return changeset.Line
+function M.section(section, opts)
+  return section_line(section, opts, width_memo())
+end
+
+---The lines `lines` draws for one row under a section and everything visible under it. They depend on nothing
+---else in the tree, since a file's guides start afresh.
+---@param row changeset.Row A file or a comment row.
+---@param opts changeset.RenderOpts
+---@return changeset.Line[]
+function M.child(row, opts)
+  local out = {}
+  append_child(out, row, opts, width_memo())
+  mark_matches(out, opts.query or "")
   return out
 end
 
@@ -523,14 +532,14 @@ function M.kind_lines(rows, opts)
     local gap = opts.width
       - vim.fn.strdisplaywidth(lead .. " " .. glyph .. " " .. row.kind)
       - vim.fn.strdisplaywidth(count)
-    local line = compose(nil, {
+    local line = M.compose(nil, {
       { lead, not row.hidden and icon_hl or nil },
       { " " },
-      { glyph, row.hidden and M.HIDDEN_HL or icon_hl },
+      { glyph, row.hidden and highlights.HIDDEN_HL or icon_hl },
       { " " },
-      { row.kind, row.hidden and M.HIDDEN_HL or nil },
+      { row.kind, row.hidden and highlights.HIDDEN_HL or nil },
       { (" "):rep(math.max(gap, 1)) },
-      { count, M.META_HL },
+      { count, highlights.META_HL },
     })
     line.kind = row.kind
     out[i] = line
@@ -580,14 +589,14 @@ function M.header(summary, width)
   local room = width
     - vim.fn.strdisplaywidth((" %s "):format(BRANCH_ICON))
     - (pr and vim.fn.strdisplaywidth(pr) + 2 or 0)
-  local ref = clip_right(summary.ref, room)
+  local ref = cells.clip(summary.ref, room)
   local remote = ref:match("^origin/") or ""
   return table.concat({
-    ("%%#%s# %s "):format(M.HEADER_ICON_HL, BRANCH_ICON),
-    ("%%#%s#%s"):format(M.HEADER_DIM_HL, remote),
-    ("%%#%s#%s"):format(M.HEADER_REF_HL, escaped(ref:sub(#remote + 1))),
-    ("%%#%s#%%="):format(M.HEADER_HL),
-    pr and ("%%#%s#%s "):format(M.HEADER_DIM_HL, pr) or "",
+    ("%%#%s# %s "):format(highlights.HEADER_ICON_HL, BRANCH_ICON),
+    ("%%#%s#%s"):format(highlights.HEADER_DIM_HL, remote),
+    ("%%#%s#%s"):format(highlights.HEADER_REF_HL, escaped(ref:sub(#remote + 1))),
+    ("%%#%s#%%="):format(highlights.HEADER_HL),
+    pr and ("%%#%s#%s "):format(highlights.HEADER_DIM_HL, pr) or "",
   })
 end
 
@@ -598,21 +607,10 @@ end
 ---@return table[] chunks
 local function counted(glyph, count, noun)
   return {
-    { glyph .. " ", M.HEADER_DIM_HL },
-    { tostring(count), M.HEADER_HL },
-    { " " .. noun .. (count == 1 and "" or "s"), M.HEADER_DIM_HL },
+    { glyph .. " ", highlights.HEADER_DIM_HL },
+    { tostring(count), highlights.HEADER_HL },
+    { " " .. noun .. (count == 1 and "" or "s"), highlights.HEADER_DIM_HL },
   }
-end
-
----Width in cells of virtual-text chunks.
----@param chunks table[]
----@return integer
-local function cells(chunks)
-  local total = 0
-  for _, chunk in ipairs(chunks) do
-    total = total + vim.fn.strdisplaywidth(chunk[1])
-  end
-  return total
 end
 
 ---The header's second row, as a virtual line over the tree: the file count on the
@@ -625,11 +623,14 @@ end
 ---@param width integer Cells the line spans; padded to fill, so the strip runs the full width.
 ---@return table[] chunks Virtual-text chunks for one line of `virt_lines`.
 function M.header_totals(summary, width)
-  local strip = M.HEADER_HL
+  local strip = highlights.HEADER_HL
   local left, right
   if summary.reading then
     left = {
-      { ("⋯ reading symbols %d/%d"):format(summary.reading.done, summary.reading.total), { strip, M.META_HL } },
+      {
+        ("⋯ reading symbols %d/%d"):format(summary.reading.done, summary.reading.total),
+        { strip, highlights.META_HL },
+      },
     }
     right = {}
   else
@@ -648,7 +649,7 @@ function M.header_totals(summary, width)
   })
 
   local chunks = vim.list_extend({ { " ", strip } }, left)
-  chunks[#chunks + 1] = { (" "):rep(math.max(width - cells(chunks) - cells(right), 1)), strip }
+  chunks[#chunks + 1] = { (" "):rep(math.max(width - cells.chunks(chunks) - cells.chunks(right), 1)), strip }
   return vim.list_extend(chunks, right)
 end
 
@@ -657,12 +658,17 @@ end
 ---@param info changeset.Footer
 ---@return string
 function M.footer(info)
-  local parts = { ("%%#%s# Changeset "):format(M.BADGE_HL) }
+  local parts = { ("%%#%s# Changeset "):format(highlights.BADGE_HL) }
   if info.file then
-    parts[#parts + 1] = ("%%#%s# file %d of %d"):format(M.FOOTER_HL, info.file, info.files)
+    parts[#parts + 1] = ("%%#%s# file %d of %d"):format(highlights.FOOTER_HL, info.file, info.files)
   end
   if info.query ~= "" then
-    parts[#parts + 1] = ("%%#%s#  %s %%#%s#%s"):format(M.FOOTER_HL, FILTER_ICON, M.FOOTER_KEY_HL, escaped(info.query))
+    parts[#parts + 1] = ("%%#%s#  %s %%#%s#%s"):format(
+      highlights.FOOTER_HL,
+      FILTER_ICON,
+      highlights.FOOTER_KEY_HL,
+      escaped(info.query)
+    )
   end
   local hints = vim
     .iter(HINTS)
@@ -670,11 +676,16 @@ function M.footer(info)
       return info.keys[hint[1]]
     end)
     :map(function(hint)
-      return ("%%#%s#%s %%#%s#%s"):format(M.FOOTER_KEY_HL, escaped(info.keys[hint[1]]), M.FOOTER_HL, hint[2])
+      return ("%%#%s#%s %%#%s#%s"):format(
+        highlights.FOOTER_KEY_HL,
+        escaped(info.keys[hint[1]]),
+        highlights.FOOTER_HL,
+        hint[2]
+      )
     end)
     :totable()
   -- `%<` before the hints: a bar too narrow for everything gives up the keys first.
-  parts[#parts + 1] = ("%%#%s#%%=%%<"):format(M.FOOTER_HL) .. table.concat(hints, "  ") .. " "
+  parts[#parts + 1] = ("%%#%s#%%=%%<"):format(highlights.FOOTER_HL) .. table.concat(hints, "  ") .. " "
   return table.concat(parts)
 end
 
@@ -691,13 +702,16 @@ end
 ---@return string
 function M.preview_winbar(band)
   return table.concat({
-    ("%%#%s# Preview "):format(M.PREVIEW_LABEL_HL),
+    ("%%#%s# Preview "):format(highlights.PREVIEW_LABEL_HL),
     -- The spaces belong to the icon's group rather than the band's, which keeps
     -- the two one highlight run and the icon one cell off the badge either way.
     ("%%#%s# %s "):format(band.icon_hl, band.icon),
-    ("%%#%s#%%<%s"):format(M.PREVIEW_HL, escaped(band.path)),
+    ("%%#%s#%%<%s"):format(highlights.PREVIEW_HL, escaped(band.path)),
     "%=",
-    ("%%#%s#%s "):format(M.PREVIEW_HINT_HL, escaped(band.destination or (band.jump and HINT:format(band.jump) or ""))),
+    ("%%#%s#%s "):format(
+      highlights.PREVIEW_HINT_HL,
+      escaped(band.destination or (band.jump and HINT:format(band.jump) or ""))
+    ),
   })
 end
 
@@ -705,55 +719,7 @@ end
 ---@param winbar string
 ---@return boolean
 function M.is_preview_winbar(winbar)
-  return winbar:find(("%%#%s# Preview "):format(M.PREVIEW_LABEL_HL), 1, true) ~= nil
-end
-
----What `set_default` last gave each group, as `definition` read it back.
----@type table<string, vim.api.keyset.get_hl_info>
-local last_given = {}
-
----`name`'s definition without its `default` flag, which setting `Normal` strips from
----every group.
----@param name string
----@return vim.api.keyset.get_hl_info
-local function definition(name)
-  local hl = vim.api.nvim_get_hl(0, { name = name })
-  hl.default = nil
-  return hl
-end
-
----Give `name` the default `attrs` unless a colorscheme or the user has defined it. A
----group still holding what this module last gave it is forced over: `default` alone
----would keep the old theme's colours.
----@param name string
----@param attrs vim.api.keyset.highlight
-local function set_default(name, attrs)
-  local current = definition(name)
-  if not vim.tbl_isempty(current) and not vim.deep_equal(current, last_given[name]) then
-    return
-  end
-  vim.api.nvim_set_hl(0, name, vim.tbl_extend("force", attrs, { default = true, force = true }))
-  last_given[name] = definition(name)
-end
-
----Point `PREVIEW_ICON_HL` at `hl`'s colour over the band's background.
----
----An icon plugin's group carries a foreground only, so a glyph drawn straight in one
----punches the window's own background through the band. One group recoloured per
----preview rather than one per filetype: only ever one band is on screen.
----@type string? The group the band's glyph last came with, so a new colorscheme can
----be followed: this one is mixed from two resolved colours rather than linked to them.
-local band_hl
-
----@param hl string Group the glyph came with.
----@return string group
-function M.band_icon(hl)
-  band_hl = hl
-  set_default(M.PREVIEW_ICON_HL, {
-    fg = vim.api.nvim_get_hl(0, { name = hl, link = false }).fg,
-    bg = vim.api.nvim_get_hl(0, { name = M.PREVIEW_HL, link = false }).bg,
-  })
-  return M.PREVIEW_ICON_HL
+  return winbar:find(("%%#%s# Preview "):format(highlights.PREVIEW_LABEL_HL), 1, true) ~= nil
 end
 
 ---The sentence shown in place of the tree when there is nothing to list.
@@ -764,82 +730,6 @@ function M.empty_message(info)
     return ("On %s — nothing to compare. Switch to a branch to see its changes."):format(info.branch)
   end
   return ("%s matches %s. Nothing changed yet."):format(info.branch, info.ref)
-end
-
----`amount` of the way from `from` to `to`, channel by channel.
----@param from integer
----@param to integer
----@param amount number
----@return integer
-local function mix(from, to, amount)
-  local out = 0
-  for _, place in ipairs({ 0x10000, 0x100, 1 }) do
-    local a, b = math.floor(from / place) % 256, math.floor(to / place) % 256
-    out = out + math.floor(a + (b - a) * amount + 0.5) * place
-  end
-  return out
-end
-
----Create the groups the sidebar draws with, as overridable defaults. `META_HL` is mixed
----from `Comment` rather than linked to it, which would drop the italics.
-function M.define_highlights()
-  local comment = vim.api.nvim_get_hl(0, { name = "Comment", link = false })
-  set_default(M.META_HL, { fg = comment.fg, italic = true })
-
-  -- CursorLine's background is the faintest tint every colorscheme gives a window
-  -- to say "this is the thing you are on", so the band reads in any theme without
-  -- competing with the file under it. Visual is the same idea two shades louder,
-  -- and stands in for a theme that leaves CursorLine to the number column.
-  local cursorline = vim.api.nvim_get_hl(0, { name = "CursorLine", link = false })
-  local visual = vim.api.nvim_get_hl(0, { name = "Visual", link = false })
-  local band = cursorline.bg or visual.bg
-  local warn = vim.api.nvim_get_hl(0, { name = "DiagnosticWarn", link = false })
-  set_default(M.PREVIEW_HL, { bg = band })
-  -- `reverse` rather than a background read off `Normal`: it pairs the accent
-  -- with whatever the window is actually drawn on, so the badge survives a
-  -- theme that leaves `Normal` transparent.
-  set_default(M.PREVIEW_LABEL_HL, { fg = warn.fg or comment.fg, reverse = true, bold = true })
-  set_default(M.PREVIEW_HINT_HL, { fg = comment.fg, bg = band, italic = true })
-  -- TabLine's background is what a colorscheme paints its own chrome with, so the
-  -- header reads as the panel's frame rather than as a preview band.
-  local chrome = vim.api.nvim_get_hl(0, { name = "TabLine", link = false }).bg or band
-  set_default(M.HEADER_HL, { bg = chrome })
-  -- Directory's colour rather than the preview badge's warning yellow: these say
-  -- what the panel is, and yellow is already spoken for by "on loan".
-  local directory = vim.api.nvim_get_hl(0, { name = "Directory", link = false }).fg or comment.fg
-  set_default(M.HEADER_ICON_HL, { fg = directory, bg = chrome })
-  set_default(M.HEADER_DIM_HL, { fg = comment.fg, bg = chrome })
-  local normal = vim.api.nvim_get_hl(0, { name = "Normal", link = false })
-  set_default(M.HEADER_REF_HL, { fg = normal.fg, bg = chrome, bold = true })
-  set_default(M.BADGE_HL, { fg = directory, reverse = true, bold = true })
-  local statusline = vim.api.nvim_get_hl(0, { name = "StatusLine", link = false })
-  set_default(M.FOOTER_HL, { fg = comment.fg, bg = statusline.bg })
-  set_default(M.FOOTER_KEY_HL, { fg = statusline.fg, bg = statusline.bg, bold = true })
-  -- What the editor already paints over the text you searched for.
-  set_default(M.MATCH_HL, { link = "Search" })
-  -- Struck through as well as dimmed: dim on its own is what ancestor rows mean,
-  -- and it reads as faint rather than as switched off in a light colourscheme.
-  set_default(M.HIDDEN_HL, { fg = comment.fg, strikethrough = true })
-  -- Every state tints toward the theme's keyword colour, a hue nothing else on a row
-  -- carries, so a tinted row reads as a state rather than as another diff colour.
-  -- Mixed rather than linked: an opaque background keeps each token's own colour
-  -- legible on top. Over the chrome's background when Normal is transparent.
-  local accent = vim.api.nvim_get_hl(0, { name = "Statement", link = false }).fg or normal.fg or 0x808080
-  local base = normal.bg or chrome or 0
-  set_default(M.SELECTED_HL, { bg = mix(base, accent, SELECTED_TINT) })
-  set_default(M.HERE_HL, { bg = mix(base, accent, HERE_TINT) })
-  set_default(M.PICKED_HL, { bg = mix(base, accent, PICKED_TINT) })
-  set_default(M.SELECTED_ICON_HL, { fg = accent })
-  set_default(M.HERE_ICON_HL, { fg = accent })
-  set_default(M.PICKED_ICON_HL, { fg = accent })
-  -- Fully blended is the TUI's cue to hide the cursor outright. `nocombine` is only
-  -- there to keep the group: one holding nothing but `blend` is stored as cleared.
-  set_default(M.NO_CURSOR_HL, { blend = 100, nocombine = true })
-  -- Last, over the band it is drawn on: a glyph left on the old theme's colour is
-  -- the one thing here that can come out invisible rather than merely off-key.
-  if band_hl then
-    M.band_icon(band_hl)
-  end
 end
 
 return M

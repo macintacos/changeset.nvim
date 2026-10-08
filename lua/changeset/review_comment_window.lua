@@ -1,0 +1,550 @@
+---The markdown window a review comment is written in, under the line it is about.
+
+local cells = require("changeset.cells")
+local help = require("changeset.help")
+local highlights = require("changeset.highlights")
+local review_comment = require("changeset.review_comment")
+
+local M = {}
+
+---The most columns inside its border, a review comment block's too, so a block reads as this window collapsed.
+M.MEASURE = 72
+local HEIGHT = 6
+local MIN_WIDTH = 20
+-- The float's rows and its top and bottom border.
+local BOX = HEIGHT + 2
+-- Blank rows above and below the box and a blank column left of it, so no text butts against its border.
+local GAP = 1
+local ROOM = BOX + 2 * GAP
+
+local ns = vim.api.nvim_create_namespace("changeset.review_comment_window")
+
+---Blank virtual lines, as tall as the room, that the float lies on so it covers no text.
+local PADDING = {}
+for i = 1, ROOM do
+  PADDING[i] = { { "" } }
+end
+
+---@class changeset.ReviewCommentWindowOpts
+---@field line integer The current window's buffer line it opens under, 1-based.
+---@field title string The whole title, e.g. "Review comment · line 42".
+---@field icon [string, string]? A glyph and the group it comes in, drawn ahead of the title on the title's background.
+---@field keys string[] Keys that save, in insert and normal mode.
+---@field save_desc string The save keys' `desc`, which `?` lists.
+---@field close_desc string The `desc` of the keys that close without saving, which `?` lists.
+---@field save fun(body: string, done: fun(err: string?)) Called with the buffer's lines joined by "\n", never only whitespace; the window closes once `done` gets no error.
+---@field keep fun(body: string, draft: true?) Called with the buffer's lines joined by "\n", empty included, whenever the buffer goes (a close, an :e in the float, quitting) except after a taken save; `draft` is true after the window's `draft()`, to keep the text as a draft even when unchanged.
+---@field back fun() Called once a key that closes without saving has closed it, after `keep`.
+---@field blank fun(window: changeset.ReviewCommentWindow)? Called, the window still open, on a save of blank text; without it, the window closes, handing the text to `keep`.
+---@field body string? The text it opens with.
+---@field comment changeset.ReviewComment The comment it is about, as `current` reports it and its buffer is named; a new one's body is "".
+---@field routes table<string, string>? What each subcommand run in the window does instead of closing it first, by name, as `?` lists it.
+
+---The window as `current` reports it, with what can be done to it.
+---@class changeset.ReviewCommentWindow
+---@field source integer The window it opened from.
+---@field source_buf integer The buffer it opened on.
+---@field comment changeset.ReviewComment
+---@field text fun(): string Its lines joined by "\n".
+---@field save fun() As its save keys do.
+---@field back fun() As its keys that close without saving do.
+---@field close fun(after: fun()?) Closes it keeping the text, then calls `after` once it has gone and insert mode with it.
+---@field discard fun(after: fun()?) Closes it keeping nothing, then calls `after` as `close` does.
+---@field draft fun() Closes it keeping the text as a draft, though unchanged.
+---@field resume fun() Picks writing back up where a default key typed in insert mode left it, when that key's command leaves the window open.
+---@field hold fun(opens: fun()) Leaves insert mode, then calls `opens`, keeping the window open while focus is in the window that opens, until focus comes back to it and its mode.
+
+---Each open window's report, by window.
+---@type table<integer, changeset.ReviewCommentWindow>
+local open_windows = {}
+
+---Called as each window opens and closes, with its report and whether it opened.
+---@type fun(window: changeset.ReviewCommentWindow, opened: boolean)[]
+local watchers = {}
+
+---Calls `fn` as each window opens and closes, with its report and whether it opened. For changeset's own modules.
+---@param fn fun(window: changeset.ReviewCommentWindow, opened: boolean)
+function M.watch(fn)
+  table.insert(watchers, fn)
+end
+
+---@param window changeset.ReviewCommentWindow
+---@param opened boolean
+local function tell(window, opened)
+  for _, fn in ipairs(watchers) do
+    fn(window, opened)
+  end
+end
+
+---Where insert mode left the cursor in each window as an insert-mode key of its own was typed there, until the key's
+---command has run.
+---@type table<integer, integer[]>
+local typed_at = {}
+
+---Notes where insert mode is in the current window, for the insert-mode key of its own being typed there. The window's insert-mode keys reach this from a `<Cmd>` string.
+function M.typed()
+  local win = vim.api.nvim_get_current_win()
+  typed_at[win] = vim.api.nvim_win_get_cursor(win)
+  vim.schedule(function()
+    typed_at[win] = nil
+  end)
+end
+
+-- Leaves insert mode in the key's own keys, so what follows it runs, and a dialog that opens is open, before any key
+-- typed after it. The cursor is noted from a <Cmd> of its own first: an <expr> map reads it before typeahead has moved
+-- it.
+local LEAVE_INSERT = "<Cmd>lua require('changeset.review_comment_window').typed()<CR><C-\\><C-n>"
+
+---Saves window `win` as its save keys do, for an insert-mode one once it has left insert mode. The window's insert-mode keys reach this from a `<Cmd>` string.
+---@param win integer
+function M.save(win)
+  open_windows[win].save()
+end
+
+---Closes window `win` as its keys that close without saving do, for an insert-mode one once it has left insert mode. The window's insert-mode keys reach this from a `<Cmd>` string.
+---@param win integer
+function M.back(win)
+  open_windows[win].back()
+end
+
+---The review comment window, when it is the current window.
+---@return changeset.ReviewCommentWindow?
+function M.current()
+  return open_windows[vim.api.nvim_get_current_win()]
+end
+
+---The default `<C-g>` keys `plugin/changeset.lua` mapped in normal mode, each with its subcommand and `desc`; none
+---while the default keys are off.
+---@return { lhs: string, name: string, desc: string }[]
+local function default_keys()
+  return vim.g.changeset_window_keys or {}
+end
+
+---What a default key does in the window, as `?` lists it.
+---@param key { name: string, desc: string }
+---@param routes table<string, string>
+---@return string
+local function window_desc(key, routes)
+  return routes[key.name] or ("Keep a draft, then: " .. key.desc)
+end
+
+---Rows `line` takes in `win` once wrapped, less the virtual lines above it. For changeset's own modules.
+---@param win integer
+---@param line integer
+---@return integer
+function M.rows(win, line)
+  local height = vim.api.nvim_win_text_height(win, { start_row = line - 1, end_row = line - 1 })
+  return height.all - height.fill
+end
+
+---Rows of `win` from its first screen row to the end of line `line`, its filler included. For changeset's own modules.
+---@param win integer
+---@param view vim.fn.winsaveview.ret `win`'s view.
+---@param line integer
+---@return integer
+function M.rows_through(win, view, line)
+  -- The filler above the top line shows only `topfill` deep.
+  local hidden = vim.api.nvim_win_text_height(win, { start_row = view.topline - 1, end_row = view.topline - 1 }).fill
+    - view.topfill
+  return vim.api.nvim_win_text_height(win, { start_row = view.topline - 1, end_row = line - 1 }).all - hidden
+end
+
+---Whether the row the box starts on, past the gap under `line`'s last row, is inside `win`.
+---@param win integer
+---@param line integer
+---@return boolean
+local function under_in_view(win, line)
+  local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+  if line < view.topline then
+    return false
+  end
+  -- Counted in rows rather than read off a screen position: a line running past the edge of a window that doesn't
+  -- wrap has its end off screen.
+  return M.rows_through(win, view, line) + GAP < vim.api.nvim_win_get_height(win)
+end
+
+---Scroll `win` the least that shows `line` with the box under it, moving its cursor to `line` if it must scroll.
+---@param win integer
+---@param line integer
+local function reveal(win, line)
+  vim.api.nvim_win_call(win, function()
+    local topline = vim.fn.winsaveview().topline
+    local top = math.min(topline, line)
+    local height = vim.api.nvim_win_get_height(0)
+    while
+      top < line
+      and vim.api.nvim_win_text_height(0, { start_row = top - 1, end_row = line - 1 }).all + GAP + BOX > height
+    do
+      top = top + 1
+    end
+    if top ~= topline then
+      -- Neovim scrolls any window back to its cursor, current or not.
+      vim.fn.winrestview({ topline = top, topfill = 0, lnum = line })
+    end
+  end)
+end
+
+---The name a statusline shows for `comment`'s window: its file and lines, under a scheme so it is never expanded into a
+---path. Never `changeset://`, by which a loaded session finds the sidebar.
+---@param comment changeset.ReviewComment
+---@return string
+local function name(comment)
+  return "review-comment://" .. review_comment.location(comment)
+end
+
+---Make a floating `win` taller by the room, since it has no neighbours to scroll past.
+---@param win integer
+---@return integer grown The rows it grew, 0 for a split.
+local function grow(win)
+  if vim.api.nvim_win_get_config(win).relative == "" then
+    return 0
+  end
+  local before = vim.api.nvim_win_get_height(win)
+  vim.api.nvim_win_set_config(win, { height = before + ROOM })
+  return vim.api.nvim_win_get_height(win) - before
+end
+
+---Open the window under `opts.line` of the current window, focused, in insert mode.
+---@param opts changeset.ReviewCommentWindowOpts
+---@return integer win
+function M.open(opts)
+  local source = vim.api.nvim_get_current_win()
+  local source_buf = vim.api.nvim_win_get_buf(source)
+  -- Scratch, so 'nofile': no write takes its name for a file.
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].bufhidden = "wipe"
+  -- Protected: a reopen can race the old float's scheduled close, its buffer still holding the name.
+  pcall(vim.api.nvim_buf_set_name, buf, name(opts.comment))
+  if opts.body then
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(opts.body, "\n"))
+  end
+  local hint = {
+    { " " },
+    { " " .. vim.fn.keytrans(vim.keycode(opts.keys[1])) .. " ", highlights.KEYCAP_HL },
+    { " save  " },
+    { " q ", highlights.KEYCAP_HL },
+    { " draft " },
+  }
+  local hint_width = cells.chunks(hint)
+
+  ---Its line, held to the source's end should edits there shorten it.
+  local function line()
+    return math.min(opts.line, vim.api.nvim_buf_line_count(source_buf))
+  end
+  local mark = vim.api.nvim_buf_set_extmark(source_buf, ns, line() - 1, 0, { virt_lines = PADDING })
+  local grown = grow(source)
+  reveal(source, line())
+
+  ---The float on the padding under its line, as wide as the source now has room for.
+  local function placement()
+    -- bufpos anchors at the first text column, so the gutter, the gap and the border all come
+    -- out of the window's width.
+    local room = vim.api.nvim_win_get_width(source) - vim.fn.getwininfo(source)[1].textoff - GAP - 2
+    local width = math.max(math.min(M.MEASURE, room), MIN_WIDTH)
+    return {
+      relative = "win",
+      win = source,
+      bufpos = { line() - 1, 0 },
+      -- bufpos is the line's first row; a wrapped line's other rows come before the box.
+      row = M.rows(source, line()) + GAP,
+      col = GAP,
+      width = width,
+      -- Neovim cuts a footer too wide from its left, which would name another key.
+      footer = hint_width <= width and hint or "",
+      -- A float is never clipped to its anchor window: off its line, it would cover other text.
+      hide = not under_in_view(source, line()),
+    }
+  end
+
+  local win = vim.api.nvim_open_win(
+    buf,
+    true,
+    vim.tbl_extend("error", placement(), {
+      height = HEIGHT,
+      style = "minimal",
+      border = "rounded",
+      title = opts.icon
+          and { { " " .. opts.icon[1], highlights.title_icon(opts.icon[2]) }, { " " .. opts.title .. " " } }
+        or " " .. opts.title .. " ",
+      title_pos = "left",
+      footer_pos = "right",
+    })
+  )
+  -- Set once the float is current, so the user's FileType settings land on it.
+  vim.bo[buf].filetype = "markdown"
+  vim.wo[win].wrap = true
+  vim.wo[win].linebreak = true
+  -- A cell between the text and the left border, as a block has. Neovim pads no window's right side.
+  vim.wo[win].statuscolumn = "%#NormalFloat# "
+  -- An `:e` here would leave the float showing a file.
+  vim.wo[win].winfixbuf = true
+
+  ---@param after fun()?
+  local function close_now(after)
+    -- Deleting the buffer closes every window on it, a `:split` of the float's among them.
+    if vim.api.nvim_buf_is_valid(buf) then
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end
+    if after then
+      after()
+    end
+  end
+
+  ---Whether the float is current in insert or replace mode.
+  local function inserting()
+    return vim.api.nvim_get_current_win() == win and vim.api.nvim_get_mode().mode:find("^[iR]") ~= nil
+  end
+
+  ---Calls `after` once insert mode has ended in the float, at once when it isn't on.
+  ---@param after fun()
+  local function leave_insert(after)
+    if not inserting() then
+      return after()
+    end
+    -- stopinsert only takes effect on the next loop iteration; acting before then leaves
+    -- insert in whatever window is current next, moving its cursor and firing its InsertLeave.
+    -- Fires: insert mode ending in this float, after the stopinsert below.
+    vim.api.nvim_create_autocmd("InsertLeave", { buffer = buf, once = true, callback = vim.schedule_wrap(after) })
+    vim.cmd.stopinsert()
+  end
+
+  ---@param after fun()?
+  local function close(after)
+    leave_insert(function()
+      close_now(after)
+    end)
+  end
+
+  local function text()
+    return table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+  end
+
+  local function attached()
+    return vim.api.nvim_win_is_valid(win)
+      and vim.api.nvim_win_is_valid(source)
+      and vim.api.nvim_win_get_buf(source) == source_buf
+  end
+
+  local held = false
+  local function place()
+    if not attached() then
+      -- Its source window gone, nothing anchors it.
+      if vim.api.nvim_win_is_valid(win) and not vim.api.nvim_win_is_valid(source) then
+        vim.schedule(close)
+      end
+      return
+    end
+    vim.api.nvim_buf_set_extmark(source_buf, ns, line() - 1, 0, { id = mark, virt_lines = PADDING })
+    local config = placement()
+    vim.api.nvim_win_set_config(win, config)
+    -- Hidden with focus, as a mouse wheel over the source leaves it, it would take keys with nothing on screen.
+    -- Scheduled: inside WinScrolled, a close would skip the BufUnload that keeps its text, as autocmds don't nest.
+    if config.hide and not held and vim.fn.getcmdwintype() == "" then
+      vim.schedule(close)
+    end
+  end
+
+  local group = vim.api.nvim_create_augroup("changeset.review_comment_window." .. buf, {})
+  -- Fires: any window scrolling or resizing, the source among them; its pattern names only the
+  -- first window that changed.
+  vim.api.nvim_create_autocmd("WinScrolled", { group = group, callback = place })
+  ---Picks writing back up at `cursor`, where insert mode left off.
+  ---@param cursor integer[]
+  local function restart_insert(cursor)
+    vim.api.nvim_win_set_cursor(win, cursor)
+    local row = vim.api.nvim_buf_get_lines(buf, cursor[1] - 1, cursor[1], false)[1] or ""
+    vim.cmd(cursor[2] >= #row and "startinsert!" or "startinsert")
+  end
+
+  ---Picks writing back up after an insert-mode key of its own that left the window open.
+  local function resume_typing()
+    if typed_at[win] and vim.api.nvim_get_current_win() == win then
+      restart_insert(typed_at[win])
+    end
+  end
+
+  ---Where to pick writing back up on return from a window it held for, if it was writing.
+  ---@type integer[]?
+  local resume
+  -- Fires: focus coming back from a window it held for, and a new window entered while it shows this buffer.
+  vim.api.nvim_create_autocmd("WinEnter", {
+    group = group,
+    buffer = buf,
+    callback = function()
+      if vim.api.nvim_get_current_win() ~= win then
+        return
+      end
+      held = false
+      if resume then
+        local cursor = resume
+        resume = nil
+        restart_insert(cursor)
+      end
+    end,
+  })
+  -- Fires: focus leaving the float for any window. Checked once the move lands, since a window can't close while
+  -- focus is leaving it.
+  vim.api.nvim_create_autocmd("WinLeave", {
+    group = group,
+    buffer = buf,
+    callback = vim.schedule_wrap(function()
+      -- The command-line window is a detour from the float, and nothing can close while it is open.
+      if not held and vim.fn.getcmdwintype() == "" and vim.api.nvim_get_current_win() ~= win then
+        close_now()
+      end
+    end),
+  })
+  local gone = false
+  -- Edits carry the padding with the text, and replacing every line carries it to the end,
+  -- while the float stays on its line number.
+  vim.api.nvim_buf_attach(source_buf, false, {
+    on_lines = function()
+      if gone then
+        return true
+      end
+      vim.schedule(place)
+    end,
+  })
+
+  ---Takes back the room made under its line.
+  local function unpad()
+    gone = true
+    local report = open_windows[win]
+    open_windows[win] = nil
+    if report then
+      tell(report, false)
+    end
+    vim.api.nvim_del_augroup_by_id(group)
+    if vim.api.nvim_buf_is_valid(source_buf) then
+      vim.api.nvim_buf_del_extmark(source_buf, ns, mark)
+    end
+    if grown > 0 and vim.api.nvim_win_is_valid(source) then
+      vim.api.nvim_win_set_config(source, { height = vim.api.nvim_win_get_height(source) - grown })
+    end
+  end
+
+  local saved, drafting = false, false
+  -- Fires: the float's buffer going any way (a close, :q, :e in the float, quitting); read now, as it is wiped next.
+  vim.api.nvim_create_autocmd("BufUnload", {
+    buffer = buf,
+    once = true,
+    callback = function()
+      unpad()
+      if not saved then
+        opts.keep(text(), drafting or nil)
+      end
+      -- :e! reloads the buffer in place, leaving the window behind with nothing managing it.
+      vim.schedule(function()
+        if vim.api.nvim_win_is_valid(win) then
+          vim.api.nvim_win_close(win, true)
+        end
+      end)
+    end,
+  })
+
+  local saving = false
+  local function save()
+    -- A double press must not add the review comment twice.
+    if saving then
+      return
+    end
+    if not text():find("%S") then
+      -- At once, not from the close's BufUnload, so a dialog it opens is open before any key typed after the save.
+      if opts.blank then
+        return opts.blank(open_windows[win])
+      end
+      return close()
+    end
+    saving = true
+    opts.save(text(), function(err)
+      saving = false
+      if err then
+        return resume_typing()
+      end
+      saved = true
+      close()
+    end)
+  end
+
+  local map, own = help.mapper(buf)
+  local save_typed = LEAVE_INSERT .. ("<Cmd>lua require('changeset.review_comment_window').save(%d)<CR>"):format(win)
+  for _, lhs in ipairs(opts.keys) do
+    vim.keymap.set("i", lhs, save_typed, { buffer = buf, desc = opts.save_desc })
+    map(lhs, save, opts.save_desc)
+  end
+  local function back()
+    close(opts.back)
+  end
+  local back_typed = LEAVE_INSERT .. ("<Cmd>lua require('changeset.review_comment_window').back(%d)<CR>"):format(win)
+  vim.keymap.set("i", "<S-Esc>", back_typed, { buffer = buf, desc = opts.close_desc })
+  for _, lhs in ipairs({ "<S-Esc>", "q", "<Esc>" }) do
+    map(lhs, back, opts.close_desc)
+  end
+  ---@param lhs string
+  ---@return boolean
+  local function saves(lhs)
+    return vim.iter(opts.keys):any(function(key)
+      return vim.keycode(key) == vim.keycode(lhs)
+    end)
+  end
+  -- A key the user maps in insert mode, at startup or since, keeps doing what they mapped, here as anywhere. Asked
+  -- before any is mapped here, and counting the markdown maps already on this buffer.
+  local keys = vim.tbl_filter(function(key)
+    return not saves(key.lhs)
+  end, default_keys())
+  local free = {}
+  for _, key in ipairs(keys) do
+    free[key.lhs] = vim.fn.mapcheck(key.lhs, "i") == ""
+  end
+  for _, key in ipairs(keys) do
+    local desc = window_desc(key, opts.routes or {})
+    local command = ("<Cmd>Changeset %s<CR>"):format(key.name)
+    -- Not `map`: its nowait would end `<C-g>c` before `<C-g>cn` could follow.
+    vim.keymap.set("n", key.lhs, command, { buffer = buf, desc = desc })
+    own[#own + 1] = key.lhs
+    if free[key.lhs] then
+      -- Typed mid-sentence, so they work in insert mode too.
+      vim.keymap.set("i", key.lhs, LEAVE_INSERT .. command, { buffer = buf, desc = desc })
+    end
+  end
+  map("?", function()
+    help.show(buf, own)
+    -- A help window that takes focus is a look at the keys, not a move away.
+    held = vim.api.nvim_get_current_win() ~= win
+  end, "Show these keymaps")
+
+  open_windows[win] = {
+    source = source,
+    source_buf = source_buf,
+    comment = opts.comment,
+    text = text,
+    save = save,
+    back = back,
+    close = close,
+    discard = function(after)
+      saved = true
+      close(after)
+    end,
+    draft = function()
+      drafting = true
+      close()
+    end,
+    resume = resume_typing,
+    hold = function(opens)
+      held = true
+      resume = inserting() and vim.api.nvim_win_get_cursor(win) or typed_at[win]
+      leave_insert(opens)
+    end,
+  }
+  tell(open_windows[win], true)
+
+  if opts.body then
+    vim.api.nvim_win_set_cursor(win, { vim.api.nvim_buf_line_count(buf), 0 })
+    vim.cmd("startinsert!")
+  else
+    vim.cmd.startinsert()
+  end
+  return win
+end
+
+return M

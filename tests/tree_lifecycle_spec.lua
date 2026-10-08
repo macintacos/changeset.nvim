@@ -1,9 +1,11 @@
 local changeset = require("changeset")
 local build = require("changeset.build")
 local window = require("changeset.window")
+local Changes = require("support.changes")
 local Fixture = require("support.git")
+local Notify = require("support.notify")
 local Sidebar = require("support.sidebar")
-require("support.gh")
+local gh = require("support.gh")
 
 ---@param tree changeset.Tree?
 ---@return string[]
@@ -126,6 +128,54 @@ describe("changeset tree", function()
       assert.equal("feature2", build.current().branch)
     end)
 
+    it("rebuilds the tree when gitsigns sees HEAD land on another branch", function()
+      build.build()
+      local tree = build.current()
+
+      Fixture.git({ "checkout", "-q", "-b", "feature2" }, tmp)
+      vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate" })
+
+      assert.is_true(vim.wait(2000, function()
+        return build.current().branch == "feature2"
+      end, 25))
+      assert.not_equal(tree, build.current())
+    end)
+
+    it("refreshes the tree when gitsigns sees HEAD stay on its branch", function()
+      build.build()
+      assert.is_true(wait_for_file("mod.lua"))
+      local tree = build.current()
+
+      local refreshed = false
+      build.subscribe(function(event)
+        refreshed = refreshed or event == "diff"
+      end)
+      vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate" })
+
+      assert.is_true(vim.wait(2000, function()
+        return refreshed
+      end, 25))
+      assert.equal(tree, build.current())
+    end)
+
+    it("refreshes the tree when gitsigns sees HEAD detach", function()
+      build.build()
+      assert.is_true(wait_for_file("mod.lua"))
+      local tree = build.current()
+
+      Fixture.git({ "checkout", "-q", "--detach" }, tmp)
+      local refreshed = false
+      build.subscribe(function(event)
+        refreshed = refreshed or event == "diff"
+      end)
+      vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate" })
+
+      assert.is_true(vim.wait(2000, function()
+        return refreshed
+      end, 25))
+      assert.equal(tree, build.current())
+    end)
+
     it("rebuilds the tree once the fork point moves", function()
       build.build()
       local tree = assert(build.current())
@@ -138,6 +188,91 @@ describe("changeset tree", function()
 
       assert.not_equal(tree, build.current())
       assert.not_equal(tree.base, assert(build.current()).base)
+    end)
+
+    ---Rebase `feature` onto a trunk that has moved on, returning the new fork point.
+    ---@return string
+    local function rebase_onto_newer_trunk()
+      Fixture.git({ "checkout", "-q", "trunk" }, tmp)
+      vim.fn.writefile({ "trunk work" }, tmp .. "/trunk.txt")
+      Fixture.commit("trunk work", tmp)
+      Fixture.git({ "checkout", "-q", "feature" }, tmp)
+      Fixture.git({ "rebase", "-q", "trunk" }, tmp)
+      return Fixture.git({ "merge-base", "HEAD", "trunk" }, tmp)
+    end
+
+    it("measures the new fork point when gitsigns sees HEAD rebased onto a newer trunk", function()
+      build.build()
+      assert.is_true(wait_for_file("mod.lua"))
+
+      local base = rebase_onto_newer_trunk()
+      vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate" })
+
+      assert.is_true(vim.wait(5000, function()
+        return build.current().base == base and build.current().collected
+      end, 25))
+      assert.same({ "mod.lua" }, paths_of(build.current()))
+    end)
+
+    it("measures the new fork point on a refresh after a rebase onto a newer trunk", function()
+      build.build()
+      assert.is_true(wait_for_file("mod.lua"))
+
+      local base = rebase_onto_newer_trunk()
+      changeset.refresh()
+
+      assert.is_true(vim.wait(5000, function()
+        return build.current().base == base and build.current().collected
+      end, 25))
+      assert.same({ "mod.lua" }, paths_of(build.current()))
+    end)
+
+    it("follows a branch switch when R is pressed in the sidebar", function()
+      changeset.open()
+      assert.is_true(wait_for_file("mod.lua"))
+
+      Fixture.git({ "checkout", "-q", "-b", "feature2" }, tmp)
+      vim.api.nvim_set_current_win(window.win() --[[@as integer]])
+      vim.api.nvim_feedkeys("R", "x", false)
+
+      assert.equal("feature2", build.current().branch)
+    end)
+
+    it("follows a branch switch while the current buffer is outside the tree's repository", function()
+      build.build()
+      assert.is_true(wait_for_file("mod.lua"))
+      local elsewhere = vim.fn.tempname()
+      vim.fn.mkdir(elsewhere, "p")
+      vim.fn.chdir(elsewhere)
+      vim.cmd("enew")
+      vim.bo.buftype = "nofile"
+
+      Fixture.git({ "switch", "-q", "-c", "other" }, tmp)
+      vim.api.nvim_exec_autocmds("FocusGained", {})
+
+      local followed = vim.wait(3000, function()
+        return build.current().branch == "other"
+      end, 25)
+      vim.fn.delete(elsewhere, "rf")
+      assert.is_true(followed)
+    end)
+
+    it("stays quiet on focus changes once its repository is deleted", function()
+      build.build()
+      assert.is_true(wait_for_file("mod.lua"))
+      local notes, restore = Notify.capture()
+      local ok, err = pcall(function()
+        vim.cmd("silent! %bwipeout!")
+        vim.fn.chdir(previous_dir)
+        vim.fn.delete(tmp, "rf")
+
+        vim.api.nvim_exec_autocmds("FocusGained", {})
+        vim.wait(1000)
+      end)
+      restore()
+
+      assert(ok, err)
+      assert.same({}, Notify.messages(notes, vim.log.levels.ERROR))
     end)
 
     it("leaves the sidebar blank until the diff is read", function()
@@ -157,6 +292,123 @@ describe("changeset tree", function()
       changeset.open()
 
       assert.is_true(wait_for_file("new.lua"))
+    end)
+
+    describe("reopened on a kept tree", function()
+      local real_system, real_systemlist, held, waited
+
+      ---Hold every `vim.system` process unstarted, and count the git processes Neovim waits on.
+      local function hold()
+        held, waited = {}, 0
+        vim.system = function(argv, opts, on_exit)
+          held[#held + 1] = { argv, opts, on_exit }
+          return {}
+        end
+        vim.fn.systemlist = function(...)
+          waited = waited + 1
+          return real_systemlist(...)
+        end
+      end
+
+      ---Start every held process, now.
+      local function release()
+        vim.system, vim.fn.systemlist = real_system, real_systemlist
+        for _, process in ipairs(held) do
+          real_system(unpack(process))
+        end
+        held = {}
+      end
+
+      before_each(function()
+        real_system, real_systemlist = vim.system, vim.fn.systemlist
+        build.build()
+        assert.is_true(wait_for_file("mod.lua"))
+      end)
+
+      after_each(function()
+        vim.system, vim.fn.systemlist = real_system, real_systemlist
+      end)
+
+      it("draws the kept tree before waiting on git", function()
+        hold()
+
+        changeset.open()
+
+        assert.equal(0, waited)
+        assert.truthy(Sidebar.text():find("mod.lua", 1, true))
+      end)
+
+      it("rebuilds the tree once its re-measured fork point has moved", function()
+        local tree = build.current()
+        hold()
+        changeset.open()
+        local base = rebase_onto_newer_trunk()
+
+        release()
+
+        assert.is_true(vim.wait(5000, function()
+          return build.current() ~= tree and build.current().base == base and build.current().collected
+        end, 25))
+      end)
+
+      it("rebuilds on a moved fork point while the focused sidebar resolves to the cwd's other repository", function()
+        local elsewhere = vim.fn.resolve(vim.fn.tempname())
+        vim.fn.mkdir(elsewhere, "p")
+        Fixture.init_repo("main", elsewhere)
+        vim.fn.chdir(elsewhere)
+        local base = rebase_onto_newer_trunk()
+
+        changeset.toggle()
+        local moved = vim.wait(5000, function()
+          return build.current().base == base
+        end, 25)
+        vim.fn.delete(elsewhere, "rf")
+
+        assert.is_true(moved)
+      end)
+
+      it("warns, and closes the sidebar, once the kept tree's branch shares no history with any base", function()
+        Fixture.git({ "branch", "-D", "trunk" }, tmp)
+        local notes, restore = Notify.capture()
+
+        changeset.open()
+        local warned = vim.wait(5000, function()
+          return #notes > 0
+        end, 25)
+        restore()
+
+        assert.is_true(warned)
+        assert.same({ "Changeset: no merge base with the default branch" }, Notify.messages(notes, vim.log.levels.WARN))
+        assert.is_false(window.is_visible())
+      end)
+
+      it("builds for the branch HEAD moved to before the re-measure landed", function()
+        hold()
+        changeset.open()
+        vim.system, vim.fn.systemlist = real_system, real_systemlist
+        Fixture.git({ "checkout", "-q", "-b", "feature2" }, tmp)
+
+        release()
+
+        assert.is_true(vim.wait(5000, function()
+          return build.current().branch == "feature2"
+        end, 25))
+      end)
+
+      it("keeps the tree a build for another branch made before the re-measure landed", function()
+        hold()
+        changeset.open()
+        vim.system, vim.fn.systemlist = real_system, real_systemlist
+        Fixture.git({ "checkout", "-q", "-b", "feature2" }, tmp)
+        build.build()
+        local tree = assert(build.current())
+
+        release()
+        vim.wait(500)
+
+        assert.equal(tree, build.current())
+        assert.equal("feature2", tree.branch)
+      end)
     end)
 
     it("refreshes when gitsigns reports HEAD moved, while the sidebar is closed", function()
@@ -221,9 +473,7 @@ describe("changeset tree", function()
         build.refresh()
         wait_for_asks(2)
 
-        asks[1].answer("mod.lua", {
-          { name = "M", kind = "Variable", depth = 0, lnum = 1, range_lnum = 1, range_end_lnum = 1 },
-        })
+        asks[1].answer("mod.lua", { Changes.sym("M", "Variable", 0, 1, 1) })
         build.refresh()
         wait_for_asks(3)
 
@@ -254,7 +504,7 @@ describe("changeset tree", function()
       vim.fn.writefile({ "return 2" }, "child.lua")
       Fixture.commit("child change", tmp)
       vim.cmd.edit("child.lua")
-      vim.env.FAKE_GH_PR = '{"baseRefName":"parent","number":1,"state":"OPEN"}'
+      vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 1 })
     end)
 
     after_each(function()
@@ -284,7 +534,7 @@ describe("changeset tree", function()
     before_each(function()
       Fixture.feature_one_file(tmp)
       vim.cmd.edit("mod.lua")
-      vim.env.FAKE_GH_PR = '{"baseRefName":"trunk","number":7,"state":"OPEN"}'
+      vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "trunk", number = 7 })
     end)
 
     after_each(function()
@@ -302,16 +552,18 @@ describe("changeset tree", function()
   end)
 
   describe("when the diff cannot be read", function()
-    local collect, notify
+    local collect, restore_notify
 
     before_each(function()
       Fixture.feature_one_file(tmp)
       vim.cmd.edit("mod.lua")
-      collect, notify = require("changeset.diff").collect, vim.notify
+      collect = require("changeset.diff").collect
+      _, restore_notify = Notify.capture()
     end)
 
     after_each(function()
-      require("changeset.diff").collect, vim.notify = collect, notify
+      require("changeset.diff").collect = collect
+      restore_notify()
     end)
 
     it("drops a restored position waiting on it", function()
@@ -327,7 +579,6 @@ describe("changeset tree", function()
       require("changeset.diff").collect = function(_, _, callback)
         callback(nil, "boom")
       end
-      vim.notify = function() end
 
       build.refresh()
 
@@ -336,17 +587,14 @@ describe("changeset tree", function()
   end)
 
   describe("with nothing to diff against", function()
-    local notify, notified
+    local notes, restore
 
     before_each(function()
-      notify, notified = vim.notify, 0
-      vim.notify = function()
-        notified = notified + 1
-      end
+      notes, restore = Notify.capture()
     end)
 
     after_each(function()
-      vim.notify = notify
+      restore()
     end)
 
     it("builds nothing, silently, outside a repository", function()
@@ -355,7 +603,7 @@ describe("changeset tree", function()
       assert.is_false(build.build())
 
       assert.equal(tree, build.current())
-      assert.equal(0, notified)
+      assert.equal(0, #notes)
     end)
 
     it("builds nothing, silently, in a repository with no default branch", function()
@@ -365,7 +613,7 @@ describe("changeset tree", function()
       assert.is_false(build.build())
 
       assert.equal(tree, build.current())
-      assert.equal(0, notified)
+      assert.equal(0, #notes)
     end)
   end)
 end)

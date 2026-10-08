@@ -1,7 +1,7 @@
 # Dependency rules
 
-These rules apply to a change to the plugins and tools that the specs, the type check and
-`mise run docs` load, and to the treesitter parsers the specs parse with.
+These rules apply to a change to the plugins and tools that the specs and the type check
+load, and to the treesitter parsers the specs parse with.
 
 ## Bumping a pin
 
@@ -15,9 +15,7 @@ To bump a pin:
 2. Run `mise run deps`.
 3. After bumping `nvim-treesitter`, run `mise run parsers`. It rebuilds every parser whose
    recorded revision differs from the new pin's.
-4. After bumping `panvimdoc`, or `pandoc` in `mise.toml`, run `mise run docs` and commit
-   the regenerated `doc/`.
-5. Run the suite.
+4. Run the suite.
 
 ## Adding a plugin
 
@@ -28,9 +26,8 @@ vim.opt.rtp:prepend(require("support.deps").path("<name>"))
 ```
 
 Add it to `.luarc.check.json`'s `workspace.library` as well, so the type check sees its
-modules. That list holds every pin but `luacov` and `panvimdoc`, because neither is a
-Neovim plugin: luacov's modules load through `package.path`, and panvimdoc is a script
-that `mise run docs` runs.
+modules. That list holds every pin but `luacov`, which is not a Neovim plugin: its modules
+load through `package.path`.
 
 ## Treesitter parsers
 

@@ -1,4 +1,4 @@
-require("support.gh")
+local gh = require("support.gh")
 local fixture = require("support.git")
 local Git = require("changeset.git")
 local fork_point = require("changeset.fork_point")
@@ -35,17 +35,19 @@ local function commit_file(root, name)
 end
 
 ---A repository with `main`, then `parent` off it, then `feature` off that, checked out.
+---@param source string? What `feature`'s reflog says it was created from: parent's tip commit, which names no
+---parent, when absent.
 ---@return string root
 ---@return string default_base main's tip, where feature forked from main.
 ---@return string parent_base parent's tip.
-local function stacked_repo()
+local function stacked_repo(source)
   local root = vim.fn.resolve(vim.fn.tempname())
   vim.fn.mkdir(root, "p")
   fixture.init_repo("main", root)
   local default_base = commit_file(root, "main.txt")
   fixture.git({ "checkout", "-q", "-b", "parent" }, root)
   local parent_base = commit_file(root, "parent.txt")
-  fixture.git({ "checkout", "-q", "-b", "feature" }, root)
+  fixture.git({ "checkout", "-q", "-b", "feature", source or parent_base }, root)
   commit_file(root, "feature.txt")
   return root, default_base, parent_base
 end
@@ -73,8 +75,9 @@ describe("fork_point", function()
     roots = {}
   end)
 
-  local function repo()
-    local root, default_base, parent_base = stacked_repo()
+  ---@param source string?
+  local function repo(source)
+    local root, default_base, parent_base = stacked_repo(source)
     table.insert(roots, root)
     return root, default_base, parent_base
   end
@@ -90,8 +93,118 @@ describe("fork_point", function()
     assert.is_nil(point.pr)
   end)
 
+  it("measures against the branch it was created from without waiting on gh", function()
+    local root, _, parent_base = repo("parent")
+
+    local point = assert(fork_point.get(root, "feature"))
+
+    assert.equal(parent_base, point.base)
+    assert.equal("parent", point.against)
+    assert.equal("parent", point.ref)
+    assert.is_nil(point.pr)
+  end)
+
+  it("keeps the branch it was created from while its fork point is the default branch's", function()
+    local root = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(root, "p")
+    table.insert(roots, root)
+    fixture.init_repo("main", root)
+    local fork = commit_file(root, "main.txt")
+    fixture.git({ "checkout", "-q", "-b", "parent" }, root)
+    fixture.git({ "checkout", "-q", "-b", "feature", "parent" }, root)
+    commit_file(root, "feature.txt")
+
+    local point = assert(fork_point.get(root, "feature"))
+
+    assert.equal(fork, point.base)
+    assert.equal("parent", point.against)
+  end)
+
+  it("moves to the default branch once the branch is rebased onto it past a squash-merged parent", function()
+    local root = repo("parent")
+    fixture.git({ "checkout", "-q", "main" }, root)
+    fixture.git({ "merge", "-q", "--squash", "parent" }, root)
+    local squashed = fixture.commit("squash parent", root)
+    fixture.git({ "rebase", "-q", "--onto", "main", "parent", "feature" }, root)
+
+    local point = assert(fork_point.get(root, "feature"))
+
+    assert.equal(squashed, point.base)
+    assert.equal("main", point.against)
+  end)
+
+  it("keeps the PR whose target is the branch it was created from", function()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
+    local root, _, parent_base = repo("parent")
+
+    fork_point.get(root, "feature")
+    assert.is_true(await_heard(root, 1))
+    local point = heard_in(root)[1].point
+
+    assert.equal(parent_base, point.base)
+    assert.equal(7, point.pr)
+  end)
+
+  it("stays on the branch it was created from, without the PR, when the PR targets another", function()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "main", number = 7 })
+    local root, _, parent_base = repo("parent")
+
+    fork_point.get(root, "feature")
+    assert.is_true(await_heard(root, 1))
+    local point = heard_in(root)[1].point
+    local again = fork_point.get(root, "feature")
+
+    for _, p in ipairs({ point, again }) do
+      assert.equal(parent_base, p.base)
+      assert.equal("parent", p.against)
+      assert.is_nil(p.pr)
+    end
+  end)
+
+  it("keeps the PR into the default branch once the parent is merged into it", function()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "main", number = 7 })
+    local root = repo("parent")
+    fixture.git({ "checkout", "-q", "main" }, root)
+    fixture.git({ "merge", "-q", "--no-ff", "-m", "merge parent", "parent" }, root)
+    fixture.git({ "checkout", "-q", "feature" }, root)
+
+    fork_point.get(root, "feature")
+    assert.is_true(await_heard(root, 1))
+
+    assert.equal(7, heard_in(root)[1].point.pr)
+  end)
+
+  it("keeps the PR into the default branch when the parent has no commits of its own", function()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "main", number = 7 })
+    local root = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(root, "p")
+    table.insert(roots, root)
+    fixture.init_repo("main", root)
+    commit_file(root, "main.txt")
+    fixture.git({ "checkout", "-q", "-b", "parent" }, root)
+    fixture.git({ "checkout", "-q", "-b", "feature", "parent" }, root)
+    commit_file(root, "feature.txt")
+
+    fork_point.get(root, "feature")
+    assert.is_true(await_heard(root, 1))
+
+    assert.equal(7, heard_in(root)[1].point.pr)
+  end)
+
+  it("moves a branch created from the default branch to its PR's target", function()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
+    local root = repo("main")
+
+    fork_point.get(root, "feature")
+    assert.is_true(await_heard(root, 1))
+    local point = heard_in(root)[1].point
+
+    assert.equal("parent", point.against)
+    assert.equal(7, point.pr)
+  end)
+
   it("moves to the PR's target once gh answers, and keeps that answer", function()
-    vim.env.FAKE_GH_PR = '{"baseRefName":"parent","number":7,"state":"OPEN"}'
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
     local root, default_base, parent_base = repo()
 
     local first, asking = fork_point.get(root, "feature")
@@ -110,8 +223,138 @@ describe("fork_point", function()
     assert.is_false(still_asking)
   end)
 
+  it("moves to the target gh names when asked again", function()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
+    local root, default_base = repo()
+    fork_point.get(root, "feature")
+    assert.is_true(await_heard(root, 1))
+
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "main", number = 7 })
+    fork_point.recheck(root, "feature")
+
+    assert.is_true(await_heard(root, 2))
+    assert.equal(default_base, heard_in(root)[2].point.base)
+    assert.equal("main", heard_in(root)[2].point.against)
+  end)
+
+  it("asks gh once while a recheck is in flight", function()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
+    local root = repo()
+    fork_point.get(root, "feature")
+    assert.is_true(await_heard(root, 1))
+    vim.env.FAKE_GH_DELAY = "0.3"
+
+    fork_point.recheck(root, "feature")
+    fork_point.recheck(root, "feature")
+
+    assert.is_true(await_heard(root, 2))
+    assert.equal(2, asks)
+  end)
+
+  it("does not measure again in the background when a recheck names the same target", function()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
+    local root = repo()
+    fork_point.get(root, "feature")
+    assert.is_true(await_heard(root, 1))
+    local real_get_async, measures = fork_point.get_async, 0
+    fork_point.get_async = function(...)
+      measures = measures + 1
+      return real_get_async(...)
+    end
+    local real_system, held = vim.system, {}
+    vim.system = function(argv, opts, on_exit)
+      if argv[1] == "gh" then
+        return real_system(argv, opts, on_exit)
+      end
+      held[#held + 1] = { argv, opts, on_exit }
+      return {}
+    end
+    local done = false
+    fork_point.get_async(root, "feature", function()
+      done = true
+    end)
+    fork_point.recheck(root, "feature")
+    local answered = vim.wait(5000, function()
+      return asks == 2 and #held > 1
+    end, 10)
+    vim.system = real_system
+    for _, process in ipairs(held) do
+      real_system(unpack(process))
+    end
+    assert.is_true(answered)
+
+    assert.is_true(vim.wait(5000, function()
+      return done
+    end, 10))
+    fork_point.get_async = real_get_async
+    assert.equal(1, measures)
+  end)
+
+  ---@param root string
+  ---@return changeset.ForkPoint?
+  local function measured_async(root)
+    local done, point = false, nil
+    fork_point.get_async(root, "feature", function(measured)
+      done, point = true, measured
+    end)
+    assert.is_true(vim.wait(5000, function()
+      return done
+    end, 10))
+    return point
+  end
+
+  for _, case in ipairs({
+    { "the default branch", nil, nil },
+    { "the branch it was created from", "parent", nil },
+    { "its PR's target", nil, "parent" },
+  }) do
+    it("measures in the background what it measures at once, against " .. case[1], function()
+      local root = repo(case[2])
+      if case[3] then
+        vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = case[3], number = 7 })
+        fork_point.get(root, "feature")
+        assert.is_true(await_heard(root, 1))
+      end
+
+      local point = fork_point.get(root, "feature")
+
+      assert.same(point, measured_async(root))
+    end)
+  end
+
+  it("measures again in the background when gh names a target while it measures", function()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
+    vim.env.FAKE_GH_DELAY = "0.5"
+    local root, _, parent_base = repo()
+    fork_point.get(root, "feature")
+    local real_system, held = vim.system, {}
+    vim.system = function(argv, opts, on_exit)
+      if argv[1] == "gh" then
+        return real_system(argv, opts, on_exit)
+      end
+      held[#held + 1] = { argv, opts, on_exit }
+      return {}
+    end
+    local point
+    fork_point.get_async(root, "feature", function(measured)
+      point = measured
+    end)
+    local answered = await_heard(root, 1)
+    vim.system = real_system
+    for _, process in ipairs(held) do
+      real_system(unpack(process))
+    end
+    assert.is_true(answered)
+
+    assert.is_true(vim.wait(5000, function()
+      return point ~= nil
+    end, 10))
+    assert.equal(parent_base, point.base)
+    assert.equal(7, point.pr)
+  end)
+
   it("stays on the default base when the PR's target shares no fork point", function()
-    vim.env.FAKE_GH_PR = '{"baseRefName":"gone","number":7,"state":"OPEN"}'
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "gone", number = 7 })
     local root, default_base = repo()
 
     fork_point.get(root, "feature")
@@ -126,7 +369,7 @@ describe("fork_point", function()
   end)
 
   it("stays on the default base for a PR that is not open", function()
-    vim.env.FAKE_GH_PR = '{"baseRefName":"parent","number":7,"state":"MERGED"}'
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7, state = "MERGED" })
     local root, default_base = repo()
 
     fork_point.get(root, "feature")
@@ -139,7 +382,7 @@ describe("fork_point", function()
   it("answers the default base when gh is not installed", function()
     local root, default_base = repo()
 
-    require("support.gh").without(fork_point.get, root, "feature")
+    gh.without(fork_point.get, root, "feature")
 
     assert.is_true(await_heard(root, 1))
     assert.equal(default_base, heard_in(root)[1].point.base)
@@ -159,7 +402,7 @@ describe("fork_point", function()
   end)
 
   it("keeps separate answers for two repositories on the same branch", function()
-    vim.env.FAKE_GH_PR = '{"baseRefName":"parent","number":7,"state":"OPEN"}'
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
     local stacked, _, parent_base = repo()
     fork_point.get(stacked, "feature")
     assert.is_true(await_heard(stacked, 1))

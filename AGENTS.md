@@ -1,8 +1,9 @@
 # changeset.nvim
 
 A Neovim sidebar mapping what the current branch changed: its files, and the symbols each
-hunk touched. `README.md` is the user reference, and `doc/agents/design.md` records why the
-sidebar looks and behaves as it does. Each file under `lua/changeset/` opens with a
+hunk touched. `README.md` introduces it to users, and `doc/changeset.nvim.txt`, which
+`:help changeset.nvim` opens, is their complete reference. `doc/agents/design.md` records
+why the sidebar looks and behaves as it does. Each file under `lua/changeset/` opens with a
 one-line summary of what it owns.
 
 ## Setup
@@ -58,11 +59,6 @@ Run `mise run preflight` and make it pass. The pre-commit hook formats and lints
 files, and pre-push runs the type check and the suite. Never bypass them with
 `--no-verify`.
 
-Follow every `README.md` edit with `mise run format && mise run docs`, and commit the
-regenerated `doc/` in the same PR. Format first, because the pre-commit hook's Markdown
-fixes change what pandoc renders. CI runs `mise run docs` and fails if `doc/` changes, but
-`preflight` does not.
-
 ## Routing
 
 Read this digraph as a checklist, not a single path: load every file whose edge matches
@@ -79,10 +75,26 @@ digraph rules_router {
     "What does the change touch?" -> "Load doc/agents/design.md" [label="anything a user can see the sidebar do: its look, keys, previews, rebuilds, caching, windows"];
     "What does the change touch?" -> "Load doc/agents/api-rules.md" [label="what users call or configure: options, :Changeset, <Plug> maps, highlight groups, public functions"];
     "What does the change touch?" -> "Load doc/agents/dependency-rules.md" [label="test dependencies: pins, treesitter parsers, .luarc.check.json"];
+    "What does the change touch?" -> "Load doc/agents/herdr.md" [label="handing a review to an AI agent through herdr: the herdr calls, their JSON and error envelope"];
 }
 ```
 
 ## Keeping docs current
+
+A change a user can see updates both user docs, by hand; neither is generated from the other.
+`doc/changeset.nvim.txt` is the complete reference: say each behaviour there once. `README.md`
+changes only where it covers the change: install, the quick start, the review steps, the key
+and command tables, or the default `setup()` block.
+
+The vimdoc keeps Vim help's layout: lines of at most 78 columns, tags flush right, `>lua` and
+`<` around code. Each name has a tag:
+
+- a subcommand `:Changeset-<words>`, joined by hyphens, and a `<Plug>` map its own name;
+- a default key `changeset-<key>`, and a sidebar key `changeset-sidebar-<key>`;
+- an option `changeset-option-<path>`, such as `changeset-option-keymaps.jump`;
+- a highlight group its own name, and a Lua function `changeset.<name>()`;
+- a section `changeset-<topic>`. Keep `changeset.nvim-options`, which the unknown-option
+  warning and `:checkhealth` name.
 
 When your change makes a doc wrong or incomplete, update that doc in the same change. A new
 rule goes in this file until its area needs a rule file of its own. Add that file's edge to

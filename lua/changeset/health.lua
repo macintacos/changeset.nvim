@@ -22,13 +22,16 @@ local M = {}
 ---@field nvim_012 boolean
 ---@field git boolean
 ---@field gh boolean
----@field icons "mini.icons"|"nvim-web-devicons"|false|nil
+---@field herdr boolean Inside a herdr pane, with `herdr` executable.
+---@field icons "mini.icons"|"nvim-web-devicons"|"installed"|false|nil "installed": `mini.icons`, never set up.
 ---@field which_key boolean
 ---@field mini_pick false|"installed"|"set up"
 ---@field gitsigns boolean
+---@field gitsigns_unified boolean Has the unified view the unified diff draws with.
 ---@field symbol_servers string[]
 ---@field parsers { lang: string, found: boolean }[]
 ---@field options changeset.Options
+---@field unknown_options string[] Dotted paths of the options setup() didn't know.
 
 ---@param level changeset.health.Level
 ---@param msg string
@@ -44,6 +47,19 @@ local function loads(name)
   return (pcall(require, name))
 end
 
+---The attached servers that provide symbols, once each. Without `vim.list`, which a Neovim too old to report on lacks.
+---@return string[]
+local function symbol_servers()
+  local seen, names = {}, {}
+  for _, client in ipairs(vim.lsp.get_clients({ method = "textDocument/documentSymbol" })) do
+    if not seen[client.name] then
+      seen[client.name] = true
+      names[#names + 1] = client.name
+    end
+  end
+  return names
+end
+
 ---@return changeset.health.Facts
 local function probe()
   local mini_pick = loads("mini.pick") and (MiniPick and "set up" or "installed")
@@ -52,17 +68,18 @@ local function probe()
     nvim_012 = vim.fn.has("nvim-0.12") == 1,
     git = vim.fn.executable("git") == 1,
     gh = vim.fn.executable("gh") == 1,
-    icons = icons.source(),
+    herdr = (vim.env.HERDR_WORKSPACE_ID or "") ~= "" and vim.fn.executable("herdr") == 1,
+    icons = icons.source() or (loads("mini.icons") and "installed"),
     which_key = loads("which-key"),
     mini_pick = mini_pick,
     gitsigns = loads("gitsigns"),
-    symbol_servers = vim.list.unique(vim.tbl_map(function(client)
-      return client.name
-    end, vim.lsp.get_clients({ method = "textDocument/documentSymbol" }))),
+    gitsigns_unified = loads("gitsigns.unified"),
+    symbol_servers = symbol_servers(),
     parsers = vim.tbl_map(function(lang)
       return { lang = lang, found = vim.treesitter.language.add(lang) ~= nil }
     end, attributes.languages()),
     options = config.get(),
+    unknown_options = config.unknown(),
   }
 end
 
@@ -91,12 +108,29 @@ local function gh(facts)
 end
 
 ---@param facts changeset.health.Facts
+local function herdr(facts)
+  if facts.herdr then
+    return finding(
+      "ok",
+      "running inside herdr: `:Changeset review submit` can paste the review into its agents' prompts"
+    )
+  end
+  return finding(
+    "warn",
+    "not inside a herdr pane: `:Changeset review submit` has no agent prompt to paste the review into"
+  )
+end
+
+---@param facts changeset.health.Facts
 local function icon_provider(facts)
   if facts.icons == "mini.icons" then
     return finding("ok", "icons from `mini.icons`")
   end
   if facts.icons == "nvim-web-devicons" then
     return finding("ok", "icons from `nvim-web-devicons` (files only)")
+  end
+  if facts.icons == "installed" then
+    return finding("warn", "`mini.icons` is installed but not set up: call `require('mini.icons').setup()` for icons")
   end
   return finding("warn", "no icon provider: install `mini.icons` or `nvim-web-devicons`")
 end
@@ -122,13 +156,16 @@ end
 
 ---@param facts changeset.health.Facts
 local function gitsigns(facts)
+  if facts.gitsigns and not facts.gitsigns_unified then
+    return finding("info", "`gitsigns` has no unified view: update it for the unified diff")
+  end
   if facts.gitsigns then
     return finding("ok", "`gitsigns` found")
   end
   if facts.options.pr_review.enabled then
     return finding("error", "`gitsigns` not found while `pr_review.enabled` is set: PR Review Mode cannot run")
   end
-  return finding("info", "`gitsigns` not found: PR Review Mode is unavailable")
+  return finding("info", "`gitsigns` not found: PR Review Mode and the unified diff are unavailable")
 end
 
 ---@param facts changeset.health.Facts
@@ -156,6 +193,26 @@ local function parsers(facts)
   end, facts.parsers)
 end
 
+---@param facts changeset.health.Facts
+---@return changeset.health.Finding[]
+local function configuration(facts)
+  local findings = {}
+  if #facts.unknown_options > 0 then
+    local names = vim.tbl_map(function(path)
+      return "`" .. path .. "`"
+    end, facts.unknown_options)
+    table.insert(
+      findings,
+      finding(
+        "warn",
+        ("unknown options, ignored: %s. See `:help changeset.nvim-options`"):format(table.concat(names, ", "))
+      )
+    )
+  end
+  table.insert(findings, finding("info", vim.inspect(facts.options)))
+  return findings
+end
+
 ---The findings `check` emits for `facts`, by section. Pure; exposed for the spec.
 ---@param facts changeset.health.Facts
 ---@return changeset.health.Section[]
@@ -166,6 +223,7 @@ function M._report(facts)
       name = "Optional integrations",
       findings = vim.list_extend({
         gh(facts),
+        herdr(facts),
         icon_provider(facts),
         which_key(facts),
         mini_pick(facts),
@@ -173,7 +231,7 @@ function M._report(facts)
         symbols(facts),
       }, parsers(facts)),
     },
-    { name = "Configuration", findings = { finding("info", vim.inspect(facts.options)) } },
+    { name = "Configuration", findings = configuration(facts) },
   }
 end
 

@@ -3,14 +3,10 @@
 ---which-key renders a buffer's local mappings straight from the mappings
 ---themselves, so the `desc` each key already carries is the whole registration:
 ---nothing is added to the user's which-key spec, and `?` still answers when
----which-key is not installed at all. What it is handed is a buffer of the
----sidebar's own keys, because the sidebar's buffer holds more than those.
+---which-key is not installed at all. The buffer holds more than the sidebar's
+---own keys, so the others are lifted off it while which-key shows.
 
 local M = {}
-
----The buffer the last `?` handed to which-key, kept so each one replaces it.
----@type integer?
-local staged
 
 ---A buffer-local mapper that records what it sets, for `show` to document.
 ---
@@ -28,45 +24,50 @@ function M.mapper(buf)
     own
 end
 
----The mappings on the sidebar's buffer that the sidebar itself set.
+---The mappings on the sidebar's buffer that the sidebar itself set, and the rest.
 ---
 ---A buffer collects mappings from whoever wants one — a blanket `FileType`
 ---autocmd is all it takes — and another plugin's keys are not this sidebar's
 ---interface. Compared as keycodes, since `<C-v>` and `<C-V>` are one key.
 ---@param keymaps { lhs: string }[] As returned by `nvim_buf_get_keymap`.
 ---@param own string[] The `lhs` of every mapping the sidebar set.
----@return table[]
+---@return table[] mine
+---@return table[] others
 function M._own(keymaps, own)
   local wanted = {}
   for _, lhs in ipairs(own) do
     wanted[vim.keycode(lhs)] = true
   end
-  return vim.tbl_filter(function(keymap)
-    return wanted[vim.keycode(keymap.lhs)] == true
-  end, keymaps)
+  local mine, others = {}, {}
+  for _, keymap in ipairs(keymaps) do
+    table.insert(wanted[vim.keycode(keymap.lhs)] and mine or others, keymap)
+  end
+  return mine, others
 end
 
----A throwaway buffer carrying `keymaps` and nothing else.
+---Calls `show` with `others` lifted off `buf`, then puts them back, whether or not it raised.
 ---
----which-key describes whatever a buffer maps and takes no say in which of them,
----so bounding what it shows means giving it a buffer that maps only these. The
----callbacks come across with the keys, which is what keeps the popup's own
----keypresses working; they act on the sidebar's state, not on a buffer.
----@param keymaps { lhs: string, desc: string?, callback: function?, rhs: string? }[]
----@return integer buf
-function M._stage(keymaps)
-  if staged and vim.api.nvim_buf_is_valid(staged) then
-    pcall(vim.api.nvim_buf_delete, staged, { force = true })
+---which-key lists the current buffer's mappings once its popup is up, whatever
+---buffer it was handed. Its popup returns only once closed, and a key picked in it
+---is typed after, so the key reaches the buffer's mappings as they were.
+---@param buf integer
+---@param others table[] As returned by `nvim_buf_get_keymap`.
+---@param show fun()
+local function without(buf, others, show)
+  local ok, err = pcall(function()
+    for _, keymap in ipairs(others) do
+      vim.keymap.del("n", keymap.lhs, { buffer = buf })
+    end
+    show()
+  end)
+  -- A buffer wiped while the popup waited has nothing to restore.
+  if vim.api.nvim_buf_is_valid(buf) then
+    -- mapset() maps on the current buffer.
+    vim.api.nvim_buf_call(buf, function()
+      vim.iter(others):each(vim.fn.mapset)
+    end)
   end
-  staged = vim.api.nvim_create_buf(false, true)
-  for _, keymap in ipairs(keymaps) do
-    vim.keymap.set("n", keymap.lhs, keymap.callback or keymap.rhs or "<Nop>", {
-      buffer = staged,
-      desc = keymap.desc,
-      nowait = true,
-    })
-  end
-  return staged
+  assert(ok, err)
 end
 
 ---One `lhs  desc` line per described mapping, keys padded into a column.
@@ -91,21 +92,44 @@ function M._lines(keymaps)
   end, rows)
 end
 
----Show the keys the sidebar answers to.
----@param buf integer The sidebar's buffer.
----@param own string[] The `lhs` of every mapping the sidebar set on it.
----@param global string[]? The sidebar's keys that work from anywhere, which live in
----the global table rather than on the buffer and would otherwise go undocumented.
-function M.show(buf, own, global)
-  local mine = M._own(vim.api.nvim_buf_get_keymap(buf, "n"), own)
-  vim.list_extend(mine, M._own(vim.api.nvim_get_keymap("n"), global or {}))
+---Show the keys changeset answers to on `buf`.
+---@param buf integer The current buffer, which which-key lists: the sidebar's, the kind menu's or a review comment window's.
+---@param own string[] The `lhs` of every mapping changeset set on it.
+function M.show(buf, own)
+  local mine, others = M._own(vim.api.nvim_buf_get_keymap(buf, "n"), own)
   local ok, wk = pcall(require, "which-key")
   if ok then
-    return wk.show({ buf = M._stage(mine), global = false })
+    return without(buf, others, function()
+      wk.show({ global = false })
+    end)
   end
-  vim.lsp.util.open_floating_preview(M._lines(mine), "", {
+  local lines = M._lines(mine)
+  local width = math.min(vim.o.columns - 4, math.max(1, unpack(vim.tbl_map(vim.fn.strdisplaywidth, lines))))
+  local height = math.min(vim.o.lines - 4, math.max(#lines, 1))
+  local float = vim.api.nvim_create_buf(false, true)
+  vim.bo[float].bufhidden = "wipe"
+  vim.api.nvim_buf_set_lines(float, 0, -1, false, lines)
+  -- Sized to the editor, not the current window, which can be a float a few rows tall. Never focused: focus leaving
+  -- the review comment window would close it.
+  local win = vim.api.nvim_open_win(float, false, {
+    relative = "editor",
+    row = math.floor((vim.o.lines - height) / 2) - 1,
+    col = math.floor((vim.o.columns - width) / 2) - 1,
+    width = width,
+    height = height,
+    style = "minimal",
     border = "rounded",
     title = " Changeset ",
+  })
+  -- Fires: the next move, keystroke typed or window left where `?` was pressed, which is done with the list.
+  vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI", "InsertCharPre", "BufLeave", "WinLeave" }, {
+    buffer = vim.api.nvim_get_current_buf(),
+    once = true,
+    callback = function()
+      if vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_win_close(win, true)
+      end
+    end,
   })
 end
 

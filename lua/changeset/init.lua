@@ -7,9 +7,14 @@
 ---happens in the pure modules they call.
 
 local actions = require("changeset.actions")
+local buffers = require("changeset.buffers")
 local build = require("changeset.build")
+local comment_store = require("changeset.comment_store")
 local config = require("changeset.config")
+local diff = require("changeset.diff")
 local draw = require("changeset.draw")
+local highlights = require("changeset.highlights")
+local Paths = require("changeset.paths")
 local render = require("changeset.render")
 local Rows = require("changeset.rows")
 local sidebar_state = require("changeset.sidebar_state")
@@ -38,31 +43,122 @@ local left_float = false
 ---@type changeset.Config.Keymaps
 local bound_keys = {}
 
+---The width of the sidebar's window when the tree was last drawn.
+---@type integer?
+local drawn_width
+
 ---Draw the tree, naming the keys the sidebar bound.
-local function redraw()
+local function draw_tree()
+  local win = window.win()
+  drawn_width = win and vim.api.nvim_win_get_width(win)
   draw.draw(bound_keys.filter_kinds)
+end
+
+-- A redraw costing more than a frame, run on every symbols answer, keeps the editor frozen for the whole walk.
+local FRAME_MS = 16
+
+---The redraw a rebuild owes the sidebar, and what the last one cost.
+---@class changeset.Settling
+---@field owed boolean A rebuild changed the rows since the sidebar last settled on them.
+---@field timer uv.uv_timer_t? Waiting to settle.
+---@field last_end number When the last settle ended, in ms.
+---@field last_cost number What it cost, in ms.
+
+---@type changeset.Settling
+local settling = { owed = false, last_end = 0, last_cost = 0 }
+
+---Draw the rows the last rebuild left and settle the position on them.
+---@type fun()
+local settle
+
+---Draw the tree, settling first on rows a rebuild left undrawn.
+local function redraw()
+  if settling.owed then
+    return settle()
+  end
+  draw_tree()
+end
+
+---The row a step from the sidebar just opened, which its next `CursorMoved` mustn't preview over the opened line.
+---@type string?
+local opened_id
+
+---Whether the sidebar's next `WinEnter` is a step handing focus back, which mustn't land on your row and undo it.
+local stepping_back = false
+
+local DELETED = "This file was deleted on this branch"
+
+local NO_BASE = "no merge base with the default branch"
+
+-- snacks.nvim's bigfile size: past it a buffer's synchronous treesitter parse takes noticeable time, on every pass
+-- over the row.
+local PREVIEW_MAX_BYTES = 1.5 * 1024 * 1024
+
+---Preview what `row`'s file held at `tree`'s base before the branch deleted it, else the notice that it was deleted.
+---git answers later, by when the cursor may have left the row, or you the window you asked from; either then previews
+---nothing, rather than swap the buffer of a window you have since entered.
+---@param tree changeset.Tree
+---@param row changeset.Row
+local function preview_deleted(tree, row)
+  local band = draw.band_for(row, bound_keys.jump)
+  local from = vim.api.nvim_get_current_win()
+  diff.blob(tree.base .. ":" .. row.path, tree.root, function(text)
+    local still = draw.row_at_cursor()
+    if not (still and still.id == row.id and vim.api.nvim_get_current_win() == from) then
+      return
+    end
+    -- A NUL is git's own test for a binary file.
+    if text and #text <= PREVIEW_MAX_BYTES and not text:find("\0", 1, true) then
+      window.preview_deleted(row.path, text, band)
+    else
+      window.preview_notice(DELETED, band)
+    end
+  end)
+end
+
+local UNPREVIEWABLE = "This file is binary or too big to preview"
+
+local SUBMODULE = "A submodule has nothing to preview"
+
+---Whether the file at `path` is small enough to preview, and text by git's test: no NUL in its first 8000 bytes.
+---@param path string
+---@return boolean
+local function previewable(path)
+  if vim.fn.getfsize(path) > PREVIEW_MAX_BYTES then
+    return false
+  end
+  local file = io.open(path, "rb")
+  if not file then
+    return true
+  end
+  local head = file:read(8000) or ""
+  file:close()
+  return not head:find("\0", 1, true)
 end
 
 local function preview_current()
   local state = sidebar_state.current()
   local row = draw.row_at_cursor()
-  if not row then
+  local opened = opened_id
+  opened_id = nil
+  if not row or row.id == opened then
     return
   end
   assert(state, "changeset: no tree built yet")
-  if row.lnum and row.kind ~= "file" then
+  if row.kind == "file" and row.status == "deleted" then
+    preview_deleted(state.tree, row)
+  elseif not (row.kind == "comment" or row.lnum or row.kind == "file") then
+    return
+  elseif (vim.uv.fs_stat(state.tree.root .. "/" .. row.path) or {}).type == "directory" then
+    window.preview_notice(SUBMODULE, draw.band_for(row, bound_keys.jump))
+  elseif vim.fn.filereadable(state.tree.root .. "/" .. row.path) == 0 then
+    window.preview_notice(DELETED, draw.band_for(row, bound_keys.jump))
+  elseif not previewable(state.tree.root .. "/" .. row.path) then
+    window.preview_notice(UNPREVIEWABLE, draw.band_for(row, bound_keys.jump))
+  else
     window.preview(
       state.tree.root .. "/" .. row.path,
-      row.lnum,
-      draw.band_for(row, bound_keys.jump),
-      { row = row, state = state }
-    )
-  elseif row.kind == "file" and row.status == "deleted" then
-    window.preview_notice("This file was deleted on this branch", draw.band_for(row, bound_keys.jump))
-  elseif row.kind == "file" then
-    window.preview(
-      state.tree.root .. "/" .. row.path,
-      1,
+      row.lnum or row.kind == "file" and 1 or nil,
       draw.band_for(row, bound_keys.jump),
       { row = row, state = state }
     )
@@ -86,27 +182,41 @@ local function track()
     return
   end
   local name = vim.api.nvim_buf_get_name(buf)
-  local path = name ~= "" and vim.fs.relpath(state.tree.root, vim.fs.normalize(name)) or nil
+  local path = Paths.relative(state.tree.root, name)
   state.position:track(path and { path = path, lnum = vim.api.nvim_win_get_cursor(win)[1] } or nil)
   draw.paint()
 end
 
----Keep where you are and the sidebar's cursor row in a global `:mksession` saves, so
----every session write carries them without work of its own at write time.
+---Keep where you are and the sidebar's cursor row and scroll in a global `:mksession`
+---saves, so every session write carries them without work of its own at write time.
 local function remember()
   local state = sidebar_state.current()
-  local saved = state and state.position:saved(draw.row_at_cursor())
+  local win = window.win()
+  local offset = win and vim.api.nvim_win_get_cursor(win)[1] - vim.fn.line("w0", win)
+  local saved = state and state.position:saved(draw.row_at_cursor(), offset)
+  if saved and not win and window.buf() then
+    -- The sidebar stands in another tabpage, whose cursor row can't be read, so the row recorded stays.
+    local ok, last = pcall(vim.json.decode, vim.g[POSITION_GLOBAL] or "")
+    saved.row = ok and type(last) == "table" and last.row or nil
+  end
   if saved then
     vim.g[POSITION_GLOBAL] = vim.json.encode(saved)
   end
 end
 
----Put the sidebar's cursor on the line `position` chose, when it chose one, and repaint the row marks.
+---Put the sidebar's cursor on the line `position` chose, when it chose one, with `offset` lines above it on screen
+---when it chose that too, and repaint the row marks.
 ---@param lnum integer?
-local function apply(lnum)
+---@param offset integer?
+local function apply(lnum, offset)
   local win = window.win()
   if lnum and win then
     vim.api.nvim_win_set_cursor(win, { lnum, 0 })
+    if offset then
+      vim.api.nvim_win_call(win, function()
+        vim.fn.winrestview({ topline = math.max(1, lnum - offset) })
+      end)
+    end
   end
   draw.paint()
 end
@@ -120,27 +230,28 @@ local function pick(row)
   draw.paint()
 end
 
----Text of a changed line, for captioning an orphan hunk.
+---What captions orphan hunks in one rebuild, looking loaded buffers up once and reading each file once.
 ---
 ---Prefers the buffer, which holds unwritten changes the file does not. Reading
 ---symbols is what loads a file, so a file answered from the cache has no buffer
 ---and is read from disk instead.
----@param path string
----@param lnum integer
----@return string?
-local function line_text(path, lnum)
-  local tree = build.current()
-  if lnum < 1 then
-    return nil
-  end
-  assert(tree, "changeset: no tree built yet")
-  local full = tree.root .. "/" .. path
-  local buf = vim.fn.bufnr(full)
-  if buf ~= -1 and vim.api.nvim_buf_is_loaded(buf) then
-    return vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1]
-  end
-  local ok, lines = pcall(vim.fn.readfile, full, "", lnum)
-  return ok and lines[lnum] or nil
+---@param root string
+---@return changeset.rows.Lines lines Its `text` and `tick`.
+local function captions(root)
+  local index, read = buffers.index(), {}
+  return {
+    text = function(path, lnum)
+      if lnum < 1 then
+        return nil
+      end
+      read[path] = read[path] or buffers.lines(root .. "/" .. path, 1, nil, index)
+      return read[path][lnum]
+    end,
+    tick = function(path)
+      local buf = index[vim.fs.normalize(root .. "/" .. path)]
+      return buf and vim.api.nvim_buf_get_changedtick(buf)
+    end,
+  }
 end
 
 ---Whether the tree is done growing under `path`: its diff is in, and so are its
@@ -158,23 +269,179 @@ local function decided(path)
   end)
 end
 
+---What the sidebar last drew beyond its rows: the header draws the tree's commits and PR, and an empty tree reads
+---differently once its diff is in.
+---@type { state: changeset.SidebarState, collected: boolean, commits: integer?, pr: integer? }?
+local built_from
+
+---Build the sidebar's rows afresh from the tree.
+---@return boolean changed false when they would draw as the sidebar's rows already do.
 local function rebuild()
   local state = sidebar_state.current()
   assert(state, "changeset: no tree built yet")
-  -- Taken before the rows change: whether the cursor moved is judged by the row it was on.
+  local lines = captions(state.tree.root)
+  lines.comments = state.tree.comments
+  local rows = Rows.build(state.tree.files, state.tree.symbols, lines)
+  local from = { state = state, collected = state.tree.collected, commits = state.tree.commits, pr = state.tree.pr }
+  local last = built_from or {}
+  if
+    last.state == state
+    and last.collected == from.collected
+    and last.commits == from.commits
+    and last.pr == from.pr
+    and Rows.same(state.rows, rows)
+  then
+    return false
+  end
+  built_from = from
+  state.rows = rows
+  return true
+end
+
+---A step pressed before the tree was ready, with the window and buffer it was pressed in.
+---@class changeset.WaitingStep
+---@field count integer Presses added up, down for positive.
+---@field kind changeset.StepUnit|"preview" What the presses step by; a press of another kind starts the count again.
+---@field take fun(count: integer)
+---@field win integer
+---@field buf integer
+
+---@type changeset.WaitingStep?
+local waiting
+
+---What a step from `M.step` lends `actions.open_step`.
+---@type changeset.StepHooks
+local step_hooks = {
+  pick = pick,
+  redraw = redraw,
+  back = function(row)
+    opened_id = row and row.id
+    stepping_back = true
+  end,
+}
+
+---Whether a step can be taken: the diff is read, and so are the symbols of the file the step would start from, or
+---its rows would be the placeholders drawn while they're read.
+---@param tree changeset.Tree
+---@return boolean
+local function ready(tree)
+  if not tree.collected then
+    return false
+  end
+  local win = window.peek_target()
+  local name = win and vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win)) or ""
+  local path = Paths.relative(tree.root, name)
+  return not path or decided(path)
+end
+
+---Take the waiting step once the tree is ready, if you're still where you pressed it; else drop it unsaid.
+local function take_waiting()
+  local tree = build.current()
+  if not (waiting and tree and ready(tree)) then
+    return
+  end
+  local step = waiting
+  waiting = nil
+  if
+    step.count == 0
+    or vim.api.nvim_get_current_win() ~= step.win
+    or vim.api.nvim_win_get_buf(step.win) ~= step.buf
+  then
+    return
+  end
+  local state = assert(sidebar_state.current(), "changeset: no tree built yet")
+  -- Landed again: the rows the sidebar opened on held no row for where you are.
+  apply(state.position:entered(draw.view()))
+  step.take(step.count)
+end
+
+---When a rebuild's redraw may run: at once while the last one cost a frame or less, else twice its cost after it
+---ended, so answers arriving meanwhile draw together.
+---@param now_ms number
+---@param last_end_ms number
+---@param last_cost_ms number
+---@return number due_ms
+function M._due(now_ms, last_end_ms, last_cost_ms)
+  if last_cost_ms <= FRAME_MS then
+    return now_ms
+  end
+  return math.max(now_ms, last_end_ms + 2 * last_cost_ms)
+end
+
+---@return number
+local function now_ms()
+  return vim.uv.hrtime() / 1e6
+end
+
+local function cancel_settle()
+  local timer = settling.timer
+  settling.timer = nil
+  if timer and not timer:is_closing() then
+    timer:stop()
+    timer:close()
+  end
+end
+
+function settle()
+  cancel_settle()
+  settling.owed = false
+  local state = sidebar_state.current()
+  if not state then
+    return
+  end
+  local start = now_ms()
+  -- Taken before the redraw: whether the cursor moved is judged by the row it was on.
   local before = (draw.row_at_cursor() or {}).id
-  state.rows = Rows.build(state.tree.files, state.tree.symbols, { text = line_text, comments = state.tree.comments })
-  redraw()
+  draw_tree()
   apply(state.position:rebuilt(draw.view(), before, decided))
+  settling.last_end = now_ms()
+  settling.last_cost = settling.last_end - start
+  take_waiting()
+end
+
+---Settle when `M._due` says, folding the rebuilds made meanwhile into one redraw.
+local function settle_soon()
+  settling.owed = true
+  if settling.timer then
+    return
+  end
+  local now = now_ms()
+  local due = M._due(now, settling.last_end, settling.last_cost)
+  if due <= now then
+    return settle()
+  end
+  settling.timer = vim.uv.new_timer()
+  settling.timer:start(
+    math.ceil(due - now),
+    0,
+    vim.schedule_wrap(function()
+      if settling.owed then
+        settle()
+      end
+    end)
+  )
 end
 
 ---What the sidebar does as the tree changes.
 ---@type table<changeset.TreeEvent, fun()>
 local on_tree_event = {
-  diff = rebuild,
-  symbols = rebuild,
+  diff = function()
+    if rebuild() or settling.owed then
+      settle()
+    else
+      take_waiting()
+    end
+  end,
+  symbols = function()
+    if rebuild() or settling.owed then
+      settle_soon()
+    else
+      take_waiting()
+    end
+  end,
   pr = redraw,
   failed = function()
+    waiting = nil
     assert(sidebar_state.current(), "changeset: no tree built yet").position:failed()
   end,
 }
@@ -184,15 +451,21 @@ build.subscribe(function(event)
   on_tree_event[event]()
 end)
 
+-- Fires: a review comment kept, dropped or cleared, so the Comments section follows it.
+comment_store.subscribe(redraw)
+
+-- Loaded here so that using changeset at all draws the marks.
+local review_comments = require("changeset.review_comments")
+
 ---The sidebar's footer, which its statusline evaluates on every redraw.
 ---@return string
 function M.footer()
   local state = sidebar_state.current()
-  local win = window.win()
-  if not (state and win) then
+  local lnum = window.cursor()
+  if not (state and lnum) then
     return ""
   end
-  local file, files = view.position(state.view:visible(), vim.api.nvim_win_get_cursor(win)[1])
+  local file, files = view.position(state.view:visible(), lnum)
   return render.footer({ file = file, files = files, query = state.view:query(), keys = bound_keys })
 end
 
@@ -204,8 +477,9 @@ end
 ---@return { rows: changeset.Row[], root: string, ref: string }? tree
 ---@return string? err Why there is no tree yet.
 function M.rows()
-  if not build.build() then
-    return nil, "no merge base with the default branch"
+  local kept = build.kept()
+  if not (kept or build.build()) then
+    return nil, NO_BASE
   end
   -- The first ask builds the tree too, and a picker cannot fill in behind it the way the sidebar does.
   vim.wait(DIFF_WAIT_MS, function()
@@ -217,14 +491,29 @@ function M.rows()
     return nil, "still reading the diff"
   end
   -- A tree whose diff landed before the sidebar loaded announced nothing the sidebar heard.
-  if #state.rows == 0 then
-    rebuild()
+  if #state.rows == 0 and rebuild() then
+    settle()
   end
-  return {
+  local tree = {
     rows = view.by_kind(Rows.files(state.rows), state.view:hidden()),
     root = state.tree.root,
     ref = state.tree.ref,
   }
+  if kept then
+    build.remeasure()
+  end
+  return tree
+end
+
+---Public API: the comment bubble on line `lnum` of `buf` and its highlight group, for a `'statuscolumn'` to draw;
+---nil on a line without one. Answers from the buffer's marks alone, so it is cheap on every screen row, whatever
+---`review_comment.sign` is.
+---@param buf integer
+---@param lnum integer 1-based, as `v:lnum`.
+---@return string? glyph `󰍩`, or `󰍪` for a draft.
+---@return string? hl `ChangesetReviewComment`, or `ChangesetReviewCommentDraft` for a draft.
+function M.bubble(buf, lnum)
+  return review_comments.bubble(buf, lnum)
 end
 
 ---Configure changeset. Optional; reaches the sidebar the next time it opens; PR Review Mode, once on, stays on.
@@ -232,8 +521,40 @@ end
 ---@param opts changeset.Config?
 function M.setup(opts)
   config.setup(opts)
+  -- The marks drew before setup(), to the defaults.
+  review_comments.redraw()
   if config.get().pr_review.enabled then
     require("changeset.review").activate()
+  end
+end
+
+---Drop everything the sidebar set up but its window.
+local function release()
+  cancel_settle()
+  waiting = nil
+  opened_id, stepping_back = nil, false
+  require("changeset.menu").close()
+  vim.api.nvim_clear_autocmds({ group = augroup })
+end
+
+---Builds the tree for the current buffer's repository, unless it is already built there, warning when it can't.
+---@return boolean ready
+local function built()
+  if not build.build() then
+    vim.notify("Changeset: " .. NO_BASE, vim.log.levels.WARN)
+    return false
+  end
+  -- The cursor is still where the user was, and nothing tracked it before a tree existed.
+  track()
+  return true
+end
+
+---Rebuild the tree now, or build the current buffer's repository's when there is none.
+function M.refresh()
+  if build.current() then
+    build.update()
+  else
+    built()
   end
 end
 
@@ -243,18 +564,22 @@ function M.open()
   -- live exactly while a sidebar stands on some tabpage.
   if window.buf() then
     M.close()
+  else
+    -- A session read over the sidebar closes its window, and this runs before the
+    -- `WinClosed` close that would let go of it.
+    release()
   end
-  local kept = build.current()
-  if not build.build() then
-    return vim.notify("Changeset: no merge base with the default branch", vim.log.levels.WARN)
+  local previous = build.current()
+  -- A kept tree draws at once; its fork point is measured again behind it.
+  local kept = build.kept()
+  if kept then
+    track()
+  elseif not built() then
+    return
   end
   bound_keys = config.get().keymaps
 
-  -- The cursor is still where the user was, and nothing tracked it before a tree existed.
-  track()
-
   local buf = vim.api.nvim_create_buf(false, true)
-  vim.bo[buf].filetype = "changeset"
   vim.bo[buf].buftype = "nofile"
   -- Wiped with its window. A scratch buffer is kept otherwise, so every close would
   -- leave one behind, its extmarks and mappings included.
@@ -265,9 +590,11 @@ function M.open()
   -- The hidden cursor would still underline whatever word a click leaves it on.
   vim.b[buf].minicursorword_disable = true
 
-  render.define_highlights()
+  highlights.define_highlights()
   local win = window.open(buf)
   vim.wo[win].statusline = "%{%v:lua.require'changeset'.footer()%}"
+  -- In its window, so a `FileType` handler's window options land on the sidebar's, after its own.
+  vim.bo[buf].filetype = "changeset"
   -- After `filetype`, so these replace any `]]`/`[[` a plugin maps on the buffer at `FileType`.
   actions.set_keymaps(buf, bound_keys, { pick = pick, close = M.close })
 
@@ -279,7 +606,12 @@ function M.open()
     pattern = tostring(win),
     desc = "changeset: let go of the sidebar when its window closes another way",
     callback = function()
-      vim.schedule(M.close)
+      vim.schedule(function()
+        -- A session read over the sidebar opens its own before this runs.
+        if not window.is_visible() then
+          M.close()
+        end
+      end)
     end,
   })
   vim.api.nvim_create_autocmd("CursorMoved", {
@@ -313,13 +645,37 @@ function M.open()
   })
   -- Fires: the editor being resized. Moves the tree below the files when the editor
   -- gets too narrow to keep it beside them, and back once it is wide enough; redrawn
-  -- either way, since rows are trimmed to the window's width.
+  -- either way, since rows are trimmed to the window's width. An open kind menu docks
+  -- against the sidebar where it now stands.
   vim.api.nvim_create_autocmd("VimResized", {
     group = augroup,
     desc = "changeset: move the tree beside or below the files as the editor's width allows",
     callback = function()
       window.relayout()
       redraw()
+      require("changeset.menu").relayout()
+    end,
+  })
+  -- Fires: windows changing size. The sidebar's own, dragged or `:resize`d, needs its rows refitted to the width,
+  -- which `winfixwidth` doesn't stop.
+  vim.api.nvim_create_autocmd("WinResized", {
+    group = augroup,
+    desc = "changeset: refit the tree to its window's new width",
+    callback = function()
+      local sidebar = window.win()
+      if sidebar and vim.api.nvim_win_get_width(sidebar) ~= drawn_width then
+        redraw()
+      end
+    end,
+  })
+  -- Fires: entering a tabpage. A sidebar standing in it missed every redraw made while it was in another.
+  vim.api.nvim_create_autocmd("TabEnter", {
+    group = augroup,
+    desc = "changeset: redraw the tree missed while the sidebar stood in another tabpage",
+    callback = function()
+      if window.is_visible() then
+        settle()
+      end
     end,
   })
   -- Fires: leaving any window while the sidebar is open. Remembers whether it was a
@@ -341,7 +697,9 @@ function M.open()
     desc = "changeset: put the sidebar's cursor on the row you are on",
     callback = function()
       local state = sidebar_state.current()
-      if state and vim.api.nvim_get_current_win() == window.win() and not left_float then
+      local back = stepping_back
+      stepping_back = false
+      if state and vim.api.nvim_get_current_win() == window.win() and not left_float and not back then
         apply(state.position:entered(draw.view()))
       end
     end,
@@ -372,21 +730,46 @@ function M.open()
       draw.paint()
     end,
   })
-  actions.bind_step_keys(bound_keys, preview_current)
+  require("changeset.unified_diff").activate()
 
   redraw()
-  -- A kept tree misses what nothing announced, such as a file edited outside Neovim while it kept focus.
-  if build.current() == kept then
+  -- A kept tree misses what nothing announced, such as a file edited outside Neovim while it kept focus. It refreshes
+  -- once re-measured, so a rebased branch is never diffed against its old fork point.
+  if kept then
+    build.remeasure(function()
+      vim.notify("Changeset: " .. NO_BASE, vim.log.levels.WARN)
+      M.close()
+    end, build.refresh)
+  elseif build.current() == previous then
     build.refresh()
   end
 end
 
----Dismiss the sidebar and its step keys, putting back what they replaced. The tree stays, and keeps refreshing.
+---Dismiss the sidebar. The tree stays, and keeps refreshing.
 function M.close()
-  require("changeset.menu").close()
-  actions.unbind_step_keys()
-  vim.api.nvim_clear_autocmds({ group = augroup })
+  release()
   window.close()
+end
+
+---Fill `placeholder`, in the current tabpage, with the tree, or let go of it when there is no tree to fill it with.
+---@param placeholder integer
+local function fill(placeholder)
+  M.open()
+  if not window.is_visible() then
+    local stale = vim.api.nvim_win_get_buf(placeholder)
+    if #window.panes(0) > 1 then
+      vim.api.nvim_win_close(placeholder, true)
+    else
+      vim.api.nvim_win_call(placeholder, vim.cmd.enew)
+    end
+    -- A session lists it, under a name nothing else answers to.
+    pcall(vim.api.nvim_buf_delete, stale, { force = true })
+    return
+  end
+  local state = sidebar_state.current()
+  assert(state, "changeset: no tree built yet")
+  local ok, recorded = pcall(vim.json.decode, vim.g[POSITION_GLOBAL])
+  apply(state.position:restore(ok and recorded or nil, draw.view(), decided))
 end
 
 ---Fill the window a restored session left standing where the sidebar was, and bring
@@ -400,15 +783,13 @@ function M.restore()
   if not placeholder then
     return
   end
-  M.open()
-  if not window.is_visible() then
-    vim.api.nvim_win_close(placeholder, true)
-    return
+  -- The sidebar opens in the tabpage it is called from, which the session may not have left focused.
+  local here = vim.api.nvim_get_current_tabpage()
+  vim.api.nvim_set_current_tabpage(vim.api.nvim_win_get_tabpage(placeholder))
+  fill(placeholder)
+  if vim.api.nvim_tabpage_is_valid(here) then
+    vim.api.nvim_set_current_tabpage(here)
   end
-  local state = sidebar_state.current()
-  assert(state, "changeset: no tree built yet")
-  local ok, recorded = pcall(vim.json.decode, vim.g[POSITION_GLOBAL])
-  apply(state.position:restore(ok and recorded or nil, draw.view(), decided))
 end
 
 ---What `toggle()` does next, given where the sidebar and the cursor are.
@@ -419,6 +800,58 @@ local function next_action(st)
     return "open"
   end
   return st.focused and "close" or "focus"
+end
+
+---Takes a step of `kind` in the sidebar, opening a closed one first, unfocused, on the row for where you are. Presses
+---made before the tree is ready add up, and are taken once it is.
+---@param count integer Down for positive.
+---@param kind changeset.StepUnit|"preview"
+---@param take fun(count: integer)
+local function walk(count, kind, take)
+  if not window.is_visible() then
+    M.open()
+    if not window.is_visible() then
+      return
+    end
+    local state = assert(sidebar_state.current(), "changeset: no tree built yet")
+    apply(state.position:entered(draw.view()))
+  end
+  local tree = build.current()
+  if not (tree and ready(tree)) then
+    local win = vim.api.nvim_get_current_win()
+    local buf = vim.api.nvim_win_get_buf(win)
+    local before = waiting and waiting.win == win and waiting.buf == buf and waiting.kind == kind and waiting.count or 0
+    waiting = { count = before + count, kind = kind, take = take, win = win, buf = buf }
+    return vim.api.nvim_echo({ { "reading the changes…" } }, false, {})
+  end
+  -- The step walks the drawn rows, and `ready()` judged the tree's; a key pressed is worth drawing now.
+  if settling.owed then
+    settle()
+  end
+  take(count)
+end
+
+---Steps the sidebar's selected row `count` places and opens it in the window you are editing in. From a file window
+---or the sidebar, focus stays there. A closed sidebar opens first, unfocused, on the row for where you are. Presses
+---made before the tree is ready add up, and are taken once it is.
+---@param count integer Down for positive.
+---@param unit ("symbol"|"file")? What counts as a place: a changed symbol, or a file, whatever folds hide it. Any row
+---on screen that opens, without one.
+function M.step(count, unit)
+  local by = unit or "change"
+  walk(count, by, function(n)
+    actions.open_step(n, by, step_hooks)
+  end)
+end
+
+---Moves the sidebar's selected row `count` rows, past section headers, and previews it in the window you were last
+---in without opening it. A closed sidebar opens first, unfocused, on the row for where you are. Presses made before
+---the tree is ready add up, and are taken once it is.
+---@param count integer Down for positive.
+function M.preview_step(count)
+  walk(count, "preview", function(n)
+    actions.preview_step(n, preview_current)
+  end)
 end
 
 ---Open, focus, or dismiss the sidebar, depending on where the cursor is.
@@ -434,19 +867,12 @@ function M.toggle()
   end
 end
 
--- The meta highlight is mixed from Comment's foreground, which a new colorscheme
--- replaces. Same idiom as lua/config/highlights.lua.
-vim.api.nvim_create_autocmd("ColorScheme", {
-  group = vim.api.nvim_create_augroup("changeset.highlights", { clear = true }),
-  desc = "changeset: rebuild the dim label colour against the new palette",
-  callback = render.define_highlights,
-})
-
--- Fires: every buffer or window switch and cursor move, sidebar open or not, so
--- "you are here" is current whenever the sidebar shows. Scheduled because a
--- preview swaps its buffer inside `nvim_win_call`, which fires these with the
--- borrowed window current; by the next tick focus is back where the user is.
-vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter", "CursorMoved", "CursorMovedI" }, {
+-- Fires: every buffer or window switch, cursor move and scroll, sidebar open or not,
+-- so "you are here" is current whenever the sidebar shows, and the sidebar's scroll
+-- whenever a session is written. Scheduled because a preview swaps its buffer inside
+-- `nvim_win_call`, which fires these with the borrowed window current; by the next
+-- tick focus is back where the user is.
+vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter", "CursorMoved", "CursorMovedI", "WinScrolled" }, {
   group = vim.api.nvim_create_augroup("changeset.track", { clear = true }),
   desc = "changeset: track the file and line the cursor is in",
   callback = function()
@@ -467,6 +893,18 @@ vim.api.nvim_create_autocmd({ "WinEnter", "BufWinEnter" }, {
   group = vim.api.nvim_create_augroup("changeset.unband", { clear = true }),
   desc = "changeset: keep the preview band off the window the cursor is in",
   callback = window.unband,
+})
+
+-- Fires: a session starting to load. It lays its windows out from the focused one, and
+-- the sidebar's would take a file with the sidebar's window options still on it.
+vim.api.nvim_create_autocmd("SessionLoadPre", {
+  group = vim.api.nvim_create_augroup("changeset.session", { clear = true }),
+  desc = "changeset: close the sidebar before a session lays out its windows",
+  callback = function()
+    if window.buf() then
+      M.close()
+    end
+  end,
 })
 
 return M

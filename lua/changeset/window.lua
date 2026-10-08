@@ -3,7 +3,9 @@
 
 local buffers = require("changeset.buffers")
 local config = require("changeset.config")
+local highlights = require("changeset.highlights")
 local render = require("changeset.render")
+local unified_diff = require("changeset.unified_diff")
 
 local M = {}
 
@@ -19,11 +21,11 @@ local NAME = "changeset://"
 ---@type table<string, string>
 local SPLIT_CMD = { vsplit = "vsplit", split = "split", tab = "tabnew" }
 
-local notice_ns = vim.api.nvim_create_namespace("changeset.notice")
+local stand_in_ns = vim.api.nvim_create_namespace("changeset.stand_in")
 
 -- Normal and visual mode only: the filter prompt on the command line still needs
 -- a cursor to type at.
-local NO_CURSOR = "n-v:" .. render.NO_CURSOR_HL
+local NO_CURSOR = "n-v:" .. highlights.NO_CURSOR_HL
 
 ---@class changeset.Snapshot What a window held before the sidebar borrowed it.
 ---@field buf integer
@@ -31,12 +33,12 @@ local NO_CURSOR = "n-v:" .. render.NO_CURSOR_HL
 ---@field winbar string
 ---@field standing_buf integer? The buffer a preview put here while the cursor stood in the window.
 ---@field pick any What the caller previewed here, handed back when the window is claimed.
+---@field split boolean? The sidebar split this window off to preview into, so it held nothing of the user's.
 
 ---Beside the files, or below them as a drawer.
 ---@alias changeset.Layout "sidebar"|"drawer"
 
--- `notice_buf` outlives close() and is reused.
----@type { win: integer?, buf: integer?, notice_buf: integer?, layout: changeset.Layout?, borrowed: table<integer, changeset.Snapshot> }
+---@type { win: integer?, buf: integer?, layout: changeset.Layout?, borrowed: table<integer, changeset.Snapshot> }
 local sidebar = { borrowed = {} }
 
 ---@param columns integer The editor's width.
@@ -57,12 +59,40 @@ local function split_for(layout, lines)
   return { split = "right", win = -1, width = SIDEBAR_WIDTH }
 end
 
+---Set `name` on `win` as `:setlocal` does. `vim.wo` sets the window's global copy too, which
+---the next buffer shown in it, and every split off it, would then take for the user's own.
+---@param win integer
+---@param name string
+---@param value any
+local function setlocal(win, name, value)
+  vim.api.nvim_set_option_value(name, value, { win = win, scope = "local" })
+end
+
+-- What the sidebar sets on its window, which `close` puts back to the user's when it keeps that window.
+local SIDEBAR_OPTIONS = {
+  number = false,
+  relativenumber = false,
+  signcolumn = "no",
+  -- Rows are sized to the window's full width, and a global one draws even with
+  -- every column above switched off.
+  statuscolumn = "",
+  -- The selected row marks the cursor's line instead.
+  wrap = false,
+  cursorline = false,
+  foldcolumn = "0",
+  -- For the sentence an empty tree shows, the one line `draw` lets wrap.
+  list = false,
+  linebreak = true,
+  -- Or a reflexive `<C-o>` there swaps the tree out of its window and wipes it.
+  winfixbuf = true,
+}
+
 ---Keep the size `layout` gave `win` when other windows open and close.
 ---@param win integer
 ---@param layout changeset.Layout
 local function pin(win, layout)
-  vim.wo[win].winfixwidth = layout == "sidebar"
-  vim.wo[win].winfixheight = layout == "drawer"
+  setlocal(win, "winfixwidth", layout == "sidebar")
+  setlocal(win, "winfixheight", layout == "drawer")
 end
 
 ---Windows a preview could go to, most recently used first.
@@ -114,27 +144,29 @@ function M._clamp(lnum, line_count)
   return math.max(1, math.min(lnum, line_count))
 end
 
----A window a preview can go to: still open, not the sidebar, not a float, and holding a file or the sidebar's notice.
+---A window a preview can go to: still open, not the sidebar, not pinned to its buffer, not a float, and holding a
+---file or a stand-in for one.
 ---@param win integer
 ---@return boolean
 local function usable(win)
-  if not vim.api.nvim_win_is_valid(win) or win == sidebar.win then
+  if not vim.api.nvim_win_is_valid(win) or win == sidebar.win or vim.wo[win].winfixbuf then
     return false
   end
   if vim.api.nvim_win_get_config(win).relative ~= "" then
     return false
   end
   local buf = vim.api.nvim_win_get_buf(win)
-  return buf == sidebar.notice_buf or vim.bo[buf].buftype == ""
+  return vim.b[buf].changeset_stand_in or vim.bo[buf].buftype == ""
 end
 
----Windows in this tabpage that can hold a file. A float is not one of them, and
+---Windows in `tabpage` that can hold a file. A float is not one of them, and
 ---counting them is what decides whether the sidebar's window can be closed at all.
+---@param tabpage integer 0 for the current one.
 ---@return integer[]
-local function panes()
+function M.panes(tabpage)
   return vim.tbl_filter(function(win)
     return vim.api.nvim_win_get_config(win).relative == ""
-  end, vim.api.nvim_tabpage_list_wins(0))
+  end, vim.api.nvim_tabpage_list_wins(tabpage))
 end
 
 ---@return integer[]
@@ -146,31 +178,42 @@ local function reachable()
   )
 end
 
----@return integer
+---The window a commit would open into, without splitting for one; nil when there is none.
+---@return integer?
+function M.peek_target()
+  return M._pick_target(reachable(), usable)
+end
+
+---@return integer win
+---@return boolean? split Whether `win` was split off the sidebar for this.
 local function target()
-  local win = M._pick_target(reachable(), usable)
+  local win = M.peek_target()
   if win then
     return win
   end
   -- Nothing left to preview into: the sidebar is the only window, so give the
   -- file a split of its own rather than borrowing the sidebar. Split from inside
   -- `nvim_win_call`, which hands focus back without a `WinEnter` on the sidebar.
-  return vim.api.nvim_win_call(sidebar.win, function()
+  local split = vim.api.nvim_win_call(sidebar.win, function()
     vim.cmd(sidebar.layout == "drawer" and "leftabove split" or "leftabove vsplit")
     return vim.api.nvim_get_current_win()
   end)
+  -- Copied from the sidebar with the rest of its options. Its header winbar would be put back as the user's.
+  setlocal(split, "winfixbuf", false)
+  setlocal(split, "winbar", "")
+  return split, true
 end
 
 ---Show `buf` in `win` without recording a jumplist entry.
 ---
 ---It is swapping the buffer, not moving the cursor, that records one — hence
 ---`keepjumps`, so holding `j` in the sidebar cannot fill `<C-o>` with one entry
----per keypress.
+---per keypress. The `!` hides a modified buffer even under 'nohidden'.
 ---@param win integer
 ---@param buf integer
 local function show(win, buf)
   vim.api.nvim_win_call(win, function()
-    vim.cmd({ cmd = "buffer", args = { buf }, mods = { keepjumps = true } })
+    vim.cmd({ cmd = "buffer", args = { buf }, bang = true, mods = { keepjumps = true } })
   end)
 end
 
@@ -202,9 +245,10 @@ end
 ---@param pick any Handed back by `claim`; nil clears whatever the last preview here left.
 ---@return integer win
 local function borrow(buf, band, pick)
-  local win = target()
+  local win, split = target()
   local standing = win == vim.api.nvim_get_current_win()
   remember(win)
+  sidebar.borrowed[win].split = sidebar.borrowed[win].split or split
   sidebar.borrowed[win].standing_buf = standing and buf or nil
   sidebar.borrowed[win].pick = pick
   show(win, buf)
@@ -232,12 +276,15 @@ end
 ---Whether the sidebar is on screen where the user is standing.
 ---
 ---A window in another tabpage is not: focusing it would haul the user out of the tab
----they are in, and every caller here means "can they see it from here".
+---they are in, and every caller here means "can they see it from here". Nor is one
+---that another buffer has taken over, which is the user's window now.
 ---@return boolean
 function M.is_visible()
   return sidebar.win ~= nil
     and vim.api.nvim_win_is_valid(sidebar.win)
     and vim.tbl_contains(vim.api.nvim_tabpage_list_wins(0), sidebar.win)
+    and M.buf() ~= nil
+    and vim.api.nvim_win_get_buf(sidebar.win) == sidebar.buf
 end
 
 ---Whether the cursor is in the sidebar.
@@ -261,6 +308,13 @@ function M.win()
   return M.is_visible() and sidebar.win or nil
 end
 
+---The sidebar's cursor line, while it stands.
+---@return integer?
+function M.cursor()
+  local win = M.win()
+  return win and vim.api.nvim_win_get_cursor(win)[1]
+end
+
 ---Hide the cursor while it is in the sidebar, where the cursor line marks the row
 ---and the cursor itself would sit on the row's icon.
 function M.sync_cursor()
@@ -272,9 +326,10 @@ function M.sync_cursor()
 end
 
 ---The window a restored session left standing where the sidebar was.
+---@param tabpage integer? The tabpage to look in, 0 for the current one; every tabpage when nil.
 ---@return integer?
-function M.placeholder()
-  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+function M.placeholder(tabpage)
+  for _, win in ipairs(tabpage and vim.api.nvim_tabpage_list_wins(tabpage) or vim.api.nvim_list_wins()) do
     local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win))
     if win ~= sidebar.win and name:find(NAME, 1, true) then
       return win
@@ -293,7 +348,7 @@ function M.relayout()
   sidebar.layout = layout
   pin(sidebar.win, layout)
   -- Neovim refuses to move the last window, which has no layout to change anyway.
-  if #panes() > 1 then
+  if #M.panes(0) > 1 then
     vim.api.nvim_win_set_config(sidebar.win, split_for(layout, vim.o.lines))
     if vim.o.equalalways then
       vim.cmd("wincmd =")
@@ -305,12 +360,14 @@ end
 ---@param buf integer Scratch buffer holding the tree.
 ---@return integer win
 function M.open(buf)
-  local placeholder = M.placeholder()
+  local placeholder = M.placeholder(0)
   sidebar.borrowed = {}
 
   if placeholder then
     local stale = vim.api.nvim_win_get_buf(placeholder)
     sidebar.win = placeholder
+    -- A session saved with 'localoptions' brings it back.
+    setlocal(placeholder, "winfixbuf", false)
     vim.api.nvim_win_set_buf(placeholder, buf)
     pcall(vim.api.nvim_buf_delete, stale, { force = true })
     -- Laid out as the session was saved, which `relayout` below settles for this editor.
@@ -321,17 +378,17 @@ function M.open(buf)
     pin(sidebar.win, sidebar.layout)
   end
   sidebar.buf = buf
+  -- The sidebar's own buffers go with their windows, so one already holding this
+  -- name is what a session left.
+  local leftover = vim.fn.bufnr("^" .. NAME .. buf .. "$")
+  if leftover > 0 and leftover ~= buf then
+    pcall(vim.api.nvim_buf_delete, leftover, { force = true })
+  end
   vim.api.nvim_buf_set_name(buf, NAME .. buf)
 
-  local wo = vim.wo[sidebar.win]
-  wo.number, wo.relativenumber, wo.signcolumn = false, false, "no"
-  -- Rows are sized to the window's full width, and a global one draws even with
-  -- every column above switched off.
-  wo.statuscolumn = ""
-  -- The selected row marks the cursor's line instead.
-  wo.wrap, wo.cursorline, wo.foldcolumn = false, false, "0"
-  -- For the sentence an empty tree shows, the one line `draw` lets wrap.
-  wo.list, wo.linebreak = false, true
+  for name, value in pairs(SIDEBAR_OPTIONS) do
+    setlocal(sidebar.win, name, value)
+  end
   M.relayout()
 
   -- Opening a window is the editor's business to settle, and 'equalalways' is
@@ -375,7 +432,7 @@ end
 ---Sets the top line instead of running `zt`/`<C-y>`: keys run here reach every
 ---`vim.on_key` listener as if typed in this window, and a preview runs this in a
 ---window the user is not in.
-function M._reveal_cursor()
+function M.reveal_cursor()
   local rows = math.floor(vim.api.nvim_win_get_height(0) * REVEAL_RATIO) - 1
   vim.fn.winrestview({ topline = top_line(vim.fn.line("."), rows) })
 end
@@ -410,10 +467,11 @@ function M.preview(path, lnum, band, pick)
   end
   local win = borrow(buf, band, pick)
   sign(buf)
+  unified_diff.sync(win)
   if lnum then
     local last = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
     vim.api.nvim_win_set_cursor(win, { M._clamp(lnum, last), 0 })
-    vim.api.nvim_win_call(win, M._reveal_cursor)
+    vim.api.nvim_win_call(win, M.reveal_cursor)
   end
 end
 
@@ -434,23 +492,52 @@ function M._centred(text, width, height)
   return lines, row
 end
 
+---A buffer to stand in for a file that can't be opened. A new one each time, so no filetype carries over from the
+---last, which goes once no window shows it.
+---@return integer buf
+local function new_stand_in()
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].bufhidden = "wipe"
+  vim.b[buf].changeset_stand_in = true
+  return buf
+end
+
 ---Show `text` where a file preview would go, in place of a file.
 ---@param text string
 ---@param band changeset.Band What the band over the window says about the row.
 function M.preview_notice(text, band)
-  local buf = sidebar.notice_buf
-  if not (buf and vim.api.nvim_buf_is_valid(buf)) then
-    buf = vim.api.nvim_create_buf(false, true)
-    sidebar.notice_buf = buf
-  end
+  local buf = new_stand_in()
   local info = vim.fn.getwininfo(borrow(buf, band))[1]
   local lines, row = M._centred(text, info.width - info.textoff, info.height)
-  vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
   local line = lines[row + 1]
-  vim.api.nvim_buf_clear_namespace(buf, notice_ns, 0, -1)
-  vim.api.nvim_buf_set_extmark(buf, notice_ns, row, #line - #text, { end_col = #line, hl_group = render.META_HL })
+  vim.api.nvim_buf_set_extmark(buf, stand_in_ns, row, #line - #text, { end_col = #line, hl_group = highlights.META_HL })
+end
+
+---Show `text`, what `path` held before the branch deleted it, where a file preview would go: highlighted as its
+---filetype, and every line tinted as the unified diff tints a deleted one.
+---@param path string Names the filetype.
+---@param text string
+---@param band changeset.Band What the band over the window says about the row.
+function M.preview_deleted(path, text, band)
+  local buf = new_stand_in()
+  local lines = vim.split((text:gsub("\n$", "")), "\n", { plain = true })
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].modifiable = false
+  vim.api.nvim_buf_set_extmark(
+    buf,
+    stand_in_ns,
+    0,
+    0,
+    { end_row = #lines - 1, line_hl_group = highlights.DIFF_DELETE_HL }
+  )
+  -- Named before it is shown, as `buffers.load` names a file's, so its `FileType` handlers set nothing on the window.
+  local filetype = vim.filetype.match({ buf = buf, filename = path })
+  if filetype then
+    vim.bo[buf].filetype = filetype
+  end
+  borrow(buf, band)
 end
 
 ---Make `buf` the chosen contents of `win`: focus it, leave `<C-o>` pointing where
@@ -488,7 +575,7 @@ local function promote(win, buf, lnum, how)
   end
   if lnum then
     vim.api.nvim_win_set_cursor(0, { M._clamp(lnum, vim.api.nvim_buf_line_count(buf)), 0 })
-    M._reveal_cursor()
+    M.reveal_cursor()
   end
 end
 
@@ -503,7 +590,7 @@ function M.commit(path, lnum, how)
     vim.notify("Changeset: cannot open " .. path, vim.log.levels.WARN)
     return false
   end
-  promote(target(), buf, lnum, how)
+  promote((target()), buf, lnum, how)
   return true
 end
 
@@ -515,8 +602,8 @@ function M.claim()
   local win = vim.api.nvim_get_current_win()
   local snapshot = M.is_visible() and sidebar.borrowed[win]
   local buf = vim.api.nvim_win_get_buf(win)
-  -- A notice stands in for a file that cannot be opened, so there is nothing to choose.
-  if not snapshot or snapshot.standing_buf == buf or buf == sidebar.notice_buf then
+  -- A stand-in is for a file that cannot be opened, so there is nothing to choose.
+  if not snapshot or snapshot.standing_buf == buf or vim.b[buf].changeset_stand_in then
     return
   end
   -- The user may have scrolled the preview before reaching it; the swaps inside
@@ -536,14 +623,32 @@ function M.close()
   local borrowed, win = sidebar.borrowed, sidebar.win
   sidebar.win, sidebar.buf, sidebar.borrowed = nil, nil, {}
 
+  -- Closed rather than put back: it showed nothing before the sidebar made it.
+  for borrowed_win, snapshot in pairs(borrowed) do
+    if
+      snapshot.split
+      and vim.api.nvim_win_is_valid(borrowed_win)
+      and #M.panes(vim.api.nvim_win_get_tabpage(borrowed_win)) > 1
+    then
+      vim.api.nvim_win_close(borrowed_win, true)
+      borrowed[borrowed_win] = nil
+    end
+  end
+
   if win and vim.api.nvim_win_is_valid(win) then
-    if #panes() > 1 then
+    if #M.panes(vim.api.nvim_win_get_tabpage(win)) > 1 then
       vim.api.nvim_win_close(win, true)
     else
       -- The last window cannot be closed, and leaving the tree in it would leave a
       -- panel on screen whose keys no longer answer.
+      setlocal(win, "winfixbuf", false)
       vim.api.nvim_win_call(win, function()
         vim.cmd("enew")
+        -- The new buffer still takes the sidebar's local values.
+        for name in pairs(SIDEBAR_OPTIONS) do
+          vim.cmd.setlocal(name .. "<")
+        end
+        vim.cmd("setlocal winfixwidth< winfixheight<")
       end)
       -- A new buffer takes the window's options, header and footer included.
       vim.wo[win].winbar, vim.wo[win].statusline = "", ""

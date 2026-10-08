@@ -6,6 +6,7 @@ require("mini.icons").setup()
 local pick = require("changeset.pick")
 local ns = vim.api.nvim_create_namespace("changeset.pick")
 local Fixture = require("support.git")
+local Notify = require("support.notify")
 require("support.gh")
 
 ---A changeset row with the fields the picker reads.
@@ -227,14 +228,11 @@ describe("changeset.pick", function()
     it("warns rather than opening the picker when there is no changeset", function()
       Fixture.git({ "checkout", "-q", "--orphan", "unrelated" }, tmp)
       Fixture.commit("unrelated", tmp)
-      local notify, notes = vim.notify, {}
-      vim.notify = function(msg, level)
-        table.insert(notes, { msg = msg, level = level })
-      end
+      local notes, restore = Notify.capture()
 
       local ok, err = pcall(pick.pick)
 
-      vim.notify = notify
+      restore()
       assert(ok, err)
       assert.equal(1, #notes)
       assert.equal(vim.log.levels.WARN, notes[1].level)

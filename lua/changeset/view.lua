@@ -18,10 +18,28 @@ local Rows = require("changeset.rows")
 ---@field private narrowed string The query rows must match; empty for none.
 ---@field private kinds_hidden table<string, true> Symbol kinds left out of the tree.
 ---@field private shown changeset.Row[] The row on each line, as `show` last laid them out.
+---@field private laid changeset.Row[] The tree `show` last laid out, narrowed and compressed, before any fold.
 local View = {}
 View.__index = View
 
 local M = {}
+
+---A shallow copy of `t` with `fields` set over it: `vim.tbl_extend("force", t, fields)` without its argument checks,
+---which every redraw pays once per row.
+---@generic T: table
+---@param t T
+---@param fields table
+---@return T
+local function with(t, fields)
+  local out = {}
+  for k, v in pairs(t) do
+    out[k] = v
+  end
+  for k, v in pairs(fields) do
+    out[k] = v
+  end
+  return out
+end
 
 ---Narrow the tree to rows matching `query`.
 ---
@@ -52,7 +70,7 @@ function M.filter(rows, query)
     if #children == 0 then
       return nil
     end
-    return vim.tbl_extend("force", row, { children = children })
+    return with(row, { children = children })
   end
 
   local out = {}
@@ -86,7 +104,7 @@ function M.by_kind(rows, hidden)
       if row.kind == "symbol" and hidden[row.symbol_kind] then
         vim.list_extend(out, children)
       else
-        out[#out + 1] = vim.tbl_extend("force", row, { children = children })
+        out[#out + 1] = with(row, { children = children })
       end
     end
     return out
@@ -113,14 +131,14 @@ end
 
 ---Where the file holding line `lnum` stands among the files on screen; a file
 ---shown in several sections counts once.
----@param rows { depth: integer, path: string }[] One per line, as `render.lines` hands them back: 0 a section header, 1 a file.
+---@param rows { depth: integer, path: string, kind: string? }[] One per line, as `render.lines` hands them back: 0 a section header, 1 a file or comment row.
 ---@param lnum integer
----@return integer? index nil on a section header's line, or when no file is at or above `lnum`.
+---@return integer? index nil on a section header's line or a comment row's, or when no file is at or above `lnum`.
 ---@return integer total
 function M.position(rows, lnum)
   local index, total, index_of_path = nil, 0, {}
   for i, row in ipairs(rows) do
-    if row.depth == 1 then
+    if row.depth == 1 and row.kind ~= "comment" then
       if not index_of_path[row.path] then
         total = total + 1
         index_of_path[row.path] = total
@@ -166,7 +184,7 @@ local folds_by_root = {}
 ---@param hidden table<string, true> Symbol kinds to leave out.
 ---@return changeset.View
 function M.new(folds, hidden)
-  return setmetatable({ folds = folds, narrowed = "", kinds_hidden = hidden, shown = {} }, View)
+  return setmetatable({ folds = folds, narrowed = "", kinds_hidden = hidden, shown = {}, laid = {} }, View)
 end
 
 ---A view sharing its folds with every other view of `root`; a root's first view starts with Generated folded.
@@ -208,31 +226,132 @@ local function reanchor(rows, previous_row, fallback)
   return same_file or math.max(1, math.min(fallback, #rows))
 end
 
+---@class changeset.view.Block A run of lines that changes as one: a section's header, or a row under a section and
+---everything visible under it.
+---@field lines changeset.Line[]
+---@field header boolean? Whether this is a section's header.
+---@field key string? What it draws, as a string, once `draw` has compared it with another.
+
+---@class changeset.view.Drawn A row under a section, as `show` last drew it.
+---@field laid changeset.Row? Narrowed and compressed; nil when narrowing drops it.
+---@field block changeset.view.Block
+---@field width integer
+---@field query string
+---@field hidden table<string, true>
+---@field folds string
+
+---Each row under a section as last drawn, by the row `Rows.build` made, which stays the same table while the row does.
+---@type table<changeset.Row, changeset.view.Drawn>
+local drawn = setmetatable({}, { __mode = "k" })
+
+---Forget every row as drawn.
+function M._forget()
+  drawn = setmetatable({}, { __mode = "k" })
+end
+
+---The folds and opened chains at or under each file row, as one string per file id.
+---@param folds changeset.view.Folds
+---@return table<string, string>
+local function folds_by_file(folds)
+  local found = {}
+  local function add(ids, tag)
+    for id in pairs(ids) do
+      -- A file row's id is its section's and its path; everything under it extends that.
+      local file = id:match("^[^%z]*%z[^%z]*")
+      if file then
+        found[file] = found[file] or {}
+        table.insert(found[file], tag .. id)
+      end
+    end
+  end
+  add(folds.collapsed, "f")
+  add(folds.chains, "c")
+  return vim.tbl_map(function(ids)
+    table.sort(ids)
+    return table.concat(ids, "\1")
+  end, found)
+end
+
+---`child` of `section` narrowed, compressed and rendered, reused while nothing it is drawn from changed.
+---@param section changeset.Row
+---@param child changeset.Row
+---@param folds string Its folds, from `folds_by_file`.
+---@param opts changeset.RenderOpts
+---@param hidden table<string, true>
+---@param is_open fun(id: string): boolean
+---@return changeset.view.Drawn
+local function draw_child(section, child, folds, opts, hidden, is_open)
+  local was = drawn[child]
+  if was and was.width == opts.width and was.query == opts.query and was.hidden == hidden and was.folds == folds then
+    return was
+  end
+  local kept = M.filter(M.by_kind({ child }, hidden), opts.query)[1]
+  local laid = kept and Rows.compress({ with(section, { children = { kept } }) }, is_open)[1].children[1]
+  local now = {
+    laid = laid,
+    block = { lines = laid and render.child(laid, opts) or {} },
+    width = opts.width,
+    query = opts.query,
+    hidden = hidden,
+    folds = folds,
+  }
+  -- A comment row is made anew on every draw, so it never hits; and its entry, holding its own weak key, never goes.
+  if child.kind ~= "comment" then
+    drawn[child] = now
+  end
+  return now
+end
+
 ---Narrow, compress and render `rows`, keeping the row on each line.
 ---@param rows changeset.Row[] The tree, uncompressed.
 ---@param layout changeset.view.Layout
 ---@return changeset.Line[] lines
 ---@return integer lnum Where the cursor goes: the row it sat on, wherever that is now.
+---@return changeset.view.Block[] blocks The lines, in the runs that change together.
 function View:show(rows, layout)
   local previous_row = self.shown[layout.cursor]
-  local compressed = Rows.compress(M.by_kind(M.filter(rows, self.narrowed), self.kinds_hidden), function(id)
-    return self.folds.chains[id] == true
-  end)
-  -- `render.lines` walks the tree for its guides, so it is the one place that
-  -- decides which rows are on screen; each line carries its row back, which is
-  -- how a cursor line maps to a row without re-deriving that walk here.
-  local lines = render.lines(compressed, {
+  local opts = {
     icon = layout.icon,
     collapsed = function(id)
       return self.folds.collapsed[id] == true
     end,
     width = layout.width,
     query = self.narrowed,
-  })
-  self.shown = vim.tbl_map(function(line)
-    return line.row
-  end, lines)
-  return lines, reanchor(self.shown, previous_row, layout.cursor)
+  }
+  local function is_open(id)
+    return self.folds.chains[id] == true
+  end
+  local folds = folds_by_file(self.folds)
+  local laid, blocks = {}, {}
+  for _, section in ipairs(rows) do
+    local children, under = {}, {}
+    for _, child in ipairs(section.children) do
+      local d = draw_child(section, child, folds[child.id] or "", opts, self.kinds_hidden, is_open)
+      if d.laid then
+        children[#children + 1] = d.laid
+        under[#under + 1] = d.block
+      end
+    end
+    -- Narrowing keeps a section only while one of its rows matches.
+    if self.narrowed == "" or #children > 0 then
+      local row = with(section, { depth = 0, children = children })
+      laid[#laid + 1] = row
+      blocks[#blocks + 1] = { lines = { render.section(row, opts) }, header = true }
+      if not opts.collapsed(row.id) then
+        vim.list_extend(blocks, under)
+      end
+    end
+  end
+  self.laid = laid
+  local lines, shown = {}, {}
+  for _, block in ipairs(blocks) do
+    for _, line in ipairs(block.lines) do
+      lines[#lines + 1] = line
+      shown[#shown + 1] = line.row
+    end
+  end
+  self.shown = shown
+  return lines, reanchor(shown, previous_row, layout.cursor), blocks
 end
 
 ---The row on line `lnum`.
@@ -248,6 +367,34 @@ function View:visible()
   return self.shown
 end
 
+---The rows `show` last laid out, in display order, as they would read with every fold open.
+---@return changeset.Row[]
+function View:unfolded()
+  local out = {}
+  local function walk(rows)
+    for _, row in ipairs(rows) do
+      out[#out + 1] = row
+      walk(row.children)
+    end
+  end
+  walk(self.laid)
+  return out
+end
+
+---Unfold every row the row with `id` sits under, so that it shows.
+---@param id string
+---@return boolean unfolded Whether any row was folded.
+function View:reveal(id)
+  local unfolded = false
+  for folded in pairs(self.folds.collapsed) do
+    if Rows.under(id, folded) then
+      self.folds.collapsed[folded] = nil
+      unfolded = true
+    end
+  end
+  return unfolded
+end
+
 ---Show more under the row on `lnum`: a shut chain's rows first, else its children.
 ---@param lnum integer
 ---@return boolean acted false when no row is on `lnum`.
@@ -258,10 +405,10 @@ function View:open(lnum)
   end
   -- Separate axes: compression hides a chain's *intermediate* rows, folding hides
   -- a row's children.
-  if row.chain and not self.folds.chains[row.id] then
-    self.folds.chains[row.id] = true
-  else
+  if self.folds.collapsed[row.id] then
     self.folds.collapsed[row.id] = nil
+  elseif row.chain and not self.folds.chains[row.id] then
+    self.folds.chains[row.id] = true
   end
   return true
 end
@@ -308,17 +455,29 @@ function View:unfold_files()
   self.folds.collapsed = kept
 end
 
+---The nearest line past `lnum` in `delta`'s direction whose row `stops`, else `lnum`.
+---@param shown changeset.Row[]
+---@param lnum integer
+---@param delta integer
+---@param stops fun(row: changeset.Row): boolean
+---@return integer
+local function seek(shown, lnum, delta, stops)
+  local i = lnum + delta
+  while shown[i] and not stops(shown[i]) do
+    i = i + delta
+  end
+  return shown[i] and i or lnum
+end
+
 ---The nearest row past `lnum` in `delta`'s direction that is not
 ---a section header, or the line itself when there is none that way.
 ---@param lnum integer
 ---@param delta integer 1 or -1.
 ---@return integer
 function View:step(lnum, delta)
-  local i = lnum + delta
-  while self.shown[i] and self.shown[i].kind == "section" do
-    i = i + delta
-  end
-  return self.shown[i] and i or lnum
+  return seek(self.shown, lnum, delta, function(row)
+    return row.kind ~= "section"
+  end)
 end
 
 ---The nearest section header past `lnum` in `delta`'s direction, a folded
@@ -327,11 +486,9 @@ end
 ---@param delta integer 1 or -1.
 ---@return integer
 function View:step_section(lnum, delta)
-  local i = lnum + delta
-  while self.shown[i] and self.shown[i].kind ~= "section" do
-    i = i + delta
-  end
-  return self.shown[i] and i or lnum
+  return seek(self.shown, lnum, delta, function(row)
+    return row.kind == "section"
+  end)
 end
 
 ---Keep only rows matching `query`; empty shows them all.

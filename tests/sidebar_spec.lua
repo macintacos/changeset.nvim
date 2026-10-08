@@ -2,14 +2,21 @@ vim.opt.rtp:prepend(require("support.deps").path("mini.icons"))
 require("mini.icons").setup()
 
 local changeset = require("changeset")
-changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
+-- The <Plug> maps live in the plugin file, which the spec runner does not load.
+vim.cmd("runtime plugin/changeset.lua")
+-- What `]g` runs: the spec runner starts before startup is done, which maps the default keys.
+local PREVIEW_NEXT = vim.keycode("<Plug>(changeset-preview-next)")
 local build = require("changeset.build")
-local render = require("changeset.render")
+local highlights = require("changeset.highlights")
 local window = require("changeset.window")
+local Changes = require("support.changes")
 local Fixture = require("support.git")
+local Symbols = require("support.symbols")
 local Sidebar = require("support.sidebar")
 
 local ns = vim.api.nvim_get_namespaces()["changeset"]
+-- The header's totals, the gaps between sections and the hidden-kinds note.
+local frame_ns = vim.api.nvim_get_namespaces()["changeset.frame"]
 
 ---@param path string
 ---@param lines string[]
@@ -64,7 +71,7 @@ end
 local function totals(buf)
   local above = vim.tbl_filter(function(mark)
     return mark[4].virt_lines_above
-  end, vim.api.nvim_buf_get_extmarks(buf, ns, 0, 0, { details = true }))
+  end, vim.api.nvim_buf_get_extmarks(buf, frame_ns, 0, 0, { details = true }))
   assert.equal(1, #above)
   return table.concat(vim.tbl_map(function(chunk)
     return chunk[1]
@@ -102,6 +109,74 @@ describe("changeset sidebar", function()
     assert.truthy(text:find("other.lua", 1, true))
   end)
 
+  it("captions an orphan hunk with its buffer's unwritten text once the tree rebuilds", function()
+    local buf = open_sidebar()
+    vim.cmd.edit("other.lua")
+    vim.api.nvim_buf_set_lines(0, 0, 1, false, { "return 'unwritten'" })
+
+    build.refresh()
+
+    assert.is_true(vim.wait(5000, function()
+      return table.concat(lines_of(buf), "\n"):find("return 'unwritten'", 1, true) ~= nil
+    end, 25))
+  end)
+
+  describe("refreshing", function()
+    local draw = require("changeset.draw")
+    local real_draw, draws
+
+    before_each(function()
+      real_draw, draws = draw.draw, 0
+    end)
+
+    after_each(function()
+      draw.draw = real_draw
+    end)
+
+    ---Refresh the tree, counting the sidebar's draws until the new diff is in.
+    local function refresh()
+      draw.draw = function(...)
+        draws = draws + 1
+        return real_draw(...)
+      end
+      local before = build.current().files
+      build.refresh()
+      assert.is_true(vim.wait(10000, function()
+        return build.current().files ~= before
+      end, 25))
+      Sidebar.flush()
+    end
+
+    it("leaves the sidebar as drawn when nothing changed", function()
+      open_sidebar()
+
+      refresh()
+
+      assert.equal(0, draws)
+    end)
+
+    it("redraws once the branch gains a commit, though the diff stays the same", function()
+      open_sidebar()
+      Fixture.git({ "commit", "-q", "--allow-empty", "-m", "more" }, tmp)
+
+      refresh()
+
+      assert.equal(1, draws)
+    end)
+
+    it("redraws once a file's diff changes", function()
+      local buf = open_sidebar()
+      write("other.lua", { "return { a = 1, b = 2 }", "-- more" })
+
+      refresh()
+
+      assert.is_true(draws > 0)
+      assert.is_true(vim.wait(10000, function()
+        return table.concat(lines_of(buf), "\n"):find("L1–2", 1, true) ~= nil
+      end, 25))
+    end)
+  end)
+
   it("paints a filter match over the colour of the row it sits in", function()
     local buf = open_sidebar()
     vim.api.nvim_set_current_win((assert(window.win())))
@@ -117,7 +192,7 @@ describe("changeset sidebar", function()
       end
     end
 
-    assert.equal(render.MATCH_HL, assert(top).opts.hl_group)
+    assert.equal(highlights.MATCH_HL, assert(top).opts.hl_group)
   end)
 
   it("leads a nested file's row with its filename and dims its directory", function()
@@ -154,6 +229,70 @@ describe("changeset sidebar", function()
     assert.truthy(vim.api.nvim_win_call(assert(window.win()), vim.fn.winsaveview).topfill > 0)
   end)
 
+  describe("as the Comments section arrives above the cursor", function()
+    local comment_store = require("changeset.comment_store")
+    local columns
+
+    before_each(function()
+      os.remove(comment_store.path())
+      columns = vim.o.columns
+    end)
+
+    after_each(function()
+      vim.o.columns = columns
+      os.remove(comment_store.path())
+    end)
+
+    it("keeps the top of a tree that fits in view, totals and all", function()
+      -- Wide enough for the tree to stand beside the files, at the editor's height.
+      vim.o.columns = 200
+      local buf = open_sidebar()
+      local win = assert(window.win())
+      vim.api.nvim_win_set_cursor(win, { line_of(buf, "other.lua"), 0 })
+
+      comment_store.keep(build.current().root, { path = "mod.lua", line = 4, body = "why 2" })
+
+      assert.equal(1, line_of(buf, "Comments"))
+      assert.equal(line_of(buf, "other.lua"), vim.api.nvim_win_get_cursor(win)[1])
+      local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+      assert.same({ 1, 2 }, { view.topline, view.topfill })
+    end)
+
+    it(
+      "keeps the cursor's row in place once the section would push its 'scrolloff' rows out of view from the top",
+      function()
+        vim.o.columns = 200
+        local buf = open_sidebar()
+        local win = assert(window.win())
+        vim.wo[win].scrolloff = 10
+        local before = line_of(buf, "Implementation") + 1
+        vim.api.nvim_win_set_cursor(win, { before, 0 })
+        -- Room under the top for the section and the cursor's row, but not for 'scrolloff' rows below it as well.
+        vim.api.nvim_win_set_height(win, before + 6)
+
+        comment_store.keep(build.current().root, { path = "mod.lua", line = 4, body = "why 2" })
+
+        local after = line_of(buf, "Implementation") + 1
+        assert.equal(after, vim.api.nvim_win_get_cursor(win)[1])
+        assert.equal(1 + after - before, vim.api.nvim_win_call(win, vim.fn.winsaveview).topline)
+      end
+    )
+
+    it("keeps the cursor's row in place once the section would push it out of view from the top", function()
+      -- At 80 columns the tree stands in a drawer below the files, which it fills.
+      local buf = open_sidebar()
+      local win = assert(window.win())
+      local before = line_of(buf, "other.lua")
+      vim.api.nvim_win_set_cursor(win, { before, 0 })
+
+      comment_store.keep(build.current().root, { path = "mod.lua", line = 4, body = "why 2" })
+
+      local after = line_of(buf, "other.lua")
+      assert.equal(after, vim.api.nvim_win_get_cursor(win)[1])
+      assert.equal(1 + after - before, vim.fn.line("w0", win))
+    end)
+  end)
+
   it("redraws the tree across the bottom of the editor once it narrows", function()
     local columns = vim.o.columns
     vim.o.columns = 200
@@ -165,6 +304,57 @@ describe("changeset sidebar", function()
     vim.o.columns = columns
 
     assert.equal(100, width)
+  end)
+
+  it("fits its rows to the width once the sidebar's own window is resized", function()
+    local columns = vim.o.columns
+    vim.o.columns = 200
+    local buf = open_sidebar()
+    local win = assert(window.win())
+
+    vim.api.nvim_win_set_width(win, 70)
+    -- A headless editor never fires it on its own; a UI does once the screen updates.
+    vim.api.nvim_exec_autocmds("WinResized", { pattern = tostring(win) })
+    local width = vim.fn.strdisplaywidth(totals(buf))
+    vim.o.columns = columns
+
+    assert.equal(70, width)
+  end)
+
+  describe("back from another tabpage", function()
+    after_each(function()
+      vim.cmd("silent! tabonly!")
+    end)
+
+    it("shows a review comment written while it stood there", function()
+      local comment_store = require("changeset.comment_store")
+      os.remove(comment_store.path())
+      open_sidebar()
+      vim.cmd.tabnew()
+
+      comment_store.keep(assert(build.current()).root, { path = "mod.lua", line = 2, body = "from tab 2" })
+      vim.cmd.tabprevious()
+      os.remove(comment_store.path())
+
+      assert.truthy(Sidebar.text():find("from tab 2", 1, true), Sidebar.text())
+    end)
+
+    it("shows a file the tree gained while it stood there", function()
+      open_sidebar()
+      vim.cmd.tabnew()
+
+      write(vim.fs.joinpath(tmp, "plain.lua"), { "return 3" })
+      build.refresh()
+      assert.is_true(vim.wait(10000, function()
+        return vim.iter(assert(build.current()).files):any(function(file)
+          return file.path == "plain.lua"
+        end)
+      end, 25))
+      Sidebar.flush()
+      vim.cmd.tabprevious()
+
+      assert.truthy(Sidebar.text():find("plain.lua", 1, true), Sidebar.text())
+    end)
   end)
 
   it("keeps the tree clear of a statuscolumn, whose cells its rows are sized over", function()
@@ -313,19 +503,19 @@ describe("changeset sidebar", function()
       local above = line_of(buf, "Docs") - 2
       local gaps = vim.tbl_filter(function(mark)
         return mark[4].virt_lines ~= nil
-      end, vim.api.nvim_buf_get_extmarks(buf, ns, { above, 0 }, { above, -1 }, { details = true }))
+      end, vim.api.nvim_buf_get_extmarks(buf, frame_ns, { above, 0 }, { above, -1 }, { details = true }))
       assert.equal(2 + 3, #lines_of(buf))
       assert.equal(1, #gaps)
     end)
 
-    it("previews the next section's first file with ]h from a section's last line", function()
+    it("previews the next section's first file with ]g from a section's last line", function()
       vim.cmd.edit("mod.lua")
       local target = vim.api.nvim_get_current_win()
       local buf = open_sidebar()
       vim.api.nvim_set_current_win((assert(window.win())))
       vim.api.nvim_win_set_cursor(0, { line_of(buf, "Docs") - 1, 0 })
 
-      press("]h")
+      press(PREVIEW_NEXT)
 
       assert.equal(line_of(buf, "README.md"), vim.api.nvim_win_get_cursor(0)[1])
       assert.truthy(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(target)):find("README.md$"))
@@ -333,32 +523,18 @@ describe("changeset sidebar", function()
   end)
 
   describe("with inline tests", function()
-    local resolve = require("changeset.resolve")
-    local real_start = resolve.start
+    local source
     ---@type fun(path: string, items: table[]?)
     local answer
 
-    ---A symbol spanning `first`..`last`, as a server would report it.
-    ---@param s { name: string, kind: string, depth: integer, first: integer, last: integer }
-    local function sym(s)
-      return {
-        name = s.name,
-        kind = s.kind,
-        lnum = s.first,
-        depth = s.depth,
-        range_lnum = s.first,
-        range_end_lnum = s.last,
-      }
-    end
-
     local SESSION = {
-      sym({ name = "load", kind = "Function", depth = 0, first = 1, last = 3 }),
-      sym({ name = "tests", kind = "Module", depth = 0, first = 5, last = 9 }),
-      sym({ name = "refreshes", kind = "Function", depth = 1, first = 6, last = 8 }),
+      Changes.sym("load", "Function", 0, 1, 3),
+      Changes.sym("tests", "Module", 0, 5, 9),
+      Changes.sym("refreshes", "Function", 1, 6, 8),
     }
     local ONLY_TESTS = {
-      sym({ name = "tests", kind = "Module", depth = 0, first = 1, last = 5 }),
-      sym({ name = "works", kind = "Function", depth = 1, first = 2, last = 4 }),
+      Changes.sym("tests", "Module", 0, 1, 5),
+      Changes.sym("works", "Function", 1, 2, 4),
     }
 
     ---@return integer
@@ -420,14 +596,30 @@ describe("changeset sidebar", function()
       })
       write("src/only_tests.rs", { "mod tests {", "    fn works() {", "        let c = 1;", "    }", "}" })
       Fixture.commit("rust", tmp)
-      resolve.start = function(_, _, on_file)
-        answer = on_file
-        return function() end
-      end
+      source = Symbols.install()
+      answer = source.answer
     end)
 
     after_each(function()
-      resolve.start = real_start
+      source.restore()
+    end)
+
+    it("keeps the row under the cursor in place on screen as rows arrive above it", function()
+      open_unanswered()
+      local win = assert(window.win())
+      local before = line_of(assert(window.buf()), "other.lua")
+      cursor_to(before)
+      vim.api.nvim_win_call(win, function()
+        vim.fn.winrestview({ topline = before - 1 })
+      end)
+
+      answer("mod.lua", {})
+      Sidebar.flush()
+
+      local after = cursor_line()
+      assert(after > before, "no row arrived above the cursor")
+      assert.equal(line_of(assert(window.buf()), "other.lua"), after)
+      assert.equal(after - 1, vim.fn.line("w0", win))
     end)
 
     it("keeps the cursor on a split file's own copy when its tests land under Tests", function()
@@ -533,24 +725,25 @@ describe("changeset sidebar", function()
           },
         },
       })
-      local asked = {}
-      resolve.start = function(_, files, on_file)
-        answer = on_file
-        for _, f in ipairs(files) do
-          asked[#asked + 1] = f.path
-        end
-        return function() end
+      local function asked()
+        return vim
+          .iter(source.asks)
+          :map(function(ask)
+            return ask.paths
+          end)
+          :flatten()
+          :totable()
       end
 
       local ok, err = pcall(function()
         open_unanswered()
-        for _, path in ipairs(asked) do
+        for _, path in ipairs(asked()) do
           answer(path, {})
         end
         Sidebar.flush()
 
         assert.truthy(tests_header() < line_of(assert(window.buf()), "load"))
-        assert.is_false(vim.tbl_contains(asked, "src/session.rs"))
+        assert.is_false(vim.tbl_contains(asked(), "src/session.rs"))
       end)
       vim.fn.delete(cache_file)
       assert(ok, err)
@@ -569,6 +762,27 @@ describe("changeset sidebar", function()
       assert.falsy(table.concat(lines_of(buf), "\n"):find("load", 1, true))
     end)
 
+    it("docks the kind menu against the sidebar again once the editor is resized", function()
+      open_unanswered()
+      answer_all()
+      local sidebar = assert(window.win())
+      press("F")
+      local menu_win = vim.api.nvim_get_current_win()
+
+      local columns = vim.o.columns
+      vim.o.columns = 200
+      vim.api.nvim_exec_autocmds("VimResized", {})
+      local docked = vim.api.nvim_win_get_config(menu_win)
+      vim.api.nvim_win_close(menu_win, true)
+      vim.api.nvim_set_current_win(sidebar)
+      press("F")
+      local fresh = vim.api.nvim_win_get_config(0)
+      vim.api.nvim_win_close(0, true)
+      vim.o.columns = columns
+
+      assert.same({ fresh.row, fresh.col, fresh.width }, { docked.row, docked.col, docked.width })
+    end)
+
     describe("while a kind is hidden", function()
       local prefs = require("changeset.prefs")
 
@@ -577,7 +791,7 @@ describe("changeset sidebar", function()
       ---@return { text: string, line: integer }[]
       local function notes_under(buf)
         local notes = {}
-        for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
+        for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, frame_ns, 0, -1, { details = true })) do
           local virt_lines = mark[4].virt_lines
           local text = virt_lines and not mark[4].virt_lines_above and virt_lines[#virt_lines][1][1]
           -- A section's trailing blank is a virtual line too.
@@ -594,7 +808,7 @@ describe("changeset sidebar", function()
 
       after_each(function()
         vim.fn.delete(prefs.path())
-        changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
+        changeset.setup()
       end)
 
       it("notes under the tree which kinds it is hiding", function()
@@ -609,7 +823,7 @@ describe("changeset sidebar", function()
       end)
 
       it("names the key it bound to the kind menu in that note", function()
-        changeset.setup({ keymaps = { next = "]h", prev = "[h", filter_kinds = "<C-k>" } })
+        changeset.setup({ keymaps = { filter_kinds = "<C-k>" } })
         open_unanswered()
         answer_all()
 
@@ -697,7 +911,7 @@ describe("changeset sidebar", function()
       vim.api.nvim_set_current_win(win)
       vim.api.nvim_win_set_cursor(win, { line_of(buf, "L1", line_of(buf, "Docs")), 0 })
 
-      press("]h")
+      press(PREVIEW_NEXT)
 
       assert.truthy(vim.api.nvim_win_get_cursor((assert(window.win())))[1] > config)
     end)
@@ -750,23 +964,16 @@ describe("changeset sidebar", function()
       assert.is_true(shows(buf, "go.sum"))
 
       changeset.close()
-      -- A new branch builds a new tree over the same fold state, which must not fold Generated again.
-      Fixture.git({ "checkout", "-q", "-b", "other" }, tmp)
+      -- A new branch builds a new tree over the same fold state, which must not fold Generated again. Cut from
+      -- the commit rather than from `feature`, it has no parent and still shows feature's files.
+      Fixture.git({ "checkout", "-q", "-b", "other", Fixture.git({ "rev-parse", "HEAD" }, tmp) }, tmp)
       buf = open_sidebar()
 
       assert.is_true(shows(buf, "go.sum"))
     end)
 
     it("never asks for a generated file's symbols, nor waits on them", function()
-      local resolve = require("changeset.resolve")
-      local start = resolve.start
-      local asked = {}
-      resolve.start = function(_, files)
-        for _, f in ipairs(files) do
-          asked[#asked + 1] = f.path
-        end
-        return function() end
-      end
+      local source = Symbols.install()
 
       local ok, err = pcall(function()
         -- Not open_sidebar(): it waits for `reading symbols` to clear, which this stub never answers.
@@ -782,6 +989,13 @@ describe("changeset sidebar", function()
         )
         unfold(buf)
         local lines = lines_of(buf)
+        local asked = vim
+          .iter(source.asks)
+          :map(function(ask)
+            return ask.paths
+          end)
+          :flatten()
+          :totable()
 
         assert.truthy(vim.tbl_contains(asked, "mod.lua"))
         assert.is_false(vim.tbl_contains(asked, "go.sum"))
@@ -791,7 +1005,7 @@ describe("changeset sidebar", function()
         -- mod.lua, other.lua and .gitattributes stay held; go.sum and schema.txt count as read.
         assert.truthy(totals(buf):find("reading symbols 2/5", 1, true))
       end)
-      resolve.start = start
+      source.restore()
       assert(ok, err)
     end)
   end)
@@ -824,7 +1038,7 @@ describe("changeset sidebar", function()
 
     it("leaves the file window alone when the cursor moves onto it", function()
       local buf = on_header()
-      local target = vim.fn.win_getid(vim.fn.winnr("#"))
+      local target = assert(window.peek_target())
       local before = vim.api.nvim_win_get_buf(target)
 
       vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
@@ -834,7 +1048,7 @@ describe("changeset sidebar", function()
 
     it("opens nothing, copies nothing and says nothing on <CR> or y", function()
       on_header()
-      local target = vim.fn.win_getid(vim.fn.winnr("#"))
+      local target = assert(window.peek_target())
       local shown = vim.api.nvim_win_get_buf(target)
       local wins = #vim.api.nvim_list_wins()
       -- The clipboard provider is the one piece a headless Neovim lacks.
@@ -890,7 +1104,7 @@ describe("changeset sidebar", function()
   ---@field from_winbar string
   ---@field previewed integer The buffer the preview put there.
 
-  ---Open the sidebar from `mod.lua` and walk the selection `steps` rows with `]h`,
+  ---Open the sidebar from `mod.lua` and walk the selection `steps` rows with `]g`,
   ---pressed with the cursor `from` the sidebar or the file window, where it stays.
   ---Asserts the previews left the jumplist and the buffer list alone.
   ---@param steps integer
@@ -915,14 +1129,14 @@ describe("changeset sidebar", function()
     local listed = #vim.fn.getbufinfo({ buflisted = 1 })
 
     for _ = 1, steps do
-      vim.cmd.normal("]h")
+      vim.cmd.normal(PREVIEW_NEXT)
     end
 
     assert.same(before, vim.fn.getjumplist(target)[1])
     assert.equal(listed, #vim.fn.getbufinfo({ buflisted = 1 }))
     assert.equal(standing, vim.api.nvim_get_current_win())
     -- From the sidebar, the band is the proof a preview landed at all: without it
-    -- an untouched jumplist would also pass when `]h` did nothing. From the file,
+    -- an untouched jumplist would also pass when `]g` did nothing. From the file,
     -- the callers prove it by the buffer instead, since the window being read has none.
     if from == "sidebar" then
       assert.truthy(vim.wo[target].winbar ~= "")
@@ -965,7 +1179,7 @@ describe("changeset sidebar", function()
     commit_after(3, press_enter)
   end)
 
-  -- One `]h` stays inside the file the sidebar was opened from, where the commit
+  -- One `]g` stays inside the file the sidebar was opened from, where the commit
   -- re-shows the buffer the window already holds, so no buffer swap records the
   -- jump and the commit has to.
   it("sends <C-o> back for a row in the file the sidebar was opened from", function()
@@ -1017,17 +1231,79 @@ describe("changeset sidebar", function()
     assert.is_false(vim.bo[p.previewed].buflisted)
   end)
 
+  ---Move the open sidebar's cursor onto the first row naming `name`, and return the buffer the window it previews
+  ---into shows.
+  ---@param buf integer The sidebar's.
+  ---@param name string
+  ---@return integer
+  local function preview_row(buf, name)
+    local target = assert(window.peek_target())
+    vim.api.nvim_set_current_win((assert(window.win())))
+    vim.api.nvim_win_set_cursor(0, { line_of(buf, name), 0 })
+    vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+    return vim.api.nvim_win_get_buf(target)
+  end
+
+  it("previews a stand-in for a row whose file is gone from disk", function()
+    local buf = open_sidebar()
+    os.remove("other.lua")
+
+    assert.is_true(vim.b[preview_row(buf, "other.lua")].changeset_stand_in)
+  end)
+
+  it("previews a stand-in for a changed text file past 1.5 MiB", function()
+    local line = ("x"):rep(99) .. "\n"
+    local file = assert(io.open("big.txt", "wb"))
+    file:write(line:rep(20 * 1024))
+    file:close()
+    Fixture.commit("big", tmp)
+
+    assert.is_true(vim.b[preview_row(open_sidebar(), "big.txt")].changeset_stand_in)
+  end)
+
+  it("previews a notice that a submodule's row is a submodule", function()
+    local source = vim.fn.tempname()
+    vim.fn.mkdir(source, "p")
+    Fixture.init_repo("main", source)
+    Fixture.git({ "-c", "protocol.file.allow=always", "submodule", "add", "-q", source, "sub" }, tmp)
+    Fixture.commit("add sub", tmp)
+
+    local previewed = preview_row(open_sidebar(), " sub")
+    vim.fn.delete(source, "rf")
+
+    local text = table.concat(vim.api.nvim_buf_get_lines(previewed, 0, -1, false), "\n")
+    assert.is_true(vim.b[previewed].changeset_stand_in)
+    assert.truthy(text:find("submodule", 1, true), text)
+  end)
+
+  it("previews a stand-in for a changed binary file", function()
+    local file = assert(io.open("blob.bin", "wb"))
+    file:write("a\0b\n")
+    file:close()
+    Fixture.commit("binary", tmp)
+
+    assert.is_true(vim.b[preview_row(open_sidebar(), "blob.bin")].changeset_stand_in)
+  end)
+
   describe("on a file the branch deleted", function()
+    local diff = require("changeset.diff")
+    local real_blob = diff.blob
+
     before_each(function()
       Fixture.git({ "rm", "-q", "other.lua" }, tmp)
       Fixture.commit("drop other", tmp)
     end)
 
-    ---Open the sidebar from `mod.lua` and move its cursor onto the deleted row.
+    after_each(function()
+      diff.blob = real_blob
+    end)
+
+    ---Open the sidebar from `mod.lua`, move its cursor onto the deleted row, and wait for its preview.
     ---@return integer target The window the preview goes to.
     local function on_deleted_row()
       vim.cmd.edit("mod.lua")
       local target = vim.api.nvim_get_current_win()
+      local from = vim.api.nvim_get_current_buf()
       local buf = open_sidebar()
       local lnum
       for i, line in ipairs(lines_of(buf)) do
@@ -1041,6 +1317,12 @@ describe("changeset sidebar", function()
       vim.api.nvim_set_current_win(win)
       vim.api.nvim_win_set_cursor(0, { lnum, 0 })
       vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+      assert(
+        vim.wait(2000, function()
+          return vim.api.nvim_win_get_buf(target) ~= from
+        end, 10),
+        "the deleted row previewed nothing"
+      )
       return target
     end
 
@@ -1054,11 +1336,79 @@ describe("changeset sidebar", function()
       return false
     end
 
-    it("previews a notice that the file was deleted", function()
+    it("previews what the file held at the base, under a band saying it was deleted", function()
+      local target = on_deleted_row()
+
+      assert.same({ "return { a = 1 }" }, lines_of(vim.api.nvim_win_get_buf(target)))
+      local band = vim.api.nvim_eval_statusline(vim.wo[target].winbar, { winid = target, use_winbar = true }).str
+      assert.truthy(band:find("deleted", 1, true), "the band reads: " .. band)
+    end)
+
+    it("previews a notice that the file was deleted when git can't read it at the base", function()
+      diff.blob = function(_, _, callback)
+        callback(nil)
+      end
+
       local target = on_deleted_row()
 
       local text = table.concat(lines_of(vim.api.nvim_win_get_buf(target)), "\n")
       assert.truthy(text:find("deleted", 1, true))
+    end)
+
+    for what, text in pairs({
+      binary = "a\0b\n",
+      ["too big to read"] = ("x"):rep(80) .. ("\n" .. ("x"):rep(80)):rep(20000),
+    }) do
+      it("previews a notice that the file was deleted when what it held is " .. what, function()
+        diff.blob = function(spec, root, callback)
+          if not vim.endswith(spec, ":other.lua") then
+            return real_blob(spec, root, callback)
+          end
+          callback(text)
+        end
+
+        local target = on_deleted_row()
+
+        local shown = table.concat(lines_of(vim.api.nvim_win_get_buf(target)), "\n")
+        assert.truthy(shown:find("deleted", 1, true))
+      end)
+    end
+
+    it("leaves the next row's preview standing when git answers after the cursor moved on", function()
+      vim.cmd.edit("mod.lua")
+      local target = vim.api.nvim_get_current_win()
+      local buf = open_sidebar()
+      local answer
+      diff.blob = function(_, _, callback)
+        answer = callback
+      end
+      vim.api.nvim_set_current_win((assert(window.win())))
+      vim.api.nvim_win_set_cursor(0, { line_of(buf, "other.lua"), 0 })
+      vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+      vim.api.nvim_win_set_cursor(0, { line_of(buf, "mod.lua"), 0 })
+      vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+
+      answer("return { a = 1 }\n")
+
+      assert.equal("mod.lua", vim.fs.basename(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(target))))
+    end)
+
+    it("leaves the window you went to alone when git answers after you left the sidebar for it", function()
+      vim.cmd.edit("mod.lua")
+      local target = vim.api.nvim_get_current_win()
+      local buf = open_sidebar()
+      local answer
+      diff.blob = function(_, _, callback)
+        answer = callback
+      end
+      vim.api.nvim_set_current_win((assert(window.win())))
+      vim.api.nvim_win_set_cursor(0, { line_of(buf, "other.lua"), 0 })
+      vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+      vim.api.nvim_set_current_win(target)
+
+      answer("return { a = 1 }\n")
+
+      assert.equal("mod.lua", vim.fs.basename(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(target))))
     end)
 
     it("opens nothing for the deleted file on <CR>", function()
@@ -1069,17 +1419,52 @@ describe("changeset sidebar", function()
       assert.is_false(deleted_file_loaded())
     end)
 
-    it("chooses nothing when the cursor moves into the notice", function()
+    it("chooses nothing when the cursor moves into its preview", function()
       local target = on_deleted_row()
-      local notice = vim.api.nvim_win_get_buf(target)
+      local previewed = vim.api.nvim_win_get_buf(target)
       local listed = #vim.fn.getbufinfo({ buflisted = 1 })
 
       vim.cmd.wincmd("p")
 
       assert.equal(target, vim.api.nvim_get_current_win())
-      assert.equal(notice, vim.api.nvim_win_get_buf(target))
+      assert.equal(previewed, vim.api.nvim_win_get_buf(target))
       assert.equal(listed, #vim.fn.getbufinfo({ buflisted = 1 }))
     end)
+  end)
+
+  it("leaves the header scrolled away at the tree's top across a redraw", function()
+    open_sidebar()
+    local win = assert(window.win())
+    vim.api.nvim_set_current_win(win)
+    vim.cmd.normal(vim.keycode("<C-e><C-e>"))
+    local before = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+    assert.same({ 1, 0 }, { before.topline, before.topfill })
+
+    require("changeset.draw").draw()
+
+    local after = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+    assert.same({ 1, 0 }, { after.topline, after.topfill })
+  end)
+
+  it("wraps its lines for the buffer it shows, not for the next buffer its window shows", function()
+    open_sidebar()
+    local win = assert(window.win())
+    vim.api.nvim_set_current_win(win)
+    local before = vim.api.nvim_get_option_value("wrap", { win = win, scope = "global" })
+
+    vim.api.nvim_feedkeys(vim.keycode("fzzzz<CR>"), "xt", false)
+
+    assert.is_true(vim.wo[win].wrap)
+    assert.equal(before, vim.api.nvim_get_option_value("wrap", { win = win, scope = "global" }))
+  end)
+
+  it("leaves the tree's lines empty when a filter matches no row", function()
+    local buf = open_sidebar()
+    vim.api.nvim_set_current_win((assert(window.win())))
+
+    vim.api.nvim_feedkeys(vim.keycode("fzzzz<CR>"), "xt", false)
+
+    assert.same({ "" }, lines_of(buf))
   end)
 
   it("keeps the earlier narrowing when a later filter prompt is cancelled", function()

@@ -37,6 +37,17 @@ describe("changeset.cache", function()
       assert.equal("api.ts", unknown[1].path)
     end)
 
+    it("asks again about a file whose entry is not a record of symbols", function()
+      local entries = { ["a.ts"] = 5, ["b.ts"] = vim.NIL, ["c.ts"] = { stamp = "120:9", symbols = 5 } }
+      local files = { file("a.ts"), file("b.ts"), file("c.ts") }
+
+      local known, unknown =
+        cache.fresh(entries, files, stamps({ ["a.ts"] = "120:9", ["b.ts"] = "120:9", ["c.ts"] = "120:9" }))
+
+      assert.same({}, known)
+      assert.equal(3, #unknown)
+    end)
+
     it("asks about a file it has never read", function()
       local known, unknown = cache.fresh({}, { file("api.ts") }, stamps({ ["api.ts"] = "120:9" }))
 
@@ -94,11 +105,52 @@ describe("changeset.cache", function()
 
       assert.same({ "api.ts" }, vim.tbl_keys(cache.load(path)))
     end)
+
+    it("reads back the entries it saved", function()
+      local entries = {
+        ["api.ts"] = { stamp = "120:9", symbols = { { name = "send", lnum = 12 } } },
+        ["db.ts"] = { stamp = "80:3", symbols = {}, comments = { new = { comment = { { 1, 2 } } } } },
+      }
+      cache.encode(entries["api.ts"])
+
+      cache.save(path, entries)
+
+      assert.same(entries, cache.load(path))
+    end)
+
+    it("saves the entry filed in place of another", function()
+      local entries = { ["api.ts"] = { stamp = "120:9", symbols = { { name = "send" } } } }
+      cache.save(path, entries)
+
+      entries["api.ts"] = { stamp = "121:9", symbols = { { name = "receive" } } }
+      cache.save(path, entries)
+
+      assert.same(entries, cache.load(path))
+    end)
+
+    it("encodes an entry once, however often it is saved", function()
+      local entries = { ["api.ts"] = { stamp = "120:9", symbols = { { name = "send" } } } }
+      cache.encode(entries["api.ts"])
+      local real_encode, encoded = vim.json.encode, 0
+      vim.json.encode = function(value, ...)
+        encoded = encoded + (type(value) == "table" and 1 or 0)
+        return real_encode(value, ...)
+      end
+
+      local ok, err = pcall(function()
+        cache.save(path, entries)
+        cache.save(path, entries)
+      end)
+      vim.json.encode = real_encode
+
+      assert(ok, err)
+      assert.equal(0, encoded)
+    end)
   end)
 
   describe("path", function()
     it("names the file for the entry format it holds", function()
-      assert.truthy(vim.endswith(cache.path("/repo"), ".v3.json"))
+      assert.truthy(vim.endswith(cache.path("/repo"), ".v5.json"))
     end)
   end)
 

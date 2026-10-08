@@ -27,7 +27,7 @@ local M = {}
 
 -- Bump when what an entry holds or how it is derived changes: an older entry's stamp still matches, so it
 -- would be read back as it was.
-local FORMAT = 3
+local FORMAT = 5
 
 ---Where the cache for the repo at `root` lives. Under `cache` rather than
 ---`state`: every entry can be read again from a server, so losing the file
@@ -62,7 +62,7 @@ function M.fresh(entries, files, stamp)
   for _, file in ipairs(files) do
     local entry = entries[file.path]
     local now = stamp(file.path)
-    if entry and now and entry.stamp == now then
+    if type(entry) == "table" and type(entry.symbols) == "table" and now and entry.stamp == now then
       known[file.path] = entry.symbols
     else
       unknown[#unknown + 1] = file
@@ -96,18 +96,30 @@ function M.load(file)
   return jsonfile.read(file)
 end
 
+---Each entry's JSON, kept while the entry is: an entry filed is never changed, only replaced.
+---@type table<changeset.CacheEntry, string>
+local encoded = setmetatable({}, { __mode = "k" })
+
+---`entry` as JSON, encoded the first time it is asked for.
+---@param entry changeset.CacheEntry
+---@return string
+function M.encode(entry)
+  encoded[entry] = encoded[entry] or vim.json.encode(entry)
+  return encoded[entry]
+end
+
 ---Overwrite `file` with `entries`, leaving out the `silent` ones. A cache that cannot
 ---be written is not worth interrupting anyone over.
 ---@param file string
 ---@param entries table<string, changeset.CacheEntry>
 function M.save(file, entries)
-  local answered = {}
+  local members = {}
   for path, entry in pairs(entries) do
     if not entry.silent then
-      answered[path] = entry
+      members[#members + 1] = vim.json.encode(path) .. ":" .. M.encode(entry)
     end
   end
-  jsonfile.write(file, answered)
+  jsonfile.write(file, "{" .. table.concat(members, ",") .. "}")
 end
 
 return M

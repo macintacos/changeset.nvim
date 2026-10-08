@@ -185,7 +185,7 @@ end
 
 ---@param scope changeset.Scope
 local function save(scope)
-  if not menu then
+  if not (menu and vim.api.nvim_win_is_valid(menu.win)) then
     return
   end
   local opts = menu.opts
@@ -200,7 +200,7 @@ end
 
 ---Close, putting the tree back to the set that is on disk.
 local function dismiss()
-  if not menu then
+  if not (menu and vim.api.nvim_win_is_valid(menu.win)) then
     return
   end
   local restore, on_change = menu.saved, menu.opts.on_change
@@ -229,6 +229,41 @@ local function set_keymaps(buf)
   end, "Show these keymaps")
 end
 
+---Where the menu docks against `sidebar`, in editor cells.
+---
+---Rather than against the sidebar's own corner, because a float's border is drawn outside the size it is given: only
+---arithmetic that counts it lands the border on the cell next to the sidebar, which is what docks the two together
+---instead of leaving a gap.
+---@param rows changeset.KindRow[]
+---@param footer string
+---@param sidebar integer
+---@return vim.api.keyset.win_config
+local function placement(rows, footer, sidebar)
+  local top, left = unpack(vim.api.nvim_win_get_position(sidebar))
+  -- A drawer starts at the editor's left edge, so the menu stands on top of it instead.
+  local beside = left - 2 >= MIN_WIDTH
+  local width = width_for(rows, footer, beside and left - 2 or vim.api.nvim_win_get_width(sidebar) - 2)
+  local height = math.min(#rows, MAX_HEIGHT)
+  return {
+    relative = "editor",
+    row = beside and top + 1 or math.max(top - height - 2, 0),
+    col = beside and math.max(left - width - 1, 1) or left,
+    width = width,
+    height = height,
+  }
+end
+
+---Dock an open menu against the sidebar again, where the sidebar has moved to.
+function M.relayout()
+  if not (menu and vim.api.nvim_win_is_valid(menu.win)) then
+    return
+  end
+  local config = placement(menu.rows, M._footer(menu.hidden, menu.saved, menu.scope), menu.opts.sidebar)
+  vim.api.nvim_win_set_config(menu.win, config)
+  menu.width = config.width
+  draw()
+end
+
 ---Open the menu against the sidebar.
 ---@param opts changeset.MenuOpts
 function M.open(opts)
@@ -241,37 +276,28 @@ function M.open(opts)
   end
 
   local footer = M._footer(hidden, saved, scope)
-  local top, left = unpack(vim.api.nvim_win_get_position(opts.sidebar))
-  -- A drawer starts at the editor's left edge, so the menu stands on top of it instead.
-  local beside = left - 2 >= MIN_WIDTH
-  local width = width_for(rows, footer, beside and left - 2 or vim.api.nvim_win_get_width(opts.sidebar) - 2)
-  local height = math.min(#rows, MAX_HEIGHT)
+  local place = placement(rows, footer, opts.sidebar)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].modifiable = false
 
-  -- Placed in editor cells rather than against the sidebar's own corner, because a
-  -- float's border is drawn outside the size it is given: only arithmetic that
-  -- counts it lands the border on the cell next to the sidebar, which is what
-  -- docks the two together instead of leaving a gap.
-  local win = vim.api.nvim_open_win(buf, true, {
-    relative = "editor",
-    row = beside and top + 1 or math.max(top - height - 2, 0),
-    col = beside and math.max(left - width - 1, 1) or left,
-    width = width,
-    height = height,
-    style = "minimal",
-    border = "rounded",
-    title = " Symbol kinds ",
-    title_pos = "left",
-    footer = footer,
-    footer_pos = "left",
-  })
+  local win = vim.api.nvim_open_win(
+    buf,
+    true,
+    vim.tbl_extend("force", place, {
+      style = "minimal",
+      border = "rounded",
+      title = " Symbol kinds ",
+      title_pos = "left",
+      footer = footer,
+      footer_pos = "left",
+    })
+  )
   vim.wo[win].cursorline = true
 
   menu = {
     buf = buf,
     win = win,
-    width = width,
+    width = place.width,
     rows = rows,
     hidden = hidden,
     saved = saved,
@@ -280,6 +306,14 @@ function M.open(opts)
   }
   draw()
   set_keymaps(buf)
+  -- Fires: the menu's window closing any way but `M.close`, such as `:q` or `<C-w>c`, which leaves without saving
+  -- as `q` does. `M.close` lets go of `menu` first, so this finds nothing to put back after a save.
+  vim.api.nvim_create_autocmd("WinClosed", {
+    pattern = tostring(win),
+    once = true,
+    desc = "changeset: put back the saved kinds when the kind menu closes unsaved",
+    callback = dismiss,
+  })
 end
 
 return M

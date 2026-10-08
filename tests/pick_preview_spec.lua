@@ -14,26 +14,52 @@ local function side_floats()
   end, vim.api.nvim_list_wins())
 end
 
+---@class pick_preview_spec.Step
+---@field ready (fun(): boolean)? What the step waits for, besides an active picker.
+---@field run fun()
+
 ---Start a picker and run `steps` against it in turn, then stop it.
 ---
----`MiniPick.start` blocks until the picker stops, so each step is a timer the
----picker's key loop runs while it waits for input — spaced out so the previous
----step's keys have been handled by the time the next one looks.
+---`MiniPick.start` blocks until the picker stops, so the steps run from a timer
+---the picker's key loop polls while it waits for input. Each runs once the
+---picker is active and its `ready` holds, or after 5 s so its assertions report
+---what is there; an error stops the picker rather than leaving it to block.
 ---@param opts table Options for `MiniPick.start`.
----@param steps fun()[]
+---@param steps pick_preview_spec.Step[]
 local function drive(opts, steps)
-  local i = 0
-  local function step()
-    i = i + 1
-    if steps[i] then
-      steps[i]()
-      vim.defer_fn(step, 50)
-    else
+  local i, deadline, failure = 1, nil, nil
+  local function poll()
+    local step = steps[i]
+    if not step or failure then
       MiniPick.stop()
+      return
     end
+    deadline = deadline or vim.uv.now() + 5000
+    local ok, ready = pcall(function()
+      return MiniPick.is_picker_active() and (not step.ready or step.ready())
+    end)
+    if (ok and ready) or vim.uv.now() > deadline then
+      local ran, err = pcall(step.run)
+      failure = not ran and err or nil
+      i, deadline = i + 1, nil
+    end
+    vim.defer_fn(poll, 10)
   end
-  vim.defer_fn(step, 50)
+  vim.defer_fn(poll, 50)
   MiniPick.start(opts)
+  assert(not failure, failure)
+end
+
+---The first line the one preview float shows.
+---@return string?
+local function previewed()
+  local floats = side_floats()
+  return floats[1] and vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(floats[1]), 0, 1, false)[1]
+end
+
+---@return boolean
+local function preview_open()
+  return #side_floats() > 0
 end
 
 ---Write a file of numbered lines, e.g. "a1", "a2", …
@@ -95,16 +121,24 @@ describe("changeset.pick_preview", function()
       local a, b = numbered_file(dir, "a", 3), numbered_file(dir, "b", 3)
       local seen = {}
       drive({ source = { items = { a, b } }, window = preview.window() }, {
-        function()
-          local floats = side_floats()
-          seen.count = #floats
-          seen.first = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(floats[1]), 0, 1, false)[1]
-          vim.api.nvim_input("<C-n>")
-        end,
-        function()
-          local floats = side_floats()
-          seen.second = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(floats[1]), 0, 1, false)[1]
-        end,
+        {
+          ready = preview_open,
+          run = function()
+            local floats = side_floats()
+            seen.count = #floats
+            seen.first = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(floats[1]), 0, 1, false)[1]
+            vim.api.nvim_input("<C-n>")
+          end,
+        },
+        {
+          ready = function()
+            return previewed() ~= seen.first
+          end,
+          run = function()
+            local floats = side_floats()
+            seen.second = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(floats[1]), 0, 1, false)[1]
+          end,
+        },
       })
 
       assert.equal(1, seen.count)
@@ -115,9 +149,12 @@ describe("changeset.pick_preview", function()
     it("closes the preview when the picker stops", function()
       local opened
       drive({ source = { items = { numbered_file(dir, "e", 1) } }, window = preview.window() }, {
-        function()
-          opened = #side_floats()
-        end,
+        {
+          ready = preview_open,
+          run = function()
+            opened = #side_floats()
+          end,
+        },
       })
 
       assert.equal(1, opened)
@@ -128,9 +165,12 @@ describe("changeset.pick_preview", function()
       local path = numbered_file(dir, "c", 200)
       local line
       drive({ source = { items = { { text = "c", path = path, lnum = 120 } } }, window = preview.window() }, {
-        function()
-          line = vim.api.nvim_win_get_cursor(side_floats()[1])[1]
-        end,
+        {
+          ready = preview_open,
+          run = function()
+            line = vim.api.nvim_win_get_cursor(side_floats()[1])[1]
+          end,
+        },
       })
 
       assert.equal(120, line)
@@ -139,9 +179,11 @@ describe("changeset.pick_preview", function()
     it("leaves pickers that did not opt in alone", function()
       local count
       drive({ source = { items = { numbered_file(dir, "d", 1) } } }, {
-        function()
-          count = #side_floats()
-        end,
+        {
+          run = function()
+            count = #side_floats()
+          end,
+        },
       })
 
       assert.equal(0, count)
@@ -151,9 +193,11 @@ describe("changeset.pick_preview", function()
       vim.o.columns = preview.MIN_COLUMNS - 1
       local count
       drive({ source = { items = { numbered_file(dir, "e", 1) } }, window = preview.window() }, {
-        function()
-          count = #side_floats()
-        end,
+        {
+          run = function()
+            count = #side_floats()
+          end,
+        },
       })
 
       assert.equal(0, count)

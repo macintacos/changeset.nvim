@@ -5,7 +5,11 @@ local comments = require("changeset.comments")
 ---@param lines string[]
 ---@return string[]
 local function kinds(path, lines)
-  local read = assert(comments.read(table.concat(lines, "\n"), path))
+  local read
+  comments.read(table.concat(lines, "\n"), path, function(found)
+    read = found
+  end)
+  assert(read, "no kinds read before read returned")
   return vim.tbl_map(function(lnum)
     return comments.kind(read, lnum)
   end, vim.fn.range(1, #lines))
@@ -119,6 +123,141 @@ describe("comments", function()
   end)
 
   it("reads nothing for a language with no installed parser", function()
-    assert.is_nil(comments.read("x", "a.unknownext"))
+    local called, found = false, nil ---@type boolean, changeset.LineKinds?
+    comments.read("x", "a.unknownext", function(kinds_read)
+      called, found = true, kinds_read
+    end)
+    assert.is_true(called)
+    assert.is_nil(found)
+  end)
+
+  it("still calls back once when the sliced parse never answers", function()
+    local lines = { "-- a", "local x = 1" }
+    local real = vim.treesitter.get_string_parser
+    vim.treesitter.get_string_parser = function(...)
+      local parser = real(...)
+      local parse = parser.parse
+      parser.parse = function(self, range, on_parse)
+        if on_parse then
+          return nil
+        end
+        return parse(self, range)
+      end
+      return parser
+    end
+    local answers = {}
+    comments.read(table.concat(lines, "\n"), "a.lua", function(found)
+      answers[#answers + 1] = found
+    end)
+    vim.treesitter.get_string_parser = real
+
+    assert.is_true(vim.wait(10000, function()
+      return #answers > 0
+    end, 25))
+    vim.wait(100)
+    assert.equal(1, #answers)
+    assert.same({ "comment", "code" }, {
+      comments.kind(answers[1], 1),
+      comments.kind(answers[1], 2),
+    })
+  end)
+
+  it("ignores a slice that answers after the stalled parse already did", function()
+    local real = vim.treesitter.get_string_parser
+    local late
+    vim.treesitter.get_string_parser = function(...)
+      local parser = real(...)
+      local parse = parser.parse
+      parser.parse = function(self, range, on_parse)
+        if on_parse then
+          late = function()
+            on_parse(nil, parse(self, range))
+          end
+          return nil
+        end
+        return parse(self, range)
+      end
+      return parser
+    end
+    local answers = {}
+    comments.read("-- a\nlocal x = 1", "a.lua", function(found)
+      answers[#answers + 1] = found
+    end)
+    vim.treesitter.get_string_parser = real
+
+    assert.is_true(vim.wait(10000, function()
+      return #answers > 0
+    end, 25))
+    assert(late)()
+    assert.equal(1, #answers)
+  end)
+
+  it("reads nothing when the parser raises in its first slice", function()
+    local real = vim.treesitter.get_string_parser
+    vim.treesitter.get_string_parser = function(...)
+      local parser = real(...)
+      local parse = parser.parse
+      parser.parse = function(self, range, on_parse)
+        if on_parse then
+          error("parser failed")
+        end
+        return parse(self, range)
+      end
+      return parser
+    end
+    local answers = {}
+    comments.read("-- a\nlocal x = 1", "a.lua", function(found)
+      answers[#answers + 1] = { found = found }
+    end)
+    vim.treesitter.get_string_parser = real
+
+    assert.same({ {} }, answers)
+  end)
+
+  describe("a source too large to parse in one slice", function()
+    local lines = {}
+    for i = 1, 20000, 2 do
+      lines[i], lines[i + 1] = "-- note " .. i, "local x" .. i .. " = { " .. i .. ", 'text' }"
+    end
+    local source = table.concat(lines, "\n")
+
+    ---@param found changeset.LineKinds
+    local function assert_alternating(found)
+      for _, lnum in ipairs({ 1, 2, 9999, 10000, 19999, 20000 }) do
+        assert.equal(lnum % 2 == 1 and "comment" or "code", comments.kind(found, lnum))
+      end
+    end
+
+    local redrawtime
+    before_each(function()
+      redrawtime = vim.o.redrawtime
+    end)
+    after_each(function()
+      vim.o.redrawtime = redrawtime
+    end)
+
+    it("calls back after read returns, with every line's kind", function()
+      local found
+      comments.read(source, "big.lua", function(kinds_read)
+        found = kinds_read
+      end)
+      assert.is_nil(found)
+      assert.is_true(vim.wait(10000, function()
+        return found ~= nil
+      end, 1))
+      assert_alternating(found)
+    end)
+
+    it("still reads every line's kind once its parse outlasts 'redrawtime'", function()
+      vim.o.redrawtime = 1
+      local found
+      comments.read(source, "big.lua", function(kinds_read)
+        found = kinds_read
+      end)
+      assert.is_true(vim.wait(10000, function()
+        return found ~= nil
+      end, 1))
+      assert_alternating(found)
+    end)
   end)
 end)

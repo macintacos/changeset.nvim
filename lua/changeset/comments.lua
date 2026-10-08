@@ -69,9 +69,9 @@ end
 
 ---@param source string
 ---@param lang string
+---@param root TSNode
 ---@return TSNode[]
-local function comment_spans(source, lang)
-  local root = vim.treesitter.get_string_parser(source, lang, { injections = { [lang] = "" } }):parse()[1]:root()
+local function comment_spans(source, lang, root)
   local spans = {}
   local query = comment_query(lang)
   if query then
@@ -148,22 +148,95 @@ local function classify(lines, covered)
   return kinds
 end
 
----The kinds of `source`'s lines, or nil when no parser for its language is installed or the parser fails.
+-- Far past any real parse, which 'redrawtime' already ends at 2 s by default.
+local STALLED_PARSE_MS = 3000
+
+---A parse of a text, which a later reader of the same text in the same language can reuse.
+---@class changeset.Parsed
+---@field lang string
+---@field tree TSTree
+
+---Parse `source` in slices across the main loop, calling `on_tree` with its tree: at once when the first slice
+---finishes it, and nil when the parser raises.
+---@param source string
+---@param lang string
+---@param on_tree fun(tree: TSTree?)
+local function parse(source, lang, on_tree)
+  local ok, parser = pcall(vim.treesitter.get_string_parser, source, lang, { injections = { [lang] = "" } })
+  if not ok then
+    return on_tree(nil)
+  end
+  local answered, timer = false, nil
+  local function answer(tree)
+    if answered then
+      return
+    end
+    answered = true
+    if timer then
+      timer:stop()
+      timer:close()
+    end
+    on_tree(tree)
+  end
+  local function parse_whole()
+    local done, whole = pcall(parser.parse, parser)
+    answer(done and whole and whole[1] or nil)
+  end
+  local function finish(err, trees)
+    -- A parse past 'redrawtime' gives up; finishing it whole keeps the answer a synchronous parse gives.
+    if err == "TIMEOUT" then
+      return parse_whole()
+    end
+    answer(trees and trees[1])
+  end
+  -- Only the parse is guarded: `on_tree` raising must reach the caller, not answer twice. So an answer the first
+  -- slice gives waits for the pcall to return.
+  local returned, early = false, nil
+  local started = pcall(parser.parse, parser, nil, function(err, trees)
+    if returned then
+      return finish(err, trees)
+    end
+    early = { err = err, trees = trees }
+  end)
+  returned = true
+  if not started then
+    return answer(nil)
+  end
+  if early then
+    return finish(early.err, early.trees)
+  end
+  -- A slice that raises does so in Neovim's scheduled step, never calling back; this keeps the walk's lane moving.
+  timer = vim.defer_fn(function()
+    timer = nil
+    parse_whole()
+  end, STALLED_PARSE_MS)
+end
+
+---Read the kinds of `source`'s lines, calling back with nil when no parser for its language is installed or the
+---parser fails. Parses in slices, so a large text calls back on a later tick; a small one before `read` returns.
 ---@param source string
 ---@param path string Its name, or failing that `source`'s content, picks the language.
----@return changeset.LineKinds?
-function M.read(source, path)
+---@param on_done fun(kinds: changeset.LineKinds?, parsed: changeset.Parsed?)
+function M.read(source, path, on_done)
   local lines = vim.split(source, "\n", { plain = true })
   local ft = vim.filetype.match({ filename = path, contents = lines })
   local lang = ft and vim.treesitter.language.get_lang(ft)
   if not (lang and vim.treesitter.language.add(lang)) then
-    return nil
+    return on_done(nil)
   end
-  -- A grammar this cannot read keeps today's placement rather than raising into the walk.
-  local ok, kinds = pcall(function()
-    return classify(lines, covered_rows(lines, comment_spans(source, lang)))
+  parse(source, lang, function(tree)
+    if not tree then
+      return on_done(nil)
+    end
+    -- A grammar this cannot read keeps today's placement rather than raising into the walk.
+    local ok, kinds = pcall(function()
+      return classify(lines, covered_rows(lines, comment_spans(source, lang, tree:root())))
+    end)
+    if not ok then
+      return on_done(nil)
+    end
+    on_done(kinds, { lang = lang, tree = tree })
   end)
-  return ok and kinds or nil
 end
 
 ---Whether `lnum` falls in one of `runs`, which ascend and never overlap.

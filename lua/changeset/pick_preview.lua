@@ -90,7 +90,7 @@ local function attach(preview, main)
     vim.api.nvim_win_set_buf(win, buf)
     if item ~= nil then
       preview(buf, item)
-      vim.api.nvim_win_call(win, window._reveal_cursor)
+      vim.api.nvim_win_call(win, window.reveal_cursor)
     end
     -- mini.pick has already redrawn for this key and is blocked in getcharstr,
     -- which does not repaint on its own.

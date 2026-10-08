@@ -1,6 +1,9 @@
----Puts the tree on the sidebar's buffer, through the pure `render`: lines, marks, header and row states.
----The sidebar state's View decides what is on each line; `band_for` builds a row's preview band.
+---Puts the tree on the sidebar's buffer, through the pure `render`: the Comments section over its sections, lines,
+---marks, header and row states. The sidebar state's View decides what is on each line; `band_for` builds a row's
+---preview band.
 
+local comment_store = require("changeset.comment_store")
+local highlights = require("changeset.highlights")
 local icons = require("changeset.icons")
 local render = require("changeset.render")
 local Rows = require("changeset.rows")
@@ -16,14 +19,28 @@ local M = {}
 local ns = vim.api.nvim_create_namespace("changeset")
 -- Separate from `ns` so the tracker can repaint row backgrounds without redrawing the tree.
 local rows_ns = vim.api.nvim_create_namespace("changeset.rows")
+-- The header's totals, the gaps between sections and the hidden-kinds note: redrawn whole, while `ns` is redrawn only
+-- where the lines changed.
+local frame_ns = vim.api.nvim_create_namespace("changeset.frame")
+
+---What the last draw put on the buffer, so the next one replaces only the blocks that changed.
+---@type { buf: integer, blocks: changeset.view.Block[], tick: integer }?
+local previous
+
+---The Comments section as last drawn, kept so a repaint reads no comments from disk.
+---@type changeset.Row?
+local comments_section
 
 ---@param row changeset.Row
 ---@return string glyph, string hl
 local function icon_for(row)
+  if row.comments then
+    return render.COMMENTS_ICON, highlights.REVIEW_COMMENT_HL
+  end
   if row.kind == "section" then
     return icons.get("directory", row.icon)
   end
-  if row.kind == "file" then
+  if row.kind == "file" or row.kind == "comment" then
     return icons.get("file", row.path)
   end
   return icons.get("lsp", row.kind == "symbol" and row.symbol_kind or "Text")
@@ -36,11 +53,11 @@ function M.row_at_cursor()
   if not state then
     return nil
   end
-  local win = window.win()
-  if not win then
+  local lnum = window.cursor()
+  if not lnum then
     return nil
   end
-  return state.view:row(vim.api.nvim_win_get_cursor(win)[1])
+  return state.view:row(lnum)
 end
 
 ---The preview band's contents for `row`.
@@ -49,15 +66,31 @@ end
 ---@return changeset.Band
 function M.band_for(row, jump)
   local glyph, hl = icons.get("file", row.path)
+  local deleted = row.kind == "file" and row.status == "deleted"
   return {
     icon = glyph,
-    icon_hl = render.band_icon(hl),
+    icon_hl = highlights.band_icon(hl),
     path = row.path,
     -- Only a symbol row names its destination. An orphan hunk's own text is the
-    -- changed line, which is not a place and does not read as one.
-    destination = row.kind == "symbol" and row.name or nil,
+    -- changed line, which is not a place and does not read as one. The jump key opens
+    -- nothing on a deleted file, so its band says why instead.
+    destination = deleted and "deleted on this branch" or row.kind == "symbol" and row.name or nil,
     jump = jump,
   }
+end
+
+---The Comments section for `tree`'s repository, from the comments on disk.
+---@param tree changeset.Tree
+---@return changeset.Row?
+local function comments_for(tree)
+  return Rows.comments(comment_store.list(tree.root))
+end
+
+---The tree as the sidebar lays it out: the Comments section, while it lists anything, over `rows`.
+---@param rows changeset.Row[]
+---@return changeset.Row[]
+local function laid_out(rows)
+  return comments_section and { comments_section, unpack(rows) } or rows
 end
 
 ---The sidebar as drawn, for `changeset.position`; errors before the first build.
@@ -65,11 +98,10 @@ end
 function M.view()
   local state = sidebar_state.current()
   assert(state, "changeset: no tree built yet")
-  local win = window.win()
   return {
-    rows = state.rows,
+    rows = laid_out(state.rows),
     visible = state.view:visible(),
-    cursor = win and vim.api.nvim_win_get_cursor(win)[1],
+    cursor = window.cursor(),
     focused = window.is_focused(),
   }
 end
@@ -105,10 +137,11 @@ end
 
 ---@param buf integer
 ---@param lines changeset.Line[] Rendered lines, each carrying its own marks.
-local function apply_marks(buf, lines)
-  for lnum, line in ipairs(lines) do
+---@param first integer 0-based line the first of `lines` is on.
+local function apply_marks(buf, lines, first)
+  for i, line in ipairs(lines) do
     for _, mark in ipairs(line.marks or {}) do
-      vim.api.nvim_buf_set_extmark(buf, ns, lnum - 1, mark.col or 0, {
+      vim.api.nvim_buf_set_extmark(buf, ns, first + i - 1, mark.col or 0, {
         end_col = mark.end_col,
         hl_group = mark.hl,
         virt_text = mark.virt_text,
@@ -129,17 +162,16 @@ local function hidden_note_line(buf, anchor_line, note)
   if note then
     -- A virtual line rather than a row: the cursor cannot reach it, so it needs no
     -- place among the view's rows and no guard in everything that reads a row off a line.
-    vim.api.nvim_buf_set_extmark(buf, ns, anchor_line, 0, {
-      virt_lines = { { { "" } }, { { " " .. note, render.META_HL } } },
+    vim.api.nvim_buf_set_extmark(buf, frame_ns, anchor_line, 0, {
+      virt_lines = { { { "" } }, { { " " .. note, highlights.META_HL } } },
     })
   end
 end
 
 ---What the header says about the branch, as the tree stands.
+---@param state changeset.SidebarState
 ---@return changeset.Summary
-local function summary()
-  local state = sidebar_state.current()
-  assert(state, "changeset: no tree built yet")
+local function summary(state)
   local added, removed, readable, pending = 0, 0, 0, 0
   for _, file in ipairs(state.tree.files) do
     added, removed = added + (file.added or 0), removed + (file.removed or 0)
@@ -172,23 +204,227 @@ function M.reveal_header(win)
   end)
 end
 
+---Whether the totals hang over `buf`'s first line.
+---@param buf integer
+---@return boolean
+local function has_header(buf)
+  return vim.iter(vim.api.nvim_buf_get_extmarks(buf, frame_ns, 0, 0, { details = true })):any(function(mark)
+    return mark[4].virt_lines_above == true
+  end)
+end
+
 ---Put the ref in the winbar and hang the totals above the tree's first line.
 ---@param buf integer
 ---@param win integer
 ---@param width integer
-local function draw_header(buf, win, width)
-  local state = sidebar_state.current()
-  assert(state, "changeset: no tree built yet")
-  local header = summary()
+---@param state changeset.SidebarState
+---@param topfill integer? The header rows showing before the redraw, kept rather than revealed when given.
+local function draw_header(buf, win, width, state, topfill)
+  local header = summary(state)
   vim.wo[win].winbar = render.header(header, width)
   -- Totals before the first diff would claim that nothing changed.
   if state.tree.collected then
-    vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {
+    vim.api.nvim_buf_set_extmark(buf, frame_ns, 0, 0, {
       virt_lines = { render.header_totals(header, width), { { "" } } },
       virt_lines_above = true,
     })
   end
+  if topfill then
+    vim.api.nvim_win_call(win, function()
+      if vim.fn.winsaveview().topline == 1 then
+        vim.fn.winrestview({ topfill = topfill })
+      end
+    end)
+  else
+    M.reveal_header(win)
+  end
+end
+
+---Scroll `win` by the lines its cursor's row moved, so the row keeps its place on screen.
+---@param win integer
+---@param top integer The window's top line before the row moved.
+---@param moved integer Down for positive.
+local function hold_place(win, top, moved)
+  vim.api.nvim_win_call(win, function()
+    vim.fn.winrestview({ topline = math.max(1, top + moved) })
+  end)
   M.reveal_header(win)
+end
+
+---Whether `win`, scrolled to its top with the header's rows showing, shows line `lnum` and the `'scrolloff'` rows
+---below it, which Neovim would otherwise scroll in.
+---@param win integer
+---@param lnum integer
+---@return boolean
+local function in_view_from_top(win, lnum)
+  local height = vim.fn.winheight(win)
+  local so = math.min(vim.wo[win].scrolloff, math.floor((height - 1) / 2))
+  local last = math.min(lnum - 1 + so, vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win)) - 1)
+  return vim.api.nvim_win_text_height(win, { end_row = last }).all <= height
+end
+
+---A string that two marks share only when they draw alike.
+---@param mark changeset.Mark
+---@return string
+local function mark_key(mark)
+  local parts = {
+    mark.col or "",
+    mark.end_col or "",
+    mark.hl or "",
+    mark.pos or "",
+    mark.hl_mode or "",
+    mark.priority or "",
+    mark.virt_lines and vim.inspect(mark.virt_lines) or "",
+  }
+  for _, chunk in ipairs(mark.virt_text or {}) do
+    parts[#parts + 1] = chunk[1] .. "\2" .. (chunk[2] or "")
+  end
+  return table.concat(parts, "\1")
+end
+
+---A string that two blocks share only when they draw the same lines and marks, kept on the block.
+---@param block changeset.view.Block
+---@return string
+local function block_key(block)
+  if not block.key then
+    local parts = {}
+    for _, line in ipairs(block.lines) do
+      parts[#parts + 1] = line.text
+      for _, mark in ipairs(line.marks) do
+        parts[#parts + 1] = mark_key(mark)
+      end
+      parts[#parts + 1] = "\3"
+    end
+    block.key = table.concat(parts, "\4")
+  end
+  return block.key
+end
+
+---@param blocks changeset.view.Block[]
+---@param first integer
+---@param last_index integer
+---@return changeset.Line[]
+local function lines_of(blocks, first, last_index)
+  local out = {}
+  for i = first, last_index do
+    vim.list_extend(out, blocks[i].lines)
+  end
+  return out
+end
+
+---Replace the lines from `first` to `last_line` (0-based, exclusive) with `text`, marked as `lines` are.
+---@param buf integer
+---@param first integer
+---@param last_line integer
+---@param text string[]
+---@param lines changeset.Line[]
+local function replace(buf, first, last_line, text, lines)
+  -- Before the lines go: a replaced line's marks would otherwise slide onto the line after it.
+  vim.api.nvim_buf_clear_namespace(buf, ns, first, last_line)
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_set_lines(buf, first, last_line, false, text)
+  vim.bo[buf].modifiable = false
+  apply_marks(buf, lines, first)
+end
+
+---@param buf integer
+---@param first integer
+---@param last_line integer
+---@param lines changeset.Line[]
+local function replace_lines(buf, first, last_line, lines)
+  replace(
+    buf,
+    first,
+    last_line,
+    vim.tbl_map(function(line)
+      return line.text
+    end, lines),
+    lines
+  )
+end
+
+---Lines before each of `blocks`, and after the last.
+---@param blocks changeset.view.Block[]
+---@return integer[]
+local function offsets(blocks)
+  local out = { 0 }
+  for i, block in ipairs(blocks) do
+    out[i + 1] = out[i] + #block.lines
+  end
+  return out
+end
+
+---Replace the runs of `blocks` that differ from `was`, the blocks on `buf` now.
+---@param buf integer
+---@param was changeset.view.Block[]
+---@param blocks changeset.view.Block[]
+local function replace_changed(buf, was, blocks)
+  -- Each distinct block as one diff line, so `vim.text.diff` finds the runs that changed.
+  local ids, count = {}, 0
+  local function tokens(list)
+    local out = {}
+    for i, block in ipairs(list) do
+      local key = block_key(block)
+      if not ids[key] then
+        count = count + 1
+        ids[key] = tostring(count)
+      end
+      out[i] = ids[key]
+    end
+    return #out > 0 and table.concat(out, "\n") .. "\n" or ""
+  end
+  local hunks = vim.text.diff(tokens(was), tokens(blocks), { result_type = "indices" }) --[[@as integer[][] ]]
+  local was_at = offsets(was)
+  -- Last first, so the lines above each run are where the last draw left them.
+  for i = #hunks, 1, -1 do
+    local old_start, old_count, new_start, new_count = unpack(hunks[i])
+    old_start = old_count == 0 and old_start + 1 or old_start
+    new_start = new_count == 0 and new_start + 1 or new_start
+    replace_lines(
+      buf,
+      was_at[old_start],
+      was_at[old_start + old_count],
+      lines_of(blocks, new_start, new_start + new_count - 1)
+    )
+  end
+end
+
+---Put `blocks` on `buf`, replacing only the runs of blocks that differ from the last draw's.
+---@param buf integer
+---@param blocks changeset.view.Block[]
+local function put(buf, blocks)
+  -- Only while nothing else has changed the buffer since: its lines are then the last draw's.
+  local was = previous
+      and previous.buf == buf
+      and vim.api.nvim_buf_get_changedtick(buf) == previous.tick
+      and previous.blocks
+    or nil
+  local at = offsets(blocks)
+  if not was then
+    replace_lines(buf, 0, -1, lines_of(blocks, 1, #blocks))
+  else
+    replace_changed(buf, was, blocks)
+  end
+  previous = at[#at] > 0 and { buf = buf, blocks = blocks, tick = vim.api.nvim_buf_get_changedtick(buf) } or nil
+end
+
+---Hang the gap between sections under each section's last line.
+---@param buf integer
+---@param blocks changeset.view.Block[]
+local function section_gaps(buf, blocks)
+  local lnum = 0
+  for i, block in ipairs(blocks) do
+    if block.header and i > 1 then
+      vim.api.nvim_buf_set_extmark(
+        buf,
+        frame_ns,
+        lnum - 1,
+        0,
+        { virt_lines = render.SECTION_GAP, priority = render.MARK_PRIORITY }
+      )
+    end
+    lnum = lnum + #block.lines
+  end
 end
 
 ---Draw the sidebar's view of the tree, then its header and row states.
@@ -202,37 +438,54 @@ function M.draw(kinds_key)
   assert(state, "changeset: no tree built yet")
 
   local width = vim.api.nvim_win_get_width(win)
-  local lines, lnum =
-    state.view:show(state.rows, { icon = icon_for, width = width, cursor = vim.api.nvim_win_get_cursor(win)[1] })
+  local cursor, top = vim.api.nvim_win_get_cursor(win)[1], vim.fn.line("w0", win)
+  comments_section = comments_for(state.tree)
+  local tree = laid_out(state.rows)
+  local lines, lnum, blocks = state.view:show(tree, { icon = icon_for, width = width, cursor = cursor })
 
-  local text = vim.tbl_map(function(line)
-    return line.text
-  end, lines)
-  if #text == 0 and state.tree.collected then
-    text = {
+  -- Read before the lines go, which takes the header's filler rows with them.
+  local saved = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+  local topfill = has_header(buf) and saved.topfill or nil
+  -- A filter narrowing every row away leaves the lines empty: the footer names the filter, and the branch did change.
+  if #tree == 0 and state.tree.collected then
+    previous = nil
+    replace(buf, 0, -1, {
       render.empty_message({
         on_default_branch = state.tree.branch == state.tree.default_branch,
         branch = state.tree.branch,
         ref = state.tree.ref,
       }),
-    }
+    }, {})
+  else
+    put(buf, blocks)
   end
-
-  vim.bo[buf].modifiable = true
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, text)
-  vim.bo[buf].modifiable = false
   -- Rows are trimmed to the width; the sentence standing in for them is not.
-  vim.wo[win].wrap = #lines == 0
+  vim.api.nvim_set_option_value("wrap", #lines == 0, { win = win, scope = "local" })
 
-  vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-  apply_marks(buf, lines)
+  vim.api.nvim_buf_clear_namespace(buf, frame_ns, 0, -1)
+  section_gaps(buf, blocks)
   local hiding = view.hiding(view.kind_counts(state.rows), state.view:hidden())
-  hidden_note_line(buf, #text - 1, render.hidden_note(hiding, width - 1, kinds_key))
+  hidden_note_line(buf, vim.api.nvim_buf_line_count(buf) - 1, render.hidden_note(hiding, width - 1, kinds_key))
 
   vim.api.nvim_win_set_cursor(win, { lnum, 0 })
-
-  draw_header(buf, win, width)
+  if lnum == cursor then
+    -- Replacing the run that holds the top line lets Neovim scroll, though nothing above the cursor moved.
+    vim.api.nvim_win_call(win, function()
+      vim.fn.winrestview({ topline = saved.topline, topfill = saved.topfill })
+    end)
+  end
+  -- After the header, whose rows decide whether the cursor's row still fits under the top.
+  draw_header(buf, win, width, state, topfill)
+  if lnum ~= cursor and not (top == 1 and in_view_from_top(win, lnum)) then
+    hold_place(win, top, lnum - cursor)
+  end
   M.paint()
+end
+
+---Forget what was drawn, so the next draw puts every line afresh.
+function M._forget()
+  previous = nil
+  view._forget()
 end
 
 return M

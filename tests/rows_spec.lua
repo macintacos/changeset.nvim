@@ -1,22 +1,25 @@
 local Rows = require("changeset.rows")
+local Symbols = require("changeset.symbols")
 
 local PATH = "src/session.ts"
 
----A flat `changeset.Symbol` as `symbols.flatten` returns it, its body spanning `first..last`.
+local sym = require("support.changes").sym
+
+---A `DocumentSymbol` as a server answers it, its body spanning `first..last`.
 ---@param name string
 ---@param kind string
----@param depth integer
 ---@param first integer
 ---@param last integer
+---@param children table[]?
 ---@return table
-local function sym(name, kind, depth, first, last)
+local function lsp_sym(name, kind, first, last, children)
+  local range = { start = { line = first - 1, character = 0 }, ["end"] = { line = last - 1, character = 0 } }
   return {
     name = name,
-    kind = kind,
-    lnum = first,
-    depth = depth,
-    range_lnum = first,
-    range_end_lnum = last,
+    kind = vim.lsp.protocol.SymbolKind[kind],
+    range = range,
+    selectionRange = range,
+    children = children,
   }
 end
 
@@ -75,6 +78,21 @@ end
 local FILE_ID = "#implementation\0" .. PATH
 
 describe("changeset.rows", function()
+  local real_build = Rows.build
+
+  -- Every case builds twice, so each also checks that the rows reused across builds equal the first ones.
+  before_each(function()
+    Rows.build = function(...)
+      local rows = real_build(...)
+      assert.same(rows, real_build(...))
+      return rows
+    end
+  end)
+
+  after_each(function()
+    Rows.build = real_build
+  end)
+
   describe("build", function()
     it("marks a file done once its symbols have arrived", function()
       local rows = Rows.files(Rows.build({ file(PATH, { hunk(3, 1) }) }, { [PATH] = {} }))
@@ -256,6 +274,20 @@ describe("changeset.rows", function()
         assert.same({ "refresh" }, names(class.children))
       end)
 
+      it("shows a class from a flat SymbolInformation answer as an ancestor of its changed method", function()
+        local function info(name, kind, first, last)
+          local range = { start = { line = first - 1, character = 0 }, ["end"] = { line = last - 1, character = 0 } }
+          return { name = name, kind = kind, location = { uri = "file:///session.ts", range = range } }
+        end
+        local KIND = vim.lsp.protocol.SymbolKind
+        local items = Symbols.flatten({ info("SessionStore", KIND.Class, 3, 20), info("refresh", KIND.Method, 5, 9) })
+
+        local class = Rows.files(Rows.build({ file(PATH, { hunk(7, 1) }) }, { [PATH] = items }))[1].children[1]
+
+        assert.is_true(class.ancestor)
+        assert.same({ "refresh" }, names(class.children))
+      end)
+
       it("describes a changed symbol by its name line, kind and stat", function()
         local method = build_store({ hunk(7, 1, 2) })[1].children[1]
 
@@ -328,6 +360,27 @@ describe("changeset.rows", function()
           assert.equal(case[3], touched)
         end)
       end
+
+      it("gives a method its whole body's stat when its server also lists the method's locals", function()
+        local response = {
+          lsp_sym("SessionStore", "Class", 3, 20, {
+            lsp_sym("sweep", "Method", 5, 16, {
+              lsp_sym("dropped", "Variable", 6, 6),
+              lsp_sym("id", "Variable", 7, 7),
+              lsp_sym("session", "Variable", 8, 8),
+            }),
+          }),
+        }
+        local flat =
+          require("changeset.symbols").flatten(response, require("changeset.kinds").for_filetype("typescript"))
+
+        local class = Rows.files(Rows.build({ file(PATH, { hunk(5, 12) }) }, { [PATH] = flat }))[1].children[1]
+        local sweep = class.children[1]
+
+        assert.same({ "sweep" }, names(class.children))
+        assert.equal(12, sweep.added)
+        assert.same({}, sweep.children)
+      end)
     end)
 
     describe("orphan hunks", function()
@@ -506,6 +559,98 @@ describe("changeset.rows", function()
 
         assert.not_equal(rows[1].id, rows[2].id)
       end)
+    end)
+    describe("across builds", function()
+      local STORE = { sym("SessionStore", "Class", 0, 3, 20), sym("refresh", "Method", 1, 5, 9) }
+      local OTHER = "src/other.ts"
+
+      it("returns the same file rows when built again from the same inputs", function()
+        local files, symbols = { file(PATH, { hunk(7, 1), hunk(24, 1) }) }, { [PATH] = STORE }
+
+        local first = Rows.files(Rows.build(files, symbols))
+        local second = Rows.files(Rows.build(files, symbols))
+
+        assert.equal(first[1], second[1])
+      end)
+
+      it("rebuilds only the file whose symbols were replaced", function()
+        local files = { file(PATH, { hunk(7, 1) }), file(OTHER, { hunk(7, 1) }) }
+        local symbols = { [PATH] = STORE, [OTHER] = STORE }
+        local first = Rows.files(Rows.build(files, symbols))
+
+        symbols[OTHER] = { sym("refresh", "Function", 0, 5, 9) }
+        local second = Rows.files(Rows.build(files, symbols))
+
+        assert.equal(first[1], second[1])
+        assert.not_equal(first[2], second[2])
+        assert.same({ "refresh" }, names(second[2].children))
+      end)
+
+      it("captions orphan hunks again once the file's tick moves", function()
+        local files, symbols = { file(PATH, { hunk(24, 1) }) }, { [PATH] = STORE }
+        local text, tick = "old", 1
+        local lines = {
+          text = function()
+            return text
+          end,
+          tick = function()
+            return tick
+          end,
+        }
+        Rows.build(files, symbols, lines)
+
+        text, tick = "new", 2
+        local group = Rows.files(Rows.build(files, symbols, lines))[1].children[1]
+
+        assert.same({ "L24 new" }, names(group.children))
+      end)
+
+      it("captions orphan hunks once a build reads their text, after one that didn't", function()
+        local files, symbols = { file(PATH, { hunk(24, 1) }) }, { [PATH] = STORE }
+        Rows.build(files, symbols)
+
+        local lines = {
+          text = function()
+            return "read"
+          end,
+        }
+        local group = Rows.files(Rows.build(files, symbols, lines))[1].children[1]
+
+        assert.same({ "L24 read" }, names(group.children))
+      end)
+
+      it("reads two builds from the same inputs as the same rows", function()
+        local files, symbols = { file(PATH, { hunk(7, 1) }), file(OTHER, { hunk(7, 1) }) }, { [PATH] = STORE }
+
+        assert.is_true(Rows.same(Rows.build(files, symbols), Rows.build(files, symbols)))
+      end)
+
+      it("reads a build where one file's symbols arrived as other rows", function()
+        local files, symbols = { file(PATH, { hunk(7, 1) }), file(OTHER, { hunk(7, 1) }) }, { [PATH] = STORE }
+        local first = Rows.build(files, symbols)
+
+        symbols[OTHER] = STORE
+
+        assert.is_false(Rows.same(first, Rows.build(files, symbols)))
+      end)
+
+      it("totals each section afresh from the rows it reuses", function()
+        local files, symbols = { file(PATH, { hunk(7, 1), hunk(24, 2) }) }, { [PATH] = STORE }
+        local fresh = Rows.build(files, symbols)
+
+        assert.same(fresh, Rows.build(files, symbols))
+      end)
+    end)
+  end)
+
+  describe("comments", function()
+    it("lists a range ahead of a line inside it", function()
+      local section = assert(Rows.comments({
+        { path = "a.lua", line = 3, body = "line" },
+        { path = "a.lua", line = 4, start_line = 2, body = "range" },
+      }))
+
+      assert.equal("range", section.children[1].review_comment.body)
     end)
   end)
 
@@ -735,6 +880,129 @@ describe("changeset.rows", function()
 
     it("finds nothing for a file the changeset does not hold", function()
       assert.is_nil(Rows.locate(rows(), "elsewhere.ts", 1))
+    end)
+  end)
+
+  describe("comments", function()
+    ---@param path string
+    ---@param line integer
+    ---@param start_line integer?
+    ---@return changeset.ReviewComment
+    local function review_comment(path, line, start_line)
+      return { path = path, line = line, start_line = start_line, body = path .. ":" .. line .. " body\nmore" }
+    end
+
+    ---@param section changeset.Row
+    ---@return string[]
+    local function listed(section)
+      return vim.tbl_map(function(row)
+        return row.review_comment.body:match("^%S+")
+      end, section.children)
+    end
+
+    it("lists the review comments by path, then line", function()
+      local section =
+        assert(Rows.comments({ review_comment("b.ts", 3), review_comment("a.ts", 9), review_comment("a.ts", 2) }))
+
+      assert.same({ "a.ts:2", "a.ts:9", "b.ts:3" }, listed(section))
+    end)
+
+    it("is nothing when there is nothing to list", function()
+      assert.is_nil(Rows.comments({}))
+    end)
+
+    it("counts what it lists on its header, which carries no stat", function()
+      local section = assert(Rows.comments({ review_comment("a.ts", 9), review_comment("a.ts", 2) }))
+
+      assert.equal("section", section.kind)
+      assert.equal(2, section.comments)
+      assert.is_nil(section.added)
+    end)
+
+    it("counts the drafts among what it lists", function()
+      local draft = review_comment("a.ts", 2)
+      draft.draft = true
+
+      assert.equal(1, assert(Rows.comments({ review_comment("a.ts", 9), draft })).drafts)
+    end)
+
+    it("goes to each listed line", function()
+      local section = assert(Rows.comments({ review_comment("a.ts", 9), review_comment("a.ts", 2) }))
+
+      assert.same({ 2, 9 }, {
+        section.children[1].lnum,
+        section.children[2].lnum,
+      })
+    end)
+
+    it("gives every row its own id, apart from every file section's", function()
+      local section = assert(Rows.comments({ review_comment("a.ts", 2), review_comment("a.ts", 2, 1) }))
+      local distinct = { [section.id] = true }
+      for _, row in ipairs(section.children) do
+        distinct[row.id] = true
+      end
+
+      assert.equal(3, vim.tbl_count(distinct))
+      assert.is_false(vim.list_contains(Rows.section_ids(), section.children[1].id))
+      assert.is_true(vim.list_contains(Rows.section_ids(), section.id))
+    end)
+
+    it("is never where a line of its file is located", function()
+      local rows = Rows.build({ file(PATH, { hunk(5, 1) }) }, { [PATH] = {} })
+      table.insert(rows, 1, (assert(Rows.comments({ review_comment(PATH, 5) }))))
+
+      assert.equal(FILE_ID .. "\0#orphans", Rows.locate(rows, PATH, 5).id)
+      assert.same(
+        { FILE_ID },
+        vim.tbl_map(function(row)
+          return row.id
+        end, Rows.files(rows))
+      )
+    end)
+  end)
+
+  describe("lines", function()
+    ---A row of `kind` with `fields`.
+    ---@param kind string
+    ---@param fields table
+    ---@return changeset.Row
+    local function row(kind, fields)
+      return vim.tbl_extend(
+        "force",
+        { id = "", kind = kind, depth = 1, name = "", path = "a", ancestor = false, children = {} },
+        fields
+      )
+    end
+
+    it("answers the lines a row stands for", function()
+      assert.same({ 7, 7 }, { Rows.lines(row("function", { lnum = 7 })) })
+      assert.same({ 3, 9 }, { Rows.lines(row("orphan", { range = { 3, 9 } })) })
+      assert.same(
+        { 2, 5 },
+        { Rows.lines(row("comment", { review_comment = { path = "a", line = 5, start_line = 2, body = "" } })) }
+      )
+      assert.same({ 5, 5 }, { Rows.lines(row("comment", { review_comment = { path = "a", line = 5, body = "" } })) })
+    end)
+
+    it("answers none for a row standing for the whole file", function()
+      assert.same({}, { Rows.lines(row("comment", { review_comment = { path = "a", body = "" } })) })
+      assert.same({}, { Rows.lines(row("file", { lnum = 1 })) })
+    end)
+  end)
+
+  describe("under", function()
+    it("holds a row whose id extends the ancestor's by a segment, at any depth", function()
+      assert.is_true(Rows.under("a\0b", "a"))
+      assert.is_true(Rows.under("a\0b\0c", "a"))
+    end)
+
+    it("refuses an id that only starts with the ancestor's", function()
+      assert.is_false(Rows.under("ab", "a"))
+      assert.is_false(Rows.under("a\1" .. "2", "a"))
+    end)
+
+    it("refuses the ancestor itself", function()
+      assert.is_false(Rows.under("a", "a"))
     end)
   end)
 

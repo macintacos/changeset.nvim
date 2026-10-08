@@ -1,9 +1,10 @@
 ---PR Review Mode points gitsigns' base at this branch's fork point from the
----default branch, or from its open PR's target branch when that is another
----branch, so the gutter marks everything the branch changed rather than just
+---branch it was created from, else from its open PR's target branch, else from the
+---default branch, so the gutter marks everything the branch changed rather than just
 ---uncommitted work. It measures in the repository of the buffer gitsigns last
----updated, or the one `toggle()` ran in. A stacked branch whose PR gh has not
----named yet starts on the default-branch base and moves once the answer lands.
+---updated, or the one `toggle()` ran in. A stacked branch starts on its parent's base;
+---one with no parent, whose PR gh has not named yet, starts on the default-branch base
+---and moves once the answer lands.
 ---Requiring it registers nothing; once `activate()` has run, it turns itself on
 ---for every branch but the default, `toggle()` turns it off, and each
 ---repository's branch remembers that choice for the session.
@@ -205,13 +206,16 @@ end
 
 ---The repository and branch gitsigns published for `buf`, attached or not.
 ---@param buf integer
----@return string? root nil when gitsigns published nothing for `buf` or it has no branch.
+---@return string? root nil when gitsigns published nothing for `buf` or it is on no branch.
 ---@return string? branch
 local function tracked(buf)
   -- gitsigns publishes the status before it caches the buffer, so this reads the
   -- status. Its `root` is `git_obj.repo.toplevel`, the spelling `owned()` compares.
   local status = vim.b[buf].gitsigns_status_dict
-  if status and status.root and status.head and status.head ~= "" then
+  -- A detached HEAD, such as each commit of a rebase, is no new branch, so what is applied stays. Asked of git's own
+  -- files: gitsigns publishes it as a short hash, which a branch may be named like.
+  local detached = status and status.root and Git.detached(status.root)
+  if status and status.root and status.head and status.head ~= "" and not detached then
     return status.root, status.head
   end
 end

@@ -65,7 +65,7 @@ end
 ---@param base table<string, string[]>
 ---@param change table<string, string[]>
 ---@param cwd string
-local function init_feature_repo(base, change, cwd)
+function M.feature(base, change, cwd)
   M.init_repo("trunk", cwd)
   write_all(base, cwd)
   M.commit("base", cwd)
@@ -76,11 +76,12 @@ end
 
 ---@param count integer
 ---@param changed table<integer, true>? Lines to rewrite.
+---@param word string? What each unchanged line says before its number; "line" by default.
 ---@return string[]
-function M.numbered(count, changed)
+function M.numbered(count, changed, word)
   local lines = {}
   for i = 1, count do
-    lines[i] = (changed or {})[i] and ("changed " .. i) or ("line " .. i)
+    lines[i] = (changed or {})[i] and ("changed " .. i) or ((word or "line") .. " " .. i)
   end
   return lines
 end
@@ -88,14 +89,14 @@ end
 ---A `feature` branch off `trunk` changing the one line of `mod.lua`.
 ---@param cwd string
 function M.feature_one_file(cwd)
-  init_feature_repo({ ["mod.lua"] = { "return 1" } }, { ["mod.lua"] = { "return 2" } }, cwd)
+  M.feature({ ["mod.lua"] = { "return 1" } }, { ["mod.lua"] = { "return 2" } }, cwd)
 end
 
 ---A `feature` branch off `trunk` changing `M.one` in `mod.lua` and the table in
 ---`other.lua`, beside a `plain.lua` it leaves alone.
 ---@param cwd string
 function M.feature_two_files(cwd)
-  init_feature_repo({
+  M.feature({
     ["mod.lua"] = { "local M = {}", "", "function M.one()", "  return 1", "end", "", "return M" },
     ["other.lua"] = { "return { a = 1 }" },
     ["plain.lua"] = { "return 0" },
@@ -110,13 +111,22 @@ end
 ---no server answers, so every hunk is an orphan: `mod.lua` → "Other changes" → L2, L8.
 ---@param cwd string
 function M.feature_numbered(cwd)
-  init_feature_repo({
+  M.feature({
     ["mod.lua"] = M.numbered(10),
     ["other.lua"] = { "local a = 1", "", "return 1" },
     ["plain.lua"] = { "return 0" },
   }, {
     ["mod.lua"] = M.numbered(10, { [2] = true, [8] = true }),
     ["other.lua"] = { "local a = 1", "", "return 2" },
+  }, cwd)
+end
+
+---A `feature` branch off `trunk` adding the 40 lines of `alpha.txt` and a line to `other.lua`.
+---@param cwd string
+function M.feature_alpha(cwd)
+  M.feature({ ["other.lua"] = { "local M = {}", "return M" } }, {
+    ["alpha.txt"] = M.numbered(40, nil, "alpha"),
+    ["other.lua"] = { "local M = {}", "M.x = 1", "return M" },
   }, cwd)
 end
 

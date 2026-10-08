@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Check out the pinned test and docs dependencies"
+#MISE description="Check out the pinned test dependencies"
 
 set -euo pipefail
 

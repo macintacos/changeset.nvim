@@ -8,13 +8,16 @@ describe("changeset.health", function()
     nvim_012 = true,
     git = true,
     gh = true,
+    herdr = true,
     icons = "mini.icons",
     which_key = true,
     mini_pick = "set up",
     gitsigns = true,
+    gitsigns_unified = true,
     symbol_servers = { "lua_ls" },
     parsers = { { lang = "rust", found = true } },
     options = config.get(),
+    unknown_options = {},
   }
 
   ---Level of the first finding, in report order, whose message contains `text`.
@@ -80,6 +83,16 @@ describe("changeset.health", function()
     assert.equal("error", level({ nvim_012 = false }, "Neovim 0.12 or newer is required"))
   end)
 
+  it("reports the running Neovim on one too old for the rest of the check", function()
+    local list = vim.list
+    vim.list = nil
+    local ok, result = pcall(checked_level, "Neovim")
+    vim.list = list
+
+    assert.is_true(ok, tostring(result))
+    assert.truthy(result)
+  end)
+
   it("reports git, and errors without it", function()
     assert.equal("ok", level({}, "`git` found"))
     assert.equal("error", level({ git = false }, "`git` not found"))
@@ -90,10 +103,27 @@ describe("changeset.health", function()
     assert.equal("warn", level({ gh = false }, "`gh` not found"))
   end)
 
+  it("says whether :Changeset submit has herdr agents to paste into", function()
+    assert.equal("ok", level({}, "running inside herdr"))
+    assert.equal("warn", level({ herdr = false }, "not inside a herdr pane"))
+  end)
+
+  it("probes herdr from its workspace variable and executable", function()
+    local saved = vim.env.HERDR_WORKSPACE_ID
+    vim.env.HERDR_WORKSPACE_ID = nil
+    local outside = checked_level("herdr")
+    vim.env.HERDR_WORKSPACE_ID = ""
+    local empty = checked_level("herdr")
+    vim.env.HERDR_WORKSPACE_ID = saved
+    assert.equal("warn", outside)
+    assert.equal("warn", empty)
+  end)
+
   it("reports the icon provider, and warns without one", function()
     assert.equal("ok", level({}, "icons from `mini.icons`"))
     assert.equal("ok", level({ icons = "nvim-web-devicons" }, "icons from `nvim-web-devicons`"))
     assert.equal("warn", level({ icons = false }, "no icon provider"))
+    assert.equal("warn", level({ icons = "installed" }, "`mini.icons` is installed but not set up"))
   end)
 
   it("reports which-key as ok when installed, info when not", function()
@@ -114,6 +144,10 @@ describe("changeset.health", function()
     assert.equal("error", level({ gitsigns = false, options = review }, "`gitsigns` not found"))
   end)
 
+  it("tells a gitsigns too old for the unified diff from a current one", function()
+    assert.equal("info", level({ gitsigns_unified = false }, "`gitsigns` has no unified view"))
+  end)
+
   it("names the language servers that provide symbols", function()
     assert.equal("info", level({ symbol_servers = {} }, "no attached language server"))
     assert.equal("info", level({}, "`textDocument/documentSymbol` from lua_ls"))
@@ -127,6 +161,22 @@ describe("changeset.health", function()
 
   it("shows the options in force", function()
     assert.equal("info", level({}, "min_file_width"))
+  end)
+
+  it("warns about the options setup() didn't know, and leaves them out of those in force", function()
+    config.setup({ keymaps = { next = "]h" } })
+    local ok, calls = pcall(checked)
+    config.setup()
+    assert.is_true(ok, tostring(calls))
+
+    local warned = vim.iter(calls):find(function(call)
+      return call[1] == "warn" and call[2]:find("keymaps.next", 1, true) ~= nil
+    end)
+    assert.not_nil(warned)
+    local dumped = vim.iter(calls):find(function(call)
+      return call[2]:find("min_file_width", 1, true) ~= nil
+    end)
+    assert.falsy(dumped[2]:find("]h", 1, true))
   end)
 
   it("probes each parser the test-symbol marker needs", function()

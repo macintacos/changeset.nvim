@@ -1,9 +1,14 @@
 local changeset = require("changeset")
-changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
+-- The <Plug> maps live in the plugin file, which the spec runner does not load.
+vim.cmd("runtime plugin/changeset.lua")
+-- What `]g` runs: the spec runner starts before startup is done, which maps the default keys.
+local PREVIEW_NEXT = vim.keycode("<Plug>(changeset-preview-next)")
 local window = require("changeset.window")
+local Changes = require("support.changes")
 local Fixture = require("support.git")
 local Cursor = require("support.cursor")
 local Sidebar = require("support.sidebar")
+local Symbols = require("support.symbols")
 
 ---Put the sidebar's cursor on the first line containing `text`. Headless, setting a
 ---cursor fires no `CursorMoved`, so this stands in for the user moving it without a preview.
@@ -76,7 +81,7 @@ describe("changeset sidebar focus", function()
     local parked = vim.api.nvim_win_get_cursor(win)[1]
     vim.cmd.only()
 
-    vim.cmd.normal("]h")
+    vim.cmd.normal(PREVIEW_NEXT)
 
     assert.equal(parked + 1, vim.api.nvim_win_get_cursor(win)[1])
   end)
@@ -100,32 +105,17 @@ describe("changeset sidebar focus", function()
   end)
 
   describe("while symbols are still being read", function()
-    local resolve = require("changeset.resolve")
-    local real_start = resolve.start
+    local source
     ---@type fun(path: string, items: table[]?)
     local answer
 
-    ---A function spanning `first`..`last` of `mod.lua`, as a server would report it.
-    local function symbol(name, first, last)
-      return {
-        name = name,
-        kind = "Function",
-        lnum = first,
-        depth = 0,
-        range_lnum = first,
-        range_end_lnum = last,
-      }
-    end
-
     before_each(function()
-      resolve.start = function(_, _, on_file)
-        answer = on_file
-        return function() end
-      end
+      source = Symbols.install()
+      answer = source.answer
     end)
 
     after_each(function()
-      resolve.start = real_start
+      source.restore()
     end)
 
     it("lands on the file row, then follows you into your symbol once it resolves", function()
@@ -135,7 +125,7 @@ describe("changeset sidebar focus", function()
       Sidebar.await_diff()
       assert.truthy(Sidebar.cursor_line():find("mod.lua", 1, true))
 
-      answer("mod.lua", { symbol("step", 7, 9) })
+      answer("mod.lua", { Changes.sym("step", "Function", 0, 7, 9) })
 
       assert.truthy(Sidebar.cursor_line():find("step", 1, true))
     end)
@@ -167,6 +157,34 @@ describe("changeset sidebar focus", function()
     changeset.close()
 
     assert.is_false(Cursor.hidden())
+  end)
+
+  it("keeps the tree in its window when <C-o> jumps back from the focused sidebar", function()
+    vim.cmd.edit("plain.lua")
+    vim.cmd.edit("mod.lua")
+    changeset.open()
+    Sidebar.settle()
+    local win, tree = assert(window.win()), assert(window.buf())
+    vim.api.nvim_set_current_win(win)
+
+    pcall(vim.cmd.normal, { args = { vim.keycode("<C-o>") }, bang = true })
+
+    assert.equal(tree, vim.api.nvim_win_get_buf(win))
+  end)
+
+  it("opens a new sidebar on toggle() from a window another buffer took from the tree", function()
+    vim.cmd.edit("mod.lua")
+    changeset.open()
+    Sidebar.settle()
+    local win = assert(window.win())
+    vim.api.nvim_set_current_win(win)
+    vim.wo[win].winfixbuf = false
+    vim.cmd.edit("other.lua")
+
+    changeset.toggle()
+
+    assert.is_true(vim.api.nvim_win_is_valid(win))
+    assert.not_equal(win, window.win())
   end)
 
   it("closes the focused sidebar on toggle() and hands focus back", function()

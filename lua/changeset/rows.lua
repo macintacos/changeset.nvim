@@ -1,21 +1,35 @@
----Builds the row tree, and says how far a file's symbols have been read.
+---Builds the row tree, its Comments section included, and says how far a file's symbols have been read.
 
 local comments = require("changeset.comments")
+local review_comment = require("changeset.review_comment")
 local sections = require("changeset.sections")
+local SEP = require("changeset.symbols").SEP
 
 local M = {}
 
--- Must stay equal to `symbols.SEP`: `symbols.fit` trims a chain by splitting it on
--- its own separator, and the chains it is handed are joined with this one.
----@type string
-local SEP = " › "
+---A shallow copy of `t` with `fields` set over it: `vim.tbl_extend("force", t, fields)` without its argument checks,
+---which every redraw pays once per row.
+---@generic T: table
+---@param t T
+---@param fields table
+---@return T
+local function with(t, fields)
+  local out = {}
+  for k, v in pairs(t) do
+    out[k] = v
+  end
+  for k, v in pairs(fields) do
+    out[k] = v
+  end
+  return out
+end
 
 ---A row of the sidebar tree. Sections sit at the top with files under them; symbols, or an orphan group
----holding orphan hunks, nest below.
+---holding orphan hunks, nest below. The Comments section holds comment rows instead of files.
 ---@class changeset.Row
 ---@field id string           Stable identity: `#key` for a section, then `\0`-joined segments. A `chain` row carries its head's.
----@field kind "section"|"file"|"symbol"|"orphans"|"orphan"
----@field depth integer       0 for a section row, 1 for a file row.
+---@field kind "section"|"file"|"symbol"|"orphans"|"orphan"|"comment"
+---@field depth integer       0 for a section row, 1 for a file or comment row.
 ---@field name string         Display text; a compressed chain is joined by " › ".
 ---@field path string         Repo-relative file path; empty on a section row.
 ---@field lnum integer?       1-based jump target; nil when the row is not navigable.
@@ -30,6 +44,9 @@ local SEP = " › "
 ---@field read changeset.ReadStatus? File rows only: how far this file's symbols have been read.
 ---@field files integer?      Section rows only: how many files the section holds, before any filter.
 ---@field icon string?        Section rows only: the directory name its section header's icon is looked up by.
+---@field comments integer?   The Comments section's row only: how many rows it lists, before any filter.
+---@field drafts integer?     The Comments section's row only: how many of those are drafts.
+---@field review_comment changeset.ReviewComment? Comment rows only: the comment the row lists.
 ---@field children changeset.Row[]
 
 ---A line of a file, repo-relative.
@@ -47,6 +64,8 @@ local SEP = " › "
 ---@class changeset.rows.Lines
 ---@field text changeset.LineText? Captions orphan hunks; without it they are named by line range alone.
 ---@field comments table<string, changeset.Comments>? By file path; a file without an entry never gets a Docs copy.
+---@field tick (fun(path: string): integer?)? Moves whenever `text` would read the file at `path` differently: a
+---file's rows are built again only once it, its symbols or its comments move.
 
 ---Which kinds of changed line a unit holds.
 ---@class changeset.rows.Flags
@@ -100,7 +119,7 @@ local function widen(symbols, kinds)
     while first > floor and ABOVE[comments.kind(kinds, first - 1)] do
       first = first - 1
     end
-    out[i] = first == sym.range_lnum and sym or vim.tbl_extend("force", sym, { range_lnum = first })
+    out[i] = first == sym.range_lnum and sym or with(sym, { range_lnum = first })
     widened_at_depth[sym.depth], original_at_depth[sym.depth] = out[i], sym
   end
   return out
@@ -293,7 +312,7 @@ local function split(nodes)
       if own == copy or #children > 0 then
         local overrides = own == copy and { children = children }
           or { children = children, changed = false, added = 0, removed = 0 }
-        table.insert(out[copy], vim.tbl_extend("force", node, overrides))
+        table.insert(out[copy], with(node, overrides))
       end
     end
   end
@@ -339,11 +358,12 @@ local function symbol_rows(nodes, parent)
   local rows, seen = {}, {}
   for _, node in ipairs(nodes) do
     -- Nesting alone cannot separate two siblings of one name, which is what a
-    -- function's overloads are. `#`-prefixed segments are already synthetic ids.
+    -- function's overloads are. The ordinal stays inside the name's segment, so the
+    -- second sibling's id doesn't read as a child of the first's.
     local id = parent.id .. "\0" .. node.sym.name
     seen[id] = (seen[id] or 0) + 1
     local row = {
-      id = seen[id] == 1 and id or ("%s\0#%d"):format(id, seen[id]),
+      id = seen[id] == 1 and id or ("%s\1%d"):format(id, seen[id]),
       kind = "symbol",
       depth = parent.depth + 1,
       name = node.sym.name,
@@ -482,12 +502,17 @@ function M.section_id(key)
   return "#" .. key
 end
 
----Every section row's id, whether or not the section holds a file.
+-- Not a `section_id`: the Comments section classifies no file.
+local COMMENTS_ID = "#comments"
+
+---Every section row's id, the Comments section's included, whether or not the section holds a row.
 ---@return string[]
 function M.section_ids()
-  return vim.tbl_map(function(section)
+  local ids = vim.tbl_map(function(section)
     return M.section_id(section.key)
   end, sections.ORDER)
+  table.insert(ids, 1, COMMENTS_ID)
+  return ids
 end
 
 ---@param section changeset.Section
@@ -583,37 +608,92 @@ function M.read_status(file, symbols_by_path)
   return symbols_by_path[file.path] and "done" or "reading"
 end
 
----File `file` under its path's section, under Tests when its changes reach inline tests, and under Docs when
+---A file row and the section it goes under, with the lines it accounts for.
+---@class changeset.rows.Placed
+---@field section changeset.SectionKey
+---@field row changeset.Row
+---@field stat { added: integer?, removed: integer? }
+
+---What a file's rows were built from, and the rows.
+---@class changeset.rows.Built
+---@field symbols changeset.Symbol[]?
+---@field comments changeset.Comments?
+---@field tick integer?
+---@field captioned boolean
+---@field placed changeset.rows.Placed[]
+
+---Each file's rows from its last build, dropped with the file. Rows are never written once built, so builds share
+---them.
+---@type table<changeset.File, changeset.rows.Built>
+local built = setmetatable({}, { __mode = "k" })
+
+---`file`'s rows under its path's section, under Tests when its changes reach inline tests, and under Docs when
 ---some change only comments: each copy lists only its own symbols and "Other changes", and a copy with neither is
 ---left out. The copies' stats are `shares` of the file's.
 ---@param section_rows table<changeset.SectionKey, changeset.Row>
 ---@param file changeset.File
----@param symbols_by_path table<string, changeset.Symbol[]>
----@param lines changeset.rows.Lines
-local function add_file(section_rows, file, symbols_by_path, lines)
+---@param symbols changeset.Symbol[]?
+---@param comment_lines changeset.Comments?
+---@param line_text changeset.LineText?
+---@return changeset.rows.Placed[]
+local function place_file(section_rows, file, symbols, comment_lines, line_text)
   local key = file.section
-  local section = section_rows[key]
-  local read_status = M.read_status(file, symbols_by_path)
-  if read_status ~= "done" then
-    return append(section, file_row(file, read_status, section), file)
+  if not symbols or M.skips(file) then
+    return {
+      { section = key, row = file_row(file, M.skips(file) and "skipped" or "reading", section_rows[key]), stat = file },
+    }
   end
-  local symbols = symbols_by_path[file.path]
-  local comment_lines = key ~= "docs" and lines.comments and lines.comments[file.path] or nil
   local credited = credit(
     file,
     nest(comment_lines and widen(symbols, comment_lines.new) or symbols, sections.test_rule(file.path)),
     comment_lines
   )
-  local section_for = { kept = section, tests = section_rows.tests, docs = section_rows.docs }
+  local key_for = { kept = key, tests = "tests", docs = "docs" }
   local rows, shown = {}, {}
   for copy, nodes in pairs(split(credited.roots)) do
     local part = { nodes = nodes, orphans = credited.orphans[copy] or {} }
-    rows[copy] = fill(file_row(file, "done", section_for[copy]), part, lines.text)
+    rows[copy] = fill(file_row(file, "done", section_rows[key_for[copy]]), part, line_text)
     shown[copy] = #rows[copy].children > 0 or nil
   end
+  local placed = {}
   for copy, stat in pairs(shares(file, credited, shown)) do
     rows[copy].added, rows[copy].removed = stat.added, stat.removed
-    append(section_for[copy], rows[copy], stat)
+    placed[#placed + 1] = { section = key_for[copy], row = rows[copy], stat = stat }
+  end
+  return placed
+end
+
+---File `file` under its sections, reusing its rows from the last build when it was built from the same inputs.
+---@param section_rows table<changeset.SectionKey, changeset.Row>
+---@param file changeset.File
+---@param symbols_by_path table<string, changeset.Symbol[]>
+---@param lines changeset.rows.Lines
+local function add_file(section_rows, file, symbols_by_path, lines)
+  local symbols = symbols_by_path[file.path]
+  local comment_lines = file.section ~= "docs" and lines.comments and lines.comments[file.path] or nil
+  local tick = lines.tick and lines.tick(file.path)
+  local captioned = lines.text ~= nil
+  local last = built[file]
+  if
+    not (
+      last
+      and last.symbols == symbols
+      and last.comments == comment_lines
+      and last.tick == tick
+      and last.captioned == captioned
+    )
+  then
+    last = {
+      symbols = symbols,
+      comments = comment_lines,
+      tick = tick,
+      captioned = captioned,
+      placed = place_file(section_rows, file, symbols, comment_lines, lines.text),
+    }
+    built[file] = last
+  end
+  for _, placed in ipairs(last.placed) do
+    append(section_rows[placed.section], placed.row, placed.stat)
   end
 end
 
@@ -650,6 +730,97 @@ function M.build(files, symbols_by_path, lines)
     :totable()
 end
 
+---The lines sidebar row `row` stands for: a symbol's line, as `<CR>` opens it, a change's lines, or those of the
+---comment a Comments row lists; none for a file's row or a whole file's comment, which stand for the whole file.
+---@param row changeset.Row
+---@return integer? first
+---@return integer? last
+function M.lines(row)
+  local comment = row.review_comment
+  if comment then
+    return review_comment.first(comment), comment.line
+  end
+  if row.kind == "orphan" then
+    return row.range[1], row.range[2]
+  end
+  if row.kind ~= "file" then
+    return row.lnum, row.lnum
+  end
+end
+
+---Whether two builds' section rows draw alike: the same sections and totals, over the same file rows in order.
+---@param a changeset.Row[] Section rows from `build`.
+---@param b changeset.Row[] Section rows from `build`.
+---@return boolean
+function M.same(a, b)
+  if #a ~= #b then
+    return false
+  end
+  for i, section in ipairs(a) do
+    local other = b[i]
+    if
+      section.id ~= other.id
+      or section.files ~= other.files
+      or section.added ~= other.added
+      or section.removed ~= other.removed
+      or #section.children ~= #other.children
+    then
+      return false
+    end
+    for j, row in ipairs(section.children) do
+      if row ~= other.children[j] then
+        return false
+      end
+    end
+  end
+  return true
+end
+
+---The Comments section: a row per review comment, in `review_comment.before`'s order, then as listed. A row goes
+---to its line.
+---The header counts the rows, and carries no stat: a review comment changes no line.
+---@param review_comments changeset.ReviewComment[]
+---@return changeset.Row? section nil when there is nothing to list.
+function M.comments(review_comments)
+  if #review_comments == 0 then
+    return nil
+  end
+  local arrival, sorted = {}, {}
+  for i, comment in ipairs(review_comments) do
+    arrival[comment], sorted[i] = i, comment
+  end
+  table.sort(sorted, function(a, b)
+    return review_comment.before(a, b) or not review_comment.before(b, a) and arrival[a] < arrival[b]
+  end)
+  return {
+    id = COMMENTS_ID,
+    kind = "section",
+    depth = 0,
+    name = "Comments",
+    path = "",
+    comments = #sorted,
+    drafts = #vim.tbl_filter(function(comment)
+      return comment.draft
+    end, sorted),
+    ancestor = false,
+    children = vim.tbl_map(function(comment)
+      return {
+        id = comment.line
+            and ("%s\0%s:%d-%d"):format(COMMENTS_ID, comment.path, review_comment.first(comment), comment.line)
+          or ("%s\0%s"):format(COMMENTS_ID, comment.path),
+        kind = "comment",
+        depth = 1,
+        name = comment.path,
+        path = comment.path,
+        lnum = comment.line,
+        ancestor = false,
+        review_comment = comment,
+        children = {},
+      }
+    end, sorted),
+  }
+end
+
 ---Follow single-child links down from a symbol row; a row with two children, or none, ends the chain.
 ---@param row changeset.Row
 ---@return changeset.Row deepest
@@ -678,7 +849,7 @@ local UNFOLDS = { section = true, file = true, symbol = true }
 local function unfold(row, deepest, depth, is_open)
   local children = row == deepest and compress_rows(row.children, depth + 1, is_open)
     or { unfold(row.children[1], deepest, depth + 1, is_open) }
-  return vim.tbl_extend("force", row, { depth = depth, children = children })
+  return with(row, { depth = depth, children = children })
 end
 
 ---@param row changeset.Row Section, file or symbol row.
@@ -690,7 +861,7 @@ local function compress_row(row, depth, is_open)
   if #names == 1 or (is_open and is_open(row.id)) then
     return unfold(row, deepest, depth, is_open)
   end
-  return vim.tbl_extend("force", deepest, {
+  return with(deepest, {
     id = row.id,
     tip = deepest.id,
     name = table.concat(names, SEP),
@@ -742,7 +913,7 @@ local function deepest_symbol(row, lnum)
   return inner and deepest_symbol(inner, lnum) or row
 end
 
----The file rows under `build`'s sections, in display order.
+---The file rows under `build`'s sections, in display order; the Comments section holds none.
 ---@param rows changeset.Row[] Section rows.
 ---@return changeset.Row[]
 function M.files(rows)
@@ -752,6 +923,9 @@ function M.files(rows)
       return section.children
     end)
     :flatten()
+    :filter(function(row)
+      return row.kind == "file"
+    end)
     :totable()
 end
 
@@ -804,6 +978,15 @@ function M.locate(rows, path, lnum)
     end
   end
   return best or copies[1]
+end
+
+---Whether the row with `id` sits under the row with `ancestor`, at any depth: a row id extends its parent's by a
+---`\0`-joined segment.
+---@param id string
+---@param ancestor string
+---@return boolean
+function M.under(id, ancestor)
+  return #id > #ancestor and id:byte(#ancestor + 1) == 0 and id:sub(1, #ancestor) == ancestor
 end
 
 ---The row with `id`, at any depth.

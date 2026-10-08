@@ -2,6 +2,7 @@
 
 local Git = require("changeset.git")
 local Paths = require("changeset.paths")
+local buffers = require("changeset.buffers")
 local cache = require("changeset.cache")
 local fork_point = require("changeset.fork_point")
 local resolve = require("changeset.resolve")
@@ -23,6 +24,7 @@ local M = {}
 ---@field base string
 ---@field ref string Ref the fork point was measured against, e.g. "origin/trunk".
 ---@field branch string
+---@field head string? HEAD's commit when the tree was built.
 ---@field default_branch string
 ---@field pr integer? The branch's open PR, while the tree is measured against its target.
 ---@field files changeset.File[]
@@ -87,23 +89,29 @@ end
 ---@param path string Absolute.
 ---@return boolean
 local function unwritten(path)
-  local buf = vim.fn.bufnr(path)
-  return buf ~= -1 and vim.bo[buf].modified
+  -- Buffer names are already absolute and simplified, so the raw name nearly always finds it without normalising each.
+  local buf = vim.iter(vim.api.nvim_list_bufs()):find(function(b)
+    return vim.api.nvim_buf_is_loaded(b) and vim.api.nvim_buf_get_name(b) == path
+  end) or buffers.loaded(path)
+  return buf ~= nil and vim.bo[buf].modified
 end
 
 ---What reading one file's symbols answered.
 ---@class changeset.build.Answer
 ---@field items changeset.Symbol[]? nil when no server answered.
 ---@field comments changeset.Comments?
+---@field timed_out boolean? No server answered in time, which says nothing about whether one will.
 
 ---File what was read about `path` in the symbol cache, while the cache is still `root`'s.
 ---@param root string
 ---@param path string Repo-relative.
 ---@param answer changeset.build.Answer
 ---@param stamp string? The file as it stood when its symbols were asked for.
+---@return changeset.CachedSymbol[]? filed The symbols filed for `path`, which a later refresh's cache hands back as the
+---same table; nil when none were filed.
 local function file_answer(root, path, answer, stamp)
   if not (memo and memo.root == root and stamp) then
-    return
+    return nil
   end
   -- Only an answer that arrived is filed. A server that never attached would
   -- otherwise leave "this file has no symbols" on disk, fresh until the file
@@ -112,13 +120,62 @@ local function file_answer(root, path, answer, stamp)
   local items, dirty = answer.items, unwritten(root .. "/" .. path)
   if items and not dirty then
     memo.entries[path] = { stamp = stamp, symbols = cache.project(items), comments = answer.comments }
+    -- Encoded now, a little per answer, rather than the whole cache at once on the next save.
+    cache.encode(memo.entries[path])
     save_soon()
-  elseif not items then
+    return memo.entries[path].symbols
+  elseif not items and not answer.timed_out then
+    -- An older walk's late silence must not bury an answer about the same file state.
+    local entry = memo.entries[path]
+    if entry and not entry.silent and entry.stamp == stamp then
+      return entry.symbols
+    end
     -- Not asked again on every refresh — each ask waits out the attach timeout
     -- under a "reading symbols" row — only once the file moves or a server
     -- arrives for it.
     memo.entries[path] = { stamp = stamp, symbols = {}, comments = not dirty and answer.comments or nil, silent = true }
+    return memo.entries[path].symbols
   end
+  return nil
+end
+
+local HUNK_FIELDS = { "lnum", "count", "added", "removed", "old_lnum" }
+local FILE_FIELDS = { "path", "oldpath", "status", "section", "added", "removed" }
+
+---Whether `a` and `b` hold the same diff of the same file.
+---@param a changeset.File
+---@param b changeset.File
+---@return boolean
+local function same_file(a, b)
+  local function same(x, y, fields)
+    return vim.iter(fields):all(function(field)
+      return x[field] == y[field]
+    end)
+  end
+  if not (same(a, b, FILE_FIELDS) and #a.hunks == #b.hunks) then
+    return false
+  end
+  for i, hunk in ipairs(a.hunks) do
+    if not same(hunk, b.hunks[i], HUNK_FIELDS) then
+      return false
+    end
+  end
+  return true
+end
+
+---`files`, each one `previous` already holds swapped for that one: rows built for a file are kept by its identity.
+---@param previous changeset.File[]
+---@param files changeset.File[]
+---@return changeset.File[]
+local function keep_identity(previous, files)
+  local by_path = {}
+  for _, file in ipairs(previous) do
+    by_path[file.path] = file
+  end
+  return vim.tbl_map(function(file)
+    local old = by_path[file.path]
+    return old and same_file(old, file) and old or file
+  end, files)
 end
 
 ---Gather the diff, then let symbols fill in behind it.
@@ -145,12 +202,12 @@ function M.refresh()
       announce("failed")
       return vim.notify("Changeset: " .. (err or "git failed"), vim.log.levels.ERROR)
     end
-    tree.files = files
+    tree.files = keep_identity(tree.files, files)
     tree.commits = commits
     tree.collected = true
     local readable = vim.tbl_filter(function(file)
       return not Rows.skips(file)
-    end, files)
+    end, tree.files)
 
     -- Stamped before the request rather than after: a file edited while its
     -- symbols are being read then fails this check next time, instead of
@@ -176,19 +233,24 @@ function M.refresh()
     announce("diff")
 
     local root = tree.root
-    work.cancel = resolve.start({ root = root, base = tree.base }, unknown, function(path, items, comment_lines)
-      -- Filed even once a newer refresh has replaced this one: the stamp predates
-      -- the request, so the answer still describes the file it was read from.
-      file_answer(root, path, { items = items, comments = comment_lines }, stamps[path])
-      if tree and work.request == request then
-        -- A server that answers nothing is "read, with no symbols", which is what
-        -- turns every hunk in an unsupported file into an orphan row. Leaving the key
-        -- absent would instead read as "still reading", forever.
-        tree.symbols[path] = items or {}
-        tree.comments[path] = comment_lines
-        announce("symbols")
+    work.cancel = resolve.start(
+      { root = root, base = tree.base },
+      unknown,
+      function(path, items, comment_lines, timed_out)
+        -- Filed even once a newer refresh has replaced this one: the stamp predates
+        -- the request, so the answer still describes the file it was read from.
+        local filed =
+          file_answer(root, path, { items = items, comments = comment_lines, timed_out = timed_out }, stamps[path])
+        if tree and work.request == request then
+          -- A server that answers nothing is "read, with no symbols", which is what
+          -- turns every hunk in an unsupported file into an orphan row. Leaving the key
+          -- absent would instead read as "still reading", forever.
+          tree.symbols[path] = filed or items or {}
+          tree.comments[path] = comment_lines
+          announce("symbols")
+        end
       end
-    end)
+    )
   end)
 end
 
@@ -202,21 +264,31 @@ local function drop()
   tree = nil
 end
 
----Build the tree for the current buffer's repository, unless it is already built there.
----
----The buffer's repository, not Neovim's directory: with the two different, a base
----measured in the wrong one leaves every later `git diff` on a bad object.
+local place
+
+---Build the tree for the repository at `root`, unless it is already built there.
+---@param root string
 ---@return boolean ready false when the repository has no merge base with its default
----branch, which includes a buffer outside any repository.
-function M.build()
-  local root = Paths.root(0)
-  local branch = Git.lines({ "git", "rev-parse", "--abbrev-ref", "HEAD" }, root)[1] or "HEAD"
-  local point = fork_point.get(root, branch)
+---branch, which includes a `root` outside any repository.
+local function build_at(root)
+  local branch, commit = Git.head(root)
+  branch = branch or "HEAD"
+  return place(root, branch, commit, fork_point.get(root, branch))
+end
+
+---Keep the tree when `point` is the one it was built on, else build one there.
+---@param root string
+---@param branch string
+---@param commit string?
+---@param point changeset.ForkPoint?
+---@return boolean ready false without a fork point.
+place = function(root, branch, commit, point)
   if not point then
     return false
   end
   local base = point.base
   if tree and tree.root == root and tree.base == base and tree.branch == branch then
+    tree.head = commit
     if tree.pr ~= point.pr then
       tree.pr = point.pr
       announce("pr")
@@ -226,6 +298,10 @@ function M.build()
   drop()
 
   if not memo or memo.root ~= root then
+    if memo and save_timer and not save_timer:is_closing() then
+      stop(save_timer)
+      cache.save(cache.path(memo.root), memo.entries)
+    end
     memo = { root = root, entries = cache.load(cache.path(root)) }
   end
 
@@ -234,6 +310,7 @@ function M.build()
     base = base,
     ref = point.ref,
     branch = branch,
+    head = commit,
     default_branch = point.default_branch,
     pr = point.pr,
     files = {},
@@ -245,19 +322,96 @@ function M.build()
   return true
 end
 
--- Fires: gh answering a fork_point lookup, for any repository and branch.
-fork_point.subscribe(function(root, branch, point)
-  if not (tree and tree.root == root and tree.branch == branch and Paths.root(0) == root) then
+---Build the tree for the current buffer's repository, unless it is already built there.
+---
+---The buffer's repository, not Neovim's directory: with the two different, a base
+---measured in the wrong one leaves every later `git diff` on a bad object.
+---@return boolean ready false when the repository has no merge base with its default
+---branch, which includes a buffer outside any repository.
+function M.build()
+  return build_at(Paths.root(0))
+end
+
+---The tree, while it is for the current buffer's repository and HEAD is still on its branch.
+---@return changeset.Tree?
+function M.kept()
+  if not (tree and tree.root == Paths.root(0)) then
+    return nil
+  end
+  if (Git.head(tree.root) or "HEAD") == tree.branch then
+    return tree
+  end
+end
+
+---@type table? The re-measure in flight; a newer one replaces it.
+local remeasuring
+
+---Measure the tree's fork point again without blocking, then do what `build()` would with it: keep the tree on the
+---same one, else rebuild it. Dropped once the tree is replaced or a newer re-measure starts.
+---@param on_no_base fun()? Called when the re-measure finds no fork point, keeping the tree.
+---@param on_kept fun()? Called when the re-measure keeps the tree.
+function M.remeasure(on_no_base, on_kept)
+  local kept = tree
+  if not kept then
     return
   end
-  -- An answer of no PR holds a default point no fresher than the tree's; rebuilding on it would ask gh again.
-  if not point.pr then
+  local request = {}
+  remeasuring = request
+  fork_point.get_async(kept.root, kept.branch, function(point)
+    if remeasuring ~= request or tree ~= kept then
+      return
+    end
+    remeasuring = nil
+    local branch, commit = Git.head(kept.root)
+    local ready
+    if (branch or "HEAD") ~= kept.branch then
+      ready = build_at(kept.root)
+    else
+      ready = place(kept.root, kept.branch, commit, point)
+    end
+    if not ready and on_no_base then
+      on_no_base()
+    elseif ready and tree == kept and on_kept then
+      on_kept()
+    end
+  end)
+end
+
+---Rebuild the tree when its repository's HEAD has moved or landed on another branch, else refresh it.
+function M.update()
+  if not tree then
+    return
+  end
+  local branch, commit = Git.head(tree.root)
+  -- A detached HEAD (a stopped rebase, a bisect) is not another branch.
+  if not branch or branch == "HEAD" or (branch == tree.branch and commit == tree.head) then
+    return M.refresh()
+  end
+  if branch == tree.branch then
+    -- A moved HEAD can come with a PR retargeted, merged or closed.
+    fork_point.recheck(tree.root, branch)
+    -- A refresh before the re-measure lands would diff a rebased branch against its old fork point.
+    return M.remeasure(nil, M.refresh)
+  end
+  local kept = tree
+  if not build_at(tree.root) or tree == kept then
+    M.refresh()
+  end
+end
+
+-- Fires: gh answering a fork_point lookup, for any repository and branch.
+fork_point.subscribe(function(root, branch, point)
+  if not (tree and tree.root == root and tree.branch == branch) then
+    return
+  end
+  -- An answer that leaves no PR holds a point no fresher than the tree's, unless the tree's PR is gone.
+  if not point.pr and not tree.pr then
     return
   end
   if tree.base == point.base and tree.pr == point.pr then
     return
   end
-  M.build()
+  build_at(root)
 end)
 
 ---The tree the last build() made; nil before the first.
@@ -283,7 +437,7 @@ vim.api.nvim_create_autocmd("LspAttach", {
     if not (tree and memo and client and client:supports_method("textDocument/documentSymbol")) then
       return
     end
-    local path = vim.fs.relpath(tree.root, vim.fs.normalize(vim.api.nvim_buf_get_name(args.buf)))
+    local path = Paths.relative(tree.root, vim.api.nvim_buf_get_name(args.buf))
     local entry = path and memo.entries[path]
     if path and entry and entry.silent then
       memo.entries[path] = nil
@@ -298,8 +452,9 @@ local function refresh_soon()
   end
   stop(work.timer)
   work.timer = vim.defer_fn(function()
-    if tree then
-      M.refresh()
+    -- A removed worktree would otherwise raise on every write and focus change; `R` still reports it.
+    if tree and vim.uv.fs_stat(tree.root) then
+      M.update()
     end
   end, REFRESH_DEBOUNCE_MS)
 end

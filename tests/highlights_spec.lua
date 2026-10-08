@@ -1,7 +1,10 @@
 local changeset = require("changeset")
 local build = require("changeset.build")
-changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
-local render = require("changeset.render")
+-- The <Plug> maps live in the plugin file, which the spec runner does not load.
+vim.cmd("runtime plugin/changeset.lua")
+-- What `]g` runs: the spec runner starts before startup is done, which maps the default keys.
+local PREVIEW_NEXT = vim.keycode("<Plug>(changeset-preview-next)")
+local highlights = require("changeset.highlights")
 local window = require("changeset.window")
 local Fixture = require("support.git")
 local Sidebar = require("support.sidebar")
@@ -33,7 +36,7 @@ describe("changeset row highlights", function()
     vim.api.nvim_win_set_cursor(0, { 8, 0 })
     open_sidebar()
 
-    assert.truthy(Sidebar.line_with(render.HERE_HL):find("Other changes", 1, true))
+    assert.truthy(Sidebar.line_with(highlights.HERE_HL):find("Other changes", 1, true))
   end)
 
   it("marks the file for where you are on a line in no hunk", function()
@@ -45,7 +48,7 @@ describe("changeset row highlights", function()
     vim.api.nvim_win_set_cursor(0, { 5, 0 })
     vim.api.nvim_exec_autocmds("CursorMoved", {})
 
-    assert.truthy(Sidebar.line_with(render.HERE_HL):find("mod.lua", 1, true))
+    assert.truthy(Sidebar.line_with(highlights.HERE_HL):find("mod.lua", 1, true))
   end)
 
   it("marks a folded section's header for where you are", function()
@@ -58,7 +61,7 @@ describe("changeset row highlights", function()
 
     vim.cmd.wincmd("p")
 
-    assert.truthy(Sidebar.line_with(render.HERE_HL):find("Implementation", 1, true))
+    assert.truthy(Sidebar.line_with(highlights.HERE_HL):find("Implementation", 1, true))
   end)
 
   it("selects the row under the sidebar's cursor while the sidebar has focus", function()
@@ -67,7 +70,7 @@ describe("changeset row highlights", function()
 
     Sidebar.cursor_to("other.lua")
 
-    assert.truthy(Sidebar.line_with(render.SELECTED_HL):find("other.lua", 1, true))
+    assert.truthy(Sidebar.line_with(highlights.SELECTED_HL):find("other.lua", 1, true))
   end)
 
   it("drops the selected row once focus leaves the sidebar", function()
@@ -77,7 +80,7 @@ describe("changeset row highlights", function()
 
     vim.cmd.wincmd("p")
 
-    assert.is_nil(Sidebar.line_with(render.SELECTED_HL))
+    assert.is_nil(Sidebar.line_with(highlights.SELECTED_HL))
   end)
 
   it("marks only the selection on the row where you also are", function()
@@ -87,8 +90,8 @@ describe("changeset row highlights", function()
 
     changeset.toggle()
 
-    assert.truthy(Sidebar.line_with(render.SELECTED_HL):find("Other changes", 1, true))
-    assert.is_nil(Sidebar.line_with(render.HERE_HL))
+    assert.truthy(Sidebar.line_with(highlights.SELECTED_HL):find("Other changes", 1, true))
+    assert.is_nil(Sidebar.line_with(highlights.HERE_HL))
   end)
 
   it("marks the row opened with <CR>", function()
@@ -98,7 +101,7 @@ describe("changeset row highlights", function()
 
     vim.cmd.normal(vim.keycode("<CR>"))
 
-    assert.truthy(Sidebar.line_with(render.PICKED_HL):find("L8", 1, true))
+    assert.truthy(Sidebar.line_with(highlights.PICKED_HL):find("L8", 1, true))
   end)
 
   it("keeps the row opened with <CR> marked through a jump to another changed file", function()
@@ -109,7 +112,7 @@ describe("changeset row highlights", function()
 
     vim.cmd.edit("other.lua")
 
-    assert.truthy(Sidebar.line_with(render.PICKED_HL):find("L8", 1, true))
+    assert.truthy(Sidebar.line_with(highlights.PICKED_HL):find("L8", 1, true))
   end)
 
   it("marks the row a preview showed once the cursor moves into it", function()
@@ -119,7 +122,7 @@ describe("changeset row highlights", function()
 
     vim.cmd.wincmd("p")
 
-    assert.truthy(Sidebar.line_with(render.PICKED_HL):find("L8", 1, true))
+    assert.truthy(Sidebar.line_with(highlights.PICKED_HL):find("L8", 1, true))
   end)
 
   it("marks only where you are on the row you last opened", function()
@@ -129,8 +132,8 @@ describe("changeset row highlights", function()
 
     vim.cmd.normal(vim.keycode("<CR>"))
 
-    assert.truthy(Sidebar.line_with(render.HERE_HL):find("Other changes", 1, true))
-    assert.is_nil(Sidebar.line_with(render.PICKED_HL))
+    assert.truthy(Sidebar.line_with(highlights.HERE_HL):find("Other changes", 1, true))
+    assert.is_nil(Sidebar.line_with(highlights.PICKED_HL))
   end)
 
   it("marks only the selection on the row you last opened", function()
@@ -141,8 +144,8 @@ describe("changeset row highlights", function()
 
     Sidebar.cursor_to("L8")
 
-    assert.truthy(Sidebar.line_with(render.SELECTED_HL):find("L8", 1, true))
-    assert.is_nil(Sidebar.line_with(render.PICKED_HL))
+    assert.truthy(Sidebar.line_with(highlights.SELECTED_HL):find("L8", 1, true))
+    assert.is_nil(Sidebar.line_with(highlights.PICKED_HL))
   end)
 
   it("re-resolves the row you last opened from its line when a rebuild drops it", function()
@@ -159,7 +162,7 @@ describe("changeset row highlights", function()
       return not Sidebar.text():find("L8", 1, true)
     end, 25)
 
-    assert.truthy(Sidebar.line_with(render.PICKED_HL):find("mod.lua", 1, true))
+    assert.truthy(Sidebar.line_with(highlights.PICKED_HL):find("mod.lua", 1, true))
   end)
 
   it("clears where you are in a file outside the changeset", function()
@@ -170,7 +173,7 @@ describe("changeset row highlights", function()
 
     vim.cmd.edit("plain.lua")
 
-    assert.is_nil(Sidebar.line_with(render.HERE_HL))
+    assert.is_nil(Sidebar.line_with(highlights.HERE_HL))
   end)
 
   it("leaves where you are alone while the sidebar previews another file", function()
@@ -181,13 +184,13 @@ describe("changeset row highlights", function()
     vim.api.nvim_set_current_win(win)
 
     for _ = 1, 4 do
-      vim.cmd.normal("]h")
+      vim.cmd.normal(PREVIEW_NEXT)
     end
     -- The main loop's, which `:normal` does not fire.
     vim.api.nvim_exec_autocmds("CursorMoved", { buffer = window.buf() })
 
     assert.truthy(vim.api.nvim_get_current_line():find("other.lua", 1, true))
-    assert.truthy(Sidebar.line_with(render.HERE_HL):find("mod.lua", 1, true))
+    assert.truthy(Sidebar.line_with(highlights.HERE_HL):find("mod.lua", 1, true))
   end)
 
   it("keeps tracking where you are while the sidebar is closed", function()
@@ -207,16 +210,23 @@ describe("changeset row highlights", function()
     assert.same({ path = "other.lua", lnum = 1 }, recorded_here())
   end)
 
-  it("does not count a deleted file's notice as being in that file", function()
+  it("does not count a deleted file's preview as being in that file", function()
     Fixture.git({ "rm", "-q", "other.lua" }, tmp)
     Fixture.commit("drop other", tmp)
     vim.cmd.edit("mod.lua")
     vim.api.nvim_win_set_cursor(0, { 5, 0 })
     open_sidebar()
     Sidebar.cursor_to("other.lua")
+    local target = vim.fn.win_getid(vim.fn.winnr("#"))
+    assert(
+      vim.wait(2000, function()
+        return vim.bo[vim.api.nvim_win_get_buf(target)].buftype == "nofile"
+      end, 10),
+      "the deleted file's preview never landed"
+    )
 
     vim.cmd.wincmd("p")
 
-    assert.is_nil(Sidebar.line_with(render.HERE_HL))
+    assert.is_nil(Sidebar.line_with(highlights.HERE_HL))
   end)
 end)

@@ -1,5 +1,6 @@
 local support = require("support.git")
 local review = require("support.pr_review")
+local Notify = require("support.notify")
 
 local await, await_cached, edit, revision = review.await, review.await_cached, review.edit, review.revision
 
@@ -163,20 +164,17 @@ describe("PR Review Mode", function()
     vim.api.nvim_set_current_buf(theirs[1])
     assert.is_true(review.settle())
     local moves = review.moves_to[their_base]
-    local notices, notify = {}, vim.notify
-    vim.notify = function(msg)
-      notices[#notices + 1] = msg
-    end
+    local notes, restore = Notify.capture()
 
     local ok, err = pcall(function()
       require("changeset.review").toggle()
       assert.is_true(await(theirs, nil, 5000))
       assert.is_true(review.settle())
     end)
-    vim.notify = notify
+    restore()
 
     assert(ok, err)
     assert.are.equal(moves, review.moves_to[their_base])
-    assert.are.same({ "PR Review Mode: off" }, notices)
+    assert.are.same({ "PR Review Mode: off" }, Notify.messages(notes))
   end)
 end)

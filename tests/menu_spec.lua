@@ -1,4 +1,5 @@
 local menu = require("changeset.menu")
+local Notify = require("support.notify")
 
 local ROOT = "/fixture/repo"
 local BRANCH = "feature"
@@ -77,7 +78,7 @@ describe("changeset.menu", function()
   end)
 
   describe("mappings", function()
-    local tmp, preferences_file, sidebar, sidebar_buf, reported_hidden, notify, notices
+    local tmp, preferences_file, sidebar, sidebar_buf, reported_hidden, restore_notify, notices
 
     local function mapping_callback(lhs)
       local mapping = vim.fn.maparg(lhs, "n", false, true)
@@ -114,11 +115,7 @@ describe("changeset.menu", function()
     end
 
     before_each(function()
-      notices = {}
-      notify = vim.notify
-      vim.notify = function(msg)
-        notices[#notices + 1] = msg
-      end
+      notices, restore_notify = Notify.capture()
       tmp = vim.fn.tempname()
       vim.fn.mkdir(tmp, "p")
       preferences_file = tmp .. "/filters.json"
@@ -136,7 +133,7 @@ describe("changeset.menu", function()
     end)
 
     after_each(function()
-      vim.notify = notify
+      restore_notify()
       menu.close()
       if sidebar and vim.api.nvim_win_is_valid(sidebar) then
         vim.api.nvim_win_close(sidebar, true)
@@ -207,9 +204,9 @@ describe("changeset.menu", function()
       mapping_callback("r")()
 
       assert.equal(1, #notices)
-      assert.truthy(notices[1]:find("repo", 1, true))
-      assert.is_nil(notices[1]:find("fixture", 1, true))
-      assert.is_nil(notices[1]:find(BRANCH, 1, true))
+      assert.truthy(notices[1].msg:find("repo", 1, true))
+      assert.is_nil(notices[1].msg:find("fixture", 1, true))
+      assert.is_nil(notices[1].msg:find(BRANCH, 1, true))
     end)
 
     it("confirms that every kind is showing after saving with nothing hidden", function()
@@ -218,18 +215,22 @@ describe("changeset.menu", function()
       mapping_callback("<CR>")()
 
       assert.equal(1, #notices)
-      assert.truthy(notices[1]:find("every kind", 1, true))
+      assert.truthy(notices[1].msg:find("every kind", 1, true))
     end)
 
-    for _, lhs in ipairs({ "q", "<Esc>" }) do
-      it(("restores the saved set and leaves the file unchanged on %s"):format(lhs), function()
+    for _, how in ipairs({ "q", "<Esc>", ":close", ":quit" }) do
+      it(("restores the saved set and leaves the file unchanged on %s"):format(how), function()
         open_menu({ global = { "Variable" } }, { counts = { Variable = 31 }, hidden = { Variable = true } })
         local before = read_bytes(preferences_file)
 
         mapping_callback("x")()
         assert.same({}, reported_hidden)
 
-        mapping_callback(lhs)()
+        if vim.startswith(how, ":") then
+          vim.cmd(how:sub(2))
+        else
+          mapping_callback(how)()
+        end
 
         assert.same({ Variable = true }, reported_hidden)
         assert.equal(before, read_bytes(preferences_file))
@@ -256,6 +257,20 @@ describe("changeset.menu", function()
 
       local config = vim.api.nvim_win_get_config(menu_win)
       -- Two border rows: the menu's bottom one lands on the row just above the sidebar.
+      assert.equal(16, config.row + vim.api.nvim_win_get_height(menu_win) + 2)
+      assert.equal(0, config.col)
+    end)
+
+    it("docks again against a sidebar that moved", function()
+      local _, menu_win = open_menu({}, { counts = { Variable = 31 } })
+      vim.api.nvim_win_set_config(
+        sidebar,
+        { relative = "editor", row = 16, col = 0, width = 60, height = 4, border = "none" }
+      )
+
+      menu.relayout()
+
+      local config = vim.api.nvim_win_get_config(menu_win)
       assert.equal(16, config.row + vim.api.nvim_win_get_height(menu_win) + 2)
       assert.equal(0, config.col)
     end)

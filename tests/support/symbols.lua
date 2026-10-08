@@ -8,7 +8,7 @@ local M = {}
 ---@field answer fun(path: string, items: changeset.Symbol[]?, comments: changeset.Comments?) Answers this ask only.
 
 ---Replace `resolve.start` with a source that holds every ask for the spec to answer.
----@return { asks: support.symbols.Ask[], restore: fun() }
+---@return { asks: support.symbols.Ask[], answer: fun(path: string, items: changeset.Symbol[]?, comments: changeset.Comments?), restore: fun() }
 function M.install()
   local real_start = resolve.start
   local asks = {}
@@ -23,6 +23,10 @@ function M.install()
   end
   return {
     asks = asks,
+    ---Answers the latest ask.
+    answer = function(path, items, comments)
+      asks[#asks].answer(path, items, comments)
+    end,
     restore = function()
       resolve.start = real_start
     end,

@@ -1,4 +1,4 @@
----Project-root lookup, and the clipboard copy behind the sidebar's `y`.
+---Project-root lookup, a buffer's path in it, and the clipboard copy behind the sidebar's `y`.
 local M = {}
 
 ---Project root for `buf` — git root via `vim.fs.root`, falling back to cwd.
@@ -9,33 +9,32 @@ function M.root(buf)
   return vim.fs.normalize(git or assert(vim.uv.cwd()))
 end
 
----Set the `+` register and notify. `content` may be a string or list of strings.
----@param content string|string[]|nil
+---The path of the buffer named `name` relative to `root`, nil for an unnamed buffer or one outside `root`.
+---@param root string
+---@param name string The buffer's name.
+---@return string?
+function M.relative(root, name)
+  -- relpath prefixes the cwd to a relative name, and makes "" ".".
+  return name ~= "" and vim.fs.relpath(root, vim.fs.normalize(name)) or nil
+end
+
+---Puts `text` on the clipboard, or in the unnamed register when Neovim has no clipboard provider.
+---@param text string
+---@return string where "", or where the text went instead of the clipboard, for the end of a message.
+function M.put(text)
+  if vim.fn.has("clipboard") == 1 then
+    vim.fn.setreg("+", text)
+    return ""
+  end
+  vim.fn.setreg('"', text)
+  return ' in the " register, with no clipboard provider'
+end
+
+---Put `text` on the clipboard, as `put` does, and notify.
+---@param text string
 ---@param label string Short description used in the notification.
-function M.copy(content, label)
-  local text, count
-  if type(content) == "table" then
-    local filtered = {}
-    for _, s in ipairs(content) do
-      if s and s ~= "" then
-        table.insert(filtered, s)
-      end
-    end
-    text = table.concat(filtered, "\n")
-    count = #filtered
-  else
-    text = content
-    count = (content and content ~= "") and 1 or 0
-  end
-
-  if count == 0 then
-    vim.notify("Nothing to copy", vim.log.levels.WARN)
-    return
-  end
-
-  vim.fn.setreg("+", text)
-  local suffix = count > 1 and (" (%d)"):format(count) or ""
-  vim.notify(("Copied %s%s"):format(label, suffix))
+function M.copy(text, label)
+  vim.notify(("Copied %s%s"):format(label, M.put(text)))
 end
 
 return M

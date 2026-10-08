@@ -30,6 +30,19 @@ describe("PR Review Mode", function()
     assert.is_true(await(bufs, review.merge_base(dir), 10000))
   end)
 
+  it("moves attached buffers to the merge base after a switch to a branch named in hex digits", function()
+    local files = { "a.txt", "b.txt" }
+    review.fixture(dir, "20261008", files)
+    support.git({ "switch", "-q", "main" }, dir)
+    vim.fn.chdir(dir)
+    local bufs = edit(files)
+    assert.is_true(await_cached(bufs))
+
+    support.git({ "switch", "-q", "20261008" }, dir)
+
+    assert.is_true(await(bufs, review.merge_base(dir), 10000))
+  end)
+
   it("moves buffers back to the index after an external switch to the default branch", function()
     local files = { "a.txt", "b.txt" }
     review.fixture(dir, "left", files)
@@ -40,6 +53,33 @@ describe("PR Review Mode", function()
     support.git({ "switch", "-q", "main" }, dir)
 
     assert.is_true(await(bufs, nil, 10000))
+  end)
+
+  it("keeps what is applied, asking nothing, while HEAD is detached", function()
+    local fork_point = require("changeset.fork_point")
+    local files = { "a.txt" }
+    review.fixture(dir, "picking", files)
+    vim.fn.chdir(dir)
+    local bufs = edit(files)
+    local base = review.merge_base(dir)
+    assert.is_true(await(bufs, base, 10000))
+    local get, asked = fork_point.get, {}
+    fork_point.get = function(root, branch)
+      asked[#asked + 1] = branch
+      return get(root, branch)
+    end
+
+    support.git({ "switch", "-q", "--detach" }, dir)
+    local detached = vim.wait(10000, function()
+      local status = vim.b[bufs[1]].gitsigns_status_dict
+      return status ~= nil and status.head ~= "picking"
+    end, 25)
+    settle()
+    fork_point.get = get
+
+    assert.is_true(detached, "gitsigns never saw HEAD detach")
+    assert.same({}, asked)
+    assert.is_true(await(bufs, base, 1000))
   end)
 
   it("keeps a lone buffer on the merge base after an external branch switch", function()

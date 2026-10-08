@@ -15,6 +15,13 @@ vim.env.PATH = bin .. ":" .. vim.env.PATH
 
 local M = {}
 
+---A `gh pr view --json` body for an open PR, with `fields` merged over it.
+---@param fields table<string, any>
+---@return string
+function M.pr_view(fields)
+  return vim.json.encode(vim.tbl_extend("force", { state = "OPEN", number = 1 }, fields))
+end
+
 ---Run `fn(...)` with only git on PATH, as if gh were not installed. PATH comes back even when `fn` errors.
 ---@generic T
 ---@param fn fun(...): T

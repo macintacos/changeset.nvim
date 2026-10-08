@@ -59,7 +59,7 @@ end
 ---@param root string
 local function prune(data, root)
   local repo = data.repos[root]
-  if vim.tbl_isempty(repo.branches or {}) then
+  if vim.tbl_isempty(object(repo.branches)) then
     repo.branches = nil
   end
   if vim.tbl_isempty(repo) then
@@ -106,14 +106,14 @@ end
 function M.apply(data, scope, root, branch, hidden)
   local out = vim.deepcopy(data)
   out.repos = object(out.repos)
-  out.repos[root] = out.repos[root] or {}
+  out.repos[root] = object(out.repos[root])
   local repo = out.repos[root]
 
   if scope == "branch" then
-    repo.branches = repo.branches or {}
+    repo.branches = object(repo.branches)
     repo.branches[branch] = as_list(hidden)
   else
-    if repo.branches then
+    if type(repo.branches) == "table" then
       repo.branches[branch] = nil
     end
     if scope == "repo" then

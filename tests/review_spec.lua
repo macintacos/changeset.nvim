@@ -1,19 +1,23 @@
+local gh = require("support.gh")
 local support = require("support.git")
 local review = require("support.pr_review")
+local Notify = require("support.notify")
 local toggle = require("changeset.review").toggle
 
 local await, edit, revision, settle = review.await, review.edit, review.revision, review.settle
 
 describe("PR Review Mode", function()
-  local dir, cwd, notify, change_base
+  local dir, cwd, restore_notify, change_base
   ---@type { msg: string, level: integer? }[]
   local notices
 
   ---A repo with `a.txt` changed on `parent`, then again on `child` cut from it.
   ---@param child string
-  local function stack(child)
+  ---@param source string? What `child`'s reflog says it was created from: parent's tip commit, which names no
+  ---parent, when absent.
+  local function stack(child, source)
     review.fixture(dir, "parent", { "a.txt" })
-    support.git({ "switch", "-q", "-c", child }, dir)
+    support.git({ "switch", "-q", "-c", child, source or support.git({ "rev-parse", "HEAD" }, dir) }, dir)
     vim.fn.writefile({ "one", "two", "three" }, dir .. "/a.txt")
     support.commit("child change", dir)
   end
@@ -21,11 +25,7 @@ describe("PR Review Mode", function()
   before_each(function()
     cwd = vim.fn.getcwd()
     dir = review.repo()
-    notices = {}
-    notify = vim.notify
-    vim.notify = function(msg, level)
-      notices[#notices + 1] = { msg = msg, level = level }
-    end
+    notices, restore_notify = Notify.capture()
     change_base = require("gitsigns").change_base
   end)
 
@@ -33,7 +33,7 @@ describe("PR Review Mode", function()
     review.teardown(dir, cwd)
     vim.env.FAKE_GH_PR = nil
     vim.env.FAKE_GH_DELAY = nil
-    vim.notify = notify
+    restore_notify()
     require("gitsigns").change_base = change_base
   end)
 
@@ -62,7 +62,22 @@ describe("PR Review Mode", function()
 
   it("announces the PR's target branch once when toggled on", function()
     stack("stacked-announced")
-    vim.env.FAKE_GH_PR = '{"baseRefName":"parent","state":"OPEN"}'
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent" })
+    vim.fn.chdir(dir)
+    local bufs = edit({ "a.txt" })
+    assert.is_true(await(bufs, review.merge_base(dir, "parent"), 5000))
+    toggle()
+    assert.is_true(await(bufs, nil, 5000))
+
+    toggle()
+
+    local on = on_notices(5000)
+    assert.equal(1, #on)
+    assert.matches("vs parent", on[1])
+  end)
+
+  it("announces the branch it was created from when toggled on", function()
+    stack("created-from-parent", "parent")
     vim.fn.chdir(dir)
     local bufs = edit({ "a.txt" })
     assert.is_true(await(bufs, review.merge_base(dir, "parent"), 5000))
@@ -102,7 +117,7 @@ describe("PR Review Mode", function()
 
   it("falls back to the default-branch base, with a warning, when the PR target has no merge base", function()
     review.fixture(dir, "orphan-target", { "a.txt" })
-    vim.env.FAKE_GH_PR = '{"baseRefName":"gone","state":"OPEN"}'
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "gone" })
     vim.fn.chdir(dir)
     local bufs = edit({ "a.txt" })
     local base = review.merge_base(dir)
@@ -130,7 +145,7 @@ describe("PR Review Mode", function()
     toggle()
     assert.is_true(await(bufs, nil, 5000))
 
-    local ok, err = pcall(require("support.gh").without, toggle)
+    local ok, err = pcall(gh.without, toggle)
 
     local on = on_notices(5000)
     assert(ok, err)
@@ -159,7 +174,7 @@ describe("PR Review Mode", function()
 
   it("diffs a stacked branch against its PR's target branch", function()
     stack("stacked")
-    vim.env.FAKE_GH_PR = '{"baseRefName":"parent","state":"OPEN"}'
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent" })
     vim.fn.chdir(dir)
 
     local bufs = edit({ "a.txt" })
@@ -169,7 +184,7 @@ describe("PR Review Mode", function()
 
   it("drops a PR lookup that a toggle superseded", function()
     stack("stacked-toggled")
-    vim.env.FAKE_GH_PR = '{"baseRefName":"parent","state":"OPEN"}'
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent" })
     vim.env.FAKE_GH_DELAY = "1"
     vim.fn.chdir(dir)
 

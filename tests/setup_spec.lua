@@ -43,13 +43,6 @@ local function buffer_map(buf, lhs)
   end)
 end
 
----The global normal-mode mapping for `lhs`, if any.
-local function global_map(lhs)
-  return vim.iter(vim.api.nvim_get_keymap("n")):find(function(keymap)
-    return vim.keycode(keymap.lhs) == vim.keycode(lhs)
-  end)
-end
-
 ---The text of the float `?` opened, closing it.
 local function help_text()
   local float = assert(vim.iter(vim.api.nvim_list_wins()):find(function(win)
@@ -81,7 +74,6 @@ describe("changeset setup", function()
   after_each(function()
     changeset.close()
     changeset.setup()
-    pcall(vim.keymap.del, "n", "]h")
     vim.cmd("silent! %bwipeout!")
     vim.fn.chdir(previous_dir)
     vim.fn.delete(tmp, "rf")
@@ -95,13 +87,6 @@ describe("changeset setup", function()
         assert.not_nil(buffer_map(buf, lhs), action)
       end
     end
-  end)
-
-  it("binds no global step keys without setup()", function()
-    open_sidebar()
-
-    assert.is_nil(global_map("]h"))
-    assert.is_nil(global_map("[h"))
   end)
 
   it("binds a remapped key in place of the default, and ? lists it", function()
@@ -160,47 +145,46 @@ describe("changeset setup", function()
     assert.equal("other.lua", vim.fs.basename(vim.api.nvim_buf_get_name(0)))
   end)
 
-  it("binds next/prev globally while open, and ? lists them", function()
-    changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
-    open_sidebar()
+  ---Presses `key` on other.lua's row; returns the screen positions of the window it opened and of the file's window.
+  ---@param key string
+  ---@return integer[] opened
+  ---@return integer[] origin
+  local function split_from_sidebar(key)
+    local buf = open_sidebar()
+    local origin = vim.fn.bufwinid("mod.lua")
+    local lnum = vim.fn.match(lines_of(buf), [[other\.lua]]) + 1
+    vim.api.nvim_set_current_win((assert(window.win())))
+    vim.api.nvim_win_set_cursor(0, { lnum, 0 })
 
-    assert.not_nil(global_map("]h"))
-    assert.not_nil(global_map("[h"))
-    press("?")
-    local listed = help_keys()
-    assert.is_true(vim.list_contains(listed, "]h"))
-    assert.is_true(vim.list_contains(listed, "[h"))
+    vim.api.nvim_feedkeys(vim.keycode(key), "x", false)
+
+    assert.equal("other.lua", vim.fs.basename(vim.api.nvim_buf_get_name(0)))
+    return vim.fn.win_screenpos(0), vim.fn.win_screenpos(origin)
+  end
+
+  it("opens a row in a vertical split on <C-v>", function()
+    local opened, origin = split_from_sidebar("<C-v>")
+
+    assert.equal(origin[1], opened[1])
+    assert.not_equal(origin[2], opened[2])
   end)
 
-  it("puts back the user's mapping and drops its own on close", function()
-    vim.keymap.set("n", "]h", function() end, { desc = "user ]h" })
-    changeset.setup({ keymaps = { next = "]h", prev = "[h" } })
-    open_sidebar()
+  it("opens a row in a split on <C-x>", function()
+    local opened, origin = split_from_sidebar("<C-x>")
 
-    changeset.close()
-    changeset.close()
-    assert.equal("user ]h", global_map("]h").desc)
-    assert.is_nil(global_map("[h"))
+    assert.equal(origin[2], opened[2])
+    assert.not_equal(origin[1], opened[1])
   end)
 
-  it("puts back the user's mapping when next and prev share a key", function()
-    vim.keymap.set("n", "]h", function() end, { desc = "user ]h" })
-    changeset.setup({ keymaps = { next = "]h", prev = "]h" } })
-    open_sidebar()
+  it("searches the tree on /", function()
+    local buf = open_sidebar()
+    local win = assert(window.win())
+    vim.api.nvim_set_current_win(win)
 
-    changeset.close()
-    assert.equal("user ]h", global_map("]h").desc)
-  end)
+    vim.api.nvim_feedkeys(vim.keycode([[/other\.lua<CR>]]), "xt", false)
 
-  it("puts back the user's mapping when the sidebar is closed with :q", function()
-    vim.keymap.set("n", "]h", function() end, { desc = "user ]h" })
-    changeset.setup({ keymaps = { next = "]h" } })
-    open_sidebar()
-
-    vim.api.nvim_win_close(assert(window.win()), true)
-    assert.is_true(vim.wait(1000, function()
-      return global_map("]h").desc == "user ]h"
-    end, 10))
+    assert.equal(win, vim.api.nvim_get_current_win())
+    assert.truthy(lines_of(buf)[vim.api.nvim_win_get_cursor(win)[1]]:find("other.lua", 1, true))
   end)
 
   it("names the bound jump key in the footer", function()
@@ -211,6 +195,19 @@ describe("changeset setup", function()
     local footer = vim.api.nvim_eval_statusline(vim.wo[win].statusline, { winid = win, maxwidth = 200 }).str
     assert.truthy(footer:find("o open", 1, true))
     assert.falsy(footer:find("<CR>", 1, true))
+  end)
+
+  it("lets a FileType changeset handler set the sidebar window's options", function()
+    local id = vim.api.nvim_create_autocmd("FileType", {
+      pattern = "changeset",
+      callback = function()
+        vim.opt_local.colorcolumn = "1"
+      end,
+    })
+    open_sidebar()
+    vim.api.nvim_del_autocmd(id)
+
+    assert.equal("1", vim.wo[assert(window.win())].colorcolumn)
   end)
 
   it("applies a second setup() at the next open, not to the open sidebar", function()

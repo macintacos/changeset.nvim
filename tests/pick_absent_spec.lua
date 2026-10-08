@@ -1,19 +1,17 @@
 require("support.gh")
+local Notify = require("support.notify")
 
 describe("changeset.pick without mini.pick", function()
   assert(not pcall(require, "mini.pick") and MiniPick == nil, "mini.pick must be neither installed nor set up")
 
-  local notify, notes
+  local notes, restore
 
   before_each(function()
-    notify, notes = vim.notify, {}
-    vim.notify = function(msg, level)
-      table.insert(notes, { msg = msg, level = level })
-    end
+    notes, restore = Notify.capture()
   end)
 
   after_each(function()
-    vim.notify = notify
+    restore()
   end)
 
   it("warns once that the picker needs mini.pick", function()
