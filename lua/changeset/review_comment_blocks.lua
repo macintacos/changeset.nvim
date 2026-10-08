@@ -651,7 +651,7 @@ local function unmap_moves(buf)
   end
 end
 
----Draws `comments`, those of `buf`'s file, as blocks while blocks show, dropping the blocks drawn before.
+---Draws `comments`, those on `buf`'s lines, as blocks while blocks show, dropping the blocks drawn before.
 ---@param buf integer
 ---@param comments changeset.ReviewComment[]
 function M.draw(buf, comments)
@@ -660,10 +660,6 @@ function M.draw(buf, comments)
   end
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   drawn[buf] = nil
-  local line_count = vim.api.nvim_buf_line_count(buf)
-  comments = vim.tbl_filter(function(comment)
-    return comment.line <= line_count
-  end, comments)
   if not M.shown() or #comments == 0 then
     return unmap_moves(buf)
   end
