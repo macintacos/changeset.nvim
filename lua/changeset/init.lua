@@ -13,6 +13,7 @@ local comment_store = require("changeset.comment_store")
 local config = require("changeset.config")
 local diff = require("changeset.diff")
 local draw = require("changeset.draw")
+local highlights = require("changeset.highlights")
 local Paths = require("changeset.paths")
 local render = require("changeset.render")
 local Rows = require("changeset.rows")
@@ -455,7 +456,7 @@ function M.open()
   -- The hidden cursor would still underline whatever word a click leaves it on.
   vim.b[buf].minicursorword_disable = true
 
-  render.define_highlights()
+  highlights.define_highlights()
   local win = window.open(buf)
   vim.wo[win].statusline = "%{%v:lua.require'changeset'.footer()%}"
   -- In its window, so a `FileType` handler's window options land on the sidebar's, after its own.
