@@ -17,16 +17,13 @@ local ns = vim.api.nvim_create_namespace("changeset.review_comments")
 -- Holds only the bubbles, so `M.bubble` finds a line's without sorting out the rest.
 local sign_ns = vim.api.nvim_create_namespace("changeset.review_comment_signs")
 
-local BUBBLE = "󰍩"
--- The outline of the saved bubble: the same note, not yet filled in.
-local DRAFT_BUBBLE = "󰍪"
-
 ---`comment`'s bubble, the outline for a draft, and its group.
 ---@param comment changeset.ReviewComment
 ---@return string glyph
 ---@return string hl
 function M.glyph(comment)
-  return comment.draft and DRAFT_BUBBLE or BUBBLE, highlights.review_comment_hl(comment)
+  return comment.draft and highlights.REVIEW_COMMENT_DRAFT_BUBBLE or highlights.REVIEW_COMMENT_BUBBLE,
+    highlights.review_comment_hl(comment)
 end
 
 ---Whether blocks show, once toggled; until then `review_comment.blocks` decides.
@@ -115,7 +112,9 @@ function M.bubble(buf, lnum)
   )
   if found[1] then
     local hl = found[1][4].sign_hl_group
-    return hl == highlights.REVIEW_COMMENT_DRAFT_HL and DRAFT_BUBBLE or BUBBLE, hl
+    return hl == highlights.REVIEW_COMMENT_DRAFT_HL and highlights.REVIEW_COMMENT_DRAFT_BUBBLE
+      or highlights.REVIEW_COMMENT_BUBBLE,
+      hl
   end
 end
 

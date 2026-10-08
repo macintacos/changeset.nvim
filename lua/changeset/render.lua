@@ -4,6 +4,7 @@
 ---and width, and applies the returned marks to a buffer itself.
 
 local cells = require("changeset.cells")
+local highlights = require("changeset.highlights")
 local review_comment = require("changeset.review_comment")
 local symbols = require("changeset.symbols")
 
@@ -58,14 +59,14 @@ local symbols = require("changeset.symbols")
 
 local M = {}
 
-for name, value in pairs(require("changeset.highlights")) do
+for name, value in pairs(highlights) do
   M[name] = value
 end
 
 ---Glyph heading the Comments section: the file marks' bubble, borrowed as they borrow it, since no icon plugin has a
 ---category to ask for a comment.
 ---@type string
-M.COMMENTS_ICON = "󰍩"
+M.COMMENTS_ICON = highlights.REVIEW_COMMENT_BUBBLE
 
 ---Glyph at the right edge of the selected row.
 ---@type string

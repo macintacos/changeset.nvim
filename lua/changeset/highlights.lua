@@ -57,6 +57,10 @@ M.REVIEW_COMMENT_DRAFT_HL = "ChangesetReviewCommentDraft"
 M.REVIEW_COMMENT_CIRCLE = "●"
 M.REVIEW_COMMENT_DRAFT_CIRCLE = "◌"
 
+---A review comment's bubble in the sign column, and a draft's: the outline of the same note, not yet filled in.
+M.REVIEW_COMMENT_BUBBLE = "󰍩"
+M.REVIEW_COMMENT_DRAFT_BUBBLE = "󰍪"
+
 ---The review comment's group, or the draft group for a draft.
 ---@param comment { draft: true? }
 ---@return string
