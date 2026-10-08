@@ -62,7 +62,7 @@ function M.fresh(entries, files, stamp)
   for _, file in ipairs(files) do
     local entry = entries[file.path]
     local now = stamp(file.path)
-    if entry and now and entry.stamp == now then
+    if type(entry) == "table" and type(entry.symbols) == "table" and now and entry.stamp == now then
       known[file.path] = entry.symbols
     else
       unknown[#unknown + 1] = file

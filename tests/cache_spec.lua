@@ -37,6 +37,17 @@ describe("changeset.cache", function()
       assert.equal("api.ts", unknown[1].path)
     end)
 
+    it("asks again about a file whose entry is not a record of symbols", function()
+      local entries = { ["a.ts"] = 5, ["b.ts"] = vim.NIL, ["c.ts"] = { stamp = "120:9", symbols = 5 } }
+      local files = { file("a.ts"), file("b.ts"), file("c.ts") }
+
+      local known, unknown =
+        cache.fresh(entries, files, stamps({ ["a.ts"] = "120:9", ["b.ts"] = "120:9", ["c.ts"] = "120:9" }))
+
+      assert.same({}, known)
+      assert.equal(3, #unknown)
+    end)
+
     it("asks about a file it has never read", function()
       local known, unknown = cache.fresh({}, { file("api.ts") }, stamps({ ["api.ts"] = "120:9" }))
 

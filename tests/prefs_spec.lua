@@ -60,6 +60,24 @@ describe("changeset.prefs", function()
   end)
 
   describe("apply", function()
+    ---@type { name: string, repo: any, scope: changeset.Scope }[]
+    local wrong_typed = {
+      { name = "a repository record that is a string", repo = "oops", scope = "repo" },
+      { name = "a repository record that is null", repo = vim.NIL, scope = "repo" },
+      { name = "branches that is a number", repo = { branches = 5 }, scope = "branch" },
+      { name = "branches that is a number, saving the repo", repo = { branches = 5 }, scope = "repo" },
+      { name = "branches that is a number, saving everywhere", repo = { branches = 5 }, scope = "global" },
+    }
+    for _, case in ipairs(wrong_typed) do
+      it("saves over " .. case.name, function()
+        local data = prefs.apply({ repos = { [ROOT] = case.repo } }, case.scope, ROOT, BRANCH, { Function = true })
+
+        local hidden, scope = prefs.resolve(data, ROOT, BRANCH)
+        assert.same({ Function = true }, hidden)
+        assert.equal(case.scope, scope)
+      end)
+    end
+
     it("records a branch set without touching the wider scopes", function()
       local data = { global = { "Variable" }, repos = { [ROOT] = { kinds = { "Field" } } } }
 
