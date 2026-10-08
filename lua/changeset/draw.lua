@@ -293,7 +293,7 @@ function M.draw(kinds_key)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, text)
   vim.bo[buf].modifiable = false
   -- Rows are trimmed to the width; the sentence standing in for them is not.
-  vim.wo[win].wrap = #lines == 0
+  vim.api.nvim_set_option_value("wrap", #lines == 0, { win = win, scope = "local" })
 
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   apply_marks(buf, lines)

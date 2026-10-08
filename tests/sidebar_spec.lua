@@ -1264,6 +1264,18 @@ describe("changeset sidebar", function()
     assert.same({ 1, 0 }, { after.topline, after.topfill })
   end)
 
+  it("wraps its lines for the buffer it shows, not for the next buffer its window shows", function()
+    open_sidebar()
+    local win = assert(window.win())
+    vim.api.nvim_set_current_win(win)
+    local before = vim.api.nvim_get_option_value("wrap", { win = win, scope = "global" })
+
+    vim.api.nvim_feedkeys(vim.keycode("fzzzz<CR>"), "xt", false)
+
+    assert.is_true(vim.wo[win].wrap)
+    assert.equal(before, vim.api.nvim_get_option_value("wrap", { win = win, scope = "global" }))
+  end)
+
   it("leaves the tree's lines empty when a filter matches no row", function()
     local buf = open_sidebar()
     vim.api.nvim_set_current_win((assert(window.win())))
