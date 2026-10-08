@@ -18,7 +18,7 @@ function M.lines(args, cwd)
 end
 
 ---Resolve the repo's default branch: origin/HEAD's target, else the first of
----main/master/trunk that exists, else "main".
+---main/master/trunk that exists locally or on origin, else "main".
 ---@param cwd string? Repository to ask; Neovim's own directory when absent.
 ---@return string branch Short name, with any remote prefix stripped.
 function M.default_base(cwd)
@@ -27,7 +27,10 @@ function M.default_base(cwd)
     return (head:gsub("^origin/", ""))
   end
   for _, name in ipairs({ "main", "master", "trunk" }) do
-    if #M.lines({ "git", "rev-parse", "--verify", "--quiet", name }, cwd) > 0 then
+    local found = vim.iter({ name, "origin/" .. name }):any(function(ref)
+      return #M.lines({ "git", "rev-parse", "--verify", "--quiet", ref }, cwd) > 0
+    end)
+    if found then
       return name
     end
   end
