@@ -72,13 +72,15 @@ end
 ---@param room integer
 ---@return string
 function M.tail(text, room)
-  if text:find("\t", 1, true) then
-    -- ponytail: a tab's width hangs on everything before it, so text with one is re-measured whole at each cut.
+  -- A byte from 0xF0 or a zero-width joiner may start an emoji cluster: a flag or a joined family.
+  if text:find("[\t\240-\244]") or text:find("\226\128\141", 1, true) then
+    -- ponytail: a tab's width hangs on everything before it, and a cluster's isn't the sum of its characters', so
+    -- such text is re-measured whole at each cut, a cluster at a time.
     local from = 0
-    while M.width(vim.fn.strcharpart(text, from)) > room do
+    while M.width(vim.fn.strcharpart(text, from, #text, true)) > room do
       from = from + 1
     end
-    return vim.fn.strcharpart(text, from)
+    return vim.fn.strcharpart(text, from, #text, true)
   end
   local from, used = #text + 1, 0
   while from > 1 do

@@ -44,6 +44,15 @@ describe("changeset.cells", function()
       assert.equal("e\204\129", cells.tail("xe\204\129", 1))
     end)
 
+    it("keeps a flag whole, and within its room", function()
+      assert.equal("a", cells.tail("🇺🇸🇺🇸a", 2))
+    end)
+
+    it("keeps an emoji joined into one with others whole, and within its room", function()
+      local family = "👨\226\128\141👩\226\128\141👧"
+      assert.equal(family .. family, cells.tail("a" .. family .. "a" .. family .. family, 4))
+    end)
+
     it("measures a tab from the column the tail starts at", function()
       assert.equal("b", cells.tail("a\tb", 8))
     end)
