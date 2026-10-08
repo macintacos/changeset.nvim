@@ -176,6 +176,20 @@ describe("review comment blocks", function()
     assert.truthy(text[1]:find("…", 1, true))
   end)
 
+  it("narrows to the text area as the gutter widens", function()
+    vim.o.columns = 50
+    vim.wo.number = false
+    keep({ path = "alpha.txt", line = 3, body = ("word "):rep(40) })
+
+    vim.wo.number = true
+    -- Neovim fires no OptionSet before startup ends, which is when specs run.
+    vim.api.nvim_exec_autocmds("OptionSet", { pattern = "number" })
+
+    local win = vim.api.nvim_get_current_win()
+    local room = vim.api.nvim_win_get_width(win) - vim.fn.getwininfo(win)[1].textoff
+    assert.is_true(vim.fn.strdisplaywidth(drawn()[1].text[1]) <= room)
+  end)
+
   it("drops the end-of-line text of a comment drawn as a block, keeping its lit numbers", function()
     keep({ path = "alpha.txt", line = 3, body = "short" })
 

@@ -776,6 +776,19 @@ vim.api.nvim_create_autocmd("WinResized", {
   end,
 })
 
+-- Fires: a gutter option set, which narrows the text area without resizing the window.
+vim.api.nvim_create_autocmd("OptionSet", {
+  group = group,
+  pattern = { "number", "relativenumber", "numberwidth", "signcolumn", "foldcolumn", "statuscolumn" },
+  desc = "changeset: refit review comment blocks to a changed gutter",
+  callback = function()
+    local wins = vim.v.option_type == "local" and { vim.api.nvim_get_current_win() } or vim.api.nvim_list_wins()
+    for _, win in ipairs(wins) do
+      refit(vim.api.nvim_win_get_buf(win))
+    end
+  end,
+})
+
 -- Fires: a buffer shown in a window, which may be narrower than the ones its blocks were drawn for.
 vim.api.nvim_create_autocmd("BufWinEnter", {
   group = group,
