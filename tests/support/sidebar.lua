@@ -73,6 +73,28 @@ function M.cursor_to(text)
   error("no sidebar line contains " .. text)
 end
 
+---Click the first sidebar line containing `text`. A UI-less Neovim takes no mouse input, so this presses the button
+---where `getmousepos` says, answering as a terminal would for a click there.
+---@param text string
+function M.click(text)
+  local win = assert(window.win())
+  for lnum, line in ipairs(M.lines()) do
+    local col = line:find(text, 1, true)
+    if col then
+      local getmousepos = vim.fn.getmousepos
+      vim.fn.getmousepos = function()
+        return { winid = win, line = lnum, column = col }
+      end
+      local ok, err = pcall(vim.api.nvim_feedkeys, vim.keycode("<LeftMouse>"), "x", false)
+      vim.fn.getmousepos = getmousepos
+      assert(ok, err)
+      M.flush()
+      return
+    end
+  end
+  error("no sidebar line contains " .. text)
+end
+
 ---The text of the line the sidebar's cursor is on.
 ---@return string
 function M.cursor_line()

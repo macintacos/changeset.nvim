@@ -680,4 +680,23 @@ function M.focus()
   end
 end
 
+local LEFT_MOUSE = vim.keycode("<LeftMouse>")
+
+-- The modes a click on another window enters it from; on the command line it stays.
+local CLICK_LEAVES = { n = true, nt = true, i = true, v = true, V = true, ["\22"] = true, t = true }
+
+-- A click from another window only focuses the sidebar, so it lands on your row as any arrival does rather than on the
+-- row clicked. Its status line and border are let through, where a drag resizes it. Focus is scheduled because an error
+-- inside an `on_key` listener removes it.
+vim.on_key(function(key)
+  if key ~= LEFT_MOUSE or not CLICK_LEAVES[vim.api.nvim_get_mode().mode] then
+    return
+  end
+  local pos = vim.fn.getmousepos()
+  if pos.line > 0 and pos.winid == M.win() and not M.is_focused() then
+    vim.schedule(M.focus)
+    return ""
+  end
+end, vim.api.nvim_create_namespace("changeset.click"))
+
 return M

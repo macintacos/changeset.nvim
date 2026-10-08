@@ -53,6 +53,18 @@ describe("changeset sidebar focus", function()
     assert.truthy(Sidebar.cursor_line():find("Other changes", 1, true))
   end)
 
+  it("only focuses the sidebar on a click from another window, landing on the row you are on", function()
+    vim.cmd.edit("mod.lua")
+    vim.api.nvim_win_set_cursor(0, { 8, 0 })
+    changeset.open()
+    Sidebar.settle()
+
+    Sidebar.click("other.lua")
+
+    assert.equal(window.win(), vim.api.nvim_get_current_win())
+    assert.truthy(Sidebar.cursor_line():find("Other changes", 1, true))
+  end)
+
   it("keeps the cursor on a landed row that you expand", function()
     vim.cmd.edit("mod.lua")
     vim.api.nvim_win_set_cursor(0, { 8, 0 })
