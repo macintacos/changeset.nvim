@@ -643,3 +643,70 @@ describe("changeset.build on a branch measured against its PR's target", functio
     end, 25))
   end)
 end)
+
+describe("changeset.build after a rebase onto a moved default branch", function()
+  local root, previous_dir, source
+
+  ---@param name string
+  ---@return string
+  local function commit_file(name)
+    vim.fn.writefile({ name }, root .. "/" .. name)
+    return Fixture.commit(name, root)
+  end
+
+  before_each(function()
+    root = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(root, "p")
+    Fixture.init_repo("main", root)
+    commit_file("main.txt")
+    Fixture.git({ "checkout", "-q", "-b", "feature" }, root)
+    commit_file("feature.txt")
+    previous_dir = vim.fn.getcwd()
+    vim.fn.chdir(root)
+    vim.cmd.edit("feature.txt")
+    source = symbols.install()
+    vim.env.FAKE_GH_PR = ""
+  end)
+
+  after_each(function()
+    vim.env.FAKE_GH_PR = nil
+    source.restore()
+    vim.cmd("silent! %bwipeout!")
+    vim.fn.chdir(previous_dir)
+    vim.fn.delete(root, "rf")
+  end)
+
+  it("never lists upstream's files as the branch's", function()
+    build_and_collect()
+    Fixture.git({ "checkout", "-q", "main" }, root)
+    for i = 1, 30 do
+      commit_file("upstream" .. i .. ".txt")
+    end
+    local new_base = Fixture.git({ "rev-parse", "HEAD" }, root)
+    Fixture.git({ "checkout", "-q", "feature" }, root)
+    Fixture.git({ "rebase", "-q", "main" }, root)
+    local listed = {}
+    build.subscribe(function(event)
+      local tree = build.current()
+      if event == "diff" and tree then
+        for _, file in ipairs(tree.files) do
+          listed[#listed + 1] = file.path
+        end
+      end
+    end)
+
+    build.update()
+
+    assert.is_true(vim.wait(5000, function()
+      local tree = build.current()
+      return tree ~= nil and tree.base == new_base and tree.collected
+    end, 10))
+    vim.wait(300)
+    assert.same(
+      {},
+      vim.tbl_filter(function(path)
+        return vim.startswith(path, "upstream")
+      end, listed)
+    )
+  end)
+end)

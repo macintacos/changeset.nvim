@@ -349,7 +349,8 @@ local remeasuring
 ---Measure the tree's fork point again without blocking, then do what `build()` would with it: keep the tree on the
 ---same one, else rebuild it. Dropped once the tree is replaced or a newer re-measure starts.
 ---@param on_no_base fun()? Called when the re-measure finds no fork point, keeping the tree.
-function M.remeasure(on_no_base)
+---@param on_kept fun()? Called when the re-measure keeps the tree.
+function M.remeasure(on_no_base, on_kept)
   local kept = tree
   if not kept then
     return
@@ -370,6 +371,8 @@ function M.remeasure(on_no_base)
     end
     if not ready and on_no_base then
       on_no_base()
+    elseif ready and tree == kept and on_kept then
+      on_kept()
     end
   end)
 end
@@ -387,8 +390,8 @@ function M.update()
   if branch == tree.branch then
     -- A moved HEAD can come with a PR retargeted, merged or closed.
     fork_point.recheck(tree.root, branch)
-    M.remeasure()
-    return M.refresh()
+    -- A refresh before the re-measure lands would diff a rebased branch against its old fork point.
+    return M.remeasure(nil, M.refresh)
   end
   local kept = tree
   if not build_at(tree.root) or tree == kept then

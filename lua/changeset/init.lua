@@ -733,15 +733,15 @@ function M.open()
   require("changeset.unified_diff").activate()
 
   redraw()
-  -- A kept tree misses what nothing announced, such as a file edited outside Neovim while it kept focus.
-  if build.current() == previous then
-    build.refresh()
-  end
+  -- A kept tree misses what nothing announced, such as a file edited outside Neovim while it kept focus. It refreshes
+  -- once re-measured, so a rebased branch is never diffed against its old fork point.
   if kept then
     build.remeasure(function()
       vim.notify("Changeset: " .. NO_BASE, vim.log.levels.WARN)
       M.close()
-    end)
+    end, build.refresh)
+  elseif build.current() == previous then
+    build.refresh()
   end
 end
 
