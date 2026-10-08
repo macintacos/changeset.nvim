@@ -605,6 +605,21 @@ describe("changeset.rows", function()
         assert.same({ "L24 new" }, names(group.children))
       end)
 
+      it("reads two builds from the same inputs as the same rows", function()
+        local files, symbols = { file(PATH, { hunk(7, 1) }), file(OTHER, { hunk(7, 1) }) }, { [PATH] = STORE }
+
+        assert.is_true(Rows.same(Rows.build(files, symbols), Rows.build(files, symbols)))
+      end)
+
+      it("reads a build where one file's symbols arrived as other rows", function()
+        local files, symbols = { file(PATH, { hunk(7, 1) }), file(OTHER, { hunk(7, 1) }) }, { [PATH] = STORE }
+        local first = Rows.build(files, symbols)
+
+        symbols[OTHER] = STORE
+
+        assert.is_false(Rows.same(first, Rows.build(files, symbols)))
+      end)
+
       it("totals each section afresh from the rows it reuses", function()
         local files, symbols = { file(PATH, { hunk(7, 1), hunk(24, 2) }) }, { [PATH] = STORE }
         local fresh = Rows.build(files, symbols)

@@ -720,6 +720,34 @@ function M.lines(row)
   end
 end
 
+---Whether two builds' section rows draw alike: the same sections and totals, over the same file rows in order.
+---@param a changeset.Row[] Section rows from `build`.
+---@param b changeset.Row[] Section rows from `build`.
+---@return boolean
+function M.same(a, b)
+  if #a ~= #b then
+    return false
+  end
+  for i, section in ipairs(a) do
+    local other = b[i]
+    if
+      section.id ~= other.id
+      or section.files ~= other.files
+      or section.added ~= other.added
+      or section.removed ~= other.removed
+      or #section.children ~= #other.children
+    then
+      return false
+    end
+    for j, row in ipairs(section.children) do
+      if row ~= other.children[j] then
+        return false
+      end
+    end
+  end
+  return true
+end
+
 ---The Comments section: a row per review comment, in `review_comment.before`'s order, then as listed. A row goes
 ---to its line.
 ---The header counts the rows, and carries no stat: a review comment changes no line.

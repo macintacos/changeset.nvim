@@ -119,6 +119,62 @@ describe("changeset sidebar", function()
     end, 25))
   end)
 
+  describe("refreshing", function()
+    local draw = require("changeset.draw")
+    local real_draw, draws
+
+    before_each(function()
+      real_draw, draws = draw.draw, 0
+    end)
+
+    after_each(function()
+      draw.draw = real_draw
+    end)
+
+    ---Refresh the tree, counting the sidebar's draws until the new diff is in.
+    local function refresh()
+      draw.draw = function(...)
+        draws = draws + 1
+        return real_draw(...)
+      end
+      local before = build.current().files
+      build.refresh()
+      assert.is_true(vim.wait(10000, function()
+        return build.current().files ~= before
+      end, 25))
+      Sidebar.flush()
+    end
+
+    it("leaves the sidebar as drawn when nothing changed", function()
+      open_sidebar()
+
+      refresh()
+
+      assert.equal(0, draws)
+    end)
+
+    it("redraws once the branch gains a commit, though the diff stays the same", function()
+      open_sidebar()
+      Fixture.git({ "commit", "-q", "--allow-empty", "-m", "more" }, tmp)
+
+      refresh()
+
+      assert.equal(1, draws)
+    end)
+
+    it("redraws once a file's diff changes", function()
+      local buf = open_sidebar()
+      write("other.lua", { "return { a = 1, b = 2 }", "-- more" })
+
+      refresh()
+
+      assert.is_true(draws > 0)
+      assert.is_true(vim.wait(10000, function()
+        return table.concat(lines_of(buf), "\n"):find("L1–2", 1, true) ~= nil
+      end, 25))
+    end)
+  end)
+
   it("paints a filter match over the colour of the row it sits in", function()
     local buf = open_sidebar()
     vim.api.nvim_set_current_win((assert(window.win())))

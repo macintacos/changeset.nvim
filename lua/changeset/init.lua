@@ -240,6 +240,11 @@ local function decided(path)
   end)
 end
 
+---What the sidebar last drew beyond its rows: the header draws the tree's commits and PR, and an empty tree reads
+---differently once its diff is in.
+---@type { state: changeset.SidebarState, collected: boolean, commits: integer?, pr: integer? }?
+local built_from
+
 local function rebuild()
   local state = sidebar_state.current()
   assert(state, "changeset: no tree built yet")
@@ -247,7 +252,20 @@ local function rebuild()
   local before = (draw.row_at_cursor() or {}).id
   local lines = captions(state.tree.root)
   lines.comments = state.tree.comments
-  state.rows = Rows.build(state.tree.files, state.tree.symbols, lines)
+  local rows = Rows.build(state.tree.files, state.tree.symbols, lines)
+  local from = { state = state, collected = state.tree.collected, commits = state.tree.commits, pr = state.tree.pr }
+  local last = built_from or {}
+  if
+    last.state == state
+    and last.collected == from.collected
+    and last.commits == from.commits
+    and last.pr == from.pr
+    and Rows.same(state.rows, rows)
+  then
+    return
+  end
+  built_from = from
+  state.rows = rows
   redraw()
   apply(state.position:rebuilt(draw.view(), before, decided))
 end
