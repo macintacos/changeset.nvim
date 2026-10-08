@@ -83,22 +83,25 @@ function M.load(path)
   vim.opt.shortmess:append("A")
   local ok = pcall(vim.fn.bufload, buf)
   vim.o.shortmess = saved
+  -- A swap file would make a second Neovim warn about a file only read here,
+  -- even one whose read autocommands raised after it loaded.
+  -- Resetting it deletes the one the read made; the value the read autocommands
+  -- chose (vim-gnupg turns it off) comes back once the buffer is the user's.
+  if vim.api.nvim_buf_is_loaded(buf) then
+    local wanted = vim.bo[buf].swapfile
+    vim.bo[buf].swapfile = false
+    vim.api.nvim_create_autocmd("BufEnter", {
+      buffer = buf,
+      once = true,
+      desc = "changeset: give a buffer the sidebar loaded its swap file once the user enters it",
+      callback = function()
+        vim.bo[buf].swapfile = wanted
+      end,
+    })
+  end
   if not ok then
     return nil
   end
-  -- A swap file would make a second Neovim warn about a file only read here.
-  -- Resetting it deletes the one the read made; the value the read autocommands
-  -- chose (vim-gnupg turns it off) comes back once the buffer is the user's.
-  local wanted = vim.bo[buf].swapfile
-  vim.bo[buf].swapfile = false
-  vim.api.nvim_create_autocmd("BufEnter", {
-    buffer = buf,
-    once = true,
-    desc = "changeset: give a buffer the sidebar loaded its swap file once the user enters it",
-    callback = function()
-      vim.bo[buf].swapfile = wanted
-    end,
-  })
 
   -- Autocommands do not nest, and the sidebar previews from a `CursorMoved`
   -- callback: the read above then skips the `BufRead` chain that names a

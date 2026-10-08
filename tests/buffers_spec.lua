@@ -255,6 +255,23 @@ describe("changeset.buffers", function()
         assert.same({}, vim.fn.glob(swapdir .. "/*", true, true))
       end)
 
+      it("leaves no swap file behind when a read autocommand raises", function()
+        local group = vim.api.nvim_create_augroup("buffers_spec_broken_read", { clear = true })
+        -- A broken ftplugin or a plugin's read hook.
+        vim.api.nvim_create_autocmd("BufReadPost", {
+          group = group,
+          pattern = "*.lua",
+          callback = function()
+            error("a broken read hook")
+          end,
+        })
+
+        buffers.load(tmp .. "/mod.lua")
+        vim.api.nvim_del_augroup_by_id(group)
+
+        assert.same({}, vim.fn.glob(swapdir .. "/*", true, true))
+      end)
+
       it("gives the buffer its swap file once the user enters it", function()
         local buf = assert(buffers.load(tmp .. "/mod.lua"))
 
