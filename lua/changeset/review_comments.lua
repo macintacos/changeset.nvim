@@ -310,7 +310,7 @@ local function draw(buf, by_root)
   local stored = read(by_root, root)
   drawn_for[buf] = comment_store.branch(root)
   local comments = on_lines(buf, root, stored.listed)
-  if vim.bo[buf].modified then
+  if vim.bo[buf].modified or stale[buf] then
     -- On the stored lines, a modified buffer's marks would leave the code its edits moved.
     comments = where_edited(buf, comments)
   else

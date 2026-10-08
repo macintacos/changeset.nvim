@@ -302,6 +302,23 @@ describe("review_comments", function()
     end)
   end
 
+  it("moves a comment by the edits of a write its record refused, through a redraw before the next write", function()
+    set({ comment("beta.txt", 10) })
+    local path = comment_store.path()
+    local saved = vim.fn.readfile(path)
+    vim.api.nvim_buf_set_lines(beta, 0, 0, false, { "new 1", "new 2" })
+    vim.fn.writefile({ "{" }, path)
+    write(beta)
+
+    review_comments.redraw()
+    vim.fn.writefile(saved, path)
+    review_comments.redraw()
+    vim.api.nvim_buf_set_lines(beta, 0, 0, false, { "new 0" })
+    write(beta)
+
+    assert.are.same({ comment("beta.txt", 13) }, comment_store.list(dir))
+  end)
+
   it("stores the lines a written buffer's edits moved its submitted comments to, with none listed there", function()
     set({ comment("beta.txt", 16) })
     comment_store.take(dir, { comments = { comment("beta.txt", 16) }, at = 0, to = "claude" })
