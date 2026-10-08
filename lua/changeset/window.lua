@@ -368,6 +368,12 @@ function M.open(buf)
     pin(sidebar.win, sidebar.layout)
   end
   sidebar.buf = buf
+  -- The sidebar's own buffers go with their windows, so one already holding this
+  -- name is what a session left.
+  local leftover = vim.fn.bufnr("^" .. NAME .. buf .. "$")
+  if leftover > 0 and leftover ~= buf then
+    pcall(vim.api.nvim_buf_delete, leftover, { force = true })
+  end
   vim.api.nvim_buf_set_name(buf, NAME .. buf)
 
   for name, value in pairs(SIDEBAR_OPTIONS) do

@@ -211,6 +211,17 @@ describe("changeset.window", function()
       assert.equal(buf, vim.api.nvim_win_get_buf(placeholder))
     end)
 
+    it("opens past a leftover buffer holding the name its own buffer takes", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local leftover = vim.api.nvim_create_buf(true, false)
+      vim.api.nvim_buf_set_name(leftover, "changeset://" .. buf)
+
+      local ok, err = pcall(window.open, buf)
+
+      assert.is_true(ok, err)
+      assert.equal(buf, vim.api.nvim_win_get_buf((assert(window.win()))))
+    end)
+
     it("does not take the sidebar it just opened for a leftover", function()
       window.open(vim.api.nvim_create_buf(false, true))
 
