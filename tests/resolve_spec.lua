@@ -621,6 +621,44 @@ describe("changeset.resolve", function()
       )
     end)
 
+    it("reports a later server's symbols when an earlier one answers with none", function()
+      local function answering_with(symbols)
+        return function(method, callback)
+          vim.schedule(function()
+            if method == "initialize" then
+              callback(nil, { capabilities = { documentSymbolProvider = true } })
+            else
+              callback(nil, method == "textDocument/documentSymbol" and symbols or nil)
+            end
+          end)
+        end
+      end
+      enable("first_server", server(answering_with({})))
+      local buf = vim.fn.bufadd(root .. "/mod.lua")
+      vim.fn.bufload(buf)
+      vim.bo[buf].filetype = "lua"
+      vim.lsp.start(
+        { name = "second_server", root_dir = root, cmd = server(answering_with({ SYMBOL })) },
+        { bufnr = buf }
+      )
+      assert.is_true(vim.wait(2000, function()
+        return #vim.lsp.get_clients({ bufnr = buf, method = "textDocument/documentSymbol" }) == 2
+      end, 20))
+      local report
+      start(function(_, items)
+        report = { items = items }
+      end)
+      assert.is_true(vim.wait(3000, function()
+        return report ~= nil
+      end, 20))
+      assert.same(
+        { "one" },
+        vim.tbl_map(function(item)
+          return item.name
+        end, assert(report.items))
+      )
+    end)
+
     it("lists a symbol once when two servers both answer for the file", function()
       local function answering(method, callback)
         vim.schedule(function()

@@ -82,8 +82,8 @@ local function await_client(bufnr, on_client)
   end, ATTACH_TIMEOUT_MS)
 end
 
----Flattened symbols for one loaded buffer, from the first client that answered without an
----error, or nil when none did.
+---Flattened symbols for one loaded buffer, from the first client that listed any, else the
+---first that answered without an error, or nil when none did.
 ---@param bufnr integer
 ---@param on_done fun(items: changeset.Symbol[]?)
 local function request(bufnr, on_done)
@@ -99,12 +99,16 @@ local function request(bufnr, on_done)
     end
     done = true
     pcall(vim.api.nvim_del_autocmd, autocmd)
-    for _, client in ipairs(clients) do
-      if answers[client.id] then
-        return on_done(answers[client.id])
-      end
-    end
-    on_done(nil)
+    -- A server with nothing for this file answers []; another may still list its symbols.
+    local answered = vim
+      .iter(clients)
+      :map(function(client)
+        return answers[client.id]
+      end)
+      :totable()
+    on_done(vim.iter(answered):find(function(items)
+      return #items > 0
+    end) or answered[1])
   end
 
   local function settle(id, items)
