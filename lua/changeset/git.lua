@@ -1,5 +1,21 @@
----The git and gh queries that pick the branch changeset diffs against.
+---The git and gh queries that pick the branch changeset diffs against, and the process runner they and herdr share.
 local M = {}
+
+---`vim.system`, calling `on_exit` on the main loop. A failed spawn — a repository removed under a pending
+---refresh, a binary gone since its executable check, an argv over the OS's limit — reaches `on_exit` as a failed
+---result instead of raising.
+---@param argv string[]
+---@param opts vim.SystemOpts
+---@param on_exit fun(result: vim.SystemCompleted)
+function M.system(argv, opts, on_exit)
+  local ok, err = pcall(vim.system, argv, opts, vim.schedule_wrap(on_exit))
+  if not ok then
+    local result = { code = -1, signal = 0, stdout = "", stderr = tostring(err) }
+    vim.schedule(function()
+      on_exit(result)
+    end)
+  end
+end
 
 ---Run a git command and return its stdout lines, or an empty table if it failed.
 ---@param args string[] Command and arguments, run without a shell; `args[1]` is `git`.
@@ -119,14 +135,14 @@ function M.pr_target(cwd, cb)
       cb(nil)
     end)
   end
-  vim.system(
+  M.system(
     { "gh", "pr", "view", "--json", "baseRefName,number,state" },
     { cwd = cwd, text = true, timeout = 5000 },
-    vim.schedule_wrap(function(res)
+    function(res)
       local ok, pr = pcall(vim.json.decode, res.stdout or "")
       local open = res.code == 0 and ok and type(pr) == "table" and pr.state == "OPEN"
       cb(open and pr.baseRefName or nil, open and pr.number or nil)
-    end)
+    end
   )
 end
 

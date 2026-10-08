@@ -227,4 +227,57 @@ describe("changeset.git", function()
       assert.is_nil(Git.parent(tmp, "feature"))
     end)
   end)
+  describe("system", function()
+    it("hands a failed spawn to on_exit on the main loop as a failed result", function()
+      local real = vim.system
+      vim.system = function()
+        error("E2BIG")
+      end
+      local got, fast
+      Git.system({ "git", "status" }, {}, function(result)
+        got, fast = result, vim.in_fast_event()
+      end)
+      vim.system = real
+      assert.is_nil(got)
+      vim.wait(1000, function()
+        return got ~= nil
+      end)
+      assert.equal(-1, got.code)
+      assert.matches("E2BIG", got.stderr)
+      assert.is_false(fast)
+    end)
+
+    it("calls on_exit on the main loop with the process's result", function()
+      local got, fast
+      Git.system({ "git", "--version" }, { text = true }, function(result)
+        got, fast = result, vim.in_fast_event()
+      end)
+      vim.wait(5000, function()
+        return got ~= nil
+      end)
+      assert.equal(0, got.code)
+      assert.matches("^git version", got.stdout)
+      assert.is_false(fast)
+    end)
+  end)
+
+  describe("pr_target", function()
+    it("answers no PR when gh can't be started", function()
+      require("support.gh")
+      local real = vim.system
+      vim.system = function()
+        error("E2BIG")
+      end
+      local answered, target = false, "unset"
+      local ok = pcall(Git.pr_target, tmp, function(t)
+        answered, target = true, t
+      end)
+      vim.system = real
+      assert.is_true(ok)
+      vim.wait(1000, function()
+        return answered
+      end)
+      assert.is_nil(target)
+    end)
+  end)
 end)

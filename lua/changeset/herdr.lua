@@ -186,26 +186,15 @@ end
 ---@param args string[]
 ---@param cb fun(result: table?, code: string?)
 local function herdr(args, cb)
-  -- A spawn can fail even after the executable check: the binary gone since, or an argv over the OS's limit.
-  local started = pcall(
-    vim.system,
-    vim.list_extend({ "herdr" }, args),
-    { text = true, timeout = TIMEOUT },
-    vim.schedule_wrap(function(res)
-      if res.code ~= 0 then
-        local ok, env = pcall(vim.json.decode, res.stderr or "")
-        cb(nil, ok and type(env) == "table" and type(env.error) == "table" and env.error.code or "")
-        return
-      end
-      local ok, out = pcall(vim.json.decode, res.stdout or "", { luanil = { object = true, array = true } })
-      cb(ok and type(out) == "table" and out.result or {}, nil)
-    end)
-  )
-  if not started then
-    vim.schedule(function()
-      cb(nil, "")
-    end)
-  end
+  git.system(vim.list_extend({ "herdr" }, args), { text = true, timeout = TIMEOUT }, function(res)
+    if res.code ~= 0 then
+      local ok, env = pcall(vim.json.decode, res.stderr or "")
+      cb(nil, ok and type(env) == "table" and type(env.error) == "table" and env.error.code or "")
+      return
+    end
+    local ok, out = pcall(vim.json.decode, res.stdout or "", { luanil = { object = true, array = true } })
+    cb(ok and type(out) == "table" and out.result or {}, nil)
+  end)
 end
 
 ---@param cb fun(agents: changeset.HerdrAgent[]?)

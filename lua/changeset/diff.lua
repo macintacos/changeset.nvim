@@ -1,5 +1,6 @@
 ---Runs the branch's git diff and parses it into files and hunks, and reads a file's text at the base.
 
+local Git = require("changeset.git")
 local sections = require("changeset.sections")
 
 local M = {}
@@ -267,21 +268,6 @@ local function git_commands(base)
   }
 end
 
----`vim.system`, but a failed spawn — a repository removed under a pending refresh —
----reaches `on_exit` as a failed result instead of raising.
----@param argv string[]
----@param opts vim.SystemOpts
----@param on_exit fun(result: vim.SystemCompleted)
-local function system(argv, opts, on_exit)
-  local ok, err = pcall(vim.system, argv, opts, on_exit)
-  if not ok then
-    local result = { code = -1, signal = 0, stdout = "", stderr = tostring(err) }
-    vim.schedule(function()
-      on_exit(result)
-    end)
-  end
-end
-
 ---Run every command concurrently and hand all results to `on_done` on the main loop.
 ---@param commands table<string, string[]>
 ---@param cwd string
@@ -289,13 +275,11 @@ end
 local function run_all(commands, cwd, on_done)
   local results, pending = {}, vim.tbl_count(commands)
   for name, argv in pairs(commands) do
-    system(argv, { cwd = cwd, text = true }, function(result)
+    Git.system(argv, { cwd = cwd, text = true }, function(result)
       results[name] = result
       pending = pending - 1
       if pending == 0 then
-        vim.schedule(function()
-          on_done(results)
-        end)
+        on_done(results)
       end
     end)
   end
@@ -357,24 +341,22 @@ local function generated_paths(files, cwd, on_done)
   local paths = vim.tbl_map(function(file)
     return file.path
   end, files)
-  system(
+  Git.system(
     { "git", "check-attr", "-z", "--stdin", "linguist-generated" },
     { cwd = cwd, text = true, stdin = table.concat(paths, "\0") },
     function(result)
-      vim.schedule(function()
-        -- A failed read only costs files their Generated section.
-        local marked = result.code == 0 and M._parse_check_attr(result.stdout) or {}
-        for _, file in ipairs(files) do
-          if
-            file.status ~= "deleted"
-            and vim.endswith(file.path, ".go")
-            and go_file_generated(vim.fs.joinpath(cwd, file.path))
-          then
-            marked[file.path] = true
-          end
+      -- A failed read only costs files their Generated section.
+      local marked = result.code == 0 and M._parse_check_attr(result.stdout) or {}
+      for _, file in ipairs(files) do
+        if
+          file.status ~= "deleted"
+          and vim.endswith(file.path, ".go")
+          and go_file_generated(vim.fs.joinpath(cwd, file.path))
+        then
+          marked[file.path] = true
         end
-        on_done(marked)
-      end)
+      end
+      on_done(marked)
     end
   )
 end
@@ -411,10 +393,8 @@ end
 ---@param cwd string
 ---@param callback fun(text: string?)
 function M.blob(object, cwd, callback)
-  system({ "git", "cat-file", "blob", object }, { cwd = cwd, text = true }, function(result)
-    vim.schedule(function()
-      callback(result.code == 0 and result.stdout or nil)
-    end)
+  Git.system({ "git", "cat-file", "blob", object }, { cwd = cwd, text = true }, function(result)
+    callback(result.code == 0 and result.stdout or nil)
   end)
 end
 
