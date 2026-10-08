@@ -342,7 +342,8 @@ local remeasuring
 
 ---Measure the tree's fork point again without blocking, then do what `build()` would with it: keep the tree on the
 ---same one, else rebuild it. Dropped once the tree is replaced or a newer re-measure starts.
-function M.remeasure()
+---@param on_no_base fun()? Called when the re-measure finds no fork point, keeping the tree.
+function M.remeasure(on_no_base)
   local kept = tree
   if not kept then
     return
@@ -355,10 +356,14 @@ function M.remeasure()
     end
     remeasuring = nil
     local branch, commit = Git.head(kept.root)
+    local ready
     if (branch or "HEAD") ~= kept.branch then
-      build_at(kept.root)
+      ready = build_at(kept.root)
     else
-      place(kept.root, kept.branch, commit, point)
+      ready = place(kept.root, kept.branch, commit, point)
+    end
+    if not ready and on_no_base then
+      on_no_base()
     end
   end)
 end

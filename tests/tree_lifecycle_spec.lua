@@ -367,6 +367,21 @@ describe("changeset tree", function()
         assert.is_true(moved)
       end)
 
+      it("warns, and closes the sidebar, once the kept tree's branch shares no history with any base", function()
+        Fixture.git({ "branch", "-D", "trunk" }, tmp)
+        local notes, restore = Notify.capture()
+
+        changeset.open()
+        local warned = vim.wait(5000, function()
+          return #notes > 0
+        end, 25)
+        restore()
+
+        assert.is_true(warned)
+        assert.same({ "Changeset: no merge base with the default branch" }, Notify.messages(notes, vim.log.levels.WARN))
+        assert.is_false(window.is_visible())
+      end)
+
       it("keeps the tree a build for another branch made before the re-measure landed", function()
         hold()
         changeset.open()

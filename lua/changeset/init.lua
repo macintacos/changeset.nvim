@@ -733,7 +733,10 @@ function M.open()
     build.refresh()
   end
   if kept then
-    build.remeasure()
+    build.remeasure(function()
+      vim.notify("Changeset: " .. NO_BASE, vim.log.levels.WARN)
+      M.close()
+    end)
   end
 end
 
