@@ -24,6 +24,10 @@ local targets = {}
 ---@type table<string, changeset.ForkPoint>
 local asking = {}
 
+---Keys `recheck` is asking gh about.
+---@type table<string, true>
+local rechecking = {}
+
 ---@type table<fun(root: string, branch: string, point: changeset.ForkPoint), true>
 local subscribers = {}
 
@@ -134,14 +138,20 @@ end
 ---@param branch string
 function M.recheck(root, branch)
   local key = root .. "\n" .. branch
-  if not targets[key] or asking[key] then
+  if not targets[key] or asking[key] or rechecking[key] then
     return
   end
+  rechecking[key] = true
   Git.pr_target(root, function(target, number, failed)
+    rechecking[key] = nil
     if failed then
       return
     end
-    targets[key] = target and { target = target, number = number } or nil
+    local kept = targets[key]
+    -- The same table for the same answer, so a `get_async` in flight need not measure again.
+    if not (kept and kept.target == target and kept.number == number) then
+      targets[key] = target and { target = target, number = number } or nil
+    end
     local pr = targets[key]
     Git.async(function()
       return measure(root, branch, pr)

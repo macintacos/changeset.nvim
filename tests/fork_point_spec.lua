@@ -237,6 +237,59 @@ describe("fork_point", function()
     assert.equal("main", heard_in(root)[2].point.against)
   end)
 
+  it("asks gh once while a recheck is in flight", function()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
+    local root = repo()
+    fork_point.get(root, "feature")
+    assert.is_true(await_heard(root, 1))
+    vim.env.FAKE_GH_DELAY = "0.3"
+
+    fork_point.recheck(root, "feature")
+    fork_point.recheck(root, "feature")
+
+    assert.is_true(await_heard(root, 2))
+    assert.equal(2, asks)
+  end)
+
+  it("does not measure again in the background when a recheck names the same target", function()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
+    local root = repo()
+    fork_point.get(root, "feature")
+    assert.is_true(await_heard(root, 1))
+    local real_get_async, measures = fork_point.get_async, 0
+    fork_point.get_async = function(...)
+      measures = measures + 1
+      return real_get_async(...)
+    end
+    local real_system, held = vim.system, {}
+    vim.system = function(argv, opts, on_exit)
+      if argv[1] == "gh" then
+        return real_system(argv, opts, on_exit)
+      end
+      held[#held + 1] = { argv, opts, on_exit }
+      return {}
+    end
+    local done = false
+    fork_point.get_async(root, "feature", function()
+      done = true
+    end)
+    fork_point.recheck(root, "feature")
+    local answered = vim.wait(5000, function()
+      return asks == 2 and #held > 1
+    end, 10)
+    vim.system = real_system
+    for _, process in ipairs(held) do
+      real_system(unpack(process))
+    end
+    assert.is_true(answered)
+
+    assert.is_true(vim.wait(5000, function()
+      return done
+    end, 10))
+    fork_point.get_async = real_get_async
+    assert.equal(1, measures)
+  end)
+
   ---@param root string
   ---@return changeset.ForkPoint?
   local function measured_async(root)
