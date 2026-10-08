@@ -274,6 +274,34 @@ describe("review_comments", function()
     assert.are.same({ { 6, 6 }, { 17, 17 } }, rows(beta))
   end)
 
+  for name, damage in pairs({
+    unreadable = function(path)
+      vim.fn.writefile({ "{" }, path)
+    end,
+    unwritable = function(path)
+      vim.uv.fs_chmod(path, tonumber("444", 8))
+      vim.uv.fs_chmod(vim.fs.dirname(path), tonumber("555", 8))
+    end,
+  }) do
+    it(("moves a comment by the edits of a write its %s record refused, on the next write"):format(name), function()
+      set({ comment("beta.txt", 10) })
+      local path = comment_store.path()
+      local saved = vim.fn.readfile(path)
+      vim.api.nvim_buf_set_lines(beta, 0, 0, false, { "new 1", "new 2" })
+      damage(path)
+
+      write(beta)
+
+      vim.uv.fs_chmod(vim.fs.dirname(path), tonumber("755", 8))
+      vim.uv.fs_chmod(path, tonumber("644", 8))
+      vim.fn.writefile(saved, path)
+      vim.api.nvim_buf_set_lines(beta, 0, 0, false, { "new 0" })
+      write(beta)
+
+      assert.are.same({ comment("beta.txt", 13) }, comment_store.list(dir))
+    end)
+  end
+
   it("stores the lines a written buffer's edits moved its submitted comments to, with none listed there", function()
     set({ comment("beta.txt", 16) })
     comment_store.take(dir, { comments = { comment("beta.txt", 16) }, at = 0, to = "claude" })

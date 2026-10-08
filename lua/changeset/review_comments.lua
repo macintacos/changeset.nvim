@@ -5,6 +5,7 @@ local buffers = require("changeset.buffers")
 local comment_store = require("changeset.comment_store")
 local config = require("changeset.config")
 local hover = require("changeset.hover")
+local jsonfile = require("changeset.jsonfile")
 local review_comment_blocks = require("changeset.review_comment_blocks")
 local render = require("changeset.render")
 
@@ -57,6 +58,10 @@ local snapshots = {}
 ---The changedtick each snapshot was taken at: a buffer still at it holds the same lines, so a redraw needn't copy them.
 ---@type table<integer, integer>
 local snapshot_ticks = {}
+
+---Buffers written while the store refused their moves: their snapshots hold until a move is stored.
+---@type table<integer, true>
+local stale = {}
 
 ---The branch each buffer's marks were last drawn for.
 ---@type table<integer, string>
@@ -239,7 +244,7 @@ local function hover_text(fname, lnum)
   end
   local root = Paths.root(buf)
   local comments = on_lines(buf, root, comment_store.list(root))
-  if vim.bo[buf].modified then
+  if vim.bo[buf].modified or stale[buf] then
     comments = where_edited(buf, comments)
   end
   local entries = {}
@@ -348,12 +353,21 @@ local function store_moves(buf)
   local stored = read(by_root, root)
   local found = moves(buf, vim.list_extend(on_lines(buf, root, stored.listed), on_lines(buf, root, stored.sent)))
   if #found == 0 then
+    -- An unreadable record lists no comments, though the edits may still move some once it reads again.
+    if not jsonfile.read_object(comment_store.path()) then
+      stale[buf] = true
+      return
+    end
+    stale[buf] = nil
     return draw(buf, by_root)
   end
+  -- Cleared first: a stored move redraws through the store, retaking the snapshot.
+  stale[buf] = nil
   local written, merged = comment_store.move(root, found)
   if not written then
+    stale[buf] = true
     vim.notify("Changeset: can't move the review comments in " .. comment_store.path(), vim.log.levels.WARN)
-    return draw(buf, {})
+    return
   end
   warn_merged(merged)
 end
@@ -418,7 +432,7 @@ vim.api.nvim_create_autocmd("BufUnload", {
   group = "changeset.review_comments",
   desc = "changeset: forget what an unloaded buffer's review comments were drawn from",
   callback = function(args)
-    snapshots[args.buf], snapshot_ticks[args.buf], drawn_for[args.buf] = nil, nil, nil
+    snapshots[args.buf], snapshot_ticks[args.buf], drawn_for[args.buf], stale[args.buf] = nil, nil, nil, nil
   end,
 })
 
