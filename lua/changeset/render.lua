@@ -10,7 +10,7 @@ local symbols = require("changeset.symbols")
 ---@field priority? integer    Draw order against the row's other marks; `MARK_PRIORITY` stands when absent.
 ---@field col integer          0-based byte column the mark starts at.
 ---@field end_col? integer     0-based exclusive byte column; absent on virtual-text marks.
----@field hl? string           Group over `col`..`end_col`; absent on virtual-text marks, whose chunks carry their own.
+---@field hl? string|string[]  Group or groups over `col`..`end_col`; absent on virtual-text marks, whose chunks carry their own.
 ---@field virt_text? table[]   `nvim_buf_set_extmark` virtual-text chunks.
 ---@field pos? "inline"|"right_align" Where the virtual text is drawn.
 ---@field hl_mode? "combine" Lays the virtual text over the line's background instead of blanking it.
@@ -155,10 +155,10 @@ local META_KINDS = { orphans = true, orphan = true }
 
 ---Joins highlighted chunks into a line, recording each chunk's byte range as a mark.
 ---@param row changeset.Row? The row the line draws; absent on a line that draws no row.
----@param chunks { [1]: string, [2]: string? }[] Text and, optionally, the group that colours it.
+---@param chunks { [1]: string, [2]: string|string[]|nil }[] Text and, optionally, the group or groups that colour it.
 ---@param stat? table[] Virtual-text chunks to right-align on the line.
 ---@return changeset.Line
-local function compose(row, chunks, stat)
+function M.compose(row, chunks, stat)
   local text, marks = "", {}
   for _, chunk in ipairs(chunks) do
     -- A buffer line can't hold a line break, which a symbol name or a path can. Same byte length, so marks stay put.
@@ -254,7 +254,7 @@ local function file_line(file, opts)
   if marker then
     chunks[#chunks + 1] = { marker, "Comment" }
   end
-  return compose(file, chunks, stat)
+  return M.compose(file, chunks, stat)
 end
 
 -- Cells a section label is padded to, so every section header's count starts in one column.
@@ -274,7 +274,7 @@ local function section_line(section, opts)
   end
   local fixed_cells = vim.fn.strdisplaywidth(MARGIN .. glyph .. "  " .. section.name .. count) + stat_cells(stat)
   local pad = math.max(1, math.min(LABEL_CELLS - vim.fn.strdisplaywidth(section.name), opts.width - fixed_cells))
-  return compose(section, {
+  return M.compose(section, {
     { MARGIN },
     { glyph, icon_hl },
     { "  " },
@@ -295,7 +295,7 @@ local function child_line(row, guides, opts)
   if META_KINDS[row.kind] then
     icon_hl, name, name_hl = M.META_HL, cells.clip(row.name, room), M.META_HL
   end
-  return compose(row, {
+  return M.compose(row, {
     { MARGIN },
     { "  " },
     { guides, "Comment" },
@@ -315,7 +315,7 @@ local function placeholder_line(file)
     depth = file.depth + 1,
     children = {},
   })
-  return compose(row, { { MARGIN }, { "  " }, { "└─", "Comment" }, { "⋯ reading symbols", M.META_HL } })
+  return M.compose(row, { { MARGIN }, { "  " }, { "└─", "Comment" }, { "⋯ reading symbols", M.META_HL } })
 end
 
 ---@param out changeset.Line[]
@@ -366,7 +366,7 @@ local function comment_line(row, opts)
     local text = cells.clip(comment.body:match("^[^\r\n]*"), room - 2)
     vim.list_extend(chunks, { { "  " }, { text, M.REVIEW_COMMENT_BODY_HL } })
   end
-  return compose(row, chunks)
+  return M.compose(row, chunks)
 end
 
 ---@param out changeset.Line[]
@@ -477,7 +477,7 @@ function M.kind_lines(rows, opts)
     local gap = opts.width
       - vim.fn.strdisplaywidth(lead .. " " .. glyph .. " " .. row.kind)
       - vim.fn.strdisplaywidth(count)
-    local line = compose(nil, {
+    local line = M.compose(nil, {
       { lead, not row.hidden and icon_hl or nil },
       { " " },
       { glyph, row.hidden and M.HIDDEN_HL or icon_hl },

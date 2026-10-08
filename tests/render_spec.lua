@@ -1044,6 +1044,15 @@ describe("changeset.render", function()
     end)
   end)
 
+  describe("compose", function()
+    it("joins the chunks, marking each coloured one's byte range with its group or groups", function()
+      local line = render.compose(nil, { { "é " }, { "Yes", { "A", "B" } }, { "!", "C" } })
+
+      assert.equal("é Yes!", line.text)
+      assert.same({ { col = 3, end_col = 6, hl = { "A", "B" } }, { col = 6, end_col = 7, hl = "C" } }, line.marks)
+    end)
+  end)
+
   describe("empty_message", function()
     it("names only the branch you are on when it is the default branch", function()
       local message = render.empty_message({ on_default_branch = true, branch = "trunk", ref = "upstream/develop" })

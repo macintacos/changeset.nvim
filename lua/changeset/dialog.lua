@@ -1,6 +1,7 @@
 ---Dialogs drawn as changeset's own floats: a question before a destructive action, and a choice among rows.
 local cells = require("changeset.cells")
 local highlights = require("changeset.highlights")
+local render = require("changeset.render")
 
 local M = {}
 
@@ -153,24 +154,25 @@ end
 ---@param lines changeset.DialogLine[]
 ---@param focused integer?
 local function paint(buf, lines, focused)
-  local texts, marks = {}, {}
-  for i, line in ipairs(lines) do
-    local parts, col = {}, 0
-    for _, chunk in ipairs(line) do
-      parts[#parts + 1] = chunk[1]
-      if chunk[2] then
-        marks[#marks + 1] = { i - 1, col, col + #chunk[1], chunk[2] }
-      end
-      col = col + #chunk[1]
-    end
-    texts[i] = table.concat(parts)
-  end
+  local composed = vim.tbl_map(function(line)
+    return render.compose(nil, line)
+  end, lines)
   vim.bo[buf].modifiable = true
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, texts)
+  vim.api.nvim_buf_set_lines(
+    buf,
+    0,
+    -1,
+    false,
+    vim.tbl_map(function(line)
+      return line.text
+    end, composed)
+  )
   vim.bo[buf].modifiable = false
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-  for _, mark in ipairs(marks) do
-    vim.api.nvim_buf_set_extmark(buf, ns, mark[1], mark[2], { end_col = mark[3], hl_group = mark[4] })
+  for i, line in ipairs(composed) do
+    for _, mark in ipairs(line.marks) do
+      vim.api.nvim_buf_set_extmark(buf, ns, i - 1, mark.col, { end_col = mark.end_col, hl_group = mark.hl })
+    end
   end
   if focused then
     vim.api.nvim_buf_set_extmark(buf, ns, focused - 1, 0, { line_hl_group = highlights.DIALOG_SELECTED_HL })
