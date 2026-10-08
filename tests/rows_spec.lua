@@ -976,6 +976,22 @@ describe("changeset.rows", function()
     end)
   end)
 
+  describe("under", function()
+    it("holds a row whose id extends the ancestor's by a segment, at any depth", function()
+      assert.is_true(Rows.under("a\0b", "a"))
+      assert.is_true(Rows.under("a\0b\0c", "a"))
+    end)
+
+    it("refuses an id that only starts with the ancestor's", function()
+      assert.is_false(Rows.under("ab", "a"))
+      assert.is_false(Rows.under("a\1" .. "2", "a"))
+    end)
+
+    it("refuses the ancestor itself", function()
+      assert.is_false(Rows.under("a", "a"))
+    end)
+  end)
+
   describe("find", function()
     it("finds a row by its id at any depth", function()
       local rows = Rows.build({ file(PATH, { hunk(5, 1) }) }, { [PATH] = { sym("load", "Method", 0, 3, 8) } })

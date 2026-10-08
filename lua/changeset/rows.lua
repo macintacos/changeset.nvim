@@ -975,7 +975,7 @@ end
 ---@param ancestor string
 ---@return boolean
 function M.under(id, ancestor)
-  return vim.startswith(id, ancestor .. "\0")
+  return #id > #ancestor and id:byte(#ancestor + 1) == 0 and id:sub(1, #ancestor) == ancestor
 end
 
 ---The row with `id`, at any depth.
