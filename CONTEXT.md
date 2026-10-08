@@ -106,6 +106,16 @@ Pasting the review into an AI agent's prompt in another herdr pane, unsent, then
 the review comments that went.
 _Avoid_: send, post; "submit" never means GitHub here
 
+**Review text**:
+What a review is pasted or copied as: a part for each saved review comment, in order. Each part gives the comment's
+place by absolute path, its lines fenced, and its body.
+_Avoid_: payload, prompt
+
+**Hand-off**:
+A verb that acts on the whole review rather than on one review comment: submit, `review restore`, `review yank`,
+`review abandon` and `comment list`.
+_Avoid_: bare "review verbs", which also covers the single-comment ones
+
 **Block**:
 A review comment's whole text in a box drawn under its last line in its file, shown in
 place of its first line while `:Changeset comment toggle` has blocks on.
