@@ -189,6 +189,18 @@ describe("review comment blocks", function()
     assert.truthy(text[1]:find("…", 1, true))
   end)
 
+  it("narrows as a window showing the buffer is resized narrower", function()
+    keep({ path = "alpha.txt", line = 3, body = ("word "):rep(40) })
+    vim.cmd("vsplit")
+    vim.api.nvim_win_set_width(0, 24)
+
+    -- Neovim fires WinResized only as it redraws, which a spec never does.
+    vim.api.nvim_exec_autocmds("WinResized", {})
+
+    local room = 24 - vim.fn.getwininfo(vim.api.nvim_get_current_win())[1].textoff
+    assert.are.equal(room, vim.fn.strdisplaywidth(drawn()[1].text[1]))
+  end)
+
   it("narrows to the text area as the gutter widens", function()
     vim.o.columns = 50
     vim.wo.number = false

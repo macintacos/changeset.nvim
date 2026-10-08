@@ -729,7 +729,9 @@ vim.api.nvim_create_autocmd("WinResized", {
   group = group,
   desc = "changeset: refit review comment blocks to their narrowest window",
   callback = function()
-    for _, win in ipairs(vim.v.event.windows or {}) do
+    -- Empty only from `nvim_exec_autocmds`.
+    local wins = vim.v.event.windows or {}
+    for _, win in ipairs(#wins > 0 and wins or vim.api.nvim_list_wins()) do
       if vim.api.nvim_win_is_valid(win) then
         refit(vim.api.nvim_win_get_buf(win))
       end
