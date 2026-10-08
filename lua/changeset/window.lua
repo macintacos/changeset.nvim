@@ -157,13 +157,14 @@ local function usable(win)
   return vim.b[buf].changeset_stand_in or vim.bo[buf].buftype == ""
 end
 
----Windows in this tabpage that can hold a file. A float is not one of them, and
+---Windows in `tabpage` that can hold a file. A float is not one of them, and
 ---counting them is what decides whether the sidebar's window can be closed at all.
+---@param tabpage integer 0 for the current one.
 ---@return integer[]
-local function panes()
+local function panes(tabpage)
   return vim.tbl_filter(function(win)
     return vim.api.nvim_win_get_config(win).relative == ""
-  end, vim.api.nvim_tabpage_list_wins(0))
+  end, vim.api.nvim_tabpage_list_wins(tabpage))
 end
 
 ---@return integer[]
@@ -336,7 +337,7 @@ function M.relayout()
   sidebar.layout = layout
   pin(sidebar.win, layout)
   -- Neovim refuses to move the last window, which has no layout to change anyway.
-  if #panes() > 1 then
+  if #panes(0) > 1 then
     vim.api.nvim_win_set_config(sidebar.win, split_for(layout, vim.o.lines))
     if vim.o.equalalways then
       vim.cmd("wincmd =")
@@ -604,7 +605,7 @@ function M.close()
     if
       snapshot.split
       and vim.api.nvim_win_is_valid(borrowed_win)
-      and #vim.api.nvim_tabpage_list_wins(vim.api.nvim_win_get_tabpage(borrowed_win)) > 1
+      and #panes(vim.api.nvim_win_get_tabpage(borrowed_win)) > 1
     then
       vim.api.nvim_win_close(borrowed_win, true)
       borrowed[borrowed_win] = nil
@@ -612,7 +613,7 @@ function M.close()
   end
 
   if win and vim.api.nvim_win_is_valid(win) then
-    if #panes() > 1 then
+    if #panes(vim.api.nvim_win_get_tabpage(win)) > 1 then
       vim.api.nvim_win_close(win, true)
     else
       -- The last window cannot be closed, and leaving the tree in it would leave a

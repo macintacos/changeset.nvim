@@ -325,6 +325,18 @@ describe("changeset.window", function()
       assert.is_false(visible)
     end)
 
+    it("closes its window in the tabpage it stands in when closed from another", function()
+      local first = vim.api.nvim_get_current_tabpage()
+      local win = window.open(vim.api.nvim_create_buf(false, true))
+      vim.cmd("tabnew")
+
+      window.close()
+      local seen = { valid = vim.api.nvim_win_is_valid(win), wins = #vim.api.nvim_tabpage_list_wins(first) }
+      vim.cmd("tabclose")
+
+      assert.same({ valid = false, wins = 1 }, seen)
+    end)
+
     it("pins its buffer to its window", function()
       window.open(vim.api.nvim_create_buf(false, true))
 
