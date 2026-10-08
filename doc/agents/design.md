@@ -1420,6 +1420,15 @@ repository's deliberate choice is none of that save's business.
   tree's top stays there instead, header rows included, while the row still fits on screen
   with `'scrolloff'` kept, so a section arriving above it, as Comments does with the first review comment, comes into
   view rather than scrolling out of it.
+- **A rebuild redraws only what changed, and no faster than it can draw.** Each file's
+  rows are kept by the identity of its diff and rebuilt only once its symbols, comments
+  or the buffer its captions read move, and a rebuild whose rows draw alike leaves the
+  sidebar as drawn: a write or a return of focus that changed nothing costs no redraw.
+  Rows are always current, so `rows()` and the kind menu never wait; the redraw is what
+  waits. Once a redraw costs more than a frame, the redraw after a symbols answer waits
+  twice that cost, so a large walk fills in a few files at a time instead of freezing the
+  editor on every answer. A new diff, opening the sidebar and every other redraw draw at
+  once.
 - **Opening the sidebar is an ordinary split.** It takes its width with `winfixwidth`
   (a drawer its height, with `winfixheight`) already set and then lets `'equalalways'`
   settle the rest, so the windows that were already open share out what is left instead
