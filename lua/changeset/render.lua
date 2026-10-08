@@ -293,7 +293,9 @@ local function section_line(section, opts, width)
     count = ("%s · %d draft%s"):format(count, section.drafts, section.drafts == 1 and "" or "s")
   end
   local fixed_cells = vim.fn.strdisplaywidth(MARGIN .. glyph .. "  " .. section.name .. count) + stat_cells(stat, width)
-  local pad = math.max(1, math.min(LABEL_CELLS - vim.fn.strdisplaywidth(section.name), opts.width - fixed_cells))
+  local room = opts.width - fixed_cells
+  -- With no stat, the count takes the stat's place at the right edge.
+  local pad = math.max(1, stat and math.min(LABEL_CELLS - vim.fn.strdisplaywidth(section.name), room) or room)
   return M.compose(section, {
     { MARGIN },
     { glyph, icon_hl },
@@ -358,7 +360,7 @@ local function append_children(out, row, bars, opts, width)
 end
 
 ---A comment row: the file marks' circle in the rail's column, the file's icon, its name and line, the name alone for
----a whole file's, and the body's first line, quiet like the marks' and clipped to fit.
+---a whole file's, and the body's first line at the right edge, quiet like the marks' and clipped to fit.
 ---@param row changeset.Row
 ---@param opts changeset.RenderOpts
 ---@param width fun(text: string): integer
@@ -382,7 +384,8 @@ local function comment_line(row, opts, width)
   -- The body needs its two-cell gap and a cell to show anything.
   if room >= 3 then
     local text = cells.clip(comment.body:match("^[^\r\n]*"), room - 2)
-    vim.list_extend(chunks, { { "  " }, { text, highlights.REVIEW_COMMENT_BODY_HL } })
+    local pad = (" "):rep(room - vim.fn.strdisplaywidth(text))
+    vim.list_extend(chunks, { { pad }, { text, highlights.REVIEW_COMMENT_BODY_HL } })
   end
   return M.compose(row, chunks)
 end

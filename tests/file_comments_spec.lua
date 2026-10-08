@@ -106,14 +106,14 @@ describe("a review comment on a whole file", function()
   it("is listed under Comments by its file's name alone, ahead of its lines' comments", function()
     open_sidebar({ { path = "alpha.txt", line = 2, body = "a line" }, { path = "alpha.txt", body = "the file" } })
 
-    local file = lines_of("alpha.txt  the file")[1]
+    local file = lines_of("the file")[1]
     assert.equal(2, file)
-    assert.equal(file + 1, lines_of("alpha.txt:2  a line")[1])
+    assert.equal(file + 1, lines_of("alpha.txt:2")[1])
   end)
 
   it("opens to edit under its Comments row on <CR>, holding its text", function()
     open_sidebar({ { path = "gone.lua", body = "why drop it?" } })
-    local lnum = cursor_to_last("gone.lua  why drop it?")
+    local lnum = cursor_to_last("why drop it?")
 
     vim.api.nvim_feedkeys(vim.keycode("<CR>"), "x", false)
 
@@ -127,7 +127,7 @@ describe("a review comment on a whole file", function()
   it("previews its deleted file's notice from its Comments row", function()
     open_sidebar({ { path = "gone.lua", body = "why drop it?" } })
 
-    cursor_to_last("gone.lua  why drop it?")
+    cursor_to_last("why drop it?")
 
     local previewed = vim.api.nvim_win_get_buf(vim.fn.win_getid(vim.fn.winnr("#")))
     assert.truthy(table.concat(vim.api.nvim_buf_get_lines(previewed, 0, -1, false)):find("deleted", 1, true))

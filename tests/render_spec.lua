@@ -252,6 +252,12 @@ describe("changeset.render", function()
       assert.is_nil(stat_mark(one))
     end)
 
+    it("ends its header's count where a stat would end", function()
+      local header = render.lines({ comments({ saved() }) }, opts({ width = 50 }))[1]
+
+      assert.equal(50 - 2, vim.fn.strdisplaywidth(header.text))
+    end)
+
     it("counts the drafts it lists on its header", function()
       local header = comments({ saved(), saved({ line = 43, draft = true }) })
       header.drafts = 1
@@ -277,9 +283,15 @@ describe("changeset.render", function()
       local one = render.lines({ comments({ saved() }) }, opts())[2]
       local range = render.lines({ comments({ saved({ start_line = 40 }) }) }, opts())[2]
 
-      assert.is_true(vim.endswith(one.text, "a.lua:42  note"))
-      assert.is_true(vim.endswith(range.text, "a.lua:40-42  note"))
+      assert.truthy(one.text:find("a.lua:42%s%s+note$"))
+      assert.truthy(range.text:find("a.lua:40%-42%s%s+note$"))
       assert.equal(highlights.REVIEW_COMMENT_BODY_HL, mark_over(one, "note").hl)
+    end)
+
+    it("ends the body where a stat would end", function()
+      local line = render.lines({ comments({ saved() }) }, opts({ width = 50 }))[2]
+
+      assert.equal(50 - 2, vim.fn.strdisplaywidth(line.text))
     end)
 
     it("clips the body to the width", function()
