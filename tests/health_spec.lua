@@ -82,6 +82,16 @@ describe("changeset.health", function()
     assert.equal("error", level({ nvim_012 = false }, "Neovim 0.12 or newer is required"))
   end)
 
+  it("reports the running Neovim on one too old for the rest of the check", function()
+    local list = vim.list
+    vim.list = nil
+    local ok, result = pcall(checked_level, "Neovim")
+    vim.list = list
+
+    assert.is_true(ok, tostring(result))
+    assert.truthy(result)
+  end)
+
   it("reports git, and errors without it", function()
     assert.equal("ok", level({}, "`git` found"))
     assert.equal("error", level({ git = false }, "`git` not found"))

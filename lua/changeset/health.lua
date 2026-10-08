@@ -46,6 +46,19 @@ local function loads(name)
   return (pcall(require, name))
 end
 
+---The attached servers that provide symbols, once each. Without `vim.list`, which a Neovim too old to report on lacks.
+---@return string[]
+local function symbol_servers()
+  local seen, names = {}, {}
+  for _, client in ipairs(vim.lsp.get_clients({ method = "textDocument/documentSymbol" })) do
+    if not seen[client.name] then
+      seen[client.name] = true
+      names[#names + 1] = client.name
+    end
+  end
+  return names
+end
+
 ---@return changeset.health.Facts
 local function probe()
   local mini_pick = loads("mini.pick") and (MiniPick and "set up" or "installed")
@@ -59,9 +72,7 @@ local function probe()
     which_key = loads("which-key"),
     mini_pick = mini_pick,
     gitsigns = loads("gitsigns"),
-    symbol_servers = vim.list.unique(vim.tbl_map(function(client)
-      return client.name
-    end, vim.lsp.get_clients({ method = "textDocument/documentSymbol" }))),
+    symbol_servers = symbol_servers(),
     parsers = vim.tbl_map(function(lang)
       return { lang = lang, found = vim.treesitter.language.add(lang) ~= nil }
     end, attributes.languages()),
