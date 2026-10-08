@@ -1174,6 +1174,15 @@ describe("changeset sidebar", function()
     assert.is_true(vim.b[preview_row(buf, "other.lua")].changeset_stand_in)
   end)
 
+  it("previews a stand-in for a changed binary file", function()
+    local file = assert(io.open("blob.bin", "wb"))
+    file:write("a\0b\n")
+    file:close()
+    Fixture.commit("binary", tmp)
+
+    assert.is_true(vim.b[preview_row(open_sidebar(), "blob.bin")].changeset_stand_in)
+  end)
+
   describe("on a file the branch deleted", function()
     local diff = require("changeset.diff")
     local real_blob = diff.blob

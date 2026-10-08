@@ -89,6 +89,24 @@ local function preview_deleted(tree, row)
   end)
 end
 
+local UNPREVIEWABLE = "This file is binary or too big to preview"
+
+---Whether the file at `path` is small enough to preview, and text by git's test: no NUL in its first 8000 bytes.
+---@param path string
+---@return boolean
+local function previewable(path)
+  if vim.fn.getfsize(path) > PREVIEW_MAX_BYTES then
+    return false
+  end
+  local file = io.open(path, "rb")
+  if not file then
+    return true
+  end
+  local head = file:read(8000) or ""
+  file:close()
+  return not head:find("\0", 1, true)
+end
+
 local function preview_current()
   local state = sidebar_state.current()
   local row = draw.row_at_cursor()
@@ -104,6 +122,8 @@ local function preview_current()
     return
   elseif vim.fn.filereadable(state.tree.root .. "/" .. row.path) == 0 then
     window.preview_notice(DELETED, draw.band_for(row, bound_keys.jump))
+  elseif not previewable(state.tree.root .. "/" .. row.path) then
+    window.preview_notice(UNPREVIEWABLE, draw.band_for(row, bound_keys.jump))
   else
     window.preview(
       state.tree.root .. "/" .. row.path,
