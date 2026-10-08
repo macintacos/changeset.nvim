@@ -116,6 +116,11 @@ The block a one-line move stopped the cursor on, as if it were a line of the fil
 keys edit or delete its review comment.
 _Avoid_: selected block, which **Selected** already means for the sidebar; focused block
 
+**Origin**:
+Where a review verb runs from: the sidebar, with its selected row, or a file's window. It names the repository the
+verb acts on: the tree's from the sidebar, else the current buffer's.
+_Avoid_: context, source, caller
+
 **Comments section**:
 The sidebar's first section, listing the repository's review comments, one comment row
 each. It classifies no file.

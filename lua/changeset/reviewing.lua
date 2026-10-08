@@ -4,11 +4,11 @@
 local Paths = require("changeset.paths")
 local Rows = require("changeset.rows")
 local buffers = require("changeset.buffers")
-local build = require("changeset.build")
 local comment_store = require("changeset.comment_store")
 local config = require("changeset.config")
 local dialog = require("changeset.dialog")
 local icons = require("changeset.icons")
+local origin = require("changeset.origin")
 local render = require("changeset.render")
 local review_comment = require("changeset.review_comment")
 local review_comment_blocks = require("changeset.review_comment_blocks")
@@ -18,15 +18,10 @@ local window = require("changeset.window")
 
 local M = {}
 
----The repository to act on: the tree's when the command runs from the sidebar, whose own buffer
----names none, else the current buffer's.
+---The repository to act on, as `origin.current` answers it.
 ---@return string
 local function root()
-  local tree = build.current()
-  if window.is_focused() and tree then
-    return tree.root
-  end
-  return Paths.root(0)
+  return origin.current().repository
 end
 
 ---@param level integer
@@ -201,11 +196,12 @@ end
 ---changed text keeps it as a draft.
 ---@param comment changeset.ReviewComment
 function M.open(comment)
-  local repository = root()
+  local from = origin.current()
+  local repository = from.repository
   local last = comment.line
   local kind = comment.draft and "Edit draft review comment · " or "Edit review comment · "
   open_window(repository, comment, {
-    line = last and not window.is_focused() and last or vim.api.nvim_win_get_cursor(0)[1],
+    line = last and not from.sidebar and last or vim.api.nvim_win_get_cursor(0)[1],
     title = kind .. lines_label(review_comment.first(comment), last),
     body = comment.body,
     keep = function(body, draft)
@@ -280,10 +276,10 @@ local function open_new(repository, comment, line)
   })
 end
 
----The file the sidebar's cursor row stands for: a file's row, or a Comments row listing a whole file's comment.
+---The file sidebar row `row` stands for: a file's row, or a Comments row listing a whole file's comment.
+---@param row changeset.Row?
 ---@return string? path
-local function sidebar_file()
-  local row = require("changeset.draw").row_at_cursor()
+local function sidebar_file(row)
   if row and (row.kind == "file" or row.review_comment and not row.review_comment.line) then
     return row.path
   end
@@ -312,9 +308,9 @@ end
 
 ---Opens the review comment window under the sidebar's cursor row for what the row stands for, or the comment already
 ---there to edit, found as from the file.
-local function comment_row()
-  local repository = root()
-  local row = require("changeset.draw").row_at_cursor()
+---@param from changeset.Origin
+local function comment_row(from)
+  local repository, row = from.repository, from.row
   if not row or row.kind == "section" then
     return say(
       vim.log.levels.WARN,
@@ -358,10 +354,11 @@ end
 ---@param first integer
 ---@param last integer
 function M.comment(first, last)
-  if window.is_focused() then
-    return comment_row()
+  local from = origin.current()
+  if from.sidebar then
+    return comment_row(from)
   end
-  local repository = Paths.root(0)
+  local repository = from.repository
   local path = commentable(repository)
   if not path then
     return
@@ -376,10 +373,11 @@ end
 ---Opens the review comment window for the cursor's line as `comment` does, but for the whole file on its first line.
 function M.comment_here()
   local lnum = vim.api.nvim_win_get_cursor(0)[1]
-  if lnum ~= 1 or window.is_focused() then
+  local from = origin.current()
+  if lnum ~= 1 or from.sidebar then
     return M.comment(lnum, lnum)
   end
-  local repository = Paths.root(0)
+  local repository = from.repository
   local path = commentable(repository)
   if path then
     comment_on_file(repository, path)
@@ -484,12 +482,13 @@ local function delete_on_file(repository, path)
 end
 
 ---Deletes the comment on the whole file the sidebar's cursor row stands for.
-local function delete_file()
-  local path = sidebar_file()
+---@param from changeset.Origin
+local function delete_file(from)
+  local path = sidebar_file(from.row)
   if not path then
     return say(vim.log.levels.WARN, "run `:Changeset comment del` from a file, or on a file's row")
   end
-  delete_on_file(root(), path)
+  delete_on_file(from.repository, path)
 end
 
 ---The review comment on the current window's cursor line, the narrowest of those covering it; on the file's first line
@@ -513,10 +512,11 @@ end
 ---Deletes the review comment on the cursor's line, the narrowest of those covering it; on the file's first line the one
 ---on the whole file when there is one; from the sidebar on a file's row, the one on the whole file.
 function M.delete()
-  if window.is_focused() then
-    return delete_file()
+  local from = origin.current()
+  if from.sidebar then
+    return delete_file(from)
   end
-  local repository = Paths.root(0)
+  local repository = from.repository
   local comment = on_cursor_line(repository)
   if comment then
     drop(repository, comment)
@@ -541,9 +541,9 @@ end
 ---The review comment the sidebar's cursor row lists, or the one on the whole file a file's row stands for, as stored
 ---now; warns or says why when there is none.
 ---@param repository string
+---@param row changeset.Row?
 ---@return changeset.ReviewComment?
-local function on_sidebar_row(repository)
-  local row = require("changeset.draw").row_at_cursor()
+local function on_sidebar_row(repository, row)
   if row and row.review_comment then
     return stored_as(repository, row.review_comment)
       or say(vim.log.levels.INFO, "no review comment on %s now", place(row.review_comment))
@@ -557,10 +557,11 @@ end
 ---Makes the review comment `delete` would delete a draft, or saves it when it is one; from the sidebar, the one a
 ---Comments row lists or the one on the whole file a file's row stands for.
 function M.draft()
-  local repository = root()
+  local from = origin.current()
+  local repository = from.repository
   local comment
-  if window.is_focused() then
-    comment = on_sidebar_row(repository)
+  if from.sidebar then
+    comment = on_sidebar_row(repository, from.row)
   else
     comment = on_cursor_line(repository)
   end
@@ -884,13 +885,14 @@ end
 ---@param command string
 ---@return integer? win, boolean from_sidebar, string repository
 local function jump_from(command)
-  local from_sidebar = window.is_focused()
+  local from = origin.current()
+  local from_sidebar = from.sidebar
   local win = from_sidebar and vim.api.nvim_get_current_win() or jump_window()
   if not win then
     say(vim.log.levels.WARN, "run `:Changeset %s` from a file", command)
     return nil, from_sidebar, ""
   end
-  return win, from_sidebar, from_sidebar and root() or Paths.root(vim.api.nvim_win_get_buf(win))
+  return win, from_sidebar, from_sidebar and from.repository or Paths.root(vim.api.nvim_win_get_buf(win))
 end
 
 ---Puts `comment`'s first line in `win`, through the sidebar's commit from the sidebar. Refuses, saying why, when

@@ -1,6 +1,7 @@
 local Dialog = require("support.dialog")
 local Fixture = require("support.git")
 local Notify = require("support.notify")
+local Paths = require("changeset.paths")
 local comment_store = require("changeset.comment_store")
 
 describe("changeset.reviewing", function()
@@ -25,14 +26,10 @@ describe("changeset.reviewing", function()
       end,
       watch = function() end,
     }
-    package.loaded["changeset.window"] = {
-      is_focused = function()
-        return focused
-      end,
-    }
-    package.loaded["changeset.build"] = {
+    package.loaded["changeset.window"] = {}
+    package.loaded["changeset.origin"] = {
       current = function()
-        return tree
+        return { repository = focused and tree.root or Paths.root(0), sidebar = focused }
       end,
     }
     package.loaded["changeset.reviewing"] = nil
@@ -49,7 +46,7 @@ describe("changeset.reviewing", function()
     for _, name in ipairs({ "changeset.review_comment_window", "changeset.window" }) do
       package.loaded[name] = nil
     end
-    package.loaded["changeset.build"] = nil
+    package.loaded["changeset.origin"] = nil
     package.loaded["changeset.herdr"] = nil
   end)
 
