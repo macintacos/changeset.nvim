@@ -47,6 +47,8 @@ local M = {}
 ---@class changeset.rows.Lines
 ---@field text changeset.LineText? Captions orphan hunks; without it they are named by line range alone.
 ---@field comments table<string, changeset.Comments>? By file path; a file without an entry never gets a Docs copy.
+---@field tick (fun(path: string): integer?)? Moves whenever `text` would read the file at `path` differently: a
+---file's rows are built again only once it, its symbols or its comments move.
 
 ---Which kinds of changed line a unit holds.
 ---@class changeset.rows.Flags
@@ -589,37 +591,81 @@ function M.read_status(file, symbols_by_path)
   return symbols_by_path[file.path] and "done" or "reading"
 end
 
----File `file` under its path's section, under Tests when its changes reach inline tests, and under Docs when
+---A file row and the section it goes under, with the lines it accounts for.
+---@class changeset.rows.Placed
+---@field section changeset.SectionKey
+---@field row changeset.Row
+---@field stat { added: integer?, removed: integer? }
+
+---What a file's rows were built from, and the rows.
+---@class changeset.rows.Built
+---@field symbols changeset.Symbol[]?
+---@field comments changeset.Comments?
+---@field tick integer?
+---@field placed changeset.rows.Placed[]
+
+---Each file's rows from its last build, dropped with the file. Rows are never written once built, so builds share
+---them.
+---@type table<changeset.File, changeset.rows.Built>
+local built = setmetatable({}, { __mode = "k" })
+
+---`file`'s rows under its path's section, under Tests when its changes reach inline tests, and under Docs when
 ---some change only comments: each copy lists only its own symbols and "Other changes", and a copy with neither is
 ---left out. The copies' stats are `shares` of the file's.
 ---@param section_rows table<changeset.SectionKey, changeset.Row>
 ---@param file changeset.File
----@param symbols_by_path table<string, changeset.Symbol[]>
----@param lines changeset.rows.Lines
-local function add_file(section_rows, file, symbols_by_path, lines)
+---@param symbols changeset.Symbol[]?
+---@param comment_lines changeset.Comments?
+---@param line_text changeset.LineText?
+---@return changeset.rows.Placed[]
+local function place_file(section_rows, file, symbols, comment_lines, line_text)
   local key = file.section
-  local section = section_rows[key]
-  local read_status = M.read_status(file, symbols_by_path)
-  if read_status ~= "done" then
-    return append(section, file_row(file, read_status, section), file)
+  if not symbols or M.skips(file) then
+    return {
+      { section = key, row = file_row(file, M.skips(file) and "skipped" or "reading", section_rows[key]), stat = file },
+    }
   end
-  local symbols = symbols_by_path[file.path]
-  local comment_lines = key ~= "docs" and lines.comments and lines.comments[file.path] or nil
   local credited = credit(
     file,
     nest(comment_lines and widen(symbols, comment_lines.new) or symbols, sections.test_rule(file.path)),
     comment_lines
   )
-  local section_for = { kept = section, tests = section_rows.tests, docs = section_rows.docs }
+  local key_for = { kept = key, tests = "tests", docs = "docs" }
   local rows, shown = {}, {}
   for copy, nodes in pairs(split(credited.roots)) do
     local part = { nodes = nodes, orphans = credited.orphans[copy] or {} }
-    rows[copy] = fill(file_row(file, "done", section_for[copy]), part, lines.text)
+    rows[copy] = fill(file_row(file, "done", section_rows[key_for[copy]]), part, line_text)
     shown[copy] = #rows[copy].children > 0 or nil
   end
+  local placed = {}
   for copy, stat in pairs(shares(file, credited, shown)) do
     rows[copy].added, rows[copy].removed = stat.added, stat.removed
-    append(section_for[copy], rows[copy], stat)
+    placed[#placed + 1] = { section = key_for[copy], row = rows[copy], stat = stat }
+  end
+  return placed
+end
+
+---File `file` under its sections, reusing its rows from the last build when it was built from the same inputs.
+---@param section_rows table<changeset.SectionKey, changeset.Row>
+---@param file changeset.File
+---@param symbols_by_path table<string, changeset.Symbol[]>
+---@param lines changeset.rows.Lines
+local function add_file(section_rows, file, symbols_by_path, lines)
+  local symbols = symbols_by_path[file.path]
+  local comment_lines = file.section ~= "docs" and lines.comments and lines.comments[file.path] or nil
+  local tick = lines.tick and lines.tick(file.path)
+  local last = built[file]
+  if not (last and last.symbols == symbols and last.comments == comment_lines and last.tick == tick) then
+    last = {
+      symbols = symbols,
+      comments = comment_lines,
+      tick = tick,
+      placed = place_file(section_rows, file, symbols, comment_lines, lines.text),
+    }
+    built[file] = last
+  end
+  for _, placed in ipairs(last.placed) do
+    append(section_rows[placed.section], placed.row, placed.stat)
   end
 end
 

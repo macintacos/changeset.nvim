@@ -107,6 +107,18 @@ describe("changeset sidebar", function()
     assert.truthy(text:find("other.lua", 1, true))
   end)
 
+  it("captions an orphan hunk with its buffer's unwritten text once the tree rebuilds", function()
+    local buf = open_sidebar()
+    vim.cmd.edit("other.lua")
+    vim.api.nvim_buf_set_lines(0, 0, 1, false, { "return 'unwritten'" })
+
+    build.refresh()
+
+    assert.is_true(vim.wait(5000, function()
+      return table.concat(lines_of(buf), "\n"):find("return 'unwritten'", 1, true) ~= nil
+    end, 25))
+  end)
+
   it("paints a filter match over the colour of the row it sits in", function()
     local buf = open_sidebar()
     vim.api.nvim_set_current_win((assert(window.win())))

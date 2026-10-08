@@ -187,6 +187,28 @@ describe("changeset.build", function()
       assert.equal(1, #assert(build.current().symbols["mod.lua"]))
     end)
 
+    it("keeps each file and its symbols the same objects across a refresh over an unchanged diff", function()
+      answer({ Changes.sym("f", "Function", 0, 1, 1) })
+      build_and_collect()
+      local tree = assert(build.current())
+      local file, read = tree.files[1], tree.symbols["mod.lua"]
+
+      refresh_and_collect()
+
+      assert.equal(file, build.current().files[1])
+      assert.equal(read, build.current().symbols["mod.lua"])
+    end)
+
+    it("hands a refresh a file of its own once its diff moves", function()
+      build_and_collect()
+      local file = assert(build.current()).files[1]
+      vim.fn.writefile({ "local x = 4", "return x" }, "mod.lua")
+
+      refresh_and_collect()
+
+      assert.not_equal(file, build.current().files[1])
+    end)
+
     it("does not cache the symbols read from a buffer holding unwritten edits", function()
       answer({ Changes.sym("f", "Function", 0, 1, 1) })
       vim.api.nvim_buf_set_lines(0, 0, -1, false, { "return 3" })

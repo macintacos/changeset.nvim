@@ -78,6 +78,21 @@ end
 local FILE_ID = "#implementation\0" .. PATH
 
 describe("changeset.rows", function()
+  local real_build = Rows.build
+
+  -- Every case builds twice, so each also checks that the rows reused across builds equal the first ones.
+  before_each(function()
+    Rows.build = function(...)
+      local rows = real_build(...)
+      assert.same(rows, real_build(...))
+      return rows
+    end
+  end)
+
+  after_each(function()
+    Rows.build = real_build
+  end)
+
   describe("build", function()
     it("marks a file done once its symbols have arrived", function()
       local rows = Rows.files(Rows.build({ file(PATH, { hunk(3, 1) }) }, { [PATH] = {} }))
@@ -543,6 +558,58 @@ describe("changeset.rows", function()
           Rows.files(Rows.build({ file(PATH, { hunk(2, 1), hunk(6, 1) }) }, { [PATH] = symbols }))[1].children
 
         assert.not_equal(rows[1].id, rows[2].id)
+      end)
+    end)
+    describe("across builds", function()
+      local STORE = { sym("SessionStore", "Class", 0, 3, 20), sym("refresh", "Method", 1, 5, 9) }
+      local OTHER = "src/other.ts"
+
+      it("returns the same file rows when built again from the same inputs", function()
+        local files, symbols = { file(PATH, { hunk(7, 1), hunk(24, 1) }) }, { [PATH] = STORE }
+
+        local first = Rows.files(Rows.build(files, symbols))
+        local second = Rows.files(Rows.build(files, symbols))
+
+        assert.equal(first[1], second[1])
+      end)
+
+      it("rebuilds only the file whose symbols were replaced", function()
+        local files = { file(PATH, { hunk(7, 1) }), file(OTHER, { hunk(7, 1) }) }
+        local symbols = { [PATH] = STORE, [OTHER] = STORE }
+        local first = Rows.files(Rows.build(files, symbols))
+
+        symbols[OTHER] = { sym("refresh", "Function", 0, 5, 9) }
+        local second = Rows.files(Rows.build(files, symbols))
+
+        assert.equal(first[1], second[1])
+        assert.not_equal(first[2], second[2])
+        assert.same({ "refresh" }, names(second[2].children))
+      end)
+
+      it("captions orphan hunks again once the file's tick moves", function()
+        local files, symbols = { file(PATH, { hunk(24, 1) }) }, { [PATH] = STORE }
+        local text, tick = "old", 1
+        local lines = {
+          text = function()
+            return text
+          end,
+          tick = function()
+            return tick
+          end,
+        }
+        Rows.build(files, symbols, lines)
+
+        text, tick = "new", 2
+        local group = Rows.files(Rows.build(files, symbols, lines))[1].children[1]
+
+        assert.same({ "L24 new" }, names(group.children))
+      end)
+
+      it("totals each section afresh from the rows it reuses", function()
+        local files, symbols = { file(PATH, { hunk(7, 1), hunk(24, 2) }) }, { [PATH] = STORE }
+        local fresh = Rows.build(files, symbols)
+
+        assert.same(fresh, Rows.build(files, symbols))
       end)
     end)
   end)

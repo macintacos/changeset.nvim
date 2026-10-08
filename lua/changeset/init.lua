@@ -196,27 +196,33 @@ local function pick(row)
   draw.paint()
 end
 
----Text of a changed line, for captioning an orphan hunk.
+---What captions orphan hunks in one rebuild, looking loaded buffers up once.
 ---
 ---Prefers the buffer, which holds unwritten changes the file does not. Reading
 ---symbols is what loads a file, so a file answered from the cache has no buffer
 ---and is read from disk instead.
----@param path string
----@param lnum integer
----@return string?
-local function line_text(path, lnum)
-  local tree = build.current()
-  if lnum < 1 then
-    return nil
-  end
-  assert(tree, "changeset: no tree built yet")
-  local full = tree.root .. "/" .. path
-  local buf = buffers.loaded(full)
-  if buf then
-    return vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1]
-  end
-  local ok, lines = pcall(vim.fn.readfile, full, "", lnum)
-  return ok and lines[lnum] or nil
+---@param root string
+---@return changeset.rows.Lines lines Its `text` and `tick`.
+local function captions(root)
+  local index = buffers.index()
+  return {
+    text = function(path, lnum)
+      if lnum < 1 then
+        return nil
+      end
+      local full = root .. "/" .. path
+      local buf = index[vim.fs.normalize(full)]
+      if buf then
+        return vim.api.nvim_buf_get_lines(buf, lnum - 1, lnum, false)[1]
+      end
+      local ok, lines = pcall(vim.fn.readfile, full, "", lnum)
+      return ok and lines[lnum] or nil
+    end,
+    tick = function(path)
+      local buf = index[vim.fs.normalize(root .. "/" .. path)]
+      return buf and vim.api.nvim_buf_get_changedtick(buf)
+    end,
+  }
 end
 
 ---Whether the tree is done growing under `path`: its diff is in, and so are its
@@ -239,7 +245,9 @@ local function rebuild()
   assert(state, "changeset: no tree built yet")
   -- Taken before the rows change: whether the cursor moved is judged by the row it was on.
   local before = (draw.row_at_cursor() or {}).id
-  state.rows = Rows.build(state.tree.files, state.tree.symbols, { text = line_text, comments = state.tree.comments })
+  local lines = captions(state.tree.root)
+  lines.comments = state.tree.comments
+  state.rows = Rows.build(state.tree.files, state.tree.symbols, lines)
   redraw()
   apply(state.position:rebuilt(draw.view(), before, decided))
 end

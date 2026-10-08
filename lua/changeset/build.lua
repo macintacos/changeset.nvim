@@ -103,9 +103,11 @@ end
 ---@param path string Repo-relative.
 ---@param answer changeset.build.Answer
 ---@param stamp string? The file as it stood when its symbols were asked for.
+---@return changeset.CachedSymbol[]? filed The symbols filed for `path`, which a later refresh's cache hands back as the
+---same table; nil when none were filed.
 local function file_answer(root, path, answer, stamp)
   if not (memo and memo.root == root and stamp) then
-    return
+    return nil
   end
   -- Only an answer that arrived is filed. A server that never attached would
   -- otherwise leave "this file has no symbols" on disk, fresh until the file
@@ -115,17 +117,59 @@ local function file_answer(root, path, answer, stamp)
   if items and not dirty then
     memo.entries[path] = { stamp = stamp, symbols = cache.project(items), comments = answer.comments }
     save_soon()
+    return memo.entries[path].symbols
   elseif not items then
     -- An older walk's late silence must not bury an answer about the same file state.
     local entry = memo.entries[path]
     if entry and not entry.silent and entry.stamp == stamp then
-      return
+      return nil
     end
     -- Not asked again on every refresh — each ask waits out the attach timeout
     -- under a "reading symbols" row — only once the file moves or a server
     -- arrives for it.
     memo.entries[path] = { stamp = stamp, symbols = {}, comments = not dirty and answer.comments or nil, silent = true }
+    return memo.entries[path].symbols
   end
+  return nil
+end
+
+local HUNK_FIELDS = { "lnum", "count", "added", "removed", "old_lnum" }
+local FILE_FIELDS = { "path", "oldpath", "status", "section", "added", "removed" }
+
+---Whether `a` and `b` hold the same diff of the same file.
+---@param a changeset.File
+---@param b changeset.File
+---@return boolean
+local function same_file(a, b)
+  local function same(x, y, fields)
+    return vim.iter(fields):all(function(field)
+      return x[field] == y[field]
+    end)
+  end
+  if not (same(a, b, FILE_FIELDS) and #a.hunks == #b.hunks) then
+    return false
+  end
+  for i, hunk in ipairs(a.hunks) do
+    if not same(hunk, b.hunks[i], HUNK_FIELDS) then
+      return false
+    end
+  end
+  return true
+end
+
+---`files`, each one `previous` already holds swapped for that one: rows built for a file are kept by its identity.
+---@param previous changeset.File[]
+---@param files changeset.File[]
+---@return changeset.File[]
+local function keep_identity(previous, files)
+  local by_path = {}
+  for _, file in ipairs(previous) do
+    by_path[file.path] = file
+  end
+  return vim.tbl_map(function(file)
+    local old = by_path[file.path]
+    return old and same_file(old, file) and old or file
+  end, files)
 end
 
 ---Gather the diff, then let symbols fill in behind it.
@@ -152,12 +196,12 @@ function M.refresh()
       announce("failed")
       return vim.notify("Changeset: " .. (err or "git failed"), vim.log.levels.ERROR)
     end
-    tree.files = files
+    tree.files = keep_identity(tree.files, files)
     tree.commits = commits
     tree.collected = true
     local readable = vim.tbl_filter(function(file)
       return not Rows.skips(file)
-    end, files)
+    end, tree.files)
 
     -- Stamped before the request rather than after: a file edited while its
     -- symbols are being read then fails this check next time, instead of
@@ -186,12 +230,12 @@ function M.refresh()
     work.cancel = resolve.start({ root = root, base = tree.base }, unknown, function(path, items, comment_lines)
       -- Filed even once a newer refresh has replaced this one: the stamp predates
       -- the request, so the answer still describes the file it was read from.
-      file_answer(root, path, { items = items, comments = comment_lines }, stamps[path])
+      local filed = file_answer(root, path, { items = items, comments = comment_lines }, stamps[path])
       if tree and work.request == request then
         -- A server that answers nothing is "read, with no symbols", which is what
         -- turns every hunk in an unsupported file into an orphan row. Leaving the key
         -- absent would instead read as "still reading", forever.
-        tree.symbols[path] = items or {}
+        tree.symbols[path] = filed or items or {}
         tree.comments[path] = comment_lines
         announce("symbols")
       end

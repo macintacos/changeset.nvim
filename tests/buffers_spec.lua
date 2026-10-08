@@ -37,6 +37,38 @@ describe("changeset.buffers", function()
     end)
   end)
 
+  describe("index", function()
+    after_each(function()
+      vim.cmd("silent! %bwipeout!")
+    end)
+
+    it("finds the buffer loaded finds", function()
+      local path = vim.fs.normalize(tmp .. "/a.lua")
+      vim.fn.writefile({ "x" }, path)
+      assert(buffers.load(path))
+
+      assert.equal(buffers.loaded(path), buffers.index()[path])
+    end)
+
+    it("finds nothing for a file with no loaded buffer", function()
+      local path = vim.fs.normalize(tmp .. "/a.lua")
+      vim.fn.writefile({ "x" }, path .. ".orig")
+      assert(buffers.load(path .. ".orig"))
+
+      assert.is_nil(buffers.index()[path])
+    end)
+
+    it("finds the first loaded of two buffers whose names normalise alike", function()
+      local path = vim.fs.normalize(tmp .. "/a.lua")
+      vim.fn.writefile({ "x" }, path)
+      local first = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_name(first, tmp .. "//a.lua")
+      assert(buffers.load(path))
+
+      assert.equal(buffers.loaded(path), buffers.index()[path])
+    end)
+  end)
+
   describe("load", function()
     it("loads a file's contents without listing its buffer", function()
       local path = tmp .. "/a.lua"

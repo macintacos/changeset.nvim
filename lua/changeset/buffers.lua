@@ -17,6 +17,19 @@ function M.loaded(path)
   end)
 end
 
+---Every loaded buffer by its normalised name, as `loaded` finds them: for many lookups at once.
+---@return table<string, integer>
+function M.index()
+  local index = {}
+  for _, b in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(b) then
+      local name = vim.fs.normalize(vim.api.nvim_buf_get_name(b))
+      index[name] = index[name] or b
+    end
+  end
+  return index
+end
+
 ---Load `path` into a buffer, without disturbing one the user already has.
 ---
 ---`bufadd` leaves a buffer it creates unlisted, which is what keeps the files
