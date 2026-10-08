@@ -1,3 +1,4 @@
+local highlights = require("changeset.highlights")
 local render = require("changeset.render")
 
 ---@param overrides? table
@@ -148,7 +149,7 @@ describe("changeset.render", function()
     it("draws the file count in the meta group", function()
       local line = render.lines({ section({ files = 2 }) }, opts())[1]
 
-      assert.equal(render.META_HL, mark_over(line, "2 files").hl)
+      assert.equal(highlights.META_HL, mark_over(line, "2 files").hl)
     end)
 
     it("draws the header's icon in the group the caller gives it", function()
@@ -262,14 +263,14 @@ describe("changeset.render", function()
       local line = render.lines({ comments({ saved({ draft = true }) }) }, opts())[2]
 
       assert.equal(" ◌ ", line.text:sub(1, #" ◌ "))
-      assert.equal(render.REVIEW_COMMENT_DRAFT_HL, mark_over(line, "◌").hl)
+      assert.equal(highlights.REVIEW_COMMENT_DRAFT_HL, mark_over(line, "◌").hl)
     end)
 
     it("leads a review comment's row with a solid circle in its group", function()
       local line = render.lines({ comments({ saved() }) }, opts())[2]
 
       assert.equal(" ● ", line.text:sub(1, #" ● "))
-      assert.equal(render.REVIEW_COMMENT_HL, mark_over(line, "●").hl)
+      assert.equal(highlights.REVIEW_COMMENT_HL, mark_over(line, "●").hl)
     end)
 
     it("names the file and the line or range, then the body's first line, quiet", function()
@@ -278,7 +279,7 @@ describe("changeset.render", function()
 
       assert.is_true(vim.endswith(one.text, "a.lua:42  note"))
       assert.is_true(vim.endswith(range.text, "a.lua:40-42  note"))
-      assert.equal(render.REVIEW_COMMENT_BODY_HL, mark_over(one, "note").hl)
+      assert.equal(highlights.REVIEW_COMMENT_BODY_HL, mark_over(one, "note").hl)
     end)
 
     it("clips the body to the width", function()
@@ -497,7 +498,7 @@ describe("changeset.render", function()
         local tint, glyph = marks("selected")
 
         assert.same(
-          { render.SELECTED_HL, true, render.SELECTED_ICON, 43 },
+          { highlights.SELECTED_HL, true, render.SELECTED_ICON, 43 },
           { tint.hl_group, tint.hl_eol, glyph.virt_text[1][1], glyph.virt_text_win_col }
         )
       end)
@@ -506,7 +507,7 @@ describe("changeset.render", function()
         local tint, glyph = marks("here")
 
         assert.same(
-          { render.HERE_HL, true, render.HERE_ICON, 43 },
+          { highlights.HERE_HL, true, render.HERE_ICON, 43 },
           { tint.hl_group, tint.hl_eol, glyph.virt_text[1][1], glyph.virt_text_win_col }
         )
       end)
@@ -515,7 +516,7 @@ describe("changeset.render", function()
         local tint, glyph = marks("picked")
 
         assert.same(
-          { render.PICKED_HL, true, render.PICKED_ICON, 43 },
+          { highlights.PICKED_HL, true, render.PICKED_ICON, 43 },
           { tint.hl_group, tint.hl_eol, glyph.virt_text[1][1], glyph.virt_text_win_col }
         )
       end)
@@ -549,7 +550,7 @@ describe("changeset.render", function()
         local lines = file_lines({ file({ read = "reading" }) }, opts())
 
         assert.same({ " ▎ F a.lua (src)", "   └─⋯ reading symbols" }, texts(lines))
-        assert.equal(render.META_HL, mark_over(lines[2], "⋯ reading symbols").hl)
+        assert.equal(highlights.META_HL, mark_over(lines[2], "⋯ reading symbols").hl)
       end)
 
       it("shows only the file row once a file is read but nothing inside it changed", function()
@@ -584,14 +585,14 @@ describe("changeset.render", function()
       it("draws the group and its hunks in the meta group", function()
         local lines = file_lines(with_orphans(), opts())
 
-        assert.equal(render.META_HL, mark_over(lines[2], "Other changes").hl)
-        assert.equal(render.META_HL, mark_over(lines[3], "L4–6 local x = 1").hl)
+        assert.equal(highlights.META_HL, mark_over(lines[2], "Other changes").hl)
+        assert.equal(highlights.META_HL, mark_over(lines[3], "L4–6 local x = 1").hl)
       end)
 
       it("dims their icon instead of using the caller's colour", function()
         local lines = file_lines(with_orphans(), opts())
 
-        assert.equal(render.META_HL, mark_over(lines[2], "S").hl)
+        assert.equal(highlights.META_HL, mark_over(lines[2], "S").hl)
       end)
     end)
 
@@ -709,7 +710,7 @@ describe("changeset.render", function()
 
       local mark = assert(mark_over(lines[1], "a.lua"))
 
-      assert.equal(render.MATCH_HL, mark.hl)
+      assert.equal(highlights.MATCH_HL, mark.hl)
     end)
 
     -- An ancestor row, which is the case with a colour of its own to sit under:
@@ -731,14 +732,14 @@ describe("changeset.render", function()
 
       local mark = assert(mark_over(lines[1], "("))
 
-      assert.equal(render.MATCH_HL, mark.hl)
+      assert.equal(highlights.MATCH_HL, mark.hl)
     end)
 
     it("leaves the rows unmarked when nothing is being filtered", function()
       local lines = file_lines({ file() }, opts())
 
       for _, mark in ipairs(lines[1].marks) do
-        assert.not_equal(render.MATCH_HL, mark.hl)
+        assert.not_equal(highlights.MATCH_HL, mark.hl)
       end
     end)
   end)
@@ -748,13 +749,13 @@ describe("changeset.render", function()
 
     ---@param summary table
     ---@param width integer?
-    ---@param highlights boolean?
+    ---@param with_highlights boolean?
     ---@return { str: string, highlights: table[]? }
-    local function eval(summary, width, highlights)
+    local function eval(summary, width, with_highlights)
       width = width or 44
       return vim.api.nvim_eval_statusline(
         render.header(summary, width),
-        { use_winbar = true, maxwidth = width, highlights = highlights }
+        { use_winbar = true, maxwidth = width, highlights = with_highlights }
       )
     end
 
@@ -804,18 +805,18 @@ describe("changeset.render", function()
     end)
 
     it("dims the remote so the branch name leads", function()
-      render.define_highlights()
+      highlights.define_highlights()
       local shown = eval({ ref = "origin/trunk" }, 44, true)
 
-      assert.equal(render.HEADER_DIM_HL, group_at(shown, "origin/"))
-      assert.equal(render.HEADER_REF_HL, group_at(shown, "trunk"))
+      assert.equal(highlights.HEADER_DIM_HL, group_at(shown, "origin/"))
+      assert.equal(highlights.HEADER_REF_HL, group_at(shown, "trunk"))
     end)
 
     it("reads a local ref whole, with nothing dimmed", function()
-      render.define_highlights()
+      highlights.define_highlights()
       local shown = eval({ ref = "jt/parent" }, 44, true)
 
-      assert.equal(render.HEADER_REF_HL, group_at(shown, "jt/parent"))
+      assert.equal(highlights.HEADER_REF_HL, group_at(shown, "jt/parent"))
     end)
   end)
 
@@ -881,7 +882,7 @@ describe("changeset.render", function()
       vim.api.nvim_set_hl(0, "ChangesetSpecStrip", { bg = 0x654321 })
       local tabline = vim.api.nvim_get_hl(0, { name = "TabLine" })
       vim.api.nvim_set_hl(0, "TabLine", { link = "ChangesetSpecStrip" })
-      render.define_highlights()
+      highlights.define_highlights()
 
       for _, chunk in ipairs(totals({ commits = 3 })) do
         -- A stack of groups takes each attribute from the last group that sets it.
@@ -900,8 +901,8 @@ describe("changeset.render", function()
         by_text[chunk[1]] = chunk[2]
       end
 
-      assert.same({ render.HEADER_HL, "GitSignsAdd" }, by_text["+142"])
-      assert.same({ render.HEADER_HL, "GitSignsDelete" }, by_text["-38"])
+      assert.same({ highlights.HEADER_HL, "GitSignsAdd" }, by_text["+142"])
+      assert.same({ highlights.HEADER_HL, "GitSignsDelete" }, by_text["-38"])
     end)
   end)
 
@@ -959,7 +960,7 @@ describe("changeset.render", function()
         jump = jump == nil and "<CR>" or jump,
         icon = "󰢱",
         -- What `band_icon` hands back, which is the only group a real band carries.
-        icon_hl = render.PREVIEW_ICON_HL,
+        icon_hl = highlights.PREVIEW_ICON_HL,
         destination = destination,
         path = path or "lua/init.lua",
       }
@@ -1021,15 +1022,15 @@ describe("changeset.render", function()
     end)
 
     it("draws the badge, the icon, the path and the way out as separate runs", function()
-      render.define_highlights()
-      render.band_icon("Comment")
+      highlights.define_highlights()
+      highlights.band_icon("Comment")
       local shown = vim.api.nvim_eval_statusline(
         render.preview_winbar(band()),
         { use_winbar = true, maxwidth = 60, highlights = true }
       )
 
       assert.same(
-        { render.PREVIEW_LABEL_HL, render.PREVIEW_ICON_HL, render.PREVIEW_HL, render.PREVIEW_HINT_HL },
+        { highlights.PREVIEW_LABEL_HL, highlights.PREVIEW_ICON_HL, highlights.PREVIEW_HL, highlights.PREVIEW_HINT_HL },
         vim.tbl_map(function(mark)
           return mark.group
         end, shown.highlights)
@@ -1059,347 +1060,6 @@ describe("changeset.render", function()
     end)
   end)
 
-  describe("define_highlights", function()
-    local GROUP_NAMES = {
-      "Comment",
-      "CursorLine",
-      "Visual",
-      "DiagnosticWarn",
-      "TabLine",
-      "Directory",
-      "StatusLine",
-      "Statement",
-      "Normal",
-      "DiagnosticOk",
-      "NormalFloat",
-      "DiagnosticError",
-      "GitSignsAdd",
-      "GitSignsDelete",
-      "Added",
-      "Removed",
-    }
-    local saved
-
-    ---@param name string
-    ---@return vim.api.keyset.get_hl_info
-    local function group(name)
-      return vim.api.nvim_get_hl(0, { name = name, link = false })
-    end
-
-    before_each(function()
-      saved = {}
-      for _, name in ipairs(GROUP_NAMES) do
-        saved[name] = group(name)
-      end
-      -- `band_hl` is file-local with `band_icon` as its only writer, so without a pin
-      -- here each test inherits whichever group the last one happened to set. No getter
-      -- to read it back, so unlike the groups above it stays pinned past this block.
-      vim.api.nvim_set_hl(0, "ChangesetSpecIcon", { fg = 0x00ff00 })
-      render.band_icon("ChangesetSpecIcon")
-    end)
-
-    after_each(function()
-      for _, name in ipairs(GROUP_NAMES) do
-        vim.api.nvim_set_hl(0, name, saved[name])
-      end
-    end)
-
-    it("keeps the previewed file's icon sitting on the band's new colour", function()
-      vim.api.nvim_set_hl(0, "CursorLine", { bg = 0x123456 })
-
-      render.define_highlights()
-
-      local icon = group(render.PREVIEW_ICON_HL)
-      assert.equal(0x123456, icon.bg)
-      assert.equal(0x00ff00, icon.fg)
-    end)
-
-    it("makes the meta group Comment's colour with italics added", function()
-      vim.api.nvim_set_hl(0, "Comment", { fg = 0x336699 })
-
-      render.define_highlights()
-
-      local meta = group(render.META_HL)
-      assert.equal(0x336699, meta.fg)
-      assert.is_true(meta.italic)
-    end)
-
-    it("falls back to Visual for the band in a theme that tints no CursorLine", function()
-      vim.api.nvim_set_hl(0, "CursorLine", {})
-      vim.api.nvim_set_hl(0, "Visual", { bg = 0xabcdef })
-
-      render.define_highlights()
-
-      assert.equal(0xabcdef, group(render.PREVIEW_HL).bg)
-    end)
-
-    it("paints the preview badge in the theme's warning colour", function()
-      vim.api.nvim_set_hl(0, "Comment", { fg = 0x336699 })
-      vim.api.nvim_set_hl(0, "DiagnosticWarn", { fg = 0xffaa00 })
-
-      render.define_highlights()
-
-      assert.equal(0xffaa00, group(render.PREVIEW_LABEL_HL).fg)
-    end)
-
-    it("falls back to Comment for the preview badge in a theme with no warning colour", function()
-      vim.api.nvim_set_hl(0, "Comment", { fg = 0x336699 })
-      vim.api.nvim_set_hl(0, "DiagnosticWarn", {})
-
-      render.define_highlights()
-
-      assert.equal(0x336699, group(render.PREVIEW_LABEL_HL).fg)
-    end)
-
-    it("paints the header with the theme's own chrome, not the band's shade", function()
-      vim.api.nvim_set_hl(0, "CursorLine", { bg = 0x123456 })
-      vim.api.nvim_set_hl(0, "TabLine", { bg = 0x654321 })
-
-      render.define_highlights()
-
-      assert.equal(0x654321, group(render.HEADER_HL).bg)
-    end)
-
-    it("falls back to the band for the header in a theme that paints no chrome", function()
-      vim.api.nvim_set_hl(0, "CursorLine", { bg = 0x123456 })
-      vim.api.nvim_set_hl(0, "TabLine", {})
-
-      render.define_highlights()
-
-      assert.equal(0x123456, group(render.HEADER_HL).bg)
-    end)
-
-    it("paints the footer badge in the theme's directory colour", function()
-      vim.api.nvim_set_hl(0, "Comment", { fg = 0x336699 })
-      vim.api.nvim_set_hl(0, "Directory", { fg = 0x4488cc })
-
-      render.define_highlights()
-
-      assert.equal(0x4488cc, group(render.BADGE_HL).fg)
-    end)
-
-    it("falls back to Comment for the footer badge in a theme with no directory colour", function()
-      vim.api.nvim_set_hl(0, "Comment", { fg = 0x336699 })
-      vim.api.nvim_set_hl(0, "Directory", {})
-
-      render.define_highlights()
-
-      assert.equal(0x336699, group(render.BADGE_HL).fg)
-    end)
-
-    it("reverses both badges, so neither needs an opaque Normal", function()
-      render.define_highlights()
-
-      assert.is_true(group(render.PREVIEW_LABEL_HL).reverse)
-      assert.is_true(group(render.BADGE_HL).reverse)
-    end)
-
-    it("sets the header's icon, remote and ref on the header's strip", function()
-      vim.api.nvim_set_hl(0, "TabLine", { bg = 0x654321 })
-      vim.api.nvim_set_hl(0, "Directory", { fg = 0x4488cc })
-      vim.api.nvim_set_hl(0, "Comment", { fg = 0x336699 })
-
-      render.define_highlights()
-
-      assert.same({ 0x4488cc, 0x654321 }, { group(render.HEADER_ICON_HL).fg, group(render.HEADER_ICON_HL).bg })
-      assert.same({ 0x336699, 0x654321 }, { group(render.HEADER_DIM_HL).fg, group(render.HEADER_DIM_HL).bg })
-      assert.equal(0x654321, group(render.HEADER_REF_HL).bg)
-      assert.is_true(group(render.HEADER_REF_HL).bold)
-    end)
-
-    it("paints the footer on the statusline's own background", function()
-      vim.api.nvim_set_hl(0, "StatusLine", { fg = 0xeeeeee, bg = 0x222222 })
-      vim.api.nvim_set_hl(0, "Comment", { fg = 0x336699 })
-
-      render.define_highlights()
-
-      assert.same({ 0x336699, 0x222222 }, { group(render.FOOTER_HL).fg, group(render.FOOTER_HL).bg })
-      assert.same({ 0xeeeeee, 0x222222 }, { group(render.FOOTER_KEY_HL).fg, group(render.FOOTER_KEY_HL).bg })
-    end)
-
-    ---@param color integer
-    ---@return integer[] rgb
-    local function channels(color)
-      return { bit.band(bit.rshift(color, 16), 0xff), bit.band(bit.rshift(color, 8), 0xff), bit.band(color, 0xff) }
-    end
-
-    -- A red-only accent over a grey background: a tint of it moves the red channel alone.
-    local BACKGROUND, RED = 0x101010, 0xf01010
-
-    it("tints the selected row part of the way from the background to the theme's accent", function()
-      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = BACKGROUND })
-      vim.api.nvim_set_hl(0, "Statement", { fg = RED })
-
-      render.define_highlights()
-
-      local r, g, b = unpack(channels(group(render.SELECTED_HL).bg))
-      assert.is_true(r > 0x10 and r < 0xf0)
-      assert.same({ 0x10, 0x10 }, { g, b })
-    end)
-
-    it("tints the row you are on more faintly than the selected one", function()
-      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = BACKGROUND })
-      vim.api.nvim_set_hl(0, "Statement", { fg = RED })
-
-      render.define_highlights()
-
-      local here, selected = channels(group(render.HERE_HL).bg), channels(group(render.SELECTED_HL).bg)
-      assert.is_true(here[1] > 0x10 and here[1] < selected[1])
-      assert.same({ 0x10, 0x10 }, { here[2], here[3] })
-    end)
-
-    it("tints the row you last opened more faintly than the row you are on", function()
-      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = BACKGROUND })
-      vim.api.nvim_set_hl(0, "Statement", { fg = RED })
-
-      render.define_highlights()
-
-      local picked, here = channels(group(render.PICKED_HL).bg), channels(group(render.HERE_HL).bg)
-      assert.is_true(picked[1] > 0x10 and picked[1] < here[1])
-      assert.same({ 0x10, 0x10 }, { picked[2], picked[3] })
-    end)
-
-    it("tints over the theme's chrome when Normal is transparent", function()
-      vim.api.nvim_set_hl(0, "Statement", { fg = RED })
-      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = BACKGROUND })
-      render.define_highlights()
-      local opaque = group(render.SELECTED_HL).bg
-      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc })
-      vim.api.nvim_set_hl(0, "TabLine", { bg = BACKGROUND })
-
-      render.define_highlights()
-
-      assert.equal(opaque, group(render.SELECTED_HL).bg)
-    end)
-
-    it("tints toward Normal's text in a theme whose Statement has no colour", function()
-      vim.api.nvim_set_hl(0, "Normal", { fg = RED, bg = BACKGROUND })
-      vim.api.nvim_set_hl(0, "Statement", { bold = true })
-
-      render.define_highlights()
-
-      local r, g, b = unpack(channels(group(render.SELECTED_HL).bg))
-      assert.is_true(r > 0x10 and r < 0xf0)
-      assert.same({ 0x10, 0x10 }, { g, b })
-    end)
-
-    local GREEN = 0x10f010
-
-    it("tints the unified diff's added lines toward the theme's added colour, a changed word further", function()
-      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = BACKGROUND })
-      vim.api.nvim_set_hl(0, "GitSignsAdd", { fg = GREEN })
-
-      render.define_highlights()
-
-      local line, word = group(render.DIFF_ADD_HL), group(render.DIFF_ADD_TEXT_HL)
-      local l, w = channels(line.bg), channels(word.bg)
-      assert.is_true(l[2] > 0x10 and l[2] < w[2] and w[2] < 0xf0)
-      assert.same({ 0x10, 0x10, 0x10, 0x10 }, { l[1], l[3], w[1], w[3] })
-      assert.same({}, { line.fg, word.fg })
-    end)
-
-    it("tints the unified diff's deleted lines toward the theme's deleted colour, a changed word further", function()
-      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = BACKGROUND })
-      vim.api.nvim_set_hl(0, "GitSignsDelete", { fg = RED })
-
-      render.define_highlights()
-
-      local line, word = group(render.DIFF_DELETE_HL), group(render.DIFF_DELETE_TEXT_HL)
-      local l, w = channels(line.bg), channels(word.bg)
-      assert.is_true(l[1] > 0x10 and l[1] < w[1] and w[1] < 0xf0)
-      assert.same({ 0x10, 0x10, 0x10, 0x10 }, { l[2], l[3], w[2], w[3] })
-      assert.same({}, { line.fg, word.fg })
-    end)
-
-    it("tints the unified diff from Added and Removed before gitsigns has coloured its groups", function()
-      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = BACKGROUND })
-      vim.api.nvim_set_hl(0, "GitSignsAdd", {})
-      vim.api.nvim_set_hl(0, "GitSignsDelete", {})
-      vim.api.nvim_set_hl(0, "Added", { fg = GREEN })
-      vim.api.nvim_set_hl(0, "Removed", { fg = RED })
-
-      render.define_highlights()
-
-      local added, deleted = channels(group(render.DIFF_ADD_HL).bg), channels(group(render.DIFF_DELETE_HL).bg)
-      assert.is_true(added[2] > 0x10 and deleted[1] > 0x10)
-      assert.same({ 0x10, 0x10, 0x10, 0x10 }, { added[1], added[3], deleted[2], deleted[3] })
-    end)
-
-    it("draws every state glyph in the accent", function()
-      vim.api.nvim_set_hl(0, "Statement", { fg = 0xc8a0f0 })
-
-      render.define_highlights()
-
-      assert.same(
-        { 0xc8a0f0, 0xc8a0f0, 0xc8a0f0 },
-        { group(render.SELECTED_ICON_HL).fg, group(render.HERE_ICON_HL).fg, group(render.PICKED_ICON_HL).fg }
-      )
-    end)
-
-    it("tints a dialog's focused row over the float's background, not the editor's", function()
-      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = 0xf0f0f0 })
-      vim.api.nvim_set_hl(0, "NormalFloat", { fg = 0xcccccc, bg = BACKGROUND })
-      vim.api.nvim_set_hl(0, "Statement", { fg = RED })
-
-      render.define_highlights()
-
-      local r, g, b = unpack(channels(group(render.DIALOG_SELECTED_HL).bg))
-      assert.is_true(r > 0x10 and r < 0xf0)
-      assert.same({ 0x10, 0x10 }, { g, b })
-    end)
-
-    it("cuts a dialog's buttons from the editor's surface, where the theme keeps its text legible", function()
-      vim.api.nvim_set_hl(0, "Normal", { fg = 0x111111, bg = 0xf0f0f0 })
-      vim.api.nvim_set_hl(0, "NormalFloat", { fg = 0xffffff, bg = 0x000000 })
-
-      render.define_highlights()
-
-      assert.same({ 0x111111, 0xf0f0f0 }, { group(render.BUTTON_HL).fg, group(render.BUTTON_HL).bg })
-      assert.equal(0xf0f0f0, group(render.BUTTON_DANGER_HL).bg)
-    end)
-
-    it("shades a dialog's buttons toward the float's text when the float is the editor's surface", function()
-      vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = 0x000000 })
-      vim.api.nvim_set_hl(0, "NormalFloat", { fg = 0xffffff, bg = 0x000000 })
-
-      render.define_highlights()
-
-      local r, g, b = unpack(channels(group(render.BUTTON_HL).bg))
-      assert.is_true(r > 0 and r < 0x80)
-      assert.same({ r, r }, { g, b })
-      assert.equal(0xffffff, group(render.BUTTON_HL).fg)
-    end)
-
-    it("draws the destructive button in the theme's error colour, reversed while focused", function()
-      vim.api.nvim_set_hl(0, "DiagnosticError", { fg = RED })
-
-      render.define_highlights()
-
-      assert.equal(RED, group(render.BUTTON_DANGER_HL).fg)
-      assert.same(
-        { RED, true },
-        { group(render.BUTTON_DANGER_FOCUS_HL).fg, group(render.BUTTON_DANGER_FOCUS_HL).reverse }
-      )
-    end)
-
-    it("draws the focused button reversed in the accent", function()
-      vim.api.nvim_set_hl(0, "Statement", { fg = 0xc8a0f0 })
-
-      render.define_highlights()
-
-      assert.same({ 0xc8a0f0, true }, { group(render.BUTTON_FOCUS_HL).fg, group(render.BUTTON_FOCUS_HL).reverse })
-    end)
-
-    it("strikes a hidden kind through as well as dimming it", function()
-      vim.api.nvim_set_hl(0, "Comment", { fg = 0x336699 })
-
-      render.define_highlights()
-
-      local hidden = group(render.HIDDEN_HL)
-      assert.equal(0x336699, hidden.fg)
-      assert.is_true(hidden.strikethrough)
-    end)
-  end)
   describe("kind_lines", function()
     local menu_opts = {
       icon = function()
@@ -1431,7 +1091,7 @@ describe("changeset.render", function()
       local groups = vim.tbl_map(function(mark)
         return mark.hl
       end, lines[1].marks)
-      assert.truthy(vim.tbl_contains(groups, render.HIDDEN_HL))
+      assert.truthy(vim.tbl_contains(groups, highlights.HIDDEN_HL))
     end)
 
     it("colours a showing kind's name with the theme rather than the hidden group", function()
@@ -1440,7 +1100,7 @@ describe("changeset.render", function()
       local groups = vim.tbl_map(function(mark)
         return mark.hl
       end, lines[1].marks)
-      assert.is_false(vim.tbl_contains(groups, render.HIDDEN_HL))
+      assert.is_false(vim.tbl_contains(groups, highlights.HIDDEN_HL))
     end)
 
     it("carries each kind back on its line, so a cursor line names one", function()
