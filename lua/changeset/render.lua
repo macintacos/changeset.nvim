@@ -209,16 +209,32 @@ function M.state_marks(state, width)
   }
 end
 
+---A memo of `vim.fn.strdisplaywidth`, for the few strings every row repeats: margins, guides, glyph prefixes, stat
+---chunks and markers. Made per render, since `'ambiwidth'` changes the width of `│ └ ─ ▎ ●`.
+---@return fun(text: string): integer
+local function width_memo()
+  local known = {}
+  return function(text)
+    local cells_wide = known[text]
+    if not cells_wide then
+      cells_wide = vim.fn.strdisplaywidth(text)
+      known[text] = cells_wide
+    end
+    return cells_wide
+  end
+end
+
 ---Cells a row gives up at the right edge: the state gutter, then a stat and the gap before it.
 ---@param stat table[]? Virtual-text chunks.
+---@param width fun(text: string): integer
 ---@return integer
-local function stat_cells(stat)
+local function stat_cells(stat, width)
   if not stat then
     return GUTTER
   end
   local total = GUTTER + 1
   for _, chunk in ipairs(stat) do
-    total = total + vim.fn.strdisplaywidth(chunk[1])
+    total = total + width(chunk[1])
   end
   return total
 end
@@ -226,15 +242,16 @@ end
 ---A file row: filename first, its directory dimmed in parentheses, dropped before the name is trimmed.
 ---@param file changeset.Row
 ---@param opts changeset.RenderOpts
+---@param width fun(text: string): integer
 ---@return changeset.Line
-local function file_line(file, opts)
+local function file_line(file, opts, width)
   local glyph, icon_hl = opts.icon(file)
   local marker = STATUS_MARKER[file.status]
   local stat = M.stat_chunks(file)
   local room = opts.width
-    - vim.fn.strdisplaywidth(MARGIN .. RAIL .. " " .. glyph .. " ")
-    - (marker and vim.fn.strdisplaywidth(marker) or 0)
-    - stat_cells(stat)
+    - width(MARGIN .. RAIL .. " " .. glyph .. " ")
+    - (marker and width(marker) or 0)
+    - stat_cells(stat, width)
   local filename, dir = vim.fs.basename(file.path), vim.fs.dirname(file.path)
   local dir_room = room - vim.fn.strdisplaywidth(filename .. " ()")
   local chunks = {
@@ -261,8 +278,9 @@ local LABEL_CELLS = 20
 ---A section header: icon, label, a count of its files or comments, and the section's stat at the right edge. No rail.
 ---@param section changeset.Row
 ---@param opts changeset.RenderOpts
+---@param width fun(text: string): integer
 ---@return changeset.Line
-local function section_line(section, opts)
+local function section_line(section, opts, width)
   local glyph, icon_hl = opts.icon(section)
   local stat = M.stat_chunks(section)
   local n, noun = section.comments or section.files, section.comments and "comment" or "file"
@@ -270,7 +288,7 @@ local function section_line(section, opts)
   if (section.drafts or 0) > 0 then
     count = ("%s · %d draft%s"):format(count, section.drafts, section.drafts == 1 and "" or "s")
   end
-  local fixed_cells = vim.fn.strdisplaywidth(MARGIN .. glyph .. "  " .. section.name .. count) + stat_cells(stat)
+  local fixed_cells = vim.fn.strdisplaywidth(MARGIN .. glyph .. "  " .. section.name .. count) + stat_cells(stat, width)
   local pad = math.max(1, math.min(LABEL_CELLS - vim.fn.strdisplaywidth(section.name), opts.width - fixed_cells))
   return M.compose(section, {
     { MARGIN },
@@ -284,11 +302,12 @@ end
 ---@param row changeset.Row
 ---@param guides string Tree connectors for the row, e.g. "│ └─".
 ---@param opts changeset.RenderOpts
+---@param width fun(text: string): integer
 ---@return changeset.Line
-local function child_line(row, guides, opts)
+local function child_line(row, guides, opts, width)
   local glyph, icon_hl = opts.icon(row)
   local stat = M.stat_chunks(row)
-  local room = opts.width - vim.fn.strdisplaywidth(MARGIN .. "  " .. guides .. glyph .. " ") - stat_cells(stat)
+  local room = opts.width - width(MARGIN .. "  " .. guides .. glyph .. " ") - stat_cells(stat, width)
   local name, name_hl = symbols.fit(row.name, room), row.ancestor and "Comment" or nil
   if META_KINDS[row.kind] then
     icon_hl, name, name_hl = highlights.META_HL, cells.clip(row.name, room), highlights.META_HL
@@ -323,12 +342,13 @@ end
 ---@param row changeset.Row
 ---@param bars string Ancestor bars this level's connectors hang off.
 ---@param opts changeset.RenderOpts
-local function append_children(out, row, bars, opts)
+---@param width fun(text: string): integer
+local function append_children(out, row, bars, opts, width)
   for i, child in ipairs(row.children) do
     local is_last = i == #row.children
-    out[#out + 1] = child_line(child, bars .. (is_last and "└─" or "├─"), opts)
+    out[#out + 1] = child_line(child, bars .. (is_last and "└─" or "├─"), opts, width)
     if not opts.collapsed(child.id) then
-      append_children(out, child, bars .. (is_last and "  " or "│ "), opts)
+      append_children(out, child, bars .. (is_last and "  " or "│ "), opts, width)
     end
   end
 end
@@ -337,14 +357,15 @@ end
 ---a whole file's, and the body's first line, quiet like the marks' and clipped to fit.
 ---@param row changeset.Row
 ---@param opts changeset.RenderOpts
+---@param width fun(text: string): integer
 ---@return changeset.Line
-local function comment_line(row, opts)
+local function comment_line(row, opts, width)
   local comment = assert(row.review_comment, "changeset: a comment row lists nothing")
   local glyph, icon_hl = opts.icon(row)
   local span = review_comment.span(comment)
   local where = vim.fs.basename(row.path) .. (span and ":" .. span or "")
   local circle = comment.draft and highlights.REVIEW_COMMENT_DRAFT_CIRCLE or highlights.REVIEW_COMMENT_CIRCLE
-  local room = opts.width - vim.fn.strdisplaywidth(MARGIN .. circle .. " " .. glyph .. " ") - stat_cells(nil)
+  local room = opts.width - width(MARGIN .. circle .. " " .. glyph .. " ") - stat_cells(nil, width)
   where = cells.clip(where, room)
   local chunks = {
     { MARGIN },
@@ -365,8 +386,9 @@ end
 ---@param out changeset.Line[]
 ---@param file changeset.Row
 ---@param opts changeset.RenderOpts
-local function append_file(out, file, opts)
-  out[#out + 1] = file_line(file, opts)
+---@param width fun(text: string): integer
+local function append_file(out, file, opts, width)
+  out[#out + 1] = file_line(file, opts, width)
   if opts.collapsed(file.id) then
     return
   end
@@ -376,7 +398,7 @@ local function append_file(out, file, opts)
   if file.read == "reading" then
     out[#out + 1] = placeholder_line(file)
   else
-    append_children(out, file, "", opts)
+    append_children(out, file, "", opts, width)
   end
 end
 
@@ -410,19 +432,19 @@ end
 ---@param opts changeset.RenderOpts
 ---@return changeset.Line[]
 function M.lines(rows, opts)
-  local out = {}
+  local out, width = {}, width_memo()
   for i, section in ipairs(rows) do
     if i > 1 then
       local marks = out[#out].marks
       marks[#marks + 1] = { col = 0, virt_lines = { { { "" } } } }
     end
-    out[#out + 1] = section_line(section, opts)
+    out[#out + 1] = section_line(section, opts, width)
     if not opts.collapsed(section.id) then
       for _, child in ipairs(section.children) do
         if child.kind == "comment" then
-          out[#out + 1] = comment_line(child, opts)
+          out[#out + 1] = comment_line(child, opts, width)
         else
-          append_file(out, child, opts)
+          append_file(out, child, opts, width)
         end
       end
     end

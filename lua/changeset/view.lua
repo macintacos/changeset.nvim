@@ -24,6 +24,23 @@ View.__index = View
 
 local M = {}
 
+---A shallow copy of `t` with `fields` set over it: `vim.tbl_extend("force", t, fields)` without its argument checks,
+---which every redraw pays once per row.
+---@generic T: table
+---@param t T
+---@param fields table
+---@return T
+local function with(t, fields)
+  local out = {}
+  for k, v in pairs(t) do
+    out[k] = v
+  end
+  for k, v in pairs(fields) do
+    out[k] = v
+  end
+  return out
+end
+
 ---Narrow the tree to rows matching `query`.
 ---
 ---A match keeps its ancestors, so a hit never floats free of the file it lives
@@ -53,7 +70,7 @@ function M.filter(rows, query)
     if #children == 0 then
       return nil
     end
-    return vim.tbl_extend("force", row, { children = children })
+    return with(row, { children = children })
   end
 
   local out = {}
@@ -87,7 +104,7 @@ function M.by_kind(rows, hidden)
       if row.kind == "symbol" and hidden[row.symbol_kind] then
         vim.list_extend(out, children)
       else
-        out[#out + 1] = vim.tbl_extend("force", row, { children = children })
+        out[#out + 1] = with(row, { children = children })
       end
     end
     return out

@@ -7,6 +7,23 @@ local SEP = require("changeset.symbols").SEP
 
 local M = {}
 
+---A shallow copy of `t` with `fields` set over it: `vim.tbl_extend("force", t, fields)` without its argument checks,
+---which every redraw pays once per row.
+---@generic T: table
+---@param t T
+---@param fields table
+---@return T
+local function with(t, fields)
+  local out = {}
+  for k, v in pairs(t) do
+    out[k] = v
+  end
+  for k, v in pairs(fields) do
+    out[k] = v
+  end
+  return out
+end
+
 ---A row of the sidebar tree. Sections sit at the top with files under them; symbols, or an orphan group
 ---holding orphan hunks, nest below. The Comments section holds comment rows instead of files.
 ---@class changeset.Row
@@ -102,7 +119,7 @@ local function widen(symbols, kinds)
     while first > floor and ABOVE[comments.kind(kinds, first - 1)] do
       first = first - 1
     end
-    out[i] = first == sym.range_lnum and sym or vim.tbl_extend("force", sym, { range_lnum = first })
+    out[i] = first == sym.range_lnum and sym or with(sym, { range_lnum = first })
     widened_at_depth[sym.depth], original_at_depth[sym.depth] = out[i], sym
   end
   return out
@@ -295,7 +312,7 @@ local function split(nodes)
       if own == copy or #children > 0 then
         local overrides = own == copy and { children = children }
           or { children = children, changed = false, added = 0, removed = 0 }
-        table.insert(out[copy], vim.tbl_extend("force", node, overrides))
+        table.insert(out[copy], with(node, overrides))
       end
     end
   end
@@ -821,7 +838,7 @@ local UNFOLDS = { section = true, file = true, symbol = true }
 local function unfold(row, deepest, depth, is_open)
   local children = row == deepest and compress_rows(row.children, depth + 1, is_open)
     or { unfold(row.children[1], deepest, depth + 1, is_open) }
-  return vim.tbl_extend("force", row, { depth = depth, children = children })
+  return with(row, { depth = depth, children = children })
 end
 
 ---@param row changeset.Row Section, file or symbol row.
@@ -833,7 +850,7 @@ local function compress_row(row, depth, is_open)
   if #names == 1 or (is_open and is_open(row.id)) then
     return unfold(row, deepest, depth, is_open)
   end
-  return vim.tbl_extend("force", deepest, {
+  return with(deepest, {
     id = row.id,
     tip = deepest.id,
     name = table.concat(names, SEP),
