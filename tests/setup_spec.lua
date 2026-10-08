@@ -197,6 +197,19 @@ describe("changeset setup", function()
     assert.falsy(footer:find("<CR>", 1, true))
   end)
 
+  it("lets a FileType changeset handler set the sidebar window's options", function()
+    local id = vim.api.nvim_create_autocmd("FileType", {
+      pattern = "changeset",
+      callback = function()
+        vim.opt_local.colorcolumn = "1"
+      end,
+    })
+    open_sidebar()
+    vim.api.nvim_del_autocmd(id)
+
+    assert.equal("1", vim.wo[assert(window.win())].colorcolumn)
+  end)
+
   it("applies a second setup() at the next open, not to the open sidebar", function()
     local buf = open_sidebar()
     changeset.setup({ keymaps = { jump = "o" } })

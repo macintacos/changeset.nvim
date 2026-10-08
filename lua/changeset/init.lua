@@ -422,7 +422,6 @@ function M.open()
   bound_keys = config.get().keymaps
 
   local buf = vim.api.nvim_create_buf(false, true)
-  vim.bo[buf].filetype = "changeset"
   vim.bo[buf].buftype = "nofile"
   -- Wiped with its window. A scratch buffer is kept otherwise, so every close would
   -- leave one behind, its extmarks and mappings included.
@@ -436,6 +435,8 @@ function M.open()
   render.define_highlights()
   local win = window.open(buf)
   vim.wo[win].statusline = "%{%v:lua.require'changeset'.footer()%}"
+  -- In its window, so a `FileType` handler's window options land on the sidebar's, after its own.
+  vim.bo[buf].filetype = "changeset"
   -- After `filetype`, so these replace any `]]`/`[[` a plugin maps on the buffer at `FileType`.
   actions.set_keymaps(buf, bound_keys, { pick = pick, close = M.close })
 
