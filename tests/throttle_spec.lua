@@ -1,0 +1,114 @@
+local changeset = require("changeset")
+local build = require("changeset.build")
+local draw = require("changeset.draw")
+local window = require("changeset.window")
+local Changes = require("support.changes")
+local Fixture = require("support.git")
+local Sidebar = require("support.sidebar")
+local Symbols = require("support.symbols")
+
+describe("the sidebar's redraw after a rebuild", function()
+  describe("due", function()
+    it("is due at once while a redraw costs a frame or less", function()
+      assert.equal(1000, changeset._due(1000, 990, 10))
+    end)
+
+    it("waits twice a costlier redraw's cost after it ended", function()
+      assert.equal(580, changeset._due(500, 500, 40))
+    end)
+
+    it("stays due then however early the next rebuild comes", function()
+      assert.equal(580, changeset._due(530, 500, 40))
+    end)
+
+    it("is due at once once that wait has passed", function()
+      assert.equal(700, changeset._due(700, 500, 40))
+    end)
+  end)
+
+  describe("over a tree that draws slowly", function()
+    local tmp, previous_dir, source, real_draw, draws
+
+    before_each(function()
+      tmp, previous_dir = Fixture.enter_tempdir()
+      Fixture.feature({
+        ["a.lua"] = { "return 1" },
+        ["b.lua"] = { "return 1" },
+        ["c.lua"] = { "return 1" },
+      }, {
+        ["a.lua"] = { "return 2" },
+        ["b.lua"] = { "return 2" },
+        ["c.lua"] = { "return 2" },
+      }, tmp)
+      source = Symbols.install()
+      vim.cmd.edit("a.lua")
+      changeset.open()
+      assert.is_true(vim.wait(10000, function()
+        return #source.asks == 1 and window.buf() ~= nil and Sidebar.text():find("c.lua", 1, true) ~= nil
+      end, 10))
+      real_draw, draws = draw.draw, 0
+      draw.draw = function(...)
+        draws = draws + 1
+        real_draw(...)
+        -- Past a frame, and long enough that a refresh's diff lands before the wait runs out.
+        vim.uv.sleep(150)
+      end
+    end)
+
+    after_each(function()
+      draw.draw = real_draw
+      source.restore()
+      changeset.close()
+      vim.cmd("silent! %bwipeout!")
+      vim.fn.chdir(previous_dir)
+      vim.fn.delete(tmp, "rf")
+    end)
+
+    ---@param path string
+    local function answer(path)
+      source.answer(path, { Changes.sym("f_" .. path:sub(1, 1), "Function", 0, 1, 1) })
+    end
+
+    it("draws the answers that arrive while it waits together, once the wait is over", function()
+      answer("a.lua")
+      answer("b.lua")
+      answer("c.lua")
+
+      assert.equal(1, draws)
+      assert.is_nil(Sidebar.text():find("f_b", 1, true))
+      assert.is_true(vim.wait(2000, function()
+        return Sidebar.text():find("f_c", 1, true) ~= nil
+      end, 10))
+      assert.equal(2, draws)
+      assert.truthy(Sidebar.text():find("f_b", 1, true))
+    end)
+
+    it("draws at once when a new diff lands while it waits", function()
+      answer("a.lua")
+      answer("b.lua")
+      local before = build.current().files
+
+      build.refresh()
+      assert.is_true(vim.wait(2000, function()
+        return build.current().files ~= before
+      end, 1))
+
+      assert.equal(2, draws)
+      assert.truthy(Sidebar.text():find("f_b", 1, true))
+      vim.wait(400)
+      assert.equal(2, draws)
+    end)
+
+    it("lists the rows of every answer while their draw waits", function()
+      answer("a.lua")
+      answer("b.lua")
+
+      local tree = assert(changeset.rows())
+
+      local names = vim.tbl_map(function(row)
+        return (row.children[1] or {}).name
+      end, tree.rows)
+      assert.same({ "f_a", "f_b" }, vim.list_slice(names, 1, 2))
+    end)
+  end)
+end)

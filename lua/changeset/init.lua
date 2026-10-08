@@ -48,10 +48,35 @@ local bound_keys = {}
 local drawn_width
 
 ---Draw the tree, naming the keys the sidebar bound.
-local function redraw()
+local function draw_tree()
   local win = window.win()
   drawn_width = win and vim.api.nvim_win_get_width(win)
   draw.draw(bound_keys.filter_kinds)
+end
+
+-- A redraw costing more than a frame, run on every symbols answer, keeps the editor frozen for the whole walk.
+local FRAME_MS = 16
+
+---The redraw a rebuild owes the sidebar, and what the last one cost.
+---@class changeset.Settling
+---@field owed boolean A rebuild changed the rows since the sidebar last settled on them.
+---@field timer uv.uv_timer_t? Waiting to settle.
+---@field last_end number When the last settle ended, in ms.
+---@field last_cost number What it cost, in ms.
+
+---@type changeset.Settling
+local settling = { owed = false, last_end = 0, last_cost = 0 }
+
+---Draw the rows the last rebuild left and settle the position on them.
+---@type fun()
+local settle
+
+---Draw the tree, settling first on rows a rebuild left undrawn.
+local function redraw()
+  if settling.owed then
+    return settle()
+  end
+  draw_tree()
 end
 
 ---The row a step from the sidebar just opened, which its next `CursorMoved` mustn't preview over the opened line.
@@ -245,11 +270,11 @@ end
 ---@type { state: changeset.SidebarState, collected: boolean, commits: integer?, pr: integer? }?
 local built_from
 
+---Build the sidebar's rows afresh from the tree.
+---@return boolean changed false when they would draw as the sidebar's rows already do.
 local function rebuild()
   local state = sidebar_state.current()
   assert(state, "changeset: no tree built yet")
-  -- Taken before the rows change: whether the cursor moved is judged by the row it was on.
-  local before = (draw.row_at_cursor() or {}).id
   local lines = captions(state.tree.root)
   lines.comments = state.tree.comments
   local rows = Rows.build(state.tree.files, state.tree.symbols, lines)
@@ -262,12 +287,11 @@ local function rebuild()
     and last.pr == from.pr
     and Rows.same(state.rows, rows)
   then
-    return
+    return false
   end
   built_from = from
   state.rows = rows
-  redraw()
-  apply(state.position:rebuilt(draw.view(), before, decided))
+  return true
 end
 
 ---A step pressed before the tree was ready, with the window and buffer it was pressed in.
@@ -327,16 +351,89 @@ local function take_waiting()
   step.take(step.count)
 end
 
+---When a rebuild's redraw may run: at once while the last one cost a frame or less, else twice its cost after it
+---ended, so answers arriving meanwhile draw together.
+---@param now_ms number
+---@param last_end_ms number
+---@param last_cost_ms number
+---@return number due_ms
+function M._due(now_ms, last_end_ms, last_cost_ms)
+  if last_cost_ms <= FRAME_MS then
+    return now_ms
+  end
+  return math.max(now_ms, last_end_ms + 2 * last_cost_ms)
+end
+
+---@return number
+local function now_ms()
+  return vim.uv.hrtime() / 1e6
+end
+
+local function cancel_settle()
+  local timer = settling.timer
+  settling.timer = nil
+  if timer and not timer:is_closing() then
+    timer:stop()
+    timer:close()
+  end
+end
+
+function settle()
+  cancel_settle()
+  settling.owed = false
+  local state = sidebar_state.current()
+  if not state then
+    return
+  end
+  local start = now_ms()
+  -- Taken before the redraw: whether the cursor moved is judged by the row it was on.
+  local before = (draw.row_at_cursor() or {}).id
+  draw_tree()
+  apply(state.position:rebuilt(draw.view(), before, decided))
+  settling.last_end = now_ms()
+  settling.last_cost = settling.last_end - start
+  take_waiting()
+end
+
+---Settle when `M._due` says, folding the rebuilds made meanwhile into one redraw.
+local function settle_soon()
+  settling.owed = true
+  if settling.timer then
+    return
+  end
+  local now = now_ms()
+  local due = M._due(now, settling.last_end, settling.last_cost)
+  if due <= now then
+    return settle()
+  end
+  settling.timer = vim.uv.new_timer()
+  settling.timer:start(
+    math.ceil(due - now),
+    0,
+    vim.schedule_wrap(function()
+      if settling.owed then
+        settle()
+      end
+    end)
+  )
+end
+
 ---What the sidebar does as the tree changes.
 ---@type table<changeset.TreeEvent, fun()>
 local on_tree_event = {
   diff = function()
-    rebuild()
-    take_waiting()
+    if rebuild() or settling.owed then
+      settle()
+    else
+      take_waiting()
+    end
   end,
   symbols = function()
-    rebuild()
-    take_waiting()
+    if rebuild() or settling.owed then
+      settle_soon()
+    else
+      take_waiting()
+    end
   end,
   pr = redraw,
   failed = function()
@@ -389,8 +486,8 @@ function M.rows()
     return nil, "still reading the diff"
   end
   -- A tree whose diff landed before the sidebar loaded announced nothing the sidebar heard.
-  if #state.rows == 0 then
-    rebuild()
+  if #state.rows == 0 and rebuild() then
+    settle()
   end
   return {
     rows = view.by_kind(Rows.files(state.rows), state.view:hidden()),
@@ -424,6 +521,7 @@ end
 
 ---Drop everything the sidebar set up but its window.
 local function release()
+  cancel_settle()
   waiting = nil
   opened_id, stepping_back = nil, false
   require("changeset.menu").close()
