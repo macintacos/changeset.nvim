@@ -24,7 +24,7 @@ local rows_ns = vim.api.nvim_create_namespace("changeset.rows")
 local frame_ns = vim.api.nvim_create_namespace("changeset.frame")
 
 ---What the last draw put on the buffer, so the next one replaces only the blocks that changed.
----@type { buf: integer, blocks: changeset.view.Block[], count: integer }?
+---@type { buf: integer, blocks: changeset.view.Block[], tick: integer }?
 local previous
 
 ---The Comments section as last drawn, kept so a repaint reads no comments from disk.
@@ -363,21 +363,11 @@ local function offsets(blocks)
   return out
 end
 
----Put `blocks` on `buf`, replacing only the runs of blocks that differ from the last draw's.
+---Replace the runs of `blocks` that differ from `was`, the blocks on `buf` now.
 ---@param buf integer
+---@param was changeset.view.Block[]
 ---@param blocks changeset.view.Block[]
-local function put(buf, blocks)
-  local was = previous
-      and previous.buf == buf
-      and vim.api.nvim_buf_line_count(buf) == previous.count
-      and previous.blocks
-    or nil
-  local at = offsets(blocks)
-  previous = at[#at] > 0 and { buf = buf, blocks = blocks, count = at[#at] } or nil
-  if not was then
-    replace_lines(buf, 0, -1, lines_of(blocks, 1, #blocks))
-    return
-  end
+local function replace_changed(buf, was, blocks)
   -- Each distinct block as one diff line, so `vim.text.diff` finds the runs that changed.
   local ids, count = {}, 0
   local function tokens(list)
@@ -406,6 +396,25 @@ local function put(buf, blocks)
       lines_of(blocks, new_start, new_start + new_count - 1)
     )
   end
+end
+
+---Put `blocks` on `buf`, replacing only the runs of blocks that differ from the last draw's.
+---@param buf integer
+---@param blocks changeset.view.Block[]
+local function put(buf, blocks)
+  -- Only while nothing else has changed the buffer since: its lines are then the last draw's.
+  local was = previous
+      and previous.buf == buf
+      and vim.api.nvim_buf_get_changedtick(buf) == previous.tick
+      and previous.blocks
+    or nil
+  local at = offsets(blocks)
+  if not was then
+    replace_lines(buf, 0, -1, lines_of(blocks, 1, #blocks))
+  else
+    replace_changed(buf, was, blocks)
+  end
+  previous = at[#at] > 0 and { buf = buf, blocks = blocks, tick = vim.api.nvim_buf_get_changedtick(buf) } or nil
 end
 
 ---Hang the gap between sections under each section's last line.

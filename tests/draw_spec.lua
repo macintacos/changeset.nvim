@@ -143,6 +143,20 @@ describe("changeset draw", function()
     end
   end)
 
+  it("draws every line again once something else changed the sidebar's buffer", function()
+    draw.draw()
+    local buf = assert(window.buf())
+    local count = vim.api.nvim_buf_line_count(buf)
+    vim.bo[buf].modifiable = true
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(("x"):rep(count, "\n"), "\n"))
+    vim.bo[buf].modifiable = false
+
+    draw.draw()
+    local after = drawn()
+
+    assert.same(from_scratch(), after)
+  end)
+
   it("leaves the sidebar as a draw from nothing would, whatever happened since", function()
     local win = assert(window.win())
     local queries = { "", "", "one", "de", "b.lua", "zzz" }
