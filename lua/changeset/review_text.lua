@@ -18,17 +18,25 @@ local function block(repository, comment)
 end
 
 ---The text a review is pasted as: a block per comment, its backticked `path:Lfirst-Llast` then `Feedback:` and its
----body, in `review_comment.before`'s order, a blank line between blocks.
+---body, in `review_comment.before`'s order, between `framing`'s header and footer, a blank line between each part.
 ---@param repository string
 ---@param comments changeset.ReviewComment[]
+---@param framing changeset.Config.Review
 ---@return string
-function M.text(repository, comments)
+function M.text(repository, comments, framing)
   local sorted = vim.list_slice(comments)
   table.sort(sorted, review_comment.before)
-  return table.concat(
+  local blocks = table.concat(
     vim.tbl_map(function(comment)
       return block(repository, comment)
     end, sorted),
+    "\n\n"
+  )
+  local parts = { vim.trim(framing.header), blocks, vim.trim(framing.footer) }
+  return table.concat(
+    vim.tbl_filter(function(part)
+      return part ~= ""
+    end, parts),
     "\n\n"
   )
 end

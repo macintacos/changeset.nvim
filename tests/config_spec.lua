@@ -24,6 +24,12 @@ describe("changeset.config", function()
     assert.is_true(config.get().review_comment.sign)
   end)
 
+  it("frames the review with nothing by default, each end set on its own", function()
+    assert.same({ header = "", footer = "" }, config.get().review)
+    config.setup({ review = { header = "x" } })
+    assert.same({ header = "x", footer = "" }, config.get().review)
+  end)
+
   it("rejects a bad value, naming the option, and keeps the options in force", function()
     config.setup({ layout = { min_file_width = 100 } })
     for _, case in ipairs({
@@ -38,6 +44,9 @@ describe("changeset.config", function()
       { { review_comment = { save = { "" } } }, "review_comment.save" },
       { { review_comment = { sign = "no" } }, "review_comment.sign" },
       { { review_comment = { blocks = "yes" } }, "review_comment.blocks" },
+      { { review = false }, "review" },
+      { { review = { header = 1 } }, "review.header" },
+      { { review = { footer = true } }, "review.footer" },
     }) do
       local ok, err = pcall(config.setup, case[1])
       assert.is_false(ok)

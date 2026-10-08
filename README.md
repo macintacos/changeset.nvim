@@ -214,6 +214,12 @@ require("changeset").setup({
     -- PR Review Mode on every branch but the default. Turning it off takes a restart.
     enabled = false,
   },
+  review = {
+    -- Text pasted above the review, such as a skill to invoke.
+    header = "",
+    -- Text pasted below the review, such as standing instructions.
+    footer = "",
+  },
   review_comment = {
     -- The keys that save a review comment, in Insert and Normal mode.
     save = { "<C-CR>", "<C-s>" },

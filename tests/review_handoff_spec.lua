@@ -572,12 +572,31 @@ describe("changeset.review_handoff", function()
 
         handoff.yank()
 
-        assert.equal(require("changeset.review_text").text(dir, { comment() }), vim.fn.getreg('"'))
+        assert.equal(
+          require("changeset.review_text").text(dir, { comment() }, require("changeset.config").get().review),
+          vim.fn.getreg('"')
+        )
         assert.same({ comment() }, comment_store.list(dir))
         assert.equal(vim.log.levels.INFO, notes[1].level)
         assert.truthy(notes[1].msg:find('"', 1, true))
       end
     )
+
+    it("frames the copied review with the header and footer", function()
+      vim.fn.has = function(feature)
+        return feature == "clipboard" and 0 or has(feature)
+      end
+      require("changeset.config").setup({ review = { header = "H", footer = "F" } })
+      edit_file()
+      comment_store.keep(dir, comment())
+
+      handoff.yank()
+      require("changeset.config").setup()
+
+      local text = vim.fn.getreg('"')
+      assert.equal("H\n\n", text:sub(1, 3))
+      assert.equal("\n\nF", text:sub(-3))
+    end)
 
     it("copies only saved comments", function()
       vim.fn.has = function(feature)

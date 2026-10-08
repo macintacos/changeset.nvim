@@ -2,6 +2,7 @@
 ---Review: paste it into an agent's prompt, bring a submitted batch back, copy it, clear it, or list it.
 local Paths = require("changeset.paths")
 local comment_store = require("changeset.comment_store")
+local config = require("changeset.config")
 local dialog = require("changeset.dialog")
 local highlights = require("changeset.highlights")
 local origin = require("changeset.origin")
@@ -112,7 +113,7 @@ local function saved_review(repository, verb)
     end
     return nil, drafts, ""
   end
-  return comments, drafts, review_text.text(repository, comments)
+  return comments, drafts, review_text.text(repository, comments, config.get().review)
 end
 
 ---Pastes the repository's saved review comments into an agent's prompt through herdr, then takes the ones pasted out
