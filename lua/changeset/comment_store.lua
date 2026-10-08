@@ -4,6 +4,7 @@
 ---Every mutation re-reads the file and rewrites only its own root's list, so two
 ---Neovims writing comments don't drop each other's.
 
+local Git = require("changeset.git")
 local jsonfile = require("changeset.jsonfile")
 local review_comment = require("changeset.review_comment")
 
@@ -61,46 +62,21 @@ local function valid(entry)
     )
 end
 
----The first line of the file at `path`; nil when it can't be read, as a directory can't.
----@param path string
----@return string?
-local function first_line(path)
-  local fd = io.open(path, "r")
-  if not fd then
-    return nil
-  end
-  local line = fd:read("*l")
-  fd:close()
-  return line
-end
-
----The git directory of the repository at `root`: its `.git`, or where a worktree's `.git` file points.
----@param root string
----@return string
-local function git_dir(root)
-  local dot_git = vim.fs.joinpath(root, ".git")
-  local pointer = (first_line(dot_git) or ""):match("^gitdir: (.+)")
-  if not pointer then
-    return dot_git
-  end
-  return vim.fn.isabsolutepath(pointer) == 1 and pointer or vim.fs.joinpath(root, pointer)
-end
-
 ---What the repository at `root` files its comments under: the branch checked out, the one a stopped rebase rewrites,
 ---else a detached HEAD's commit; nil outside a repository and in a reftable one. Read off git's own files rather than
 ---by running git, since every redraw and hover asks.
 ---@param root string
 ---@return string?
 function M.branch(root)
-  local dir = git_dir(root)
-  local head = first_line(vim.fs.joinpath(dir, "HEAD"))
+  local dir = Git.git_dir(root)
+  local head = Git.first_line(vim.fs.joinpath(dir, "HEAD"))
   -- A reftable repository's HEAD file always names this; only git can say what is checked out.
   if not head or head == "ref: refs/heads/.invalid" then
     return nil
   end
   local name = head:match("^ref: refs/heads/(.+)")
   for _, rebase in ipairs({ "rebase-merge", "rebase-apply" }) do
-    name = name or (first_line(vim.fs.joinpath(dir, rebase, "head-name")) or ""):match("^refs/heads/(.+)")
+    name = name or (Git.first_line(vim.fs.joinpath(dir, rebase, "head-name")) or ""):match("^refs/heads/(.+)")
   end
   return name or head
 end

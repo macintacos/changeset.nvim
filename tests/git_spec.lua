@@ -280,4 +280,89 @@ describe("changeset.git", function()
       assert.is_nil(target)
     end)
   end)
+  describe("head", function()
+    local real_systemlist, spawned
+
+    before_each(function()
+      spawned = 0
+      real_systemlist = vim.fn.systemlist
+      vim.fn.systemlist = function(...)
+        spawned = spawned + 1
+        return real_systemlist(...)
+      end
+    end)
+
+    after_each(function()
+      vim.fn.systemlist = real_systemlist
+    end)
+
+    ---What `git rev-parse HEAD --abbrev-ref HEAD` answers at `root`: the branch, then the commit.
+    ---@param root string
+    local function rev_parse(root)
+      local out = real_systemlist({ "git", "-C", root, "rev-parse", "HEAD", "--abbrev-ref", "HEAD" })
+      return out[2], out[1]
+    end
+
+    it("reads a checked-out branch and its commit without running git", function()
+      local commit = Fixture.init_repo("trunk", tmp)
+      Fixture.git({ "checkout", "-q", "-b", "feature/x" }, tmp)
+
+      local branch, at = Git.head(tmp)
+      assert.same({ "feature/x", commit }, { branch, at })
+      assert.equal(0, spawned)
+    end)
+
+    it("reads a detached HEAD as HEAD at its commit", function()
+      local commit = Fixture.init_repo("trunk", tmp)
+      Fixture.git({ "checkout", "-q", "--detach" }, tmp)
+
+      assert.same({ "HEAD", commit }, { Git.head(tmp) })
+      assert.equal(0, spawned)
+    end)
+
+    it("reads a worktree's branch through its .git file", function()
+      Fixture.init_repo("trunk", tmp)
+      Fixture.git({ "worktree", "add", "-q", "-b", "feature", tmp .. "/wt" }, tmp)
+
+      assert.same({ rev_parse(tmp .. "/wt") }, { Git.head(tmp .. "/wt") })
+      assert.equal(0, spawned)
+    end)
+
+    it("reads a stopped rebase as HEAD", function()
+      Fixture.init_repo("trunk", tmp)
+      Fixture.git({ "commit", "-q", "--allow-empty", "-m", "second" }, tmp)
+      vim.fn.system({ "git", "-C", tmp, "rebase", "--exec", "false", "HEAD~1" })
+      assert.truthy(vim.uv.fs_stat(tmp .. "/.git/rebase-merge"))
+
+      local branch, commit = Git.head(tmp)
+      assert.equal("HEAD", branch)
+      assert.equal(select(2, rev_parse(tmp)), commit)
+    end)
+
+    it("asks git in a reftable repository", function()
+      Fixture.init_repo("trunk", tmp)
+      Fixture.git({ "refs", "migrate", "--ref-format=reftable" }, tmp)
+
+      assert.same({ rev_parse(tmp) }, { Git.head(tmp) })
+      assert.is_true(spawned > 0)
+    end)
+
+    it("asks git for a branch whose ref is packed", function()
+      Fixture.init_repo("trunk", tmp)
+      Fixture.git({ "pack-refs", "--all" }, tmp)
+
+      assert.same({ rev_parse(tmp) }, { Git.head(tmp) })
+      assert.equal("trunk", (Git.head(tmp)))
+    end)
+
+    it("answers no branch on an unborn branch, as git does", function()
+      Fixture.git({ "init", "-q", "-b", "trunk" }, tmp)
+
+      assert.same({}, { Git.head(tmp) })
+    end)
+
+    it("answers nothing outside a repository", function()
+      assert.same({}, { Git.head(tmp) })
+    end)
+  end)
 end)

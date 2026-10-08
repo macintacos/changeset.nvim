@@ -1,4 +1,5 @@
----The git and gh queries that pick the branch changeset diffs against, and the process runner they and herdr share.
+---The git and gh queries that pick the branch changeset diffs against, HEAD read off git's own files, and the process
+---runner they and herdr share.
 local M = {}
 
 ---`vim.system`, calling `on_exit` on the main loop. A failed spawn — a repository removed under a pending
@@ -15,6 +16,60 @@ function M.system(argv, opts, on_exit)
       on_exit(result)
     end)
   end
+end
+
+---The first line of the file at `path`; nil when it can't be read, as a directory can't.
+---@param path string
+---@return string?
+function M.first_line(path)
+  local fd = io.open(path, "r")
+  if not fd then
+    return nil
+  end
+  local line = fd:read("*l")
+  fd:close()
+  return line
+end
+
+---The git directory of the repository at `root`: its `.git`, or where a worktree's `.git` file points.
+---@param root string
+---@return string
+function M.git_dir(root)
+  local dot_git = vim.fs.joinpath(root, ".git")
+  local pointer = (M.first_line(dot_git) or ""):match("^gitdir: (.+)")
+  if not pointer then
+    return dot_git
+  end
+  return vim.fn.isabsolutepath(pointer) == 1 and pointer or vim.fs.joinpath(root, pointer)
+end
+
+---HEAD's branch and commit at `root`, as `git rev-parse HEAD --abbrev-ref HEAD` answers them: "HEAD" for a detached
+---HEAD, a stopped rebase's included. Read off git's own files, since every refresh asks; git runs only where they can't
+---say: a reftable repository, an unreadable HEAD, a branch with no loose ref (unborn, or packed).
+---@param root string
+---@return string? branch nil outside a repository and on an unborn branch.
+---@return string? commit
+function M.head(root)
+  local dir = M.git_dir(root)
+  local line = M.first_line(vim.fs.joinpath(dir, "HEAD")) or ""
+  if line:match("^%x+$") then
+    return "HEAD", line
+  end
+  local name = line:match("^ref: refs/heads/(.+)")
+  -- A reftable repository's HEAD always names `.invalid`.
+  if name and name ~= ".invalid" then
+    -- A worktree's branches live in the repository it was added from.
+    local common = M.first_line(vim.fs.joinpath(dir, "commondir"))
+    if common then
+      dir = vim.fn.isabsolutepath(common) == 1 and common or vim.fs.joinpath(dir, common)
+    end
+    local commit = M.first_line(vim.fs.joinpath(dir, "refs", "heads", name))
+    if commit and commit:match("^%x+$") then
+      return name, commit
+    end
+  end
+  local out = M.lines({ "git", "rev-parse", "HEAD", "--abbrev-ref", "HEAD" }, root)
+  return out[2], out[1]
 end
 
 ---Run a git command and return its stdout lines, or an empty table if it failed.

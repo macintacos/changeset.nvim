@@ -255,20 +255,12 @@ local function drop()
   tree = nil
 end
 
----@param root string?
----@return string? branch "HEAD" when detached.
----@return string? commit
-local function head(root)
-  local out = Git.lines({ "git", "rev-parse", "HEAD", "--abbrev-ref", "HEAD" }, root)
-  return out[2], out[1]
-end
-
 ---Build the tree for the repository at `root`, unless it is already built there.
 ---@param root string
 ---@return boolean ready false when the repository has no merge base with its default
 ---branch, which includes a `root` outside any repository.
 local function build_at(root)
-  local branch, commit = head(root)
+  local branch, commit = Git.head(root)
   branch = branch or "HEAD"
   local point = fork_point.get(root, branch)
   if not point then
@@ -325,7 +317,7 @@ function M.update()
   if not tree then
     return
   end
-  local branch, commit = head(tree.root)
+  local branch, commit = Git.head(tree.root)
   -- A detached HEAD (a stopped rebase, a bisect) is not another branch.
   if not branch or branch == "HEAD" or (branch == tree.branch and commit == tree.head) then
     return M.refresh()
