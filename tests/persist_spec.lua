@@ -230,6 +230,25 @@ describe("changeset position in a session", function()
     assert.equal(before, #vim.api.nvim_tabpage_list_wins(0))
   end)
 
+  it("lets go of a restored sidebar window it cannot fill when it is the only window, and of its buffer", function()
+    local outside = vim.fn.tempname()
+    vim.fn.mkdir(outside, "p")
+    vim.fn.chdir(outside)
+    vim.cmd("enew")
+    vim.api.nvim_buf_set_name(0, "changeset://tree")
+    local stale = vim.api.nvim_get_current_buf()
+    local notify = vim.notify
+    vim.notify = function() end
+
+    local ok, err = pcall(changeset.restore)
+    vim.notify = notify
+    vim.fn.chdir(tmp)
+    vim.fn.delete(outside, "rf")
+
+    assert(ok, err)
+    assert.is_false(vim.api.nvim_buf_is_valid(stale))
+  end)
+
   it("opens without a position from a recorded global that is not JSON", function()
     vim.cmd.edit("mod.lua")
     vim.api.nvim_win_set_cursor(0, { 2, 0 })

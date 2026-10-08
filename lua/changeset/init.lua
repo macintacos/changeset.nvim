@@ -569,7 +569,14 @@ function M.restore()
   end
   M.open()
   if not window.is_visible() then
-    vim.api.nvim_win_close(placeholder, true)
+    local stale = vim.api.nvim_win_get_buf(placeholder)
+    if #vim.api.nvim_tabpage_list_wins(0) > 1 then
+      vim.api.nvim_win_close(placeholder, true)
+    else
+      vim.api.nvim_win_call(placeholder, vim.cmd.enew)
+    end
+    -- A session lists it, under a name nothing else answers to.
+    pcall(vim.api.nvim_buf_delete, stale, { force = true })
     return
   end
   local state = sidebar_state.current()
