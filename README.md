@@ -63,7 +63,8 @@ defines `:Changeset` and its keys.
 ## Reviewing a branch
 
 1. Press `<C-g>cc` on a line or a visual selection. A small markdown window opens under
-   it. On a file's first line, or a file's row in the sidebar, the comment covers the whole
+   it. It works on a row in the sidebar too: a symbol's row comments on the line `<CR>`
+   opens, a change's row on its lines, a file's row on the whole file. On a file's first line the comment covers the whole
    file; to comment on that line alone, select it first.
 2. Write the comment, then save it with `<C-s>` or `<C-CR>`. Closing the window any other
    way keeps your text as a draft.
@@ -130,7 +131,7 @@ has a `<Plug>(changeset-…)` map named after its words, and these default keys:
 | `]]` / `[[`                 | `next_section` / `prev_section`           | Move to the next / previous section                                     |
 | `f`                         | `filter`                                  | Filter the tree as you type                                             |
 | `F`                         | `filter_kinds`                            | Hide symbol kinds, remembered for this branch, repository or everywhere |
-| `y`                         | `yank`                                    | Copy the row's `path:line`                                              |
+| `y`                         | `yank`                                    | Copy the row's `path:line`, or a ranged comment's `path:first-last`     |
 | `d`                         | `delete_comment`                          | Delete the review comment on a Comments row                             |
 | `R`                         | `refresh`                                 | Rebuild the tree                                                        |
 | `?`                         | `help`                                    | List the sidebar's keys                                                 |

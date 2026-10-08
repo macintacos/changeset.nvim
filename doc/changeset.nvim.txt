@@ -157,9 +157,11 @@ and changeset warns "no merge base with the default branch".
 :Changeset [{subcommand}]                                         *:Changeset*
 	Without a subcommand, `toggle`. `<Tab>` completes the subcommands.
 	`:Changeset comment`, `:Changeset review` and `:Changeset preview`
-	take a verb; alone, they report an error that lists the verbs. Only
-	`comment new` uses a range. From the review comment window, a
-	subcommand acts on the comment being written
+	take a verb, and `next` and `prev` take an optional one. With no verb
+	where one is needed, or a verb a subcommand doesn't have, it reports
+	an error that lists the verbs; words past a full subcommand report
+	that it takes no arguments. Only `comment new` uses a range. From the
+	review comment window, a subcommand acts on the comment being written
 	(|changeset-window-commands|).
 
 Each subcommand has a `<Plug>` map of its words joined by hyphens, and most
@@ -177,7 +179,9 @@ SIDEBAR
 :Changeset refresh                                        *:Changeset-refresh*
 <Plug>(changeset-refresh)                          *<Plug>(changeset-refresh)*
 <C-g>r                                                      *changeset-<C-g>r*
-	Rebuild the tree now. Before any tree was built, it does nothing.
+	Rebuild the tree now. Before any tree was built, build one for the
+	current buffer's repository, as |:Changeset| would, or warn "no merge
+	base with the default branch".
 
 STEPPING
 
@@ -243,11 +247,11 @@ REVIEW COMMENTS
 <C-g>cd                                                    *changeset-<C-g>cd*
 	Delete the review comment on the cursor's line, without asking. Where
 	several cover the line, delete the narrowest; run it again for the
-	next. On a file's first line, or on its row in the sidebar, delete the
-	one on the whole file; a comment on the first line itself goes with
-	`d` on its block or its Comments row. In the sidebar it works only on
-	a file's row or a whole file's Comments row. In a file with unsaved
-	edits it refuses.
+	next. On a file's first line, delete the one on the whole file when
+	there is one, else the line's. On a file's row in the sidebar, delete
+	the one on the whole file. In the sidebar it works only on a file's
+	row or a whole file's Comments row. In a file with unsaved edits it
+	refuses.
 
 :Changeset comment next                              *:Changeset-comment-next*
 <Plug>(changeset-comment-next)                *<Plug>(changeset-comment-next)*
@@ -452,9 +456,9 @@ PREVIEWS                                                   *changeset-preview*
 Moving the cursor in the sidebar previews the row in the window you were last
 in, with a band across the top of that window naming the file. The band ends
 with the symbol's name, or with the key that opens the row. A file row
-previews its first line. Previewing adds no jumplist entry and leaves the
-buffer unlisted. When no window can take the preview, changeset splits one off
-beside the sidebar.
+previews its first change, where `<CR>` opens it. Previewing adds no jumplist
+entry and leaves the buffer unlisted. When no window can take the preview,
+changeset splits one off beside the sidebar.
 
 A deleted file previews what it held at the base, every line tinted
 |ChangesetDiffDelete|, and the band says "deleted on this branch". A binary
@@ -536,7 +540,8 @@ y                                                        *changeset-sidebar-y*
 keymaps.yank                                   *changeset-option-keymaps.yank*
 	Copy the row's `path:line`, relative to the repository, to the
 	clipboard, or to the unnamed register when Neovim has no clipboard
-	provider. A row with no line copies the path alone.
+	provider. A Comments row on a range copies `path:first-last`. A row
+	with no line copies the path alone.
 
 d                                                        *changeset-sidebar-d*
 keymaps.delete_comment               *changeset-option-keymaps.delete_comment*
@@ -803,9 +808,10 @@ on their line numbers.
 THE COMMENTS SECTION                              *changeset-comments-section*
 
 With the sidebar open, a Comments section at the top of the tree lists the
-branch's review comments, by file and then line, a whole file's first. Each
-row shows a `●`, or a draft's `◌`, the file's name and lines, and the first
-line of the comment. Its header counts the comments and the drafts.
+branch's review comments, by file, then first line, then last line, a whole
+file's first. Each row shows a `●`, or a draft's `◌`, the file's name and
+lines, and the first line of the comment. Its header counts the comments and
+the drafts.
 
 - Moving onto a row previews its line; for a file that is gone, a notice says
   so.
@@ -817,7 +823,7 @@ line of the comment. Its header counts the comments and the drafts.
 WALKING AND LISTING                                *changeset-comment-walking*
 
 `:Changeset comment next` and `:Changeset comment prev` walk the review
-comments by file and then first line, wrapping at either end. They skip a
+comments in the Comments section's order, wrapping at either end. They skip a
 whole file's comments and comments whose file is gone. From a file they start
 at the cursor; from the sidebar, at the first or last comment; from a window
 that holds no file, they jump in the window before it. They refuse while the
@@ -827,10 +833,10 @@ echoes "review comment 3 of 7".
 `:Changeset comment last` jumps to the review comment you saved last, passing
 over drafts, and opens it to edit.
 
-`:Changeset comment list` puts every review comment in the quickfix list,
-drafts and comments on gone files included, a draft's text starting with
-`[draft]`, and opens the list. Run again while that list is the current one,
-it replaces it; otherwise it adds a new list.
+`:Changeset comment list` puts every review comment in the quickfix list, in
+the Comments section's order, drafts and comments on gone files included, a
+draft's text starting with `[draft]`, and opens the list. Run again while that
+list is the current one, it replaces it; otherwise it adds a new list.
 
 ==============================================================================
 10. Ending a review                                         *changeset-review*
@@ -901,10 +907,10 @@ recorded branches. Other branches' comments and the submitted batch stay.
 
 THE PASTED REVIEW                                    *changeset-review-format*
 
-The review holds one block per comment, by file and then line, a whole file's
-first. Each block names its place by absolute path, quotes its lines as they
-are now, unsaved edits included, in a fence marked with the file's language,
-and ends with the comment's text: >
+The review holds one block per comment, in the Comments section's order.
+Each block names its place by absolute path, quotes its lines as they are now,
+unsaved edits included, in a fence marked with the file's language, and ends
+with the comment's text: >
     /home/me/changeset.nvim/lua/changeset/git.lua:12-13
     ```lua
     local function parent(cwd, branch)

@@ -1,7 +1,7 @@
 # Design
 
 This records why the sidebar looks and behaves as it does, for contributors; `README.md`
-is the user reference.
+and `doc/changeset.nvim.txt` are the user reference.
 
 ## Visual system
 
@@ -763,7 +763,8 @@ The answer is every review comment whose lines take in the cursor's line, in the
 marks draw them, each a bold heading in the review comment window's
 title vocabulary and the body as written, with `---` between them, the separator stock hover
 puts between servers. A line with none gets `nil`. It is read from the store at request time, so it
-follows the marks without re-attaching, with the same caveat about edited files.
+follows the marks without re-attaching, and in a modified buffer answers on the lines the
+same diff draws them on.
 
 A buffer is attached whenever a redraw marks it, and detached by the redraw that leaves it
 unmarked: its last review comment going, or the review abandoned. So only a file with something to say has the client, for as
@@ -803,7 +804,7 @@ becomes a block: its `path:line` or `path:first-last`, its lines fenced in the f
 filetype, and its body. The path is absolute, because the agent's pane can run in another
 directory or worktree than the repository's. The lines are read as they are now, from the buffer when the file
 is loaded, so the agent sees what the comment was written against, unsaved edits included.
-Blocks go by path, then line, a blank line apart, the way the Comments section orders them.
+Blocks go in the Comments section's order, a blank line apart.
 A whole file's block is its absolute path and its body, ahead of the blocks on its lines:
 quoting the whole file would bury the comments, and a deleted file has nothing to quote.
 A block whose lines can't be read, its file gone or its range past the end, keeps its place
@@ -862,7 +863,9 @@ The marks in the files show a review comment where you read, but finding the one
 wrote means visiting every file. So the sidebar lists them in a section of their own, first,
 above Implementation: they are what you come back to. It is a section of another kind. It
 classifies no file, so its rows are not file rows, and it holds every review comment of the
-tree's repository on the branch checked out, one row each, by path and then line.
+tree's repository on the branch checked out, one row each, by path, then first line, then
+last line. The walk, the quickfix list and the pasted review share that order, from one
+comparator, so overlapping ranges come out alike everywhere.
 
 Its header follows § Sections: an icon, the label, and a count of its rows in the meta
 colour, taken before any filter, adding the drafts among them when there are any:
@@ -886,7 +889,7 @@ Being no file, its rows stay out of what counts files. The footer names no file 
 picker lists none: the picker lists changes, and a review comment is not one. They are rows
 for everything else. `h` and `l` fold the section, remembered like any other, `]]` and `[[`
 stop on its header, a filter matches a row by its path, moving onto one previews its line,
-`y` copies its `path:line`, and opening one marks it as the pick.
+`y` copies its `path:line`, or `path:first-last` for a range, and opening one marks it as the pick.
 
 A row is for finding what you wrote, so its keys act on that. `<CR>` and the split and tab
 keys jump to its line, then open it editable in the review comment window, its title and
@@ -1164,11 +1167,11 @@ deleted lines over the next line sit between the stack and that line.
 
 ## What it remembers
 
-The tree is built the first time something asks for it — `:Changeset`, the picker
-(`require("changeset.pick").pick()`), or a restored session refilling the sidebar — for
-the current buffer's repository: the fork point is measured at once, the diff and symbols
-in the background. Reading symbols loads each changed file the cache can't answer,
-Generated ones aside, so those buffers and their language servers arrive with that first
+The tree is built the first time something asks for it — `:Changeset`, `:Changeset
+refresh`, the picker (`require("changeset.pick").pick()`), or a restored session refilling
+the sidebar — for the current buffer's repository: the fork point is measured at once,
+the diff and symbols in the background. Reading symbols loads each changed file the cache
+can't answer, Generated ones aside, so those buffers and their language servers arrive with that first
 ask, and a session that never asks starts none. The picker waits a moment for the diff,
 which it has no way to fill in behind. The sidebar opens at once: a tree still waiting on
 its first diff opens blank rather than claiming nothing changed. Closing the sidebar lets
@@ -1329,6 +1332,8 @@ repository's deliberate choice is none of that save's business.
   — previewing must not write one, or `<C-o>` becomes one entry per keypress. Entering
   counts only as an arrival: a preview `]g` made in the window the cursor was already in
   stays a preview however focus leaves and returns, until `<CR>` or `q`.
+- **A row previews where `<CR>` opens it.** A file row shows its first change, not line 1,
+  so moving onto a row shows what opening it would.
 - **Previews follow the window you were last in** — the focused one, or, while the cursor
   is in the sidebar, the one it came from. `winnr("#")` answers 0 once that window has
   been closed, and 0 is an alias for the current window wherever it would then be passed,
