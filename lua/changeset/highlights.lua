@@ -394,4 +394,14 @@ function M.define_highlights()
   end
 end
 
+M.define_highlights()
+
+-- The meta highlight is mixed from Comment's foreground, which a new colorscheme replaces. Here, where every surface
+-- takes its groups, since a review verb loads without the sidebar.
+vim.api.nvim_create_autocmd("ColorScheme", {
+  group = vim.api.nvim_create_augroup("changeset.highlights", { clear = true }),
+  desc = "changeset: rebuild the highlight groups against the new palette",
+  callback = M.define_highlights,
+})
+
 return M

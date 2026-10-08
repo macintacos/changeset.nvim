@@ -318,16 +318,6 @@ local function redraw_switched()
   end
 end
 
-highlights.define_highlights()
-
--- The meta highlight is mixed from Comment's foreground, which a new colorscheme replaces. Here rather than in
--- the sidebar's module, since a review verb loads this one without it.
-vim.api.nvim_create_autocmd("ColorScheme", {
-  group = vim.api.nvim_create_augroup("changeset.highlights", { clear = true }),
-  desc = "changeset: rebuild the highlight groups against the new palette",
-  callback = highlights.define_highlights,
-})
-
 -- Fires: a review comment kept, dropped or cleared, so its marks follow it.
 comment_store.subscribe(M.redraw)
 
