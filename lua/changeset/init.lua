@@ -489,6 +489,20 @@ function M.open()
       redraw()
     end,
   })
+  -- Fires: entering a tabpage. A sidebar standing in it missed every redraw made while it was in another.
+  vim.api.nvim_create_autocmd("TabEnter", {
+    group = augroup,
+    desc = "changeset: redraw the tree missed while the sidebar stood in another tabpage",
+    callback = function()
+      local state = sidebar_state.current()
+      if not (state and window.is_visible()) then
+        return
+      end
+      local before = (draw.row_at_cursor() or {}).id
+      redraw()
+      apply(state.position:rebuilt(draw.view(), before, decided))
+    end,
+  })
   -- Fires: leaving any window while the sidebar is open. Remembers whether it was a
   -- float, so the sidebar's `WinEnter` can tell a return from one from an arrival.
   vim.api.nvim_create_autocmd("WinLeave", {

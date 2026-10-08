@@ -234,6 +234,42 @@ describe("changeset sidebar", function()
     assert.equal(100, width)
   end)
 
+  describe("back from another tabpage", function()
+    after_each(function()
+      vim.cmd("silent! tabonly!")
+    end)
+
+    it("shows a review comment written while it stood there", function()
+      local comment_store = require("changeset.comment_store")
+      os.remove(comment_store.path())
+      open_sidebar()
+      vim.cmd.tabnew()
+
+      comment_store.keep(assert(build.current()).root, { path = "mod.lua", line = 2, body = "from tab 2" })
+      vim.cmd.tabprevious()
+      os.remove(comment_store.path())
+
+      assert.truthy(Sidebar.text():find("from tab 2", 1, true), Sidebar.text())
+    end)
+
+    it("shows a file the tree gained while it stood there", function()
+      open_sidebar()
+      vim.cmd.tabnew()
+
+      write(vim.fs.joinpath(tmp, "plain.lua"), { "return 3" })
+      build.refresh()
+      assert.is_true(vim.wait(10000, function()
+        return vim.iter(assert(build.current()).files):any(function(file)
+          return file.path == "plain.lua"
+        end)
+      end, 25))
+      Sidebar.flush()
+      vim.cmd.tabprevious()
+
+      assert.truthy(Sidebar.text():find("plain.lua", 1, true), Sidebar.text())
+    end)
+  end)
+
   it("keeps the tree clear of a statuscolumn, whose cells its rows are sized over", function()
     local statuscolumn = vim.o.statuscolumn
     vim.o.statuscolumn = "%l "
