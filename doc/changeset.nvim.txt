@@ -395,7 +395,8 @@ leave the files fewer than `layout.min_file_width` columns
 (|changeset-option-layout.min_file_width|), it opens as a drawer along the
 bottom instead, a third of the editor's height and at least 10 lines. It moves
 between the two as you resize the editor. Its buffer is read-only, with
-'filetype' `changeset`.
+'filetype' `changeset`. Its window sets 'winfixbuf', so |CTRL-O| or `:edit`
+there leaves the tree in place.
 
 The header over the tree names the ref the tree is compared against, the PR's
 number when there is one, the number of files and commits, and the `+N -N`
@@ -471,8 +472,9 @@ Moving the cursor in the sidebar previews the row in the window you were last
 in, with a band across the top of that window naming the file. The band ends
 with the symbol's name, or with the key that opens the row. A file row
 previews its first change, where `<CR>` opens it. Previewing adds no jumplist
-entry and leaves the buffer unlisted. When no window can take the preview,
-changeset splits one off beside the sidebar.
+entry and leaves the buffer unlisted. A window with 'winfixbuf' set takes no
+preview. When no window can take the preview, changeset splits one off beside
+the sidebar, and closes it with the sidebar unless you opened a file in it.
 
 A deleted file previews what it held at the base, every line tinted
 |ChangesetDiffDelete|, and the band says "deleted on this branch". A binary
@@ -1297,9 +1299,9 @@ nothing, starts no language server and makes no network request.
   its buffer, so another Neovim opening it shows no |E325| warning.
 - Review comments, and each branch's last 10 submitted batches:
   `stdpath("state")/changeset/comments.json`.
-- Sessions: |:mksession| restores the sidebar when 'sessionoptions' contains
-  `blank`, as it does by default, and its cursor row and scroll too when it
-  also contains `globals`.
+- Sessions: |:mksession| restores the sidebar, in whichever tabpage it stood,
+  when 'sessionoptions' contains `blank`, as it does by default, and its
+  cursor row and scroll too when it also contains `globals`.
 - Kept in memory until Neovim exits: folds, the agent last submitted to, PR
   Review Mode turned off on a branch, and the unified diff turned off.
 
