@@ -317,9 +317,10 @@ function M.sync_cursor()
 end
 
 ---The window a restored session left standing where the sidebar was.
+---@param tabpage integer? The tabpage to look in, 0 for the current one; every tabpage when nil.
 ---@return integer?
-function M.placeholder()
-  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+function M.placeholder(tabpage)
+  for _, win in ipairs(tabpage and vim.api.nvim_tabpage_list_wins(tabpage) or vim.api.nvim_list_wins()) do
     local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win))
     if win ~= sidebar.win and name:find(NAME, 1, true) then
       return win
@@ -350,7 +351,7 @@ end
 ---@param buf integer Scratch buffer holding the tree.
 ---@return integer win
 function M.open(buf)
-  local placeholder = M.placeholder()
+  local placeholder = M.placeholder(0)
   sidebar.borrowed = {}
 
   if placeholder then

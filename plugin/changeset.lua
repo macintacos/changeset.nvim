@@ -423,7 +423,7 @@ local group = vim.api.nvim_create_augroup("changeset.plugin", {})
 vim.api.nvim_create_autocmd("SessionLoadPost", {
   group = group,
   callback = function()
-    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
       -- Keep in sync with NAME in lua/changeset/window.lua.
       if vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win)):find("changeset://", 1, true) then
         return require("changeset").restore()

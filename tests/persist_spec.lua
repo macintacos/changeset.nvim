@@ -249,6 +249,28 @@ describe("changeset position in a session", function()
     assert.is_false(vim.api.nvim_buf_is_valid(stale))
   end)
 
+  it(
+    "fills a restored sidebar window standing in another tabpage, and leaves focus where the session put it",
+    function()
+      vim.cmd("runtime plugin/changeset.lua")
+      vim.cmd.edit("mod.lua")
+      local first = vim.api.nvim_get_current_tabpage()
+      vim.cmd("tabnew")
+      vim.cmd.edit("mod.lua")
+      local leftover = vim.api.nvim_create_buf(true, false)
+      vim.api.nvim_buf_set_name(leftover, "changeset://tree")
+      local placeholder = vim.api.nvim_open_win(leftover, false, { split = "right", win = -1, width = 44 })
+      vim.api.nvim_set_current_tabpage(first)
+
+      vim.api.nvim_exec_autocmds("SessionLoadPost", {})
+      local seen = { tab = vim.api.nvim_get_current_tabpage(), shown = vim.api.nvim_win_get_buf(placeholder) }
+      local tree = window.buf()
+      vim.cmd("silent! tabonly")
+
+      assert.same({ tab = first, shown = tree }, seen)
+    end
+  )
+
   it("opens without a position from a recorded global that is not JSON", function()
     vim.cmd.edit("mod.lua")
     vim.api.nvim_win_set_cursor(0, { 2, 0 })

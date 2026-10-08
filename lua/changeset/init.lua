@@ -556,17 +556,9 @@ function M.close()
   window.close()
 end
 
----Fill the window a restored session left standing where the sidebar was, and bring
----back where you were and the sidebar's cursor row once the tree holds them.
----
----A session records the layout but not a scratch buffer's contents, so the
----sidebar comes back empty. Filling that window is also what keeps the next
----`toggle()` from opening a second one beside it.
-function M.restore()
-  local placeholder = window.placeholder()
-  if not placeholder then
-    return
-  end
+---Fill `placeholder`, in the current tabpage, with the tree, or let go of it when there is no tree to fill it with.
+---@param placeholder integer
+local function fill(placeholder)
   M.open()
   if not window.is_visible() then
     local stale = vim.api.nvim_win_get_buf(placeholder)
@@ -583,6 +575,26 @@ function M.restore()
   assert(state, "changeset: no tree built yet")
   local ok, recorded = pcall(vim.json.decode, vim.g[POSITION_GLOBAL])
   apply(state.position:restore(ok and recorded or nil, draw.view(), decided))
+end
+
+---Fill the window a restored session left standing where the sidebar was, and bring
+---back where you were and the sidebar's cursor row once the tree holds them.
+---
+---A session records the layout but not a scratch buffer's contents, so the
+---sidebar comes back empty. Filling that window is also what keeps the next
+---`toggle()` from opening a second one beside it.
+function M.restore()
+  local placeholder = window.placeholder()
+  if not placeholder then
+    return
+  end
+  -- The sidebar opens in the tabpage it is called from, which the session may not have left focused.
+  local here = vim.api.nvim_get_current_tabpage()
+  vim.api.nvim_set_current_tabpage(vim.api.nvim_win_get_tabpage(placeholder))
+  fill(placeholder)
+  if vim.api.nvim_tabpage_is_valid(here) then
+    vim.api.nvim_set_current_tabpage(here)
+  end
 end
 
 ---What `toggle()` does next, given where the sidebar and the cursor are.
