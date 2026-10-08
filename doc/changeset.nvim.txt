@@ -601,6 +601,8 @@ classes, with how many of each. In it:
   q  <Esc>     Close, putting the tree back to the saved set.
   ?            List these keys.
 
+Closing the menu any other way, such as with |:quit|, does what `q` does.
+
 The narrowest scope with a saved set wins: branch, then repository, then
 everywhere. A line under the tree names the hidden kinds while any hide. The
 picker hides them too.
