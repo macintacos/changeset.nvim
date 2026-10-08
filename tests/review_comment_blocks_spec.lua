@@ -13,11 +13,7 @@ describe("review comment blocks", function()
   before_each(function()
     tmp, previous_dir = Fixture.enter_tempdir()
     Fixture.init_repo("trunk", tmp)
-    local lines = {}
-    for i = 1, 40 do
-      lines[i] = "alpha " .. i
-    end
-    vim.fn.writefile(lines, "alpha.txt")
+    vim.fn.writefile(Fixture.numbered(40, nil, "alpha"), "alpha.txt")
     Fixture.commit("alpha", tmp)
     os.remove(comment_store.path())
     changeset.setup({ review_comment = { blocks = true } })

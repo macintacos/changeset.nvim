@@ -14,17 +14,7 @@ describe("the sidebar's Comments section", function()
 
   before_each(function()
     tmp, previous_dir = Fixture.enter_tempdir()
-    Fixture.init_repo("trunk", tmp)
-    vim.fn.writefile({ "local M = {}", "return M" }, "other.lua")
-    Fixture.commit("other", tmp)
-    Fixture.git({ "checkout", "-q", "-b", "feature" }, tmp)
-    local lines = {}
-    for i = 1, 40 do
-      lines[i] = "alpha " .. i
-    end
-    vim.fn.writefile(lines, "alpha.txt")
-    vim.fn.writefile({ "local M = {}", "M.x = 1", "return M" }, "other.lua")
-    Fixture.commit("alpha", tmp)
+    Fixture.feature_alpha(tmp)
     os.remove(comment_store.path())
   end)
 

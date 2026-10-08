@@ -16,14 +16,13 @@ describe("a review comment from a symbol's or a change's row", function()
       vim.cmd("runtime plugin/changeset.lua")
     end
     tmp, previous_dir = Fixture.enter_tempdir()
-    Fixture.init_repo("trunk", tmp)
-    vim.fn.writefile(Fixture.numbered(10), "mod.lua")
-    vim.fn.writefile({ "return 1" }, "other.lua")
-    Fixture.commit("base", tmp)
-    Fixture.git({ "checkout", "-q", "-b", "feature" }, tmp)
-    vim.fn.writefile(Fixture.numbered(10, { [2] = true, [3] = true, [8] = true }), "mod.lua")
-    vim.fn.writefile({ "return 2" }, "other.lua")
-    Fixture.commit("feature", tmp)
+    Fixture.feature({
+      ["mod.lua"] = Fixture.numbered(10),
+      ["other.lua"] = { "return 1" },
+    }, {
+      ["mod.lua"] = Fixture.numbered(10, { [2] = true, [3] = true, [8] = true }),
+      ["other.lua"] = { "return 2" },
+    }, tmp)
     os.remove(comment_store.path())
     symbols = Symbols.install()
     notes, restore_notify = Notify.capture()
