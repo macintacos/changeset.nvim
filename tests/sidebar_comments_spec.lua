@@ -246,7 +246,7 @@ describe("the sidebar's Comments section", function()
 
     assert.equal(
       "update: after\nsecond line",
-      require("changeset.review_comments").at(comment_store.list(root), "alpha.txt", 13).body
+      require("changeset.review_comment").at(comment_store.list(root), "alpha.txt", 13).body
     )
   end)
 

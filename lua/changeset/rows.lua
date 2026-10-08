@@ -1,7 +1,7 @@
 ---Builds the row tree, its Comments section included, and says how far a file's symbols have been read.
 
 local comments = require("changeset.comments")
-local comment_store = require("changeset.comment_store")
+local review_comment = require("changeset.review_comment")
 local sections = require("changeset.sections")
 local SEP = require("changeset.symbols").SEP
 
@@ -656,7 +656,7 @@ function M.build(files, symbols_by_path, lines)
     :totable()
 end
 
----The Comments section: a row per review comment, in `comment_store.before`'s order, then as listed. A row goes
+---The Comments section: a row per review comment, in `review_comment.before`'s order, then as listed. A row goes
 ---to its line.
 ---The header counts the rows, and carries no stat: a review comment changes no line.
 ---@param review_comments changeset.ReviewComment[]
@@ -670,7 +670,7 @@ function M.comments(review_comments)
     arrival[comment], sorted[i] = i, comment
   end
   table.sort(sorted, function(a, b)
-    return comment_store.before(a, b) or not comment_store.before(b, a) and arrival[a] < arrival[b]
+    return review_comment.before(a, b) or not review_comment.before(b, a) and arrival[a] < arrival[b]
   end)
   return {
     id = COMMENTS_ID,

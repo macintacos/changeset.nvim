@@ -5,6 +5,7 @@
 ---Neovims writing comments don't drop each other's.
 
 local jsonfile = require("changeset.jsonfile")
+local review_comment = require("changeset.review_comment")
 
 local M = {}
 
@@ -32,21 +33,6 @@ local TAKEN = "submitted"
 -- Every redraw reads the record, so a branch can't keep a batch for every submit.
 local KEPT_BATCHES = 10
 
----Whether `a` sorts ahead of `b`: by path, then first line, then last line, a whole file's comment first.
----@param a changeset.ReviewComment
----@param b changeset.ReviewComment
----@return boolean
-function M.before(a, b)
-  if a.path ~= b.path then
-    return a.path < b.path
-  end
-  local a_first, b_first = a.start_line or a.line or 0, b.start_line or b.line or 0
-  if a_first ~= b_first then
-    return a_first < b_first
-  end
-  return (a.line or 0) < (b.line or 0)
-end
-
 ---Where the record lives. Under `state`, because a comment can't be derived again.
 ---@return string
 function M.path()
@@ -73,13 +59,6 @@ local function valid(entry)
         and entry.start_line < entry.line
       )
     )
-end
-
----@param a changeset.ReviewComment
----@param b changeset.ReviewComment
----@return boolean
-local function same_range(a, b)
-  return a.path == b.path and a.line == b.line and a.start_line == b.start_line
 end
 
 ---The first line of the file at `path`; nil when it can't be read, as a directory can't.
@@ -323,7 +302,7 @@ end
 function M.keep(root, comment)
   return (
     rewrite(root, function(entry)
-      return same_range(entry, comment)
+      return review_comment.same_range(entry, comment)
     end, vim.trim(comment.body) ~= "" and comment or nil)
   )
 end
@@ -335,7 +314,7 @@ end
 ---@return boolean dropped Whether a comment went.
 function M.drop(root, comment)
   return rewrite(root, function(entry)
-    return same_range(entry, comment)
+    return review_comment.same_range(entry, comment)
   end)
 end
 
@@ -348,7 +327,7 @@ function M.take(root, batch)
   return (
     rewrite(root, function(entry)
       return vim.iter(batch.comments):any(function(comment)
-        return same_range(entry, comment) and entry.body == comment.body
+        return review_comment.same_range(entry, comment) and entry.body == comment.body
       end)
     end, nil, batch)
   )
@@ -392,7 +371,7 @@ function M.restore(root, batch)
   local back, kept = {}, {}
   for _, comment in ipairs(vim.tbl_filter(valid, found.comments)) do
     local held = vim.iter(list):any(function(entry)
-      return valid(entry) and on(entry, branch) and same_range(entry, comment)
+      return valid(entry) and on(entry, branch) and review_comment.same_range(entry, comment)
     end)
     table.insert(held and kept or back, comment)
   end
@@ -432,7 +411,9 @@ end
 local function moved(entry, moves, branch)
   local copy = vim.deepcopy(entry)
   local move = vim.iter(moves):find(function(each)
-    return same_range(entry, each.from) and entry.body == each.from.body and (entry.draft or nil) == each.from.draft
+    return review_comment.same_range(entry, each.from)
+      and entry.body == each.from.body
+      and (entry.draft or nil) == each.from.draft
   end)
   if move then
     copy.line, copy.start_line, copy.branch = move.to.line, move.to.start_line, entry.branch or branch

@@ -9,6 +9,7 @@ local config = require("changeset.config")
 local dialog = require("changeset.dialog")
 local icons = require("changeset.icons")
 local render = require("changeset.render")
+local review_comment = require("changeset.review_comment")
 local review_comment_blocks = require("changeset.review_comment_blocks")
 local review_comment_window = require("changeset.review_comment_window")
 local review_comments = require("changeset.review_comments")
@@ -33,30 +34,7 @@ local function say(level, text, ...)
   vim.notify("Changeset: " .. text:format(...), level)
 end
 
-local lines_label = review_comments.lines_label
-
----Where `comment` sits, as the Comments row and the pasted review name it: "a.lua:4", "a.lua:3-5" for a range, or
----"a.lua" for the whole file.
----@param comment changeset.ReviewComment
----@return string
-local function location(comment)
-  if not comment.line then
-    return comment.path
-  end
-  local first = comment.start_line or comment.line
-  return first < comment.line and ("%s:%d-%d"):format(comment.path, first, comment.line)
-    or ("%s:%d"):format(comment.path, comment.line)
-end
-
----Where `comment` sits, for a sentence: "line 4 of a.lua", or "the whole of a.lua".
----@param comment changeset.ReviewComment
----@return string
-local function place(comment)
-  if not comment.line then
-    return "the whole of " .. comment.path
-  end
-  return ("%s of %s"):format(lines_label(comment.start_line or comment.line, comment.line), comment.path)
-end
+local lines_label, location, place = review_comment.lines_label, review_comment.location, review_comment.place
 
 ---@param repository string
 ---@param comment changeset.ReviewComment
@@ -205,7 +183,7 @@ end
 ---@param lnum integer
 ---@return changeset.ReviewComment?
 local function at(repository, path, lnum)
-  return review_comments.at(comment_store.list(repository), path, lnum)
+  return review_comment.at(comment_store.list(repository), path, lnum)
 end
 
 ---The comment `comment new` on lines `first` to `last` of `path` opens to edit: for a range, the one on exactly that
@@ -393,7 +371,7 @@ end
 ---@return changeset.ReviewComment?
 local function stored_as(repository, comment)
   return vim.iter(comment_store.list(repository)):find(function(each)
-    return each.path == comment.path and each.line == comment.line and each.start_line == comment.start_line
+    return review_comment.same_range(each, comment)
   end)
 end
 
@@ -466,12 +444,7 @@ function M.from_window(open, name, run)
   end
   if name == "comment last" then
     local last = last_saved(source_root(open))
-    if
-      last
-      and last.path == open.comment.path
-      and last.line == open.comment.line
-      and last.start_line == open.comment.start_line
-    then
+    if last and review_comment.same_range(last, open.comment) then
       open.resume()
       -- After insert mode restarts, whose -- INSERT -- would clear it.
       return vim.schedule(function()
@@ -627,7 +600,7 @@ end
 ---@return changeset.ReviewComment[]
 local function in_order(comments)
   local sorted = vim.list_slice(comments)
-  table.sort(sorted, comment_store.before)
+  table.sort(sorted, review_comment.before)
   return sorted
 end
 
@@ -699,19 +672,17 @@ local function block(repository, comment, read)
   return table.concat(parts, "\n")
 end
 
----The text a review is pasted as: a block per comment, in `comment_store.before`'s order, a blank line
+---The text a review is pasted as: a block per comment, in `review_comment.before`'s order, a blank line
 ---between blocks.
 ---@param repository string
 ---@param comments changeset.ReviewComment[]
 ---@param read changeset.reviewing.ReadLines
 ---@return string
 function M._review_text(repository, comments, read)
-  local sorted = vim.list_slice(comments)
-  table.sort(sorted, comment_store.before)
   return table.concat(
     vim.tbl_map(function(comment)
       return block(repository, comment, read)
-    end, sorted),
+    end, in_order(comments)),
     "\n\n"
   )
 end

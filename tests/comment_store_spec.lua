@@ -216,25 +216,6 @@ describe("changeset.comment_store", function()
     assert.same({ comment({ line = 12, start_line = nil, body = "edited" }) }, comment_store.list(ROOT))
   end)
 
-  it("orders comments by path, then first line, then last line, a whole file's first", function()
-    local sorted = {
-      { path = "b.lua", line = 1, body = "" },
-      { path = "a.lua", line = 9, start_line = 2, body = "" },
-      { path = "a.lua", line = 4, body = "" },
-      { path = "a.lua", body = "" },
-      { path = "a.lua", line = 5, start_line = 2, body = "" },
-    }
-    table.sort(sorted, comment_store.before)
-
-    assert.same({
-      { path = "a.lua", body = "" },
-      { path = "a.lua", line = 5, start_line = 2, body = "" },
-      { path = "a.lua", line = 9, start_line = 2, body = "" },
-      { path = "a.lua", line = 4, body = "" },
-      { path = "b.lua", line = 1, body = "" },
-    }, sorted)
-  end)
-
   describe("submitted", function()
     local one, two = { path = "lua/a.lua", line = 3, body = "one" }, comment({ body = "two" })
 

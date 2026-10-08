@@ -6,6 +6,7 @@ local comment_store = require("changeset.comment_store")
 local config = require("changeset.config")
 local hover = require("changeset.hover")
 local jsonfile = require("changeset.jsonfile")
+local review_comment = require("changeset.review_comment")
 local review_comment_blocks = require("changeset.review_comment_blocks")
 local render = require("changeset.render")
 
@@ -15,28 +16,6 @@ local ns = vim.api.nvim_create_namespace("changeset.review_comments")
 
 -- Holds only the bubbles, so `M.bubble` finds a line's without sorting out the rest.
 local sign_ns = vim.api.nvim_create_namespace("changeset.review_comment_signs")
-
----The narrowest review comment of `path` whose marks light line `lnum`; ties go to the first listed.
----@param comments changeset.ReviewComment[]
----@param path string
----@param lnum integer
----@return changeset.ReviewComment?
-function M.at(comments, path, lnum)
-  local narrowest, narrowest_width
-  for _, comment in ipairs(comments) do
-    local first, last = comment.start_line or comment.line, comment.line
-    if
-      comment.path == path
-      and last
-      and first <= lnum
-      and lnum <= last
-      and not (narrowest_width and last - first >= narrowest_width)
-    then
-      narrowest, narrowest_width = comment, last - first
-    end
-  end
-  return narrowest
-end
 
 local BUBBLE = "󰍩"
 -- The outline of the saved bubble: the same note, not yet filled in.
@@ -194,17 +173,6 @@ function M.bubble(buf, lnum)
   end
 end
 
----"line 4", "lines 3-5" for a range, or "whole file" for none.
----@param first integer?
----@param last integer?
----@return string
-function M.lines_label(first, last)
-  if not (first and last) then
-    return "whole file"
-  end
-  return first < last and ("lines %d-%d"):format(first, last) or ("line %d"):format(last)
-end
-
 ---The comments of `comments` on lines of `buf`'s file.
 ---@param buf integer
 ---@param root string
@@ -253,7 +221,7 @@ local function hover_text(fname, lnum)
     if first <= lnum and lnum <= last then
       local body = comment.body:gsub("\r\n", "\n")
       local heading = comment.draft and "Draft review comment" or "Review comment"
-      table.insert(entries, ("**%s · %s**\n\n%s"):format(heading, M.lines_label(first, last), body))
+      table.insert(entries, ("**%s · %s**\n\n%s"):format(heading, review_comment.lines_label(first, last), body))
     end
   end
   if #entries > 0 then
@@ -336,7 +304,7 @@ local function warn_merged(merged)
     vim.notify(
       ("Changeset: merged %d review comments on %s of %s%s"):format(
         merge.count,
-        M.lines_label(comment.start_line or comment.line, comment.line),
+        review_comment.lines_label(comment.start_line or comment.line, comment.line),
         comment.path,
         comment.draft and " into a draft" or ""
       ),
