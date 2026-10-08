@@ -605,6 +605,20 @@ describe("changeset.rows", function()
         assert.same({ "L24 new" }, names(group.children))
       end)
 
+      it("captions orphan hunks once a build reads their text, after one that didn't", function()
+        local files, symbols = { file(PATH, { hunk(24, 1) }) }, { [PATH] = STORE }
+        Rows.build(files, symbols)
+
+        local lines = {
+          text = function()
+            return "read"
+          end,
+        }
+        local group = Rows.files(Rows.build(files, symbols, lines))[1].children[1]
+
+        assert.same({ "L24 read" }, names(group.children))
+      end)
+
       it("reads two builds from the same inputs as the same rows", function()
         local files, symbols = { file(PATH, { hunk(7, 1) }), file(OTHER, { hunk(7, 1) }) }, { [PATH] = STORE }
 

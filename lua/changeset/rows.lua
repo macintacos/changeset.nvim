@@ -619,6 +619,7 @@ end
 ---@field symbols changeset.Symbol[]?
 ---@field comments changeset.Comments?
 ---@field tick integer?
+---@field captioned boolean
 ---@field placed changeset.rows.Placed[]
 
 ---Each file's rows from its last build, dropped with the file. Rows are never written once built, so builds share
@@ -671,12 +672,22 @@ local function add_file(section_rows, file, symbols_by_path, lines)
   local symbols = symbols_by_path[file.path]
   local comment_lines = file.section ~= "docs" and lines.comments and lines.comments[file.path] or nil
   local tick = lines.tick and lines.tick(file.path)
+  local captioned = lines.text ~= nil
   local last = built[file]
-  if not (last and last.symbols == symbols and last.comments == comment_lines and last.tick == tick) then
+  if
+    not (
+      last
+      and last.symbols == symbols
+      and last.comments == comment_lines
+      and last.tick == tick
+      and last.captioned == captioned
+    )
+  then
     last = {
       symbols = symbols,
       comments = comment_lines,
       tick = tick,
+      captioned = captioned,
       placed = place_file(section_rows, file, symbols, comment_lines, lines.text),
     }
     built[file] = last
