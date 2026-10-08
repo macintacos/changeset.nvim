@@ -266,13 +266,15 @@ describe("plugin/changeset.lua", function()
     }, notes)
   end)
 
-  it("reports words past a subcommand as an error", function()
+  it("reports words past a subcommand as taking no arguments", function()
     vim.cmd("Changeset toggle extra")
     vim.cmd("Changeset comment new extra")
 
     assert.equal(2, #notes)
-    assert.equal(vim.log.levels.ERROR, notes[1].level)
-    assert.equal(vim.log.levels.ERROR, notes[2].level)
+    for _, note in ipairs(notes) do
+      assert.equal(vim.log.levels.ERROR, note.level)
+      assert.truthy(note.msg:find("takes no arguments", 1, true), note.msg)
+    end
   end)
 
   it("loads the module on first use", function()

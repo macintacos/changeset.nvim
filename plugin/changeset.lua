@@ -118,6 +118,9 @@ end
 ---@return string
 local function unknown(fargs)
   local verbs = next_words(fargs[1] .. " ")
+  if #verbs == 0 and subcommands[fargs[1]] then
+    return (":Changeset %s takes no arguments"):format(fargs[1])
+  end
   if #verbs == 0 then
     return "unknown subcommand " .. table.concat(fargs, " ")
   end
