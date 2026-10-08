@@ -2,6 +2,7 @@ local changeset = require("changeset")
 local build = require("changeset.build")
 local window = require("changeset.window")
 local Fixture = require("support.git")
+local Notify = require("support.notify")
 local Sidebar = require("support.sidebar")
 local gh = require("support.gh")
 
@@ -258,22 +259,19 @@ describe("changeset tree", function()
     it("stays quiet on focus changes once its repository is deleted", function()
       build.build()
       assert.is_true(wait_for_file("mod.lua"))
-      local errors = {}
-      local real_notify = vim.notify
-      vim.notify = function(msg, level)
-        if level == vim.log.levels.ERROR then
-          errors[#errors + 1] = msg
-        end
-      end
-      vim.cmd("silent! %bwipeout!")
-      vim.fn.chdir(previous_dir)
-      vim.fn.delete(tmp, "rf")
+      local notes, restore = Notify.capture()
+      local ok, err = pcall(function()
+        vim.cmd("silent! %bwipeout!")
+        vim.fn.chdir(previous_dir)
+        vim.fn.delete(tmp, "rf")
 
-      vim.api.nvim_exec_autocmds("FocusGained", {})
-      vim.wait(1000)
-      vim.notify = real_notify
+        vim.api.nvim_exec_autocmds("FocusGained", {})
+        vim.wait(1000)
+      end)
+      restore()
 
-      assert.same({}, errors)
+      assert(ok, err)
+      assert.same({}, Notify.messages(notes, vim.log.levels.ERROR))
     end)
 
     it("leaves the sidebar blank until the diff is read", function()
@@ -438,16 +436,18 @@ describe("changeset tree", function()
   end)
 
   describe("when the diff cannot be read", function()
-    local collect, notify
+    local collect, restore_notify
 
     before_each(function()
       Fixture.feature_one_file(tmp)
       vim.cmd.edit("mod.lua")
-      collect, notify = require("changeset.diff").collect, vim.notify
+      collect = require("changeset.diff").collect
+      _, restore_notify = Notify.capture()
     end)
 
     after_each(function()
-      require("changeset.diff").collect, vim.notify = collect, notify
+      require("changeset.diff").collect = collect
+      restore_notify()
     end)
 
     it("drops a restored position waiting on it", function()
@@ -463,7 +463,6 @@ describe("changeset tree", function()
       require("changeset.diff").collect = function(_, _, callback)
         callback(nil, "boom")
       end
-      vim.notify = function() end
 
       build.refresh()
 
@@ -472,17 +471,14 @@ describe("changeset tree", function()
   end)
 
   describe("with nothing to diff against", function()
-    local notify, notified
+    local notes, restore
 
     before_each(function()
-      notify, notified = vim.notify, 0
-      vim.notify = function()
-        notified = notified + 1
-      end
+      notes, restore = Notify.capture()
     end)
 
     after_each(function()
-      vim.notify = notify
+      restore()
     end)
 
     it("builds nothing, silently, outside a repository", function()
@@ -491,7 +487,7 @@ describe("changeset tree", function()
       assert.is_false(build.build())
 
       assert.equal(tree, build.current())
-      assert.equal(0, notified)
+      assert.equal(0, #notes)
     end)
 
     it("builds nothing, silently, in a repository with no default branch", function()
@@ -501,7 +497,7 @@ describe("changeset tree", function()
       assert.is_false(build.build())
 
       assert.equal(tree, build.current())
-      assert.equal(0, notified)
+      assert.equal(0, #notes)
     end)
   end)
 end)

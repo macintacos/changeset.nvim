@@ -1,11 +1,12 @@
 local comment_store = require("changeset.comment_store")
 local Fixture = require("support.git")
+local Notify = require("support.notify")
 local Paths = require("changeset.paths")
 
 vim.cmd("runtime plugin/changeset.lua")
 
 describe(":Changeset refresh", function()
-  local tmp, previous_dir, notify, notes
+  local tmp, previous_dir, restore_notify, notes
 
   ---`changeset.build` as it loads fresh, holding no tree.
   ---@return table
@@ -18,14 +19,11 @@ describe(":Changeset refresh", function()
     package.loaded["changeset.build"], package.loaded.changeset = nil, nil
     tmp, previous_dir = Fixture.enter_tempdir()
     os.remove(comment_store.path())
-    notify, notes = vim.notify, {}
-    vim.notify = function(msg, level)
-      table.insert(notes, { msg = msg, level = level })
-    end
+    notes, restore_notify = Notify.capture()
   end)
 
   after_each(function()
-    vim.notify = notify
+    restore_notify()
     vim.cmd("silent! %bwipeout!")
     vim.fn.chdir(previous_dir)
     vim.fn.delete(tmp, "rf")

@@ -1,6 +1,7 @@
 local build = require("changeset.build")
 local resolve = require("changeset.resolve")
 local Fixture = require("support.git")
+local Notify = require("support.notify")
 local symbols = require("support.symbols")
 local gh = require("support.gh") -- a fake gh on PATH: never the real one, never the network
 
@@ -342,17 +343,18 @@ describe("changeset.build", function()
 
   describe("when the diff cannot be read", function()
     local diff = require("changeset.diff")
-    local real_collect, real_notify = diff.collect, vim.notify
+    local real_collect, restore_notify = diff.collect, nil
 
     before_each(function()
       diff.collect = function(_, _, on_done)
         on_done(nil, "boom")
       end
-      vim.notify = function() end
+      _, restore_notify = Notify.capture()
     end)
 
     after_each(function()
-      diff.collect, vim.notify = real_collect, real_notify
+      diff.collect = real_collect
+      restore_notify()
     end)
 
     it("announces the failure", function()

@@ -5,6 +5,7 @@ local comment_store = require("changeset.comment_store")
 local window = require("changeset.window")
 local Dialog = require("support.dialog")
 local Fixture = require("support.git")
+local Notify = require("support.notify")
 local Sidebar = require("support.sidebar")
 
 describe("the sidebar's Comments section", function()
@@ -237,16 +238,15 @@ describe("the sidebar's Comments section", function()
     it(("refuses %s on a comment row whose file has unsaved edits"):format(key), function()
       open_with_review_comments()
       vim.api.nvim_buf_set_lines(vim.fn.bufnr("alpha.txt"), 0, 0, false, { "new 1", "new 2", "new 3" })
-      local warnings, notify = {}, vim.notify
-      vim.notify = function(msg, level)
-        if level == vim.log.levels.WARN then
-          warnings[#warnings + 1] = msg
-        end
-      end
+      local notes, restore = Notify.capture()
 
-      press_on("alpha.txt:13", key)
-      vim.wait(200)
-      vim.notify = notify
+      local ok, err = pcall(function()
+        press_on("alpha.txt:13", key)
+        vim.wait(200)
+      end)
+      restore()
+      assert(ok, err)
+      local warnings = Notify.messages(notes, vim.log.levels.WARN)
 
       assert.is_nil(vim.iter(vim.api.nvim_list_wins()):find(function(w)
         return vim.api.nvim_win_get_config(w).relative == "win"

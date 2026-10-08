@@ -1,3 +1,5 @@
+local Notify = require("support.notify")
+
 describe("changeset.config", function()
   local config = require("changeset.config")
 
@@ -46,23 +48,23 @@ describe("changeset.config", function()
   end)
 
   describe("unknown options", function()
-    local notify, notes
+    local notes, restore
 
     ---Stand in for a notifier, such as mini.notify, that replaces `vim.notify` once it is set up.
     local function set_up_notifier()
-      vim.notify = function(msg, level)
-        table.insert(notes, { msg = msg, level = level })
-      end
+      notes, restore = Notify.capture()
     end
 
     before_each(function()
-      notify, notes = vim.notify, {}
+      notes, restore = {}, nil
     end)
 
     after_each(function()
       -- Lets a warning still scheduled land here, not in the next test.
       vim.wait(20)
-      vim.notify = notify
+      if restore then
+        restore()
+      end
     end)
 
     it(

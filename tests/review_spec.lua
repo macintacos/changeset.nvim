@@ -1,12 +1,13 @@
 local gh = require("support.gh")
 local support = require("support.git")
 local review = require("support.pr_review")
+local Notify = require("support.notify")
 local toggle = require("changeset.review").toggle
 
 local await, edit, revision, settle = review.await, review.edit, review.revision, review.settle
 
 describe("PR Review Mode", function()
-  local dir, cwd, notify, change_base
+  local dir, cwd, restore_notify, change_base
   ---@type { msg: string, level: integer? }[]
   local notices
 
@@ -24,11 +25,7 @@ describe("PR Review Mode", function()
   before_each(function()
     cwd = vim.fn.getcwd()
     dir = review.repo()
-    notices = {}
-    notify = vim.notify
-    vim.notify = function(msg, level)
-      notices[#notices + 1] = { msg = msg, level = level }
-    end
+    notices, restore_notify = Notify.capture()
     change_base = require("gitsigns").change_base
   end)
 
@@ -36,7 +33,7 @@ describe("PR Review Mode", function()
     review.teardown(dir, cwd)
     vim.env.FAKE_GH_PR = nil
     vim.env.FAKE_GH_DELAY = nil
-    vim.notify = notify
+    restore_notify()
     require("gitsigns").change_base = change_base
   end)
 

@@ -1,4 +1,5 @@
 local Fixture = require("support.git")
+local Notify = require("support.notify")
 local comment_store = require("changeset.comment_store")
 local review_comments = require("changeset.review_comments")
 local config = require("changeset.config")
@@ -463,16 +464,13 @@ describe("review_comments", function()
       { path = "alpha.txt", line = 14, body = "kept", draft = true },
     })
     vim.api.nvim_buf_set_lines(alpha, 12, 13, false, {})
-    local notify, warnings = vim.notify, {}
-    vim.notify = function(msg, level)
-      if level == vim.log.levels.WARN then
-        warnings[#warnings + 1] = msg
-      end
-    end
+    local notes, restore = Notify.capture()
 
-    write(alpha)
+    local ok, err = pcall(write, alpha)
 
-    vim.notify = notify
+    restore()
+    assert(ok, err)
+    local warnings = Notify.messages(notes, vim.log.levels.WARN)
     assert.are.equal(1, #warnings)
     assert.truthy(warnings[1]:find("line 13 of alpha.txt", 1, true))
     assert.truthy(warnings[1]:find("draft", 1, true))

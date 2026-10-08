@@ -2,11 +2,12 @@ local changeset = require("changeset")
 local comment_store = require("changeset.comment_store")
 local window = require("changeset.window")
 local Fixture = require("support.git")
+local Notify = require("support.notify")
 local Sidebar = require("support.sidebar")
 local Symbols = require("support.symbols")
 
 describe("a review comment from a symbol's or a change's row", function()
-  local tmp, previous_dir, symbols, notify, warnings
+  local tmp, previous_dir, symbols, restore_notify, notes
 
   before_each(function()
     if not vim.g.loaded_changeset then
@@ -23,16 +24,11 @@ describe("a review comment from a symbol's or a change's row", function()
     Fixture.commit("feature", tmp)
     os.remove(comment_store.path())
     symbols = Symbols.install()
-    notify, warnings = vim.notify, {}
-    vim.notify = function(msg, level)
-      if level == vim.log.levels.WARN then
-        warnings[#warnings + 1] = msg
-      end
-    end
+    notes, restore_notify = Notify.capture()
   end)
 
   after_each(function()
-    vim.notify = notify
+    restore_notify()
     symbols.restore()
     vim.cmd("silent! fclose!")
     vim.cmd.stopinsert()
@@ -228,7 +224,7 @@ describe("a review comment from a symbol's or a change's row", function()
     vim.cmd("Changeset comment new")
 
     assert.is_nil(comment_window())
-    assert.equal(1, #warnings)
+    assert.equal(1, #Notify.messages(notes, vim.log.levels.WARN))
   end)
 
   it("refuses while its file has unsaved edits", function()
@@ -239,6 +235,6 @@ describe("a review comment from a symbol's or a change's row", function()
     vim.cmd("Changeset comment new")
 
     assert.is_nil(comment_window())
-    assert.equal(1, #warnings)
+    assert.equal(1, #Notify.messages(notes, vim.log.levels.WARN))
   end)
 end)

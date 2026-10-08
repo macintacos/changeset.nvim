@@ -1,9 +1,10 @@
 local Dialog = require("support.dialog")
 local Fixture = require("support.git")
+local Notify = require("support.notify")
 local comment_store = require("changeset.comment_store")
 
 describe("changeset.reviewing", function()
-  local reviewing, notify, notes, windows, dir, tree, focused, echoes, echo
+  local reviewing, restore_notify, notes, windows, dir, tree, focused, echoes, echo
 
   ---The options of the window opened last.
   local function window()
@@ -12,15 +13,12 @@ describe("changeset.reviewing", function()
 
   before_each(function()
     os.remove(comment_store.path())
-    notes, windows, focused, tree = {}, {}, false, nil
-    notify = vim.notify
+    windows, focused, tree = {}, false, nil
     echoes, echo = {}, vim.api.nvim_echo
     vim.api.nvim_echo = function(chunks)
       table.insert(echoes, chunks[1][1])
     end
-    vim.notify = function(msg, level)
-      table.insert(notes, { msg = msg, level = level })
-    end
+    notes, restore_notify = Notify.capture()
     package.loaded["changeset.review_comment_window"] = {
       open = function(opts)
         table.insert(windows, opts)
@@ -43,7 +41,7 @@ describe("changeset.reviewing", function()
   end)
 
   after_each(function()
-    vim.notify = notify
+    restore_notify()
     vim.api.nvim_echo = echo
     vim.cmd("silent! %bwipeout!")
     vim.fn.delete(dir, "rf")

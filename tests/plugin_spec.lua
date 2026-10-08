@@ -1,3 +1,5 @@
+local Notify = require("support.notify")
+
 ---The changeset augroups that hold an autocmd.
 ---@return table<string, true>
 local function changeset_groups()
@@ -42,17 +44,14 @@ end
 -- The cases run in order: the first real `require("changeset")` is the last case's,
 -- since its autocmds outlive it and the first case asserts there are none.
 describe("plugin/changeset.lua", function()
-  local notify, notes
+  local notes, restore
 
   before_each(function()
-    notify, notes = vim.notify, {}
-    vim.notify = function(msg, level)
-      table.insert(notes, { msg = msg, level = level })
-    end
+    notes, restore = Notify.capture()
   end)
 
   after_each(function()
-    vim.notify = notify
+    restore()
   end)
 
   it("loads no changeset module at startup", function()

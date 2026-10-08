@@ -4,6 +4,7 @@ local comment_store = require("changeset.comment_store")
 local window = require("changeset.window")
 local Dialog = require("support.dialog")
 local Fixture = require("support.git")
+local Notify = require("support.notify")
 local Sidebar = require("support.sidebar")
 
 describe("a review comment on a whole file", function()
@@ -152,17 +153,13 @@ describe("a review comment on a whole file", function()
 
   it("is passed over by a step, having no line to open", function()
     open_sidebar({ { path = "gone.lua", body = "why drop it?" } })
-    local notify, warned = vim.notify, {}
-    vim.notify = function(msg, level)
-      if level == vim.log.levels.WARN then
-        warned[#warned + 1] = msg
-      end
-    end
+    local notes, restore = Notify.capture()
 
-    changeset.step(-10)
+    local ok, err = pcall(changeset.step, -10)
 
-    vim.notify = notify
-    assert.same({}, warned)
+    restore()
+    assert(ok, err)
+    assert.same({}, Notify.messages(notes, vim.log.levels.WARN))
     assert.is_nil(Sidebar.cursor_line():find("why drop it?", 1, true))
   end)
 

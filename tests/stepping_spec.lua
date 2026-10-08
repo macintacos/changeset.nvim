@@ -2,6 +2,7 @@ local changeset = require("changeset")
 -- The <Plug> maps live in the plugin file, which the spec runner does not load.
 vim.cmd("runtime plugin/changeset.lua")
 local Fixture = require("support.git")
+local Notify = require("support.notify")
 local Sidebar = require("support.sidebar")
 local Symbols = require("support.symbols")
 local comment_store = require("changeset.comment_store")
@@ -112,17 +113,19 @@ describe("changeset.step", function()
         failed = true
       end)
     end
-    local notify = vim.notify
-    vim.notify = function() end
+    local _, restore = Notify.capture()
 
-    changeset.step(1)
-    assert(vim.wait(2000, function()
-      return failed
-    end))
-    require("changeset.build").refresh()
-    settle()
+    local ok, err = pcall(function()
+      changeset.step(1)
+      assert(vim.wait(2000, function()
+        return failed
+      end))
+      require("changeset.build").refresh()
+      settle()
+    end)
 
-    vim.notify = notify
+    restore()
+    assert(ok, err)
     assert.same({ "mod.lua", 2 }, { shown(win) })
   end)
 
@@ -232,11 +235,11 @@ describe("changeset.step", function()
     Sidebar.cursor_to("L8")
     -- Gone from disk before the tree hears of it, so the step onto its row can't open it.
     os.remove("other.lua")
-    local notify = vim.notify
-    vim.notify = function() end
+    local _, restore = Notify.capture()
 
-    changeset.step(1)
-    vim.notify = notify
+    local ok, err = pcall(changeset.step, 1)
+    restore()
+    assert(ok, err)
     vim.api.nvim_set_current_win(win)
     vim.api.nvim_win_set_cursor(win, { 2, 0 })
     local sidebar = window.win() or 0
@@ -300,14 +303,12 @@ describe("changeset.step", function()
     settle()
     Sidebar.cursor_to("L3")
     vim.api.nvim_set_current_win(win)
-    local notify, notes = vim.notify, {}
-    vim.notify = function(msg)
-      table.insert(notes, msg)
-    end
+    local notes, restore = Notify.capture()
 
-    changeset.step(1)
+    local ok, err = pcall(changeset.step, 1)
 
-    vim.notify = notify
+    restore()
+    assert(ok, err)
     assert.same({}, notes)
     assert.same({ "no next change" }, echoed)
     assert.same({ "other.lua", 3 }, { shown(win) })

@@ -3,6 +3,7 @@ local render = require("changeset.render")
 local Rows = require("changeset.rows")
 local window = require("changeset.window")
 local Fixture = require("support.git")
+local Notify = require("support.notify")
 local Cursor = require("support.cursor")
 local Sidebar = require("support.sidebar")
 
@@ -219,11 +220,10 @@ describe("changeset position in a session", function()
     vim.fn.mkdir(outside, "p")
     vim.fn.chdir(outside)
     local before = #vim.api.nvim_tabpage_list_wins(0)
-    local notify = vim.notify
-    vim.notify = function() end
+    local _, restore_notify = Notify.capture()
 
     local ok, err = pcall(restore_session, { here = { path = "mod.lua", lnum = 8 } })
-    vim.notify = notify
+    restore_notify()
     vim.fn.chdir(tmp)
     vim.fn.delete(outside, "rf")
     assert(ok, err)
@@ -237,11 +237,10 @@ describe("changeset position in a session", function()
     vim.cmd("enew")
     vim.api.nvim_buf_set_name(0, "changeset://tree")
     local stale = vim.api.nvim_get_current_buf()
-    local notify = vim.notify
-    vim.notify = function() end
+    local _, restore_notify = Notify.capture()
 
     local ok, err = pcall(changeset.restore)
-    vim.notify = notify
+    restore_notify()
     vim.fn.chdir(tmp)
     vim.fn.delete(outside, "rf")
 
