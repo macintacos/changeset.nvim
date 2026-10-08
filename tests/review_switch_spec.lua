@@ -30,6 +30,19 @@ describe("PR Review Mode", function()
     assert.is_true(await(bufs, review.merge_base(dir), 10000))
   end)
 
+  it("moves attached buffers to the merge base after a switch to a branch named in hex digits", function()
+    local files = { "a.txt", "b.txt" }
+    review.fixture(dir, "20261008", files)
+    support.git({ "switch", "-q", "main" }, dir)
+    vim.fn.chdir(dir)
+    local bufs = edit(files)
+    assert.is_true(await_cached(bufs))
+
+    support.git({ "switch", "-q", "20261008" }, dir)
+
+    assert.is_true(await(bufs, review.merge_base(dir), 10000))
+  end)
+
   it("moves buffers back to the index after an external switch to the default branch", function()
     local files = { "a.txt", "b.txt" }
     review.fixture(dir, "left", files)

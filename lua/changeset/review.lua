@@ -212,8 +212,9 @@ local function tracked(buf)
   -- gitsigns publishes the status before it caches the buffer, so this reads the
   -- status. Its `root` is `git_obj.repo.toplevel`, the spelling `owned()` compares.
   local status = vim.b[buf].gitsigns_status_dict
-  -- A detached HEAD, such as each commit of a rebase, publishes a short hash: no new branch, so what is applied stays.
-  local detached = status and status.head and (status.head == "HEAD" or status.head:match("^%x%x%x%x%x%x%x+$"))
+  -- A detached HEAD, such as each commit of a rebase, is no new branch, so what is applied stays. Asked of git's own
+  -- files: gitsigns publishes it as a short hash, which a branch may be named like.
+  local detached = status and status.root and Git.head(status.root) == "HEAD"
   if status and status.root and status.head and status.head ~= "" and not detached then
     return status.root, status.head
   end
