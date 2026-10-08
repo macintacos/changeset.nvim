@@ -221,15 +221,19 @@ describe("changeset.menu", function()
       assert.truthy(notices[1]:find("every kind", 1, true))
     end)
 
-    for _, lhs in ipairs({ "q", "<Esc>" }) do
-      it(("restores the saved set and leaves the file unchanged on %s"):format(lhs), function()
+    for _, how in ipairs({ "q", "<Esc>", ":close", ":quit" }) do
+      it(("restores the saved set and leaves the file unchanged on %s"):format(how), function()
         open_menu({ global = { "Variable" } }, { counts = { Variable = 31 }, hidden = { Variable = true } })
         local before = read_bytes(preferences_file)
 
         mapping_callback("x")()
         assert.same({}, reported_hidden)
 
-        mapping_callback(lhs)()
+        if vim.startswith(how, ":") then
+          vim.cmd(how:sub(2))
+        else
+          mapping_callback(how)()
+        end
 
         assert.same({ Variable = true }, reported_hidden)
         assert.equal(before, read_bytes(preferences_file))

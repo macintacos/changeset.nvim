@@ -185,7 +185,7 @@ end
 
 ---@param scope changeset.Scope
 local function save(scope)
-  if not menu then
+  if not (menu and vim.api.nvim_win_is_valid(menu.win)) then
     return
   end
   local opts = menu.opts
@@ -200,7 +200,7 @@ end
 
 ---Close, putting the tree back to the set that is on disk.
 local function dismiss()
-  if not menu then
+  if not (menu and vim.api.nvim_win_is_valid(menu.win)) then
     return
   end
   local restore, on_change = menu.saved, menu.opts.on_change
@@ -280,6 +280,14 @@ function M.open(opts)
   }
   draw()
   set_keymaps(buf)
+  -- Fires: the menu's window closing any way but `M.close`, such as `:q` or `<C-w>c`, which leaves without saving
+  -- as `q` does. `M.close` lets go of `menu` first, so this finds nothing to put back after a save.
+  vim.api.nvim_create_autocmd("WinClosed", {
+    pattern = tostring(win),
+    once = true,
+    desc = "changeset: put back the saved kinds when the kind menu closes unsaved",
+    callback = dismiss,
+  })
 end
 
 return M
