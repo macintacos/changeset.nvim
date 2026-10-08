@@ -24,7 +24,9 @@ local M = {}
 ---@field back? fun(row: changeset.Row?) Told, before focus goes back to the sidebar, which row a step from it opened.
 
 ---What the sidebar lends a step.
----@class changeset.StepHooks : changeset.ActionHooks
+---@class changeset.StepHooks
+---@field pick fun(row: changeset.Row) Mark `row` as the one last opened from the sidebar.
+---@field back? fun(row: changeset.Row?) Told, before focus goes back to the sidebar, which row a step from it opened.
 ---@field redraw fun() Redraw the tree, once a step unfolds the rows over the one it reached.
 
 ---What a step counts as a place: any row that opens, or only a changed symbol's, or a file's.
@@ -36,7 +38,7 @@ local function move(lnum)
 end
 
 ---@param how "reuse"|"vsplit"|"split"|"tab"
----@param hooks changeset.ActionHooks
+---@param hooks { pick: fun(row: changeset.Row) }
 ---@return changeset.Row? committed The row opened, if any.
 local function commit(how, hooks)
   local state = sidebar_state.current()

@@ -260,9 +260,6 @@ local waiting
 local step_hooks = {
   pick = pick,
   redraw = redraw,
-  close = function()
-    M.close()
-  end,
   back = function(row)
     opened_id = row and row.id
     stepping_back = true
