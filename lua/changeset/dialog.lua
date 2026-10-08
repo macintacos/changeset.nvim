@@ -95,7 +95,8 @@ function M.wrap(text, width)
           lines[#lines + 1] = line
         end
         word = first and space .. word or word
-        while cells.width(word) > width do
+        -- A lone character wider than the measure stays the line's, rather than leave an empty one after it.
+        while cells.width(word) > width and vim.fn.strchars(word) > 1 do
           local piece = cells.head(word, width)
           if piece == "" then
             piece = vim.fn.strcharpart(word, 0, 1)

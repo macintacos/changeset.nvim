@@ -505,6 +505,12 @@ describe("changeset.dialog", function()
     end)
   end)
 
+  describe("wrap", function()
+    it("puts a character wider than the measure on a line of its own", function()
+      assert.same({ "界", "界" }, dialog.wrap("界界", 1))
+    end)
+  end)
+
   describe("_clip", function()
     it("cuts a line whose room ends on a chunk's edge to an ellipsis in the next chunk's place", function()
       assert.same({ { "abcd", "A" }, { "…", "B" } }, dialog._clip({ { "abcd", "A" }, { "efgh", "B" } }, 5))
