@@ -263,6 +263,26 @@ describe("changeset.buffers", function()
         assert.is_true(vim.bo[buf].swapfile)
         assert.equal(1, #vim.fn.glob(swapdir .. "/*", true, true))
       end)
+
+      it("keeps a swap file off that the user's read autocommands turned off", function()
+        vim.fn.writefile({ "secret" }, tmp .. "/notes.gpg")
+        local group = vim.api.nvim_create_augroup("buffers_spec_noswap", { clear = true })
+        -- As vim-gnupg does for the files it decrypts.
+        vim.api.nvim_create_autocmd("BufReadPre", {
+          group = group,
+          pattern = "*.gpg",
+          callback = function()
+            vim.opt_local.swapfile = false
+          end,
+        })
+        local buf = assert(buffers.load(tmp .. "/notes.gpg"))
+
+        vim.cmd.buffer(buf)
+        vim.api.nvim_del_augroup_by_id(group)
+
+        assert.is_false(vim.bo[buf].swapfile)
+        assert.same({}, vim.fn.glob(swapdir .. "/*", true, true))
+      end)
     end)
   end)
 end)

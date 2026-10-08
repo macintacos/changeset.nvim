@@ -81,19 +81,22 @@ function M.load(path)
 
   local saved = vim.o.shortmess
   vim.opt.shortmess:append("A")
-  local ok = pcall(vim.cmd --[[@as fun(command: string)]], ("noswapfile call bufload(%d)"):format(buf))
+  local ok = pcall(vim.fn.bufload, buf)
   vim.o.shortmess = saved
   if not ok then
     return nil
   end
-  -- A swap file would make a second Neovim warn about a file only read here. It
-  -- comes back once the buffer is the user's, so their edits keep crash recovery.
+  -- A swap file would make a second Neovim warn about a file only read here.
+  -- Resetting it deletes the one the read made; the value the read autocommands
+  -- chose (vim-gnupg turns it off) comes back once the buffer is the user's.
+  local wanted = vim.bo[buf].swapfile
+  vim.bo[buf].swapfile = false
   vim.api.nvim_create_autocmd("BufEnter", {
     buffer = buf,
     once = true,
     desc = "changeset: give a buffer the sidebar loaded its swap file once the user enters it",
     callback = function()
-      vim.bo[buf].swapfile = vim.go.swapfile
+      vim.bo[buf].swapfile = wanted
     end,
   })
 
