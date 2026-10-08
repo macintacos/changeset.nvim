@@ -7,6 +7,7 @@ local build = require("changeset.build")
 local draw = require("changeset.draw")
 local help = require("changeset.help")
 local icons = require("changeset.icons")
+local review_comment = require("changeset.review_comment")
 local reviewing = require("changeset.reviewing")
 local sidebar_state = require("changeset.sidebar_state")
 local view = require("changeset.view")
@@ -405,9 +406,10 @@ function M.set_keymaps(buf, keys, hooks)
     if not row or row.kind == "section" then
       return
     end
-    local first = row.review_comment and row.review_comment.start_line
-    local lines = first and ("%d-%d"):format(first, row.lnum) or row.lnum
-    Paths.copy(lines and ("%s:%s"):format(row.path, lines) or row.path, "relative path:line")
+    local text = row.review_comment and review_comment.location(row.review_comment)
+      or row.lnum and ("%s:%s"):format(row.path, row.lnum)
+      or row.path
+    Paths.copy(text, "relative path:line")
   end, "Yank path:line")
   map(keys.help, function()
     help.show(buf, own)

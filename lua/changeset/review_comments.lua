@@ -5,7 +5,6 @@ local buffers = require("changeset.buffers")
 local comment_store = require("changeset.comment_store")
 local config = require("changeset.config")
 local hover = require("changeset.hover")
-local jsonfile = require("changeset.jsonfile")
 local review_comment = require("changeset.review_comment")
 local review_comment_blocks = require("changeset.review_comment_blocks")
 local highlights = require("changeset.highlights")
@@ -313,7 +312,7 @@ local function store_moves(buf)
   local found = moves(buf, vim.list_extend(on_lines(buf, root, stored.listed), on_lines(buf, root, stored.sent)))
   if #found == 0 then
     -- An unreadable record lists no comments, though the edits may still move some once it reads again.
-    if not jsonfile.read_object(comment_store.path()) then
+    if not comment_store.readable() then
       stale[buf] = true
       return
     end

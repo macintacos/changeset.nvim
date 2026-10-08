@@ -3,6 +3,17 @@
 
 local M = {}
 
+---@class changeset.ReviewComment
+---@field path string Repo-relative.
+---@field line integer? The last line, 1-based; nil for a comment on the whole file.
+---@field start_line integer? The first line, only for a range.
+---@field body string
+---@field draft true? Kept but not saved, so submit and yank leave it out.
+
+---@class changeset.ReviewCommentMove
+---@field from changeset.ReviewComment As listed.
+---@field to changeset.ReviewComment `from` on the lines it moves to.
+
 ---The first line of `comment`; nil for a whole file's.
 ---@param comment changeset.ReviewComment
 ---@return integer?

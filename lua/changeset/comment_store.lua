@@ -10,13 +10,6 @@ local review_comment = require("changeset.review_comment")
 
 local M = {}
 
----@class changeset.ReviewComment
----@field path string Repo-relative.
----@field line integer? The last line, 1-based; nil for a comment on the whole file.
----@field start_line integer? The first line, only for a range.
----@field body string
----@field draft true? Kept but not saved, so submit and yank leave it out.
-
 ---@class changeset.StoredReviewComment : changeset.ReviewComment
 ---@field branch string? The branch it was written on, or a detached HEAD's commit; nil before branches were recorded.
 
@@ -298,6 +291,12 @@ local function read_only()
   return decoded.data
 end
 
+---Whether the record can be read; a missing one reads as empty.
+---@return boolean
+function M.readable()
+  return read_only() ~= nil
+end
+
 ---The comments of the repository at `root` that the branch checked out shows, malformed entries skipped; none from
 ---an unreadable record.
 ---@param root string As `Paths.root` returns it.
@@ -414,10 +413,6 @@ function M.restore(root, batch)
   end
   return restored, still
 end
-
----@class changeset.ReviewCommentMove
----@field from changeset.ReviewComment As listed.
----@field to changeset.ReviewComment `from` on the lines it moves to.
 
 ---@class changeset.ReviewCommentMerge
 ---@field comment changeset.StoredReviewComment The comment the others merged into, as it ends up.

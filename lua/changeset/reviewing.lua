@@ -576,13 +576,6 @@ function M.draft()
   end
 end
 
----0 for a whole file's comment, which sorts ahead of its lines'.
----@param comment changeset.ReviewComment
----@return integer
-local function first_line(comment)
-  return review_comment.first(comment) or 0
-end
-
 ---`comments` in the order every view lists them in.
 ---@param comments changeset.ReviewComment[]
 ---@return changeset.ReviewComment[]
@@ -640,7 +633,7 @@ local function land(win, from_sidebar, repository, comment)
     return false
   end
   local full = vim.fs.joinpath(repository, comment.path)
-  local lnum = first_line(comment)
+  local lnum = review_comment.first(comment) or 0
   if from_sidebar then
     return window.commit(full, lnum, "reuse")
   end
