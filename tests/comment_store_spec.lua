@@ -73,6 +73,13 @@ describe("changeset.comment_store", function()
     assert.is_nil(io.open(comment_store.path(), "r"))
   end)
 
+  it("reports whether drop took a comment out", function()
+    comment_store.keep(ROOT, comment())
+
+    assert.same({ true, true }, { comment_store.drop(ROOT, comment()) })
+    assert.same({ true, false }, { comment_store.drop(ROOT, comment()) })
+  end)
+
   it("drops only the matching comment", function()
     comment_store.keep(ROOT, comment())
     comment_store.keep(ROOT, comment({ line = 9, start_line = nil }))

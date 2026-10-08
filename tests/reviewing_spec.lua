@@ -507,6 +507,40 @@ describe("changeset.reviewing", function()
       assert.same({}, comment_store.list(dir))
     end)
 
+    it("deletes an emptied comment from the repository it was opened in", function()
+      edit_file()
+      local first = dir
+      comment_store.keep(first, comment())
+      reviewing.open(comment())
+      local other = vim.fs.normalize(assert(vim.uv.fs_realpath(vim.fn.tempname()) or vim.fn.tempname()))
+      vim.fn.mkdir(other, "p")
+      Fixture.init_repo("main", other)
+      vim.fn.writefile({ "y" }, other .. "/b.lua")
+      vim.cmd.edit(other .. "/b.lua")
+
+      window().keep("", false)
+      vim.wait(1000, function()
+        return asking()
+      end, 10)
+      reply("D", function()
+        return #comment_store.list(first) == 0
+      end)
+      vim.fn.delete(other, "rf")
+
+      assert.same({}, comment_store.list(first))
+    end)
+
+    it("says nothing was deleted when the comment is no longer stored", function()
+      edit_file()
+
+      reviewing.ask_delete(comment())
+      reply("D", function()
+        return #notes > 0
+      end)
+
+      assert.is_nil(notes[1].msg:find("deleted", 1, true))
+    end)
+
     it("keeps the comment when declined", function()
       edit_file()
       comment_store.keep(dir, comment())

@@ -253,10 +253,11 @@ end
 ---@param add changeset.ReviewComment?
 ---@param sent changeset.SubmittedBatch?
 ---@return boolean written false when the record is unreadable or the write failed.
+---@return boolean changed Whether anything would change.
 local function rewrite(root, drop, add, sent)
   local data = jsonfile.read_object(M.path())
   if not data then
-    return false
+    return false, false
   end
   local branch = M.branch(root)
   local before = entries(root, data)
@@ -269,9 +270,9 @@ local function rewrite(root, drop, add, sent)
   if add then
     table.insert(list, vim.tbl_extend("force", add, { branch = branch }))
   elseif #list == #before and not sent then
-    return true
+    return true, false
   end
-  return write(root, data, list)
+  return write(root, data, list), true
 end
 
 ---The comments of `root` in `data` that `branch` shows, malformed entries skipped.
@@ -320,17 +321,22 @@ end
 ---@param comment changeset.ReviewComment
 ---@return boolean written false when the record had to change and couldn't be.
 function M.keep(root, comment)
-  return rewrite(root, function(entry)
-    return same_range(entry, comment)
-  end, vim.trim(comment.body) ~= "" and comment or nil)
+  return (
+    rewrite(root, function(entry)
+      return same_range(entry, comment)
+    end, vim.trim(comment.body) ~= "" and comment or nil)
+  )
 end
 
 ---Removes the comment at `comment`'s path and range, writing only if one went.
 ---@param root string
 ---@param comment changeset.ReviewComment
----@return boolean written
+---@return boolean written False when the record can't be read or written.
+---@return boolean dropped Whether a comment went.
 function M.drop(root, comment)
-  return M.keep(root, vim.tbl_extend("force", comment, { body = "" }))
+  return rewrite(root, function(entry)
+    return same_range(entry, comment)
+  end)
 end
 
 ---Takes out, in one write, each stored comment equal to one of `batch`'s, body included, so one edited since stays;
@@ -339,11 +345,13 @@ end
 ---@param batch changeset.SubmittedBatch
 ---@return boolean written
 function M.take(root, batch)
-  return rewrite(root, function(entry)
-    return vim.iter(batch.comments):any(function(comment)
-      return same_range(entry, comment) and entry.body == comment.body
-    end)
-  end, nil, batch)
+  return (
+    rewrite(root, function(entry)
+      return vim.iter(batch.comments):any(function(comment)
+        return same_range(entry, comment) and entry.body == comment.body
+      end)
+    end, nil, batch)
+  )
 end
 
 ---The batches the branch checked out submitted, newest first, malformed ones and their malformed comments skipped;
@@ -493,9 +501,9 @@ end
 ---@param root string
 ---@return boolean written
 function M.drop_all(root)
-  return rewrite(root, function()
+  return (rewrite(root, function()
     return true
-  end)
+  end))
 end
 
 ---Calls `fn` after each write. Subscribing again does nothing.

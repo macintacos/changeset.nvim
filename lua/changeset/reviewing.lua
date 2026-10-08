@@ -61,8 +61,12 @@ end
 ---@param repository string
 ---@param comment changeset.ReviewComment
 local function drop(repository, comment)
-  if not comment_store.drop(repository, comment) then
+  local written, dropped = comment_store.drop(repository, comment)
+  if not written then
     return say(vim.log.levels.ERROR, "can't delete the review comment in %s", comment_store.path())
+  end
+  if not dropped then
+    return say(vim.log.levels.INFO, "no review comment on %s now", place(comment))
   end
   say(vim.log.levels.INFO, "deleted the review comment on %s", place(comment))
 end
@@ -101,10 +105,11 @@ function M.unsaved(repository, path)
   return false
 end
 
----Asks, then deletes `comment` of the current buffer's repository.
+---Asks, then deletes `comment` of `repository`, by default the current buffer's.
 ---@param comment changeset.ReviewComment
-function M.ask_delete(comment)
-  local repository = root()
+---@param repository string?
+function M.ask_delete(comment, repository)
+  repository = repository or root()
   dialog.confirm({
     title = "Delete the review comment",
     body = {
@@ -171,7 +176,7 @@ function M.open(comment)
       if not body:find("%S") then
         -- Scheduled: the question opens a window, and this one is still closing.
         return vim.schedule(function()
-          M.ask_delete(comment)
+          M.ask_delete(comment, repository)
         end)
       end
       if
