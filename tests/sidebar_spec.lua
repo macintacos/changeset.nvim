@@ -961,7 +961,7 @@ describe("changeset sidebar", function()
 
     it("leaves the file window alone when the cursor moves onto it", function()
       local buf = on_header()
-      local target = vim.fn.win_getid(vim.fn.winnr("#"))
+      local target = assert(window.peek_target())
       local before = vim.api.nvim_win_get_buf(target)
 
       vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
@@ -971,7 +971,7 @@ describe("changeset sidebar", function()
 
     it("opens nothing, copies nothing and says nothing on <CR> or y", function()
       on_header()
-      local target = vim.fn.win_getid(vim.fn.winnr("#"))
+      local target = assert(window.peek_target())
       local shown = vim.api.nvim_win_get_buf(target)
       local wins = #vim.api.nvim_list_wins()
       -- The clipboard provider is the one piece a headless Neovim lacks.
@@ -1152,6 +1152,26 @@ describe("changeset sidebar", function()
 
     assert.equal(p.from_buf, vim.api.nvim_win_get_buf(p.target))
     assert.is_false(vim.bo[p.previewed].buflisted)
+  end)
+
+  ---Move the open sidebar's cursor onto the first row naming `name`, and return the buffer the window it previews
+  ---into shows.
+  ---@param buf integer The sidebar's.
+  ---@param name string
+  ---@return integer
+  local function preview_row(buf, name)
+    local target = assert(window.peek_target())
+    vim.api.nvim_set_current_win((assert(window.win())))
+    vim.api.nvim_win_set_cursor(0, { line_of(buf, name), 0 })
+    vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+    return vim.api.nvim_win_get_buf(target)
+  end
+
+  it("previews a stand-in for a row whose file is gone from disk", function()
+    local buf = open_sidebar()
+    os.remove("other.lua")
+
+    assert.is_true(vim.b[preview_row(buf, "other.lua")].changeset_stand_in)
   end)
 
   describe("on a file the branch deleted", function()

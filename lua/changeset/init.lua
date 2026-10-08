@@ -100,9 +100,11 @@ local function preview_current()
   assert(state, "changeset: no tree built yet")
   if row.kind == "file" and row.status == "deleted" then
     preview_deleted(state.tree, row)
-  elseif row.kind == "comment" and vim.fn.filereadable(state.tree.root .. "/" .. row.path) == 0 then
+  elseif not (row.kind == "comment" or row.lnum or row.kind == "file") then
+    return
+  elseif vim.fn.filereadable(state.tree.root .. "/" .. row.path) == 0 then
     window.preview_notice(DELETED, draw.band_for(row, bound_keys.jump))
-  elseif row.kind == "comment" or row.lnum or row.kind == "file" then
+  else
     window.preview(
       state.tree.root .. "/" .. row.path,
       row.lnum or row.kind == "file" and 1 or nil,
