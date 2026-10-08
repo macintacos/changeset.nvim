@@ -1,6 +1,6 @@
 ---Dialogs drawn as changeset's own floats: a question before a destructive action, and a choice among rows.
 local cells = require("changeset.cells")
-local render = require("changeset.render")
+local highlights = require("changeset.highlights")
 
 local M = {}
 
@@ -21,7 +21,7 @@ local BAR = "▌"
 local NUMBERED = 9
 -- Focus is drawn, so the cursor would only cover it. An entry of its own, apart from the sidebar's "n-v" one, so
 -- neither removes the other's.
-local NO_CURSOR = "n:" .. render.NO_CURSOR_HL
+local NO_CURSOR = "n:" .. highlights.NO_CURSOR_HL
 
 ---@class changeset.DialogBlock A paragraph of a dialog's body.
 ---@field text string
@@ -173,7 +173,7 @@ local function paint(buf, lines, focused)
     vim.api.nvim_buf_set_extmark(buf, ns, mark[1], mark[2], { end_col = mark[3], hl_group = mark[4] })
   end
   if focused then
-    vim.api.nvim_buf_set_extmark(buf, ns, focused - 1, 0, { line_hl_group = render.DIALOG_SELECTED_HL })
+    vim.api.nvim_buf_set_extmark(buf, ns, focused - 1, 0, { line_hl_group = highlights.DIALOG_SELECTED_HL })
   end
 end
 
@@ -351,11 +351,11 @@ local function buttons(labels, focus)
       col = col + 2
     end
     local danger = i == #labels
-    local hl = danger and (i == focus and render.BUTTON_DANGER_FOCUS_HL or render.BUTTON_DANGER_HL)
-      or (i == focus and render.BUTTON_FOCUS_HL or render.BUTTON_HL)
+    local hl = danger and (i == focus and highlights.BUTTON_DANGER_FOCUS_HL or highlights.BUTTON_DANGER_HL)
+      or (i == focus and highlights.BUTTON_FOCUS_HL or highlights.BUTTON_HL)
     vim.list_extend(chunks, {
       { "  ", hl },
-      { label:sub(1, 1), { hl, render.BUTTON_KEY_HL } },
+      { label:sub(1, 1), { hl, highlights.BUTTON_KEY_HL } },
       { label:sub(2) .. "  ", hl },
     })
     ranges[i] = { col, col + #label + 4 }
@@ -469,7 +469,7 @@ local function shown(item)
   local out = vim.tbl_map(function(cell)
     return { cell[1], "Comment" }
   end, item.cells)
-  out[#out + 1] = { item.unavailable, render.META_HL }
+  out[#out + 1] = { item.unavailable, highlights.META_HL }
   return out
 end
 
@@ -544,7 +544,7 @@ function M.choose(opts, cb)
     return vim.tbl_map(function(i)
       local row = vim.list_slice(rows[i])
       if i == focus then
-        row[1] = { BAR .. " ", render.SELECTED_ICON_HL }
+        row[1] = { BAR .. " ", highlights.SELECTED_ICON_HL }
       end
       return row
     end, vim.fn.range(1, #rows))
