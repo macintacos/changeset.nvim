@@ -81,6 +81,10 @@ M.PICKED_ICON = "•"
 ---@type integer
 M.MARK_PRIORITY = 199
 
+---The virtual line that parts two sections, hung under the first one's last line.
+---@type table[]
+M.SECTION_GAP = { { { "" } } }
+
 -- Above the marks a row already carries, so a match reads over a dimmed
 -- ancestor and a coloured symbol name alike.
 local MATCH_PRIORITY = M.MARK_PRIORITY + 1
@@ -427,6 +431,33 @@ local function matches(text, query)
   end
 end
 
+---@param out changeset.Line[]
+---@param row changeset.Row A row under a section: a file or a comment.
+---@param opts changeset.RenderOpts
+---@param width fun(text: string): integer
+local function append_child(out, row, opts, width)
+  if row.kind == "comment" then
+    out[#out + 1] = comment_line(row, opts, width)
+  else
+    append_file(out, row, opts, width)
+  end
+end
+
+---Mark every match of `query` on `lines`.
+---@param lines changeset.Line[]
+---@param query string
+local function mark_matches(lines, query)
+  for _, line in ipairs(lines) do
+    -- A section header never matches the filter: lighting its label would claim a match.
+    if line.row.kind ~= "section" then
+      for _, run in ipairs(matches(line.text, query)) do
+        line.marks[#line.marks + 1] =
+          { col = run[1], end_col = run[2], hl = highlights.MATCH_HL, priority = MATCH_PRIORITY }
+      end
+    end
+  end
+end
+
 ---Render section rows and everything visible under them, one buffer line per row.
 ---@param rows changeset.Row[] Section rows, children nested.
 ---@param opts changeset.RenderOpts
@@ -436,28 +467,36 @@ function M.lines(rows, opts)
   for i, section in ipairs(rows) do
     if i > 1 then
       local marks = out[#out].marks
-      marks[#marks + 1] = { col = 0, virt_lines = { { { "" } } } }
+      marks[#marks + 1] = { col = 0, virt_lines = M.SECTION_GAP }
     end
     out[#out + 1] = section_line(section, opts, width)
     if not opts.collapsed(section.id) then
       for _, child in ipairs(section.children) do
-        if child.kind == "comment" then
-          out[#out + 1] = comment_line(child, opts, width)
-        else
-          append_file(out, child, opts, width)
-        end
+        append_child(out, child, opts, width)
       end
     end
   end
-  for _, line in ipairs(out) do
-    -- A section header never matches the filter: lighting its label would claim a match.
-    if line.row.kind ~= "section" then
-      for _, run in ipairs(matches(line.text, opts.query or "")) do
-        line.marks[#line.marks + 1] =
-          { col = run[1], end_col = run[2], hl = highlights.MATCH_HL, priority = MATCH_PRIORITY }
-      end
-    end
-  end
+  mark_matches(out, opts.query or "")
+  return out
+end
+
+---A section's header line, as `lines` draws it, without the gap above it.
+---@param section changeset.Row
+---@param opts changeset.RenderOpts
+---@return changeset.Line
+function M.section(section, opts)
+  return section_line(section, opts, width_memo())
+end
+
+---The lines `lines` draws for one row under a section and everything visible under it. They depend on nothing
+---else in the tree, since a file's guides start afresh.
+---@param row changeset.Row A file or a comment row.
+---@param opts changeset.RenderOpts
+---@return changeset.Line[]
+function M.child(row, opts)
+  local out = {}
+  append_child(out, row, opts, width_memo())
+  mark_matches(out, opts.query or "")
   return out
 end
 

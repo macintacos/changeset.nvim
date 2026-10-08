@@ -226,32 +226,128 @@ local function reanchor(rows, previous_row, fallback)
   return same_file or math.max(1, math.min(fallback, #rows))
 end
 
+---@class changeset.view.Block A run of lines that changes as one: a section's header, or a row under a section and
+---everything visible under it.
+---@field lines changeset.Line[]
+---@field header boolean? Whether this is a section's header.
+
+---@class changeset.view.Drawn A row under a section, as `show` last drew it.
+---@field laid changeset.Row? Narrowed and compressed; nil when narrowing drops it.
+---@field block changeset.view.Block
+---@field width integer
+---@field query string
+---@field hidden table<string, true>
+---@field folds string
+
+---Each row under a section as last drawn, by the row `Rows.build` made, which stays the same table while the row does.
+---@type table<changeset.Row, changeset.view.Drawn>
+local drawn = setmetatable({}, { __mode = "k" })
+
+---Forget every row as drawn.
+function M._forget()
+  drawn = setmetatable({}, { __mode = "k" })
+end
+
+---The folds and opened chains at or under each file row, as one string per file id.
+---@param folds changeset.view.Folds
+---@return table<string, string>
+local function folds_by_file(folds)
+  local found = {}
+  local function add(ids, tag)
+    for id in pairs(ids) do
+      -- A file row's id is its section's and its path; everything under it extends that.
+      local file = id:match("^[^%z]*%z[^%z]*")
+      if file then
+        found[file] = found[file] or {}
+        table.insert(found[file], tag .. id)
+      end
+    end
+  end
+  add(folds.collapsed, "f")
+  add(folds.chains, "c")
+  return vim.tbl_map(function(ids)
+    table.sort(ids)
+    return table.concat(ids, "\1")
+  end, found)
+end
+
+---`child` of `section` narrowed, compressed and rendered, reused while nothing it is drawn from changed.
+---@param section changeset.Row
+---@param child changeset.Row
+---@param folds string Its folds, from `folds_by_file`.
+---@param opts changeset.RenderOpts
+---@param hidden table<string, true>
+---@param is_open fun(id: string): boolean
+---@return changeset.view.Drawn
+local function draw_child(section, child, folds, opts, hidden, is_open)
+  local was = drawn[child]
+  if was and was.width == opts.width and was.query == opts.query and was.hidden == hidden and was.folds == folds then
+    return was
+  end
+  local kept = M.filter(M.by_kind({ child }, hidden), opts.query)[1]
+  local laid = kept and Rows.compress({ with(section, { children = { kept } }) }, is_open)[1].children[1]
+  local now = {
+    laid = laid,
+    block = { lines = laid and render.child(laid, opts) or {} },
+    width = opts.width,
+    query = opts.query,
+    hidden = hidden,
+    folds = folds,
+  }
+  drawn[child] = now
+  return now
+end
+
 ---Narrow, compress and render `rows`, keeping the row on each line.
 ---@param rows changeset.Row[] The tree, uncompressed.
 ---@param layout changeset.view.Layout
 ---@return changeset.Line[] lines
 ---@return integer lnum Where the cursor goes: the row it sat on, wherever that is now.
+---@return changeset.view.Block[] blocks The lines, in the runs that change together.
 function View:show(rows, layout)
   local previous_row = self.shown[layout.cursor]
-  local compressed = Rows.compress(M.filter(M.by_kind(rows, self.kinds_hidden), self.narrowed), function(id)
-    return self.folds.chains[id] == true
-  end)
-  self.laid = compressed
-  -- `render.lines` walks the tree for its guides, so it is the one place that
-  -- decides which rows are on screen; each line carries its row back, which is
-  -- how a cursor line maps to a row without re-deriving that walk here.
-  local lines = render.lines(compressed, {
+  local opts = {
     icon = layout.icon,
     collapsed = function(id)
       return self.folds.collapsed[id] == true
     end,
     width = layout.width,
     query = self.narrowed,
-  })
-  self.shown = vim.tbl_map(function(line)
-    return line.row
-  end, lines)
-  return lines, reanchor(self.shown, previous_row, layout.cursor)
+  }
+  local function is_open(id)
+    return self.folds.chains[id] == true
+  end
+  local folds = folds_by_file(self.folds)
+  local laid, blocks = {}, {}
+  for _, section in ipairs(rows) do
+    local children, under = {}, {}
+    for _, child in ipairs(section.children) do
+      local d = draw_child(section, child, folds[child.id] or "", opts, self.kinds_hidden, is_open)
+      if d.laid then
+        children[#children + 1] = d.laid
+        under[#under + 1] = d.block
+      end
+    end
+    -- Narrowing keeps a section only while one of its rows matches.
+    if self.narrowed == "" or #children > 0 then
+      local row = with(section, { depth = 0, children = children })
+      laid[#laid + 1] = row
+      blocks[#blocks + 1] = { lines = { render.section(row, opts) }, header = true }
+      if not opts.collapsed(row.id) then
+        vim.list_extend(blocks, under)
+      end
+    end
+  end
+  self.laid = laid
+  local lines, shown = {}, {}
+  for _, block in ipairs(blocks) do
+    for _, line in ipairs(block.lines) do
+      lines[#lines + 1] = line
+      shown[#shown + 1] = line.row
+    end
+  end
+  self.shown = shown
+  return lines, reanchor(shown, previous_row, layout.cursor), blocks
 end
 
 ---The row on line `lnum`.

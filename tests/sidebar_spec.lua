@@ -15,6 +15,8 @@ local Symbols = require("support.symbols")
 local Sidebar = require("support.sidebar")
 
 local ns = vim.api.nvim_get_namespaces()["changeset"]
+-- The header's totals, the gaps between sections and the hidden-kinds note.
+local frame_ns = vim.api.nvim_get_namespaces()["changeset.frame"]
 
 ---@param path string
 ---@param lines string[]
@@ -69,7 +71,7 @@ end
 local function totals(buf)
   local above = vim.tbl_filter(function(mark)
     return mark[4].virt_lines_above
-  end, vim.api.nvim_buf_get_extmarks(buf, ns, 0, 0, { details = true }))
+  end, vim.api.nvim_buf_get_extmarks(buf, frame_ns, 0, 0, { details = true }))
   assert.equal(1, #above)
   return table.concat(vim.tbl_map(function(chunk)
     return chunk[1]
@@ -501,7 +503,7 @@ describe("changeset sidebar", function()
       local above = line_of(buf, "Docs") - 2
       local gaps = vim.tbl_filter(function(mark)
         return mark[4].virt_lines ~= nil
-      end, vim.api.nvim_buf_get_extmarks(buf, ns, { above, 0 }, { above, -1 }, { details = true }))
+      end, vim.api.nvim_buf_get_extmarks(buf, frame_ns, { above, 0 }, { above, -1 }, { details = true }))
       assert.equal(2 + 3, #lines_of(buf))
       assert.equal(1, #gaps)
     end)
@@ -768,7 +770,7 @@ describe("changeset sidebar", function()
       ---@return { text: string, line: integer }[]
       local function notes_under(buf)
         local notes = {}
-        for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
+        for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, frame_ns, 0, -1, { details = true })) do
           local virt_lines = mark[4].virt_lines
           local text = virt_lines and not mark[4].virt_lines_above and virt_lines[#virt_lines][1][1]
           -- A section's trailing blank is a virtual line too.

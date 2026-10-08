@@ -1430,6 +1430,10 @@ repository's deliberate choice is none of that save's business.
   twice that cost, so a large walk fills in a few files at a time instead of freezing the
   editor on every answer. A new diff, opening the sidebar and every other redraw draw at
   once.
+- **A redraw replaces only the lines that changed.** A file's lines depend on nothing
+  around it, so each is kept with the narrowing, hidden kinds, width and folds it was
+  drawn under, and a redraw puts back only the run from the first file that changed to
+  the last. A fold, an answer or a comment touches its own lines, not the whole tree.
 - **Opening the sidebar is an ordinary split.** It takes its width with `winfixwidth`
   (a drawer its height, with `winfixheight`) already set and then lets `'equalalways'`
   settle the rest, so the windows that were already open share out what is left instead

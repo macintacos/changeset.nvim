@@ -19,6 +19,13 @@ local M = {}
 local ns = vim.api.nvim_create_namespace("changeset")
 -- Separate from `ns` so the tracker can repaint row backgrounds without redrawing the tree.
 local rows_ns = vim.api.nvim_create_namespace("changeset.rows")
+-- The header's totals, the gaps between sections and the hidden-kinds note: redrawn whole, while `ns` is redrawn only
+-- where the lines changed.
+local frame_ns = vim.api.nvim_create_namespace("changeset.frame")
+
+---What the last draw put on the buffer, so the next one replaces only the blocks that changed.
+---@type { buf: integer, blocks: changeset.view.Block[], count: integer }?
+local previous
 
 ---The Comments section as last drawn, kept so a repaint reads no comments from disk.
 ---@type changeset.Row?
@@ -130,10 +137,11 @@ end
 
 ---@param buf integer
 ---@param lines changeset.Line[] Rendered lines, each carrying its own marks.
-local function apply_marks(buf, lines)
-  for lnum, line in ipairs(lines) do
+---@param first integer 0-based line the first of `lines` is on.
+local function apply_marks(buf, lines, first)
+  for i, line in ipairs(lines) do
     for _, mark in ipairs(line.marks or {}) do
-      vim.api.nvim_buf_set_extmark(buf, ns, lnum - 1, mark.col or 0, {
+      vim.api.nvim_buf_set_extmark(buf, ns, first + i - 1, mark.col or 0, {
         end_col = mark.end_col,
         hl_group = mark.hl,
         virt_text = mark.virt_text,
@@ -154,7 +162,7 @@ local function hidden_note_line(buf, anchor_line, note)
   if note then
     -- A virtual line rather than a row: the cursor cannot reach it, so it needs no
     -- place among the view's rows and no guard in everything that reads a row off a line.
-    vim.api.nvim_buf_set_extmark(buf, ns, anchor_line, 0, {
+    vim.api.nvim_buf_set_extmark(buf, frame_ns, anchor_line, 0, {
       virt_lines = { { { "" } }, { { " " .. note, highlights.META_HL } } },
     })
   end
@@ -200,7 +208,7 @@ end
 ---@param buf integer
 ---@return boolean
 local function has_header(buf)
-  return vim.iter(vim.api.nvim_buf_get_extmarks(buf, ns, 0, 0, { details = true })):any(function(mark)
+  return vim.iter(vim.api.nvim_buf_get_extmarks(buf, frame_ns, 0, 0, { details = true })):any(function(mark)
     return mark[4].virt_lines_above == true
   end)
 end
@@ -216,7 +224,7 @@ local function draw_header(buf, win, width, state, topfill)
   vim.wo[win].winbar = render.header(header, width)
   -- Totals before the first diff would claim that nothing changed.
   if state.tree.collected then
-    vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {
+    vim.api.nvim_buf_set_extmark(buf, frame_ns, 0, 0, {
       virt_lines = { render.header_totals(header, width), { { "" } } },
       virt_lines_above = true,
     })
@@ -255,6 +263,117 @@ local function in_view_from_top(win, lnum)
   return vim.api.nvim_win_text_height(win, { end_row = last }).all <= height
 end
 
+---Whether two blocks draw the same lines and marks.
+---@param a changeset.view.Block
+---@param b changeset.view.Block
+---@return boolean
+local function same(a, b)
+  if a == b then
+    return true
+  end
+  if #a.lines ~= #b.lines then
+    return false
+  end
+  for i, line in ipairs(a.lines) do
+    if line.text ~= b.lines[i].text or not vim.deep_equal(line.marks, b.lines[i].marks) then
+      return false
+    end
+  end
+  return true
+end
+
+---@param blocks changeset.view.Block[]
+---@param first integer
+---@param last_index integer
+---@return changeset.Line[]
+local function lines_of(blocks, first, last_index)
+  local out = {}
+  for i = first, last_index do
+    vim.list_extend(out, blocks[i].lines)
+  end
+  return out
+end
+
+---Replace the lines from `first` to `last_line` (0-based, exclusive) with `text`, marked as `lines` are.
+---@param buf integer
+---@param first integer
+---@param last_line integer
+---@param text string[]
+---@param lines changeset.Line[]
+local function replace(buf, first, last_line, text, lines)
+  -- Before the lines go: a replaced line's marks would otherwise slide onto the line after it.
+  vim.api.nvim_buf_clear_namespace(buf, ns, first, last_line)
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_set_lines(buf, first, last_line, false, text)
+  vim.bo[buf].modifiable = false
+  apply_marks(buf, lines, first)
+end
+
+---@param buf integer
+---@param first integer
+---@param last_line integer
+---@param lines changeset.Line[]
+local function replace_lines(buf, first, last_line, lines)
+  replace(
+    buf,
+    first,
+    last_line,
+    vim.tbl_map(function(line)
+      return line.text
+    end, lines),
+    lines
+  )
+end
+
+---Put `blocks` on `buf`, replacing only the lines from the first block that differs from the last draw's to the last.
+---@param buf integer
+---@param blocks changeset.view.Block[]
+local function put(buf, blocks)
+  local was = previous
+      and previous.buf == buf
+      and vim.api.nvim_buf_line_count(buf) == previous.count
+      and previous.blocks
+    or nil
+  local lines = lines_of(blocks, 1, #blocks)
+  previous = #lines > 0 and { buf = buf, blocks = blocks, count = #lines } or nil
+  if not was then
+    replace_lines(buf, 0, -1, lines)
+    return
+  end
+  local head = 1
+  while head <= #was and head <= #blocks and same(was[head], blocks[head]) do
+    head = head + 1
+  end
+  local tail = 0
+  while tail <= #was - head and tail <= #blocks - head and same(was[#was - tail], blocks[#blocks - tail]) do
+    tail = tail + 1
+  end
+  if head > #was and head > #blocks then
+    return
+  end
+  local first = #lines_of(blocks, 1, head - 1)
+  replace_lines(buf, first, #lines_of(was, 1, #was - tail), lines_of(blocks, head, #blocks - tail))
+end
+
+---Hang the gap between sections under each section's last line.
+---@param buf integer
+---@param blocks changeset.view.Block[]
+local function section_gaps(buf, blocks)
+  local lnum = 0
+  for i, block in ipairs(blocks) do
+    if block.header and i > 1 then
+      vim.api.nvim_buf_set_extmark(
+        buf,
+        frame_ns,
+        lnum - 1,
+        0,
+        { virt_lines = render.SECTION_GAP, priority = render.MARK_PRIORITY }
+      )
+    end
+    lnum = lnum + #block.lines
+  end
+end
+
 ---Draw the sidebar's view of the tree, then its header and row states.
 ---@param kinds_key string|false? The key bound to the kind menu, which the hidden-kinds note names.
 function M.draw(kinds_key)
@@ -269,34 +388,30 @@ function M.draw(kinds_key)
   local cursor, top = vim.api.nvim_win_get_cursor(win)[1], vim.fn.line("w0", win)
   comments_section = comments_for(state.tree)
   local tree = laid_out(state.rows)
-  local lines, lnum = state.view:show(tree, { icon = icon_for, width = width, cursor = cursor })
+  local lines, lnum, blocks = state.view:show(tree, { icon = icon_for, width = width, cursor = cursor })
 
-  local text = vim.tbl_map(function(line)
-    return line.text
-  end, lines)
+  -- Read before the lines go, which takes the header's filler rows with them.
+  local topfill = has_header(buf) and vim.api.nvim_win_call(win, vim.fn.winsaveview).topfill or nil
   -- A filter narrowing every row away leaves the lines empty: the footer names the filter, and the branch did change.
   if #tree == 0 and state.tree.collected then
-    text = {
+    previous = nil
+    replace(buf, 0, -1, {
       render.empty_message({
         on_default_branch = state.tree.branch == state.tree.default_branch,
         branch = state.tree.branch,
         ref = state.tree.ref,
       }),
-    }
+    }, {})
+  else
+    put(buf, blocks)
   end
-
-  -- Read before the lines go, which takes the header's filler rows with them.
-  local topfill = has_header(buf) and vim.api.nvim_win_call(win, vim.fn.winsaveview).topfill or nil
-  vim.bo[buf].modifiable = true
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, text)
-  vim.bo[buf].modifiable = false
   -- Rows are trimmed to the width; the sentence standing in for them is not.
   vim.api.nvim_set_option_value("wrap", #lines == 0, { win = win, scope = "local" })
 
-  vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-  apply_marks(buf, lines)
+  vim.api.nvim_buf_clear_namespace(buf, frame_ns, 0, -1)
+  section_gaps(buf, blocks)
   local hiding = view.hiding(view.kind_counts(state.rows), state.view:hidden())
-  hidden_note_line(buf, math.max(#text, 1) - 1, render.hidden_note(hiding, width - 1, kinds_key))
+  hidden_note_line(buf, vim.api.nvim_buf_line_count(buf) - 1, render.hidden_note(hiding, width - 1, kinds_key))
 
   vim.api.nvim_win_set_cursor(win, { lnum, 0 })
   -- After the header, whose rows decide whether the cursor's row still fits under the top.
@@ -305,6 +420,12 @@ function M.draw(kinds_key)
     hold_place(win, top, lnum - cursor)
   end
   M.paint()
+end
+
+---Forget what was drawn, so the next draw puts every line afresh.
+function M._forget()
+  previous = nil
+  view._forget()
 end
 
 return M
