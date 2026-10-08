@@ -341,8 +341,7 @@ end
 local remeasuring
 
 ---Measure the tree's fork point again without blocking, then do what `build()` would with it: keep the tree on the
----same one, else rebuild it. Dropped once the tree is replaced, the current buffer is in another repository, or a
----newer re-measure starts.
+---same one, else rebuild it. Dropped once the tree is replaced or a newer re-measure starts.
 function M.remeasure()
   local kept = tree
   if not kept then
@@ -351,7 +350,7 @@ function M.remeasure()
   local request = {}
   remeasuring = request
   fork_point.get_async(kept.root, kept.branch, function(point)
-    if remeasuring ~= request or tree ~= kept or Paths.root(0) ~= kept.root then
+    if remeasuring ~= request or tree ~= kept then
       return
     end
     remeasuring = nil

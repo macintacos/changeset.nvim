@@ -351,6 +351,22 @@ describe("changeset tree", function()
         end, 25))
       end)
 
+      it("rebuilds on a moved fork point while the focused sidebar resolves to the cwd's other repository", function()
+        local elsewhere = vim.fn.resolve(vim.fn.tempname())
+        vim.fn.mkdir(elsewhere, "p")
+        Fixture.init_repo("main", elsewhere)
+        vim.fn.chdir(elsewhere)
+        local base = rebase_onto_newer_trunk()
+
+        changeset.toggle()
+        local moved = vim.wait(5000, function()
+          return build.current().base == base
+        end, 25)
+        vim.fn.delete(elsewhere, "rf")
+
+        assert.is_true(moved)
+      end)
+
       it("keeps the tree a build for another branch made before the re-measure landed", function()
         hold()
         changeset.open()
