@@ -483,5 +483,28 @@ describe("changeset.git", function()
       assert.is_false(Git.detached(tmp))
       assert.equal(0, spawned)
     end)
+
+    for _, case in ipairs({
+      { "a reftable repository's placeholder HEAD", "ref: refs/heads/.invalid" },
+      { "an unreadable HEAD", nil },
+    }) do
+      it("asks git which branch HEAD is on behind " .. case[1], function()
+        Fixture.init_repo("trunk", tmp)
+        local head = tmp .. "/.git/HEAD"
+        vim.fn.delete(head)
+        if case[2] then
+          vim.fn.writefile({ case[2] }, head)
+        end
+        local real_head = Git.head
+        Git.head = function()
+          return "HEAD", "abc123"
+        end
+        local ok, detached = pcall(Git.detached, tmp)
+        Git.head = real_head
+
+        assert(ok, detached)
+        assert.is_true(detached)
+      end)
+    end
   end)
 end)
