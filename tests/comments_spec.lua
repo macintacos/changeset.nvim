@@ -5,7 +5,11 @@ local comments = require("changeset.comments")
 ---@param lines string[]
 ---@return string[]
 local function kinds(path, lines)
-  local read = assert(comments.read(table.concat(lines, "\n"), path))
+  local read
+  comments.read(table.concat(lines, "\n"), path, function(found)
+    read = found
+  end)
+  assert(read, "no kinds read before read returned")
   return vim.tbl_map(function(lnum)
     return comments.kind(read, lnum)
   end, vim.fn.range(1, #lines))
@@ -119,6 +123,58 @@ describe("comments", function()
   end)
 
   it("reads nothing for a language with no installed parser", function()
-    assert.is_nil(comments.read("x", "a.unknownext"))
+    local called, found = false, "unset"
+    comments.read("x", "a.unknownext", function(kinds_read)
+      called, found = true, kinds_read
+    end)
+    assert.is_true(called)
+    assert.is_nil(found)
+  end)
+
+  describe("a source too large to parse in one slice", function()
+    local lines = {}
+    for i = 1, 20000, 2 do
+      lines[i], lines[i + 1] = "-- note " .. i, "local x" .. i .. " = { " .. i .. ", 'text' }"
+    end
+    local source = table.concat(lines, "\n")
+
+    ---@param found changeset.LineKinds
+    local function assert_alternating(found)
+      for _, lnum in ipairs({ 1, 2, 9999, 10000, 19999, 20000 }) do
+        assert.equal(lnum % 2 == 1 and "comment" or "code", comments.kind(found, lnum))
+      end
+    end
+
+    local redrawtime
+    before_each(function()
+      redrawtime = vim.o.redrawtime
+    end)
+    after_each(function()
+      vim.o.redrawtime = redrawtime
+    end)
+
+    it("calls back after read returns, with every line's kind", function()
+      local found
+      comments.read(source, "big.lua", function(kinds_read)
+        found = kinds_read
+      end)
+      assert.is_nil(found)
+      assert.is_true(vim.wait(10000, function()
+        return found ~= nil
+      end, 1))
+      assert_alternating(found)
+    end)
+
+    it("still reads every line's kind once its parse outlasts 'redrawtime'", function()
+      vim.o.redrawtime = 1
+      local found
+      comments.read(source, "big.lua", function(kinds_read)
+        found = kinds_read
+      end)
+      assert.is_true(vim.wait(10000, function()
+        return found ~= nil
+      end, 1))
+      assert_alternating(found)
+    end)
   end)
 end)

@@ -158,6 +158,26 @@ local function read_base(repo, file, on_text)
   diff.blob(repo.base .. ":" .. base_path, repo.root, on_text)
 end
 
+---The comment lines of a file's text now and at its base, and the parse of its text now.
+---@param source string? nil when its comment lines go unread.
+---@param path string
+---@param old_text string?
+---@param old_path string
+---@param on_done fun(comment_lines: changeset.Comments?, parsed: changeset.Parsed?)
+local function read_comments(source, path, old_text, old_path, on_done)
+  if not source then
+    return on_done(nil)
+  end
+  comments.read(source, path, function(new_kinds, parsed)
+    if not (new_kinds and old_text) then
+      return on_done(new_kinds and { new = new_kinds }, parsed)
+    end
+    comments.read(old_text, old_path, function(old_kinds)
+      on_done({ new = new_kinds, old = old_kinds }, parsed)
+    end)
+  end)
+end
+
 ---Load `file` without listing it, then resolve its symbols and comment lines.
 ---@param repo changeset.resolve.Repo
 ---@param file changeset.File
@@ -186,18 +206,27 @@ local function resolve_one(repo, file, on_done)
       -- One snapshot for both readers: symbol lines and comment lines have to agree, and an
       -- unwritten edit would move either away from the file on disk.
       local source = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-      local new_kinds = not is_docs_file and comments.read(source, path) or nil
-      local comment_lines = new_kinds
-        and { new = new_kinds, old = old_text and comments.read(old_text, file.oldpath or path) }
-      if not ok then
-        return on_done(nil, comment_lines)
-      end
-      request(bufnr, function(items)
-        if items then
-          attributes.mark(items, path, source)
+      read_comments(
+        not is_docs_file and source or nil,
+        path,
+        old_text,
+        file.oldpath or path,
+        function(comment_lines, parsed)
+          if not ok then
+            return on_done(nil, comment_lines)
+          end
+          -- Parsing in slices lets the buffer be wiped before the server is asked.
+          if not vim.api.nvim_buf_is_valid(bufnr) then
+            return on_done(nil)
+          end
+          request(bufnr, function(items)
+            if items then
+              attributes.mark(items, path, source, parsed)
+            end
+            on_done(items, comment_lines)
+          end)
         end
-        on_done(items, comment_lines)
-      end)
+      )
     end)
   end)
 end

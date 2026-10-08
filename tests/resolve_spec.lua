@@ -405,6 +405,27 @@ describe("changeset.resolve", function()
       assert.is_nil(items.load.test)
     end)
 
+    it("parses a TypeScript file's text once for its comment lines and its tests", function()
+      serve("stub_ts", "typescript", { fn_symbol("load", 3, 3) })
+      vim.fn.writefile({
+        "// note",
+        "if (import.meta.vitest) {",
+        "}",
+        "function load() {}",
+      }, root .. "/api.ts")
+      local real, parsed = vim.treesitter.get_string_parser, 0
+      vim.treesitter.get_string_parser = function(...)
+        parsed = parsed + 1
+        return real(...)
+      end
+
+      local items = resolved("api.ts")
+      vim.treesitter.get_string_parser = real
+
+      assert.truthy(items and items.load)
+      assert.equal(1, parsed)
+    end)
+
     it("marks by the text the server read, unwritten edits included", function()
       serve("stub_rust", "rust", { fn_symbol("refreshes_token", 1, 0), fn_symbol("load", 2, 2) })
       vim.fn.mkdir(root .. "/src", "p")

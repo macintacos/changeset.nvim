@@ -44,10 +44,12 @@ end
 ---Lines of `source` holding tests, 1-based and inclusive.
 ---@param source string
 ---@param lang string
+---@param tree TSTree? `source` already parsed in `lang`.
 ---@return { [1]: integer, [2]: integer }[]
-local function test_regions(source, lang)
+local function test_regions(source, lang, tree)
   local query = vim.treesitter.query.parse(lang, QUERIES[lang])
-  local root = vim.treesitter.get_string_parser(source, lang, { injections = { [lang] = "" } }):parse()[1]:root()
+  tree = tree or vim.treesitter.get_string_parser(source, lang, { injections = { [lang] = "" } }):parse()[1]
+  local root = tree:root()
   local test_capture = assert(vim.iter(pairs(query.captures)):find(function(_, name)
     return name == "test"
   end))
@@ -67,13 +69,14 @@ end
 ---@param items { lnum: integer, test: true? }[] Read from `source`; flagged in place. `lnum`: 1-based name line.
 ---@param path string Repo-relative; its extension picks the grammar.
 ---@param source string
-function M.mark(items, path, source)
+---@param parsed changeset.Parsed? `source` already parsed, reused when its language is the one `path` marks in.
+function M.mark(items, path, source, parsed)
   local lang = LANGS[path:match("%.(%w+)$")]
   if not lang then
     return
   end
   -- No parser, or a grammar without these nodes: nothing is marked, and the name rules decide alone.
-  local ok, regions = pcall(test_regions, source, lang)
+  local ok, regions = pcall(test_regions, source, lang, parsed and parsed.lang == lang and parsed.tree or nil)
   if not ok then
     return
   end
