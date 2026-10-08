@@ -326,6 +326,10 @@ function M.open(opts)
   local held = false
   local function place()
     if not attached() then
+      -- Its source window gone, nothing anchors it.
+      if vim.api.nvim_win_is_valid(win) and not vim.api.nvim_win_is_valid(source) then
+        vim.schedule(close)
+      end
       return
     end
     vim.api.nvim_buf_set_extmark(source_buf, ns, line() - 1, 0, { id = mark, virt_lines = PADDING })
