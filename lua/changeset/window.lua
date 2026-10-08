@@ -306,6 +306,13 @@ function M.win()
   return M.is_visible() and sidebar.win or nil
 end
 
+---The sidebar's cursor line, while it stands.
+---@return integer?
+function M.cursor()
+  local win = M.win()
+  return win and vim.api.nvim_win_get_cursor(win)[1]
+end
+
 ---Hide the cursor while it is in the sidebar, where the cursor line marks the row
 ---and the cursor itself would sit on the row's icon.
 function M.sync_cursor()

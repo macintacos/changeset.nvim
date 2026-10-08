@@ -336,11 +336,11 @@ local review_comments = require("changeset.review_comments")
 ---@return string
 function M.footer()
   local state = sidebar_state.current()
-  local win = window.win()
-  if not (state and win) then
+  local lnum = window.cursor()
+  if not (state and lnum) then
     return ""
   end
-  local file, files = view.position(state.view:visible(), vim.api.nvim_win_get_cursor(win)[1])
+  local file, files = view.position(state.view:visible(), lnum)
   return render.footer({ file = file, files = files, query = state.view:query(), keys = bound_keys })
 end
 

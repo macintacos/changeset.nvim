@@ -45,11 +45,11 @@ function M.row_at_cursor()
   if not state then
     return nil
   end
-  local win = window.win()
-  if not win then
+  local lnum = window.cursor()
+  if not lnum then
     return nil
   end
-  return state.view:row(vim.api.nvim_win_get_cursor(win)[1])
+  return state.view:row(lnum)
 end
 
 ---The preview band's contents for `row`.
@@ -90,11 +90,10 @@ end
 function M.view()
   local state = sidebar_state.current()
   assert(state, "changeset: no tree built yet")
-  local win = window.win()
   return {
     rows = laid_out(state.rows),
     visible = state.view:visible(),
-    cursor = win and vim.api.nvim_win_get_cursor(win)[1],
+    cursor = window.cursor(),
     focused = window.is_focused(),
   }
 end

@@ -30,13 +30,6 @@ local M = {}
 ---What a step counts as a place: any row that opens, or only a changed symbol's, or a file's.
 ---@alias changeset.StepUnit "change"|"symbol"|"file"
 
----The sidebar's cursor line, while it stands.
----@return integer?
-local function cursor()
-  local win = window.win()
-  return win and vim.api.nvim_win_get_cursor(win)[1]
-end
-
 ---@param lnum integer
 local function move(lnum)
   vim.api.nvim_win_set_cursor(assert(window.win(), "changeset: sidebar is closed"), { lnum, 0 })
@@ -215,7 +208,7 @@ end
 ---@param unit changeset.StepUnit
 ---@param hooks changeset.StepHooks
 function M.open_step(count, unit, hooks)
-  local state, lnum = sidebar_state.current(), cursor()
+  local state, lnum = sidebar_state.current(), window.cursor()
   if not (state and lnum) then
     return
   end
@@ -245,7 +238,7 @@ end
 ---@param count integer Down for positive.
 ---@param preview fun() Preview the row under the sidebar's cursor.
 function M.preview_step(count, preview)
-  local state, lnum = sidebar_state.current(), cursor()
+  local state, lnum = sidebar_state.current(), window.cursor()
   if not (state and lnum) then
     return
   end
@@ -367,13 +360,13 @@ function M.set_keymaps(buf, keys, hooks)
   end, "Delete this review comment")
   map(keys.close, hooks.close, "Close the tree")
   map(keys.expand, function(state)
-    local lnum = cursor()
+    local lnum = window.cursor()
     if lnum and state.view:open(lnum) then
       redraw()
     end
   end, "Expand")
   map(keys.collapse, function(state)
-    local lnum = cursor()
+    local lnum = window.cursor()
     if not lnum then
       return
     end
@@ -393,13 +386,13 @@ function M.set_keymaps(buf, keys, hooks)
     redraw()
   end, "Expand every file")
   map(keys.next_section, function(state)
-    local lnum = cursor()
+    local lnum = window.cursor()
     if lnum then
       move(state.view:step_section(lnum, 1))
     end
   end, "Next section")
   map(keys.prev_section, function(state)
-    local lnum = cursor()
+    local lnum = window.cursor()
     if lnum then
       move(state.view:step_section(lnum, -1))
     end
