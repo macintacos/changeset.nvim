@@ -205,12 +205,12 @@ end
 ---
 ---It is swapping the buffer, not moving the cursor, that records one — hence
 ---`keepjumps`, so holding `j` in the sidebar cannot fill `<C-o>` with one entry
----per keypress.
+---per keypress. The `!` hides a modified buffer even under 'nohidden'.
 ---@param win integer
 ---@param buf integer
 local function show(win, buf)
   vim.api.nvim_win_call(win, function()
-    vim.cmd({ cmd = "buffer", args = { buf }, mods = { keepjumps = true } })
+    vim.cmd({ cmd = "buffer", args = { buf }, bang = true, mods = { keepjumps = true } })
   end)
 end
 

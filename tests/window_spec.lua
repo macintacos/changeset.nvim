@@ -795,6 +795,22 @@ describe("changeset.window", function()
       assert.equal(vim.fn.resolve(one), showing(vim.api.nvim_get_current_win()))
     end)
 
+    it("previews into a window holding a modified buffer under 'nohidden', and puts that buffer back", function()
+      local left, right = staged()
+      local modified = vim.api.nvim_win_get_buf(right)
+      vim.api.nvim_buf_set_lines(modified, 0, 0, false, { "unsaved" })
+      vim.o.hidden = false
+
+      local ok, err = pcall(window.preview, fixture("three"), 1, BAND)
+      window.close()
+      vim.o.hidden = true
+      vim.bo[modified].modified = false
+
+      assert.is_true(ok, err)
+      assert.equal(modified, vim.api.nvim_win_get_buf(right))
+      assert.is_true(vim.api.nvim_win_is_valid(left))
+    end)
+
     it("puts back every window it previewed into", function()
       local left, right, one, two = staged()
       window.preview(one, 2, BAND)
