@@ -338,17 +338,29 @@ function View:unfold_files()
   self.folds.collapsed = kept
 end
 
+---The nearest line past `lnum` in `delta`'s direction whose row `stops`, else `lnum`.
+---@param shown changeset.Row[]
+---@param lnum integer
+---@param delta integer
+---@param stops fun(row: changeset.Row): boolean
+---@return integer
+local function seek(shown, lnum, delta, stops)
+  local i = lnum + delta
+  while shown[i] and not stops(shown[i]) do
+    i = i + delta
+  end
+  return shown[i] and i or lnum
+end
+
 ---The nearest row past `lnum` in `delta`'s direction that is not
 ---a section header, or the line itself when there is none that way.
 ---@param lnum integer
 ---@param delta integer 1 or -1.
 ---@return integer
 function View:step(lnum, delta)
-  local i = lnum + delta
-  while self.shown[i] and self.shown[i].kind == "section" do
-    i = i + delta
-  end
-  return self.shown[i] and i or lnum
+  return seek(self.shown, lnum, delta, function(row)
+    return row.kind ~= "section"
+  end)
 end
 
 ---The nearest section header past `lnum` in `delta`'s direction, a folded
@@ -357,11 +369,9 @@ end
 ---@param delta integer 1 or -1.
 ---@return integer
 function View:step_section(lnum, delta)
-  local i = lnum + delta
-  while self.shown[i] and self.shown[i].kind ~= "section" do
-    i = i + delta
-  end
-  return self.shown[i] and i or lnum
+  return seek(self.shown, lnum, delta, function(row)
+    return row.kind == "section"
+  end)
 end
 
 ---Keep only rows matching `query`; empty shows them all.
