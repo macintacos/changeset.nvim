@@ -199,6 +199,28 @@ describe("a review comment from a symbol's or a change's row", function()
     assert.truthy(Sidebar.cursor_line():find("M.one", 1, true))
   end)
 
+  it("switches the comment a Comments row lists between saved and draft", function()
+    local listed = { path = "mod.lua", line = 9, start_line = 7, body = "listed" }
+    local root = open_sidebar({ listed })
+    cursor_to("mod.lua:7-9")
+
+    vim.cmd("Changeset comment draft")
+    assert.same({ vim.tbl_extend("force", listed, { draft = true }) }, comment_store.list(root))
+    vim.cmd("Changeset comment draft")
+
+    assert.same({ listed }, comment_store.list(root))
+  end)
+
+  it("switches the whole file's comment from the file's row", function()
+    local root = open_sidebar({ { path = "mod.lua", body = "the file" } })
+    cursor_to("Implementation")
+    vim.fn.search("mod\\.lua", "W")
+
+    vim.cmd("Changeset comment draft")
+
+    assert.same({ { path = "mod.lua", body = "the file", draft = true } }, comment_store.list(root))
+  end)
+
   it("refuses on a section's header", function()
     open_sidebar()
     cursor_to("Implementation")

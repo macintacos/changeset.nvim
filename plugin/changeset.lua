@@ -70,6 +70,9 @@ local subcommands = {
   ["comment del"] = function()
     require("changeset.reviewing").delete()
   end,
+  ["comment draft"] = function()
+    require("changeset.reviewing").draft()
+  end,
   ["comment next"] = function()
     require("changeset.reviewing").next_comment(1)
   end,
@@ -149,7 +152,7 @@ end, {
   nargs = "*",
   range = true,
   bar = true,
-  desc = "Toggle the changeset sidebar, rebuild it, step through its changes, symbols or files, open or preview them, toggle PR Review Mode, submit, restore, copy or abandon the review, or write, delete, walk, reopen, list or show review comments",
+  desc = "Toggle the changeset sidebar, rebuild it, step through its changes, symbols or files, open or preview them, toggle PR Review Mode, submit, restore, copy or abandon the review, or write, delete, draft, walk, reopen, list or show review comments",
   complete = function(lead, line)
     -- The words between `Changeset`, with any range before it, and `lead`.
     local typed = vim.trim(line:match("^%S+%s+(.-)%S*$") or "")
@@ -183,6 +186,12 @@ local keys = {
     name = "comment del",
     desc = "Delete the review comment on this line",
     icon = { cat = "directory", name = "Trash" },
+  },
+  {
+    lhs = "<C-g>ch",
+    name = "comment draft",
+    desc = "Hold the review comment on this line back as a draft, or save it",
+    icon = { cat = "filetype", name = "messages" },
   },
   {
     lhs = "<C-g>cn",
@@ -332,7 +341,7 @@ vim.keymap.set(
   "n",
   plug("review restore"),
   "<Cmd>Changeset review restore<CR>",
-  { desc = "Bring back the review comments submitted last" }
+  { desc = "Bring back a batch of submitted review comments" }
 )
 
 -- which-key's name for each prefix the default keys share.

@@ -1,5 +1,5 @@
 ---Review comments kept on this machine, by repository root and the branch each was written on, in a state record,
----beside the ones each branch submitted last.
+---beside the batches each branch submitted.
 ---
 ---Every mutation re-reads the file and rewrites only its own root's list, so two
 ---Neovims writing comments don't drop each other's.
@@ -18,11 +18,19 @@ local M = {}
 ---@class changeset.StoredReviewComment : changeset.ReviewComment
 ---@field branch string? The branch it was written on, or a detached HEAD's commit; nil before branches were recorded.
 
+---@class changeset.SubmittedBatch
+---@field comments changeset.ReviewComment[]
+---@field at integer? When it was submitted, in seconds since the epoch; nil for one kept before batches recorded it.
+---@field to string? The agent it went to; nil as `at` is.
+
 ---@type table<fun(), true>
 local subscribers = {}
 
--- The record's key for the comments `take` keeps, by root then branch: no root, an absolute path, is named this.
+-- The record's key for the batches `take` keeps, by root then branch: no root, an absolute path, is named this.
 local TAKEN = "submitted"
+
+-- Every redraw reads the record, so a branch can't keep a batch for every submit.
+local KEPT_BATCHES = 10
 
 ---Whether `a` sorts ahead of `b`: by path, then first line, then last line, a whole file's comment first.
 ---@param a changeset.ReviewComment
@@ -142,21 +150,78 @@ local function field(data, key)
   return type(data[key]) == "table" and data[key] or {}
 end
 
----The comments `take` took last from `branch` of `root`, as stored.
+---A hand edit can leave any JSON value where a batch should be.
+---@param batch any
+---@return boolean
+local function valid_batch(batch)
+  return type(batch) == "table"
+    and type(batch.comments) == "table"
+    and (batch.at == nil or type(batch.at) == "number")
+    and (batch.to == nil or type(batch.to) == "string")
+end
+
+---The batches `take` kept for `branch` of `root`, newest first, as stored, malformed ones included.
 ---@param data table
 ---@param root string
 ---@param branch string?
 ---@return any[]
-local function taken(data, root, branch)
-  return field(field(field(data, TAKEN), root), branch or "")
+local function batches(data, root, branch)
+  local stored = field(field(field(data, TAKEN), root), branch or "")
+  -- Comments and no batch: the one batch kept before a branch kept several.
+  if vim.iter(stored):any(valid) and not vim.iter(stored):any(valid_batch) then
+    return { { comments = stored } }
+  end
+  return stored
 end
 
----Keeps `list` as the comments taken last from `branch` of `root`, removing every key it empties.
+---`batch` as `submitted` lists it, its malformed comments skipped.
+---@param batch changeset.SubmittedBatch
+---@return changeset.SubmittedBatch
+local function as_listed(batch)
+  return { comments = vim.tbl_filter(valid, batch.comments), at = batch.at, to = batch.to }
+end
+
+---Whether `stored`, a valid batch as stored, is `batch` as `submitted` listed it: by when and to whom it went, which a
+---write moving its comments since leaves alone; by its comments for the one kept before batches recorded either.
+---@param stored changeset.SubmittedBatch
+---@param batch changeset.SubmittedBatch
+---@return boolean
+local function same_batch(stored, batch)
+  if batch.at then
+    return stored.at == batch.at and stored.to == batch.to
+  end
+  return stored.at == nil and vim.deep_equal(as_listed(stored), batch)
+end
+
+---The batches of `stored` that `restore` can bring back, as `submitted` lists them.
+---@param stored any[]
+---@return changeset.SubmittedBatch[]
+local function restorable(stored)
+  return vim.iter(stored):filter(valid_batch):map(as_listed):totable()
+end
+
+---`batch` ahead of `stored`, the valid batches past 10 forgotten and the malformed ones kept as they are.
+---@param batch changeset.SubmittedBatch
+---@param stored any[]
+---@return any[]
+local function ahead(batch, stored)
+  local list, count = { batch }, 1
+  for _, each in ipairs(stored) do
+    if not valid_batch(each) then
+      list[#list + 1] = each
+    elseif count < KEPT_BATCHES then
+      list[#list + 1], count = each, count + 1
+    end
+  end
+  return list
+end
+
+---Keeps `list` as the batches `branch` of `root` submitted, removing every key it empties.
 ---@param data table
 ---@param root string
 ---@param branch string?
----@param list changeset.ReviewComment[]
-local function set_taken(data, root, branch, list)
+---@param list any[]
+local function set_batches(data, root, branch, list)
   local roots = field(data, TAKEN)
   local branches = field(roots, root)
   branches[branch or ""] = #list > 0 and list or nil
@@ -180,15 +245,15 @@ local function write(root, data, list)
   return written
 end
 
----Rewrites the root's entries without those `drop` matches, adding `add` on the branch checked out and keeping `took`
----as the comments that branch took last, unless nothing would change. An unreadable record is never written over,
----since the comments in it can't be derived again.
+---Rewrites the root's entries without those `drop` matches, adding `add` on the branch checked out and keeping `sent`
+---ahead of the batches that branch submitted before, unless nothing would change. An unreadable record is never
+---written over, since the comments in it can't be derived again.
 ---@param root string
 ---@param drop fun(entry: changeset.ReviewComment): boolean Asked only about valid entries the branch shows; the rest stay.
 ---@param add changeset.ReviewComment?
----@param took changeset.ReviewComment[]? Replaces the comments taken last; empty forgets them, nil leaves them.
+---@param sent changeset.SubmittedBatch?
 ---@return boolean written false when the record is unreadable or the write failed.
-local function rewrite(root, drop, add, took)
+local function rewrite(root, drop, add, sent)
   local data = jsonfile.read_object(M.path())
   if not data then
     return false
@@ -198,25 +263,25 @@ local function rewrite(root, drop, add, took)
   local list = vim.tbl_filter(function(entry)
     return not (valid(entry) and on(entry, branch) and drop(entry))
   end, before)
-  if took then
-    set_taken(data, root, branch, took)
+  if sent then
+    set_batches(data, root, branch, ahead(sent, batches(data, root, branch)))
   end
   if add then
     table.insert(list, vim.tbl_extend("force", add, { branch = branch }))
-  elseif #list == #before and not took then
+  elseif #list == #before and not sent then
     return true
   end
   return write(root, data, list)
 end
 
----The comments of the repository at `root` that the branch checked out shows, malformed entries skipped; none from
----an unreadable record.
----@param root string As `Paths.root` returns it.
+---The comments of `root` in `data` that `branch` shows, malformed entries skipped.
+---@param data table
+---@param root string
+---@param branch string?
 ---@return changeset.ReviewComment[]
-function M.list(root)
-  local branch = M.branch(root)
+local function shown(data, root, branch)
   return vim
-    .iter(entries(root, jsonfile.read_object(M.path()) or {}))
+    .iter(entries(root, data))
     :filter(function(entry)
       return valid(entry) and on(entry, branch)
     end)
@@ -230,6 +295,24 @@ function M.list(root)
       }
     end)
     :totable()
+end
+
+---The comments of the repository at `root` that the branch checked out shows, malformed entries skipped; none from
+---an unreadable record.
+---@param root string As `Paths.root` returns it.
+---@return changeset.ReviewComment[]
+function M.list(root)
+  return shown(jsonfile.read_object(M.path()) or {}, root, M.branch(root))
+end
+
+---What `list` and `submitted` answer, in one read; none from an unreadable record.
+---@param root string
+---@return changeset.ReviewComment[] listed
+---@return changeset.SubmittedBatch[] submitted
+function M.comments(root)
+  local data = jsonfile.read_object(M.path()) or {}
+  local branch = M.branch(root)
+  return shown(data, root, branch), restorable(batches(data, root, branch))
 end
 
 ---Replaces the comment at `comment`'s path and range; a blank body drops it instead.
@@ -250,37 +333,56 @@ function M.drop(root, comment)
   return M.keep(root, vim.tbl_extend("force", comment, { body = "" }))
 end
 
----Takes out, in one write, each stored comment equal to one of `comments`, body included, so one edited since stays;
----and keeps `comments` for `restore`, in place of the ones the branch took before.
+---Takes out, in one write, each stored comment equal to one of `batch`'s, body included, so one edited since stays;
+---and keeps `batch` for `restore`, ahead of the batches the branch submitted before, the oldest forgotten past 10.
 ---@param root string
----@param comments changeset.ReviewComment[]
+---@param batch changeset.SubmittedBatch
 ---@return boolean written
-function M.take(root, comments)
+function M.take(root, batch)
   return rewrite(root, function(entry)
-    return vim.iter(comments):any(function(comment)
+    return vim.iter(batch.comments):any(function(comment)
       return same_range(entry, comment) and entry.body == comment.body
     end)
-  end, nil, comments)
+  end, nil, batch)
 end
 
----Brings back, in one write, the comments the branch checked out took last, as saved ones. One whose range holds a
----comment now stays taken, as the store keeps one a range; the rest are forgotten.
+---The batches the branch checked out submitted, newest first, malformed ones and their malformed comments skipped;
+---nil from an unreadable record.
 ---@param root string
+---@return changeset.SubmittedBatch[]?
+function M.submitted(root)
+  local data = jsonfile.read_object(M.path())
+  if not data then
+    return nil
+  end
+  return restorable(batches(data, root, M.branch(root)))
+end
+
+---Brings back, in one write, `batch` as `submitted` listed it, as saved comments, found by what it is rather than its
+---place, which a submit or restore since can shift. One whose range holds a comment now stays in the batch, as the
+---store keeps one a range; the batch goes once none does.
+---@param root string
+---@param batch changeset.SubmittedBatch
 ---@return integer? restored nil when the record is unreadable or the write failed.
----@return integer kept Still taken, for a restore once their ranges are free.
-function M.restore(root)
+---@return integer kept Still submitted, for a restore once their ranges are free; with `restored`, 0 for a batch the
+---branch checked out no longer holds.
+function M.restore(root, batch)
   local data = jsonfile.read_object(M.path())
   if not data then
     return nil, 0
   end
   local branch = M.branch(root)
-  local took = taken(data, root, branch)
-  if #took == 0 then
+  local stored = batches(data, root, branch)
+  local index = vim.iter(ipairs(stored)):find(function(_, each)
+    return valid_batch(each) and same_batch(each, batch)
+  end)
+  if not index then
     return 0, 0
   end
+  local found = stored[index]
   local list = entries(root, data)
   local back, kept = {}, {}
-  for _, comment in ipairs(vim.tbl_filter(valid, took)) do
+  for _, comment in ipairs(vim.tbl_filter(valid, found.comments)) do
     local held = vim.iter(list):any(function(entry)
       return valid(entry) and on(entry, branch) and same_range(entry, comment)
     end)
@@ -295,7 +397,11 @@ function M.restore(root)
       branch = branch,
     }
   end
-  set_taken(data, root, branch, kept)
+  found.comments = kept
+  if #kept == 0 then
+    table.remove(stored, index)
+  end
+  set_batches(data, root, branch, stored)
   if not write(root, data, list) then
     return nil, 0
   end
@@ -359,21 +465,31 @@ function M._relocate(stored, moves, branch)
 end
 
 ---Puts each stored comment equal to a move's `from` on its `to`'s lines, in one write, merging those that end up on
----one range.
+---one range: those listed, and those of each batch the branch submitted.
 ---@param root string
 ---@param moves changeset.ReviewCommentMove[]
 ---@return boolean written
----@return changeset.ReviewCommentMerge[] merged
+---@return changeset.ReviewCommentMerge[] merged Of those listed only.
 function M.move(root, moves)
   local data = jsonfile.read_object(M.path())
   if not data then
     return false, {}
   end
-  local list, merged = M._relocate(entries(root, data), moves, M.branch(root))
+  local branch = M.branch(root)
+  local list, merged = M._relocate(entries(root, data), moves, branch)
+  local stored = batches(data, root, branch)
+  for _, batch in ipairs(stored) do
+    if valid_batch(batch) then
+      -- No branch: the batch is filed under one, not its comments.
+      batch.comments = (M._relocate(batch.comments, moves, nil))
+    end
+  end
+  set_batches(data, root, branch, stored)
   return write(root, data, list), merged
 end
 
----Removes every comment of the repository at `root` that the branch checked out shows, leaving those it took last.
+---Removes every comment of the repository at `root` that the branch checked out shows, leaving the batches it
+---submitted.
 ---@param root string
 ---@return boolean written
 function M.drop_all(root)

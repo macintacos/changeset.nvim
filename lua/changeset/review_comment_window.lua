@@ -31,7 +31,7 @@ end
 ---@field save_desc string The save keys' `desc`, which `?` lists.
 ---@field close_desc string The `desc` of the keys that close without saving, which `?` lists.
 ---@field save fun(body: string, done: fun(err: string?)) Called with the buffer's lines joined by "\n", never only whitespace; the window closes once `done` gets no error.
----@field keep fun(body: string) Called with the buffer's lines joined by "\n", empty included, whenever the buffer goes (a close, an :e in the float, quitting) except after a taken save.
+---@field keep fun(body: string, draft: true?) Called with the buffer's lines joined by "\n", empty included, whenever the buffer goes (a close, an :e in the float, quitting) except after a taken save; `draft` is true after the window's `draft()`, to keep the text as a draft even when unchanged.
 ---@field back fun() Called once a key that closes without saving has closed it, after `keep`.
 ---@field blank fun(window: changeset.ReviewCommentWindow)? Called, the window still open, on a save of blank text; without it, the window closes, handing the text to `keep`.
 ---@field body string? The text it opens with.
@@ -47,6 +47,7 @@ end
 ---@field back fun() As its keys that close without saving do.
 ---@field close fun(after: fun()?) Closes it keeping the text, then calls `after` once it has gone and insert mode with it.
 ---@field discard fun(after: fun()?) Closes it keeping nothing, then calls `after` as `close` does.
+---@field draft fun() Closes it keeping the text as a draft, though unchanged.
 ---@field resume fun() Picks writing back up where a default key typed in insert mode left it, when that key's command leaves the window open.
 ---@field hold fun(opens: fun()) Leaves insert mode, then calls `opens`, keeping the window open while focus is in the window that opens, until focus comes back to it and its mode.
 
@@ -125,6 +126,9 @@ local function window_desc(key)
   end
   if key.name == "comment del" then
     return "Delete this review comment"
+  end
+  if key.name == "comment draft" then
+    return "Keep this review comment as a draft"
   end
   return "Keep a draft, then: " .. key.desc
 end
@@ -413,7 +417,7 @@ function M.open(opts)
     end
   end
 
-  local saved = false
+  local saved, drafting = false, false
   -- Fires: the float's buffer going any way (a close, :q, :e in the float, quitting); read now, as it is wiped next.
   vim.api.nvim_create_autocmd("BufUnload", {
     buffer = buf,
@@ -421,7 +425,7 @@ function M.open(opts)
     callback = function()
       unpad()
       if not saved then
-        opts.keep(text())
+        opts.keep(text(), drafting or nil)
       end
     end,
   })
@@ -508,6 +512,10 @@ function M.open(opts)
     discard = function(after)
       saved = true
       close(after)
+    end,
+    draft = function()
+      drafting = true
+      close()
     end,
     resume = resume_typing,
     hold = function(opens)

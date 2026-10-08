@@ -110,7 +110,7 @@ describe("plugin/changeset.lua", function()
 
   it("completes the verbs under a subcommand", function()
     assert.same(
-      { "del", "last", "list", "new", "next", "prev", "toggle" },
+      { "del", "draft", "last", "list", "new", "next", "prev", "toggle" },
       vim.fn.getcompletion("Changeset comment ", "cmdline")
     )
     assert.same({ "last", "list" }, vim.fn.getcompletion("'<,'>Changeset  comment  l", "cmdline"))
@@ -169,7 +169,10 @@ describe("plugin/changeset.lua", function()
 
     assert.equal(2, #notes)
     assert.equal(vim.log.levels.ERROR, notes[1].level)
-    assert.equal("Changeset: :Changeset comment takes a verb: del, last, list, new, next, prev, toggle", notes[1].msg)
+    assert.equal(
+      "Changeset: :Changeset comment takes a verb: del, draft, last, list, new, next, prev, toggle",
+      notes[1].msg
+    )
     assert.equal(vim.log.levels.ERROR, notes[2].level)
     assert.equal(
       "Changeset: :Changeset review has no verb bogus; its verbs: abandon, mode, restore, submit, yank",
@@ -213,15 +216,20 @@ describe("plugin/changeset.lua", function()
     assert.equal(1, calls.restore)
   end)
 
-  it("routes comment del and review abandon to the reviewing module", function()
+  it("routes comment del, comment draft and review abandon to the reviewing module", function()
     local calls = {}
-    package.loaded["changeset.reviewing"] = { delete = counter(calls, "delete"), abandon = counter(calls, "abandon") }
+    package.loaded["changeset.reviewing"] = {
+      delete = counter(calls, "delete"),
+      draft = counter(calls, "draft"),
+      abandon = counter(calls, "abandon"),
+    }
 
     vim.cmd("Changeset comment  del")
+    vim.cmd("Changeset comment draft")
     vim.cmd("Changeset review abandon | let g:changeset_after = 1")
 
     package.loaded["changeset.reviewing"] = nil
-    assert.same({ delete = 1, abandon = 1 }, calls)
+    assert.same({ delete = 1, draft = 1, abandon = 1 }, calls)
     assert.equal(1, vim.g.changeset_after)
   end)
 

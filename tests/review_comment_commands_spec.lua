@@ -81,6 +81,60 @@ describe(":Changeset from the review comment window", function()
     end))
   end)
 
+  ---Lets what an earlier spec scheduled, such as its draft notice, run, then forgets what was said.
+  local function quiet()
+    vim.wait(100)
+    notes = {}
+  end
+
+  it("keeps the comment being edited as a draft on :Changeset comment draft, though unchanged", function()
+    comment_store.keep(dir, { path = "a.lua", line = 4, body = "note" })
+    vim.api.nvim_win_set_cursor(source, { 4, 0 })
+    vim.cmd("4Changeset comment new")
+    quiet()
+
+    vim.cmd("Changeset comment draft")
+
+    assert.is_true(closed())
+    assert.same({ { path = "a.lua", line = 4, body = "note", draft = true } }, comment_store.list(dir))
+    vim.wait(200)
+    assert.same(
+      { "Changeset: kept the review comment as a draft" },
+      vim.tbl_map(function(note)
+        return note.msg
+      end, notes)
+    )
+  end)
+
+  it("keeps changed text as a draft on :Changeset comment draft, saying so once", function()
+    comment_store.keep(dir, { path = "a.lua", line = 4, body = "note" })
+    vim.api.nvim_win_set_cursor(source, { 4, 0 })
+    vim.cmd("4Changeset comment new")
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, { "changed" })
+    quiet()
+
+    vim.cmd("Changeset comment draft")
+
+    assert.is_true(closed())
+    assert.same({ { path = "a.lua", line = 4, body = "changed", draft = true } }, comment_store.list(dir))
+    vim.wait(200)
+    assert.same(
+      { "Changeset: kept the review comment as a draft" },
+      vim.tbl_map(function(note)
+        return note.msg
+      end, notes)
+    )
+  end)
+
+  it("keeps a new comment's text as a draft on :Changeset comment draft", function()
+    write(4, "typed")
+
+    vim.cmd("Changeset comment draft")
+
+    assert.is_true(closed())
+    assert.same({ { path = "a.lua", line = 4, body = "typed", draft = true } }, comment_store.list(dir))
+  end)
+
   it("saves on :Changeset comment new", function()
     write(4, "note")
 
@@ -270,6 +324,7 @@ describe(":Changeset from the review comment window", function()
     assert.equal("Save the review comment", desc("<C-g>cc"))
     assert.equal("Save the review comment", desc("<C-g>c"))
     assert.equal("Delete this review comment", desc("<C-g>cd"))
+    assert.equal("Keep this review comment as a draft", desc("<C-g>ch"))
     assert.equal("Keep a draft, then: Next review comment", desc("<C-g>cn"))
   end)
 

@@ -1,6 +1,6 @@
----`:Changeset comment new`, `del`, `next`, `prev`, `last` and `list` and `:Changeset review submit`, `restore`, `yank`
----and `abandon`, which write, delete, walk, reopen, list, paste into an agent's prompt, bring back, copy and clear the
----review comments kept on this machine, and the Comments rows' open and delete.
+---`:Changeset comment new`, `del`, `draft`, `next`, `prev`, `last` and `list` and `:Changeset review submit`,
+---`restore`, `yank` and `abandon`, which write, delete, draft or save, walk, reopen, list, paste into an agent's prompt,
+---bring back, copy and clear the review comments kept on this machine, and the Comments rows' open and delete.
 local Paths = require("changeset.paths")
 local buffers = require("changeset.buffers")
 local build = require("changeset.build")
@@ -154,14 +154,16 @@ function M.open(comment)
     keys = config.get().review_comment.save,
     body = comment.body,
     comment = comment,
-    keep = function(body)
+    keep = function(body, draft)
       if not body:find("%S") then
         -- Scheduled: the question opens a window, and this one is still closing.
         return vim.schedule(function()
           M.ask_delete(comment)
         end)
       end
-      if body ~= comment.body and not keep(repository, with_body(comment, body, true)) then
+      if
+        (body ~= comment.body or draft and not comment.draft) and not keep(repository, with_body(comment, body, true))
+      then
         say_draft()
       end
     end,
@@ -365,15 +367,21 @@ function M.comment_here()
   end
 end
 
+---The comment stored on `comment`'s path and range, as it is now.
+---@param repository string
+---@param comment changeset.ReviewComment
+---@return changeset.ReviewComment?
+local function stored_as(repository, comment)
+  return vim.iter(comment_store.list(repository)):find(function(each)
+    return each.path == comment.path and each.line == comment.line and each.start_line == comment.start_line
+  end)
+end
+
 ---Deletes the comment being written in `open`: asks first when it is stored or holds text, else just closes.
 ---@param open changeset.ReviewCommentWindow
 function delete_open(open)
   local repository = vim.api.nvim_win_call(open.source, root)
-  local stored = vim.iter(comment_store.list(repository)):find(function(comment)
-    return comment.path == open.comment.path
-      and comment.line == open.comment.line
-      and comment.start_line == open.comment.start_line
-  end)
+  local stored = stored_as(repository, open.comment)
   local text = open.text()
   if not stored and not text:find("%S") then
     return open.discard()
@@ -383,7 +391,11 @@ function delete_open(open)
       title = "Delete the review comment",
       body = {
         { text = location(open.comment), hl = render.META_HL, path = true },
-        { text = text:find("%S") and text or stored.body, quote = render.REVIEW_COMMENT_HL, max_lines = QUOTED },
+        {
+          text = text:find("%S") and text or assert(stored).body,
+          quote = render.REVIEW_COMMENT_HL,
+          max_lines = QUOTED,
+        },
       },
       action = "Delete",
     }, function()
@@ -409,9 +421,9 @@ local function last_saved(repository)
   end
 end
 
----Runs subcommand `name` from the review comment window `open`: `comment new` saves it, `comment del` deletes it, and
----any other closes it, keeping a draft, then calls `run` in the window it opened from, from the comment's first line,
----or for a whole file's, from where that window's cursor is.
+---Runs subcommand `name` from the review comment window `open`: `comment new` saves it, `comment del` deletes it,
+---`comment draft` keeps it as a draft, and any other closes it, keeping a draft, then calls `run` in the window it
+---opened from, from the comment's first line, or for a whole file's, from where that window's cursor is.
 ---@param open changeset.ReviewCommentWindow
 ---@param name string
 ---@param run fun()
@@ -421,6 +433,9 @@ function M.from_window(open, name, run)
   end
   if name == "comment del" then
     return delete_open(open)
+  end
+  if name == "comment draft" then
+    return open.draft()
   end
   if name == "comment last" then
     local last = last_saved(vim.api.nvim_win_call(open.source, root))
@@ -472,23 +487,81 @@ local function delete_file()
   delete_on_file(root(), path)
 end
 
----Deletes the review comment on the cursor's line, the narrowest of those covering it; on the file's first line the one
----on the whole file when there is one; from the sidebar on a file's row, the one on the whole file.
-function M.delete()
-  if window.is_focused() then
-    return delete_file()
-  end
+---The review comment on the current window's cursor line, the narrowest of those covering it; on the file's first line
+---the one on the whole file when there is one. Warns and returns nil in a modified buffer, else says when there is
+---none.
+---@param repository string
+---@return changeset.ReviewComment?
+local function on_cursor_line(repository)
   if vim.bo.modified then
     return say(vim.log.levels.WARN, M.UNSAVED)
   end
-  local repository = Paths.root(0)
   local path = file_path(repository, 0)
   local lnum = vim.api.nvim_win_get_cursor(0)[1]
   local comment = path and (lnum == 1 and on_file(repository, path) or at(repository, path, lnum))
   if not comment then
     return say(vim.log.levels.INFO, "no review comment on line %d", lnum)
   end
-  drop(repository, comment)
+  return comment
+end
+
+---Deletes the review comment on the cursor's line, the narrowest of those covering it; on the file's first line the one
+---on the whole file when there is one; from the sidebar on a file's row, the one on the whole file.
+function M.delete()
+  if window.is_focused() then
+    return delete_file()
+  end
+  local repository = Paths.root(0)
+  local comment = on_cursor_line(repository)
+  if comment then
+    drop(repository, comment)
+  end
+end
+
+---Keeps `comment` as a draft when saved, else saved, and says which.
+---@param repository string
+---@param comment changeset.ReviewComment
+local function switch_draft(repository, comment)
+  local draft = not comment.draft or nil
+  if keep(repository, with_body(comment, comment.body, draft)) then
+    return
+  end
+  say(
+    vim.log.levels.INFO,
+    draft and "kept the review comment on %s as a draft" or "saved the review comment on %s",
+    place(comment)
+  )
+end
+
+---The review comment the sidebar's cursor row lists, or the one on the whole file a file's row stands for, as stored
+---now; warns or says why when there is none.
+---@param repository string
+---@return changeset.ReviewComment?
+local function on_sidebar_row(repository)
+  local row = require("changeset.draw").row_at_cursor()
+  if row and row.review_comment then
+    return stored_as(repository, row.review_comment)
+      or say(vim.log.levels.INFO, "no review comment on %s now", place(row.review_comment))
+  end
+  if not (row and row.kind == "file") then
+    return say(vim.log.levels.WARN, "run `:Changeset comment draft` on a Comments row or a file's row, or from a file")
+  end
+  return on_file(repository, row.path) or say(vim.log.levels.INFO, "no review comment on the whole of %s", row.path)
+end
+
+---Makes the review comment `delete` would delete a draft, or saves it when it is one; from the sidebar, the one a
+---Comments row lists or the one on the whole file a file's row stands for.
+function M.draft()
+  local repository = root()
+  local comment
+  if window.is_focused() then
+    comment = on_sidebar_row(repository)
+  else
+    comment = on_cursor_line(repository)
+  end
+  if comment then
+    switch_draft(repository, comment)
+  end
 end
 
 ---"1 draft", "2 drafts".
@@ -513,6 +586,22 @@ local function split_drafts(comments)
     return not comment.draft
   end, comments)
   return saved, #comments - #saved
+end
+
+---0 for a whole file's comment, which sorts ahead of its lines'.
+---@param comment changeset.ReviewComment
+---@return integer
+local function first_line(comment)
+  return comment.start_line or comment.line or 0
+end
+
+---`comments` in the order every view lists them in.
+---@param comments changeset.ReviewComment[]
+---@return changeset.ReviewComment[]
+local function in_order(comments)
+  local sorted = vim.list_slice(comments)
+  table.sort(sorted, comment_store.before)
+  return sorted
 end
 
 ---Asks, then deletes every review comment of the repository.
@@ -642,7 +731,7 @@ function M.submit()
       return
     end
     -- Only what went: a comment written or edited while the pick was open stays.
-    if not comment_store.take(repository, comments) then
+    if not comment_store.take(repository, { comments = comments, at = os.time(), to = agent }) then
       return say(
         vim.log.levels.WARN,
         "pasted %s into %s's prompt, but %s still listed: can't remove %s from %s",
@@ -664,16 +753,16 @@ function M.submit()
   end)
 end
 
----Brings back the review comments the repository's branch submitted last, as saved ones, leaving out any on lines that
----hold a review comment now.
-function M.restore()
-  local repository = root()
-  local restored, kept = comment_store.restore(repository)
+---Brings back `batch`, one the repository's branch submitted, and says how it went.
+---@param repository string
+---@param batch changeset.SubmittedBatch
+local function restore_batch(repository, batch)
+  local restored, kept = comment_store.restore(repository, batch)
   if not restored then
     return say(vim.log.levels.ERROR, "can't restore the review comments in %s", comment_store.path())
   end
   if restored + kept == 0 then
-    return say(vim.log.levels.INFO, "no submitted review comments to restore in %s", repository)
+    return say(vim.log.levels.INFO, "that batch is no longer submitted in %s", repository)
   end
   if kept == 0 then
     return say(vim.log.levels.INFO, "restored %s", comments_label(restored))
@@ -686,20 +775,47 @@ function M.restore()
   say(vim.log.levels.INFO, "restored %s; %d %s", comments_label(restored), kept, staying)
 end
 
----0 for a whole file's comment, which sorts ahead of its lines'.
----@param comment changeset.ReviewComment
----@return integer
-local function first_line(comment)
-  return comment.start_line or comment.line or 0
+---A row of the restore picker: when `batch` went and to whom, how many it holds, and its first comment.
+---@param batch changeset.SubmittedBatch
+---@return changeset.DialogItem
+local function batch_row(batch)
+  local first = in_order(batch.comments)[1]
+  return {
+    cells = {
+      {
+        batch.at and os.date("%b %d %H:%M", batch.at) --[[@as string]] or "",
+        render.META_HL,
+      },
+      { batch.to or "" },
+      { comments_label(#batch.comments) },
+      { first and ("%s  %s"):format(location(first), first.body:match("^[^\r\n]*")) or "" },
+    },
+  }
 end
 
----`comments` in the order every view lists them in.
----@param comments changeset.ReviewComment[]
----@return changeset.ReviewComment[]
-local function in_order(comments)
-  local sorted = vim.list_slice(comments)
-  table.sort(sorted, comment_store.before)
-  return sorted
+---Brings back a batch of review comments the repository's branch submitted, as saved ones, leaving out any on lines
+---that hold a review comment now: the only one, or the one picked, newest first.
+function M.restore()
+  local repository = root()
+  local batches = comment_store.submitted(repository)
+  if not batches then
+    return say(vim.log.levels.ERROR, "can't restore the review comments in %s", comment_store.path())
+  end
+  if #batches == 0 then
+    return say(vim.log.levels.INFO, "no submitted review comments to restore in %s", repository)
+  end
+  if #batches == 1 then
+    return restore_batch(repository, batches[1])
+  end
+  dialog.choose({
+    title = "Restore submitted review comments",
+    items = vim.tbl_map(batch_row, batches),
+    action = "restore",
+  }, function(index)
+    if index then
+      restore_batch(repository, batches[index])
+    end
+  end)
 end
 
 ---Where `comment` starts against line `lnum` of `path`, `count` lines long, in the order of `in_order`: 1 after,

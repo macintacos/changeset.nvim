@@ -274,6 +274,16 @@ describe("review_comments", function()
     assert.are.same({ { 6, 6 }, { 17, 17 } }, rows(beta))
   end)
 
+  it("stores the lines a written buffer's edits moved its submitted comments to, with none listed there", function()
+    set({ comment("beta.txt", 16) })
+    comment_store.take(dir, { comments = { comment("beta.txt", 16) }, at = 0, to = "claude" })
+    vim.api.nvim_buf_set_lines(beta, 0, 0, false, { "new 1", "new 2" })
+
+    write(beta)
+
+    assert.are.same({ comment("beta.txt", 18) }, assert(comment_store.submitted(dir))[1].comments)
+  end)
+
   it("keeps a range on its first and last lines as lines are added above, inside and below it", function()
     set({ comment("alpha.txt", 10, 8) })
     vim.api.nvim_buf_set_lines(alpha, 10, 10, false, { "below" })

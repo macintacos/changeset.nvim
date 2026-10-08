@@ -420,6 +420,69 @@ describe("changeset.reviewing", function()
     end)
   end)
 
+  describe("draft", function()
+    it("makes the saved comment on the cursor's line, the narrowest, a draft, saying so", function()
+      edit_file()
+      comment_store.keep(dir, comment({ start_line = 1, line = 6 }))
+      comment_store.keep(dir, comment())
+      vim.api.nvim_win_set_cursor(0, { 4, 0 })
+
+      reviewing.draft()
+
+      assert.same({ comment({ start_line = 1, line = 6 }), comment({ draft = true }) }, comment_store.list(dir))
+      assert.same({
+        msg = "Changeset: kept the review comment on line 4 of a.lua as a draft",
+        level = vim.log.levels.INFO,
+      }, notes[#notes])
+    end)
+
+    it("saves the draft on the cursor's line, saying so", function()
+      edit_file()
+      comment_store.keep(dir, comment({ draft = true }))
+      vim.api.nvim_win_set_cursor(0, { 4, 0 })
+
+      reviewing.draft()
+
+      assert.same({ comment() }, comment_store.list(dir))
+      assert.equal("Changeset: saved the review comment on line 4 of a.lua", notes[#notes].msg)
+    end)
+
+    it("switches the whole file's comment from its first line", function()
+      edit_file()
+      comment_store.keep(dir, comment({ line = 1 }))
+      comment_store.keep(dir, { path = "a.lua", body = "the file" })
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+
+      reviewing.draft()
+
+      assert.same(
+        { comment({ line = 1 }), { path = "a.lua", body = "the file", draft = true } },
+        comment_store.list(dir)
+      )
+    end)
+
+    it("says when the line has no comment", function()
+      edit_file()
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+
+      reviewing.draft()
+
+      assert.same({ msg = "Changeset: no review comment on line 2", level = vim.log.levels.INFO }, notes[1])
+    end)
+
+    it("refuses in a modified buffer", function()
+      edit_file()
+      comment_store.keep(dir, comment())
+      vim.api.nvim_win_set_cursor(0, { 4, 0 })
+      vim.api.nvim_buf_set_lines(0, 0, 0, false, { "new" })
+
+      reviewing.draft()
+
+      assert.equal(vim.log.levels.WARN, notes[1].level)
+      assert.same({ comment() }, comment_store.list(dir))
+    end)
+  end)
+
   describe("ask_delete", function()
     it("asks about the comment by its place and its words", function()
       edit_file()
@@ -715,6 +778,20 @@ describe("changeset.reviewing", function()
       }, notes[#notes])
     end)
 
+    it("keeps what it sent for restore, with when and to whom", function()
+      edit_file()
+      comment_store.keep(dir, comment())
+      answer = { nil, "claude" }
+      local before = os.time()
+
+      reviewing.submit()
+
+      local batch = assert(comment_store.submitted(dir))[1]
+      assert.same({ comment() }, batch.comments)
+      assert.equal("claude", batch.to)
+      assert.is_true(batch.at >= before and batch.at <= os.time(), tostring(batch.at))
+    end)
+
     it("keeps every comment and warns when sending fails", function()
       edit_file()
       comment_store.keep(dir, comment())
@@ -748,12 +825,24 @@ describe("changeset.reviewing", function()
   end)
 
   describe("restore", function()
+    local time = os.time
+
     before_each(function()
       package.loaded["changeset.herdr"] = {
         send = function(_, _, cb)
           cb(nil, "claude")
         end,
       }
+      -- A minute between submits, as a user's take at least: a batch is known by when and to whom it went.
+      local now = 0
+      os.time = function()
+        now = now + 60
+        return now
+      end
+    end)
+
+    after_each(function()
+      os.time = time
     end)
 
     it("brings back the review comments submitted last, saying how many", function()
@@ -795,6 +884,94 @@ describe("changeset.reviewing", function()
       reviewing.restore()
 
       assert.equal("Changeset: 2 review comments stay submitted: their lines hold newer ones", notes[#notes].msg)
+    end)
+
+    ---Submits two batches: a.lua:4 first, then a.lua:7.
+    local function submit_twice()
+      edit_file()
+      comment_store.keep(dir, comment())
+      reviewing.submit()
+      comment_store.keep(dir, comment({ line = 7, body = "second" }))
+      reviewing.submit()
+    end
+
+    it(
+      "asks which batch to bring back when there are several, newest first, naming each one's first comment",
+      function()
+        submit_twice()
+
+        reviewing.restore()
+
+        assert.equal("Restore submitted review comments", Dialog.title())
+        local lines = Dialog.lines()
+        assert.truthy(lines[1]:find("claude%s+1 review comment%s+a.lua:7  second"), lines[1])
+        assert.truthy(lines[2]:find("a.lua:4  hi", 1, true), lines[2])
+      end
+    )
+
+    it("names no time or agent for the batch a store kept before it kept several", function()
+      edit_file()
+      vim.fn.mkdir(vim.fs.dirname(comment_store.path()), "p")
+      require("changeset.jsonfile").write(comment_store.path(), { submitted = { [dir] = { main = { comment() } } } })
+      comment_store.keep(dir, comment({ line = 7, body = "second" }))
+      reviewing.submit()
+
+      reviewing.restore()
+
+      local row = Dialog.lines()[2]
+      assert.truthy(row:find("^%s*2%s+1 review comment%s+a.lua:4  hi"), row)
+    end)
+
+    it("brings back the batch picked, leaving the others", function()
+      submit_twice()
+
+      reviewing.restore()
+      reply("2", function()
+        return #comment_store.list(dir) == 1
+      end)
+
+      assert.same({ comment() }, comment_store.list(dir))
+      assert.equal(1, #assert(comment_store.submitted(dir)))
+    end)
+
+    it("brings back the batch picked though another submit landed while the picker was open", function()
+      submit_twice()
+      local file = vim.api.nvim_get_current_win()
+
+      reviewing.restore()
+      comment_store.keep(dir, comment({ line = 9, body = "third" }))
+      vim.api.nvim_win_call(file, reviewing.submit)
+      assert.equal(3, #assert(comment_store.submitted(dir)))
+      reply("2", function()
+        return #comment_store.list(dir) == 1
+      end)
+
+      assert.same({ comment() }, comment_store.list(dir))
+    end)
+
+    it("says when the batch picked is no longer submitted", function()
+      submit_twice()
+
+      reviewing.restore()
+      comment_store.restore(dir, assert(comment_store.submitted(dir))[2])
+      reply("2", function()
+        return notes[#notes].msg:find("no longer", 1, true) ~= nil
+      end)
+
+      assert.same({ comment() }, comment_store.list(dir))
+      assert.truthy(notes[#notes].msg:find("that batch is no longer submitted", 1, true), notes[#notes].msg)
+    end)
+
+    it("brings back nothing on a cancelled pick", function()
+      submit_twice()
+
+      reviewing.restore()
+      reply("q", function()
+        return not asking()
+      end)
+
+      assert.same({}, comment_store.list(dir))
+      assert.equal(2, #assert(comment_store.submitted(dir)))
     end)
 
     it("says when there is nothing to restore", function()

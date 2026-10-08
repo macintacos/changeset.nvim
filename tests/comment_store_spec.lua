@@ -8,6 +8,21 @@ local function comment(fields)
   return vim.tbl_extend("force", { path = "lua/a.lua", line = 7, start_line = 5, body = "hi" }, fields or {})
 end
 
+---Takes `comments` as a batch submitted to claude at `at`, 0 when nil.
+---@param root string
+---@param comments table[]
+---@param at integer?
+local function take(root, comments, at)
+  return comment_store.take(root, { comments = comments, at = at or 0, to = "claude" })
+end
+
+---Restores batch `n` as `submitted` lists it for `root`, or a batch it never kept when there is none.
+---@param root string
+---@param n integer
+local function restore(root, n)
+  return comment_store.restore(root, (comment_store.submitted(root) or {})[n] or { comments = {} })
+end
+
 describe("changeset.comment_store", function()
   before_each(function()
     os.remove(comment_store.path())
@@ -111,7 +126,7 @@ describe("changeset.comment_store", function()
       assert.same({}, comment_store.list(ROOT))
       assert.is_false(comment_store.keep(ROOT, comment()))
       assert.is_false(comment_store.drop_all(ROOT))
-      assert.is_nil(comment_store.restore(ROOT))
+      assert.is_nil(restore(ROOT, 1))
       assert.same({ junk }, vim.fn.readfile(comment_store.path()))
     end)
   end
@@ -173,10 +188,8 @@ describe("changeset.comment_store", function()
       writes = writes + 1
     end)
 
-    local written = comment_store.take(
-      ROOT,
-      { comment(), comment({ line = 9, start_line = nil }), comment({ line = 12, start_line = nil }) }
-    )
+    local written =
+      take(ROOT, { comment(), comment({ line = 9, start_line = nil }), comment({ line = 12, start_line = nil }) })
 
     assert.is_true(written)
     assert.equal(1, writes)
@@ -202,72 +215,204 @@ describe("changeset.comment_store", function()
     }, sorted)
   end)
 
+  describe("submitted", function()
+    local one, two = { path = "lua/a.lua", line = 3, body = "one" }, comment({ body = "two" })
+
+    it("lists every batch taken, newest first, with when and to whom", function()
+      comment_store.keep(ROOT, one)
+      take(ROOT, { one }, 10)
+      comment_store.keep(ROOT, two)
+      take(ROOT, { two }, 20)
+
+      assert.same({
+        { comments = { two }, at = 20, to = "claude" },
+        { comments = { one }, at = 10, to = "claude" },
+      }, comment_store.submitted(ROOT))
+    end)
+
+    it("keeps the last 10 batches, forgetting older ones", function()
+      for at = 1, 11 do
+        local each = comment({ line = 10 + at, start_line = nil })
+        comment_store.keep(ROOT, each)
+        take(ROOT, { each }, at)
+      end
+
+      local batches = assert(comment_store.submitted(ROOT))
+
+      assert.equal(10, #batches)
+      assert.same({ 11, 2 }, { batches[1].at, batches[10].at })
+    end)
+
+    it("lists the one batch a store kept before it kept several, with no time or agent, and keeps it", function()
+      vim.fn.mkdir(vim.fs.dirname(comment_store.path()), "p")
+      jsonfile.write(comment_store.path(), { submitted = { [ROOT] = { [""] = { one } } } })
+
+      assert.same({ { comments = { one } } }, comment_store.submitted(ROOT))
+      take(ROOT, { two }, 20)
+      assert.same({
+        { comments = { two }, at = 20, to = "claude" },
+        { comments = { one } },
+      }, comment_store.submitted(ROOT))
+    end)
+
+    it("skips a malformed batch, and keeps it through a write", function()
+      take(ROOT, { one }, 10)
+      local data = jsonfile.read(comment_store.path())
+      table.insert(data.submitted[ROOT][""], 1, { comments = "x" })
+      jsonfile.write(comment_store.path(), data)
+
+      assert.same({ { comments = { one }, at = 10, to = "claude" } }, comment_store.submitted(ROOT))
+      take(ROOT, { two }, 20)
+      assert.same({ comments = "x" }, jsonfile.read(comment_store.path()).submitted[ROOT][""][2])
+    end)
+
+    it("reads a list of comments as the one batch a store kept before, whatever its first entry", function()
+      vim.fn.mkdir(vim.fs.dirname(comment_store.path()), "p")
+      jsonfile.write(comment_store.path(), { submitted = { [ROOT] = { [""] = { { path = 1 }, one } } } })
+
+      assert.same({ { comments = { one } } }, comment_store.submitted(ROOT))
+    end)
+
+    it("lists nothing from an unreadable record", function()
+      vim.fn.mkdir(vim.fs.dirname(comment_store.path()), "p")
+      vim.fn.writefile({ "[1,2]" }, comment_store.path())
+
+      assert.is_nil(comment_store.submitted(ROOT))
+    end)
+  end)
+
   describe("restore", function()
     local one, two = { path = "lua/a.lua", line = 3, body = "one" }, comment({ body = "two" })
 
-    it("brings back the comments taken last as saved comments, once", function()
+    it("brings back the batch it is given as saved comments, once", function()
       comment_store.keep(ROOT, one)
       comment_store.keep(ROOT, two)
-      comment_store.take(ROOT, { one, two })
+      take(ROOT, { one, two })
 
-      assert.same({ 2, 0 }, { comment_store.restore(ROOT) })
+      assert.same({ 2, 0 }, { restore(ROOT, 1) })
       assert.same({ one, two }, comment_store.list(ROOT))
-      assert.same({ 0, 0 }, { comment_store.restore(ROOT) })
+      assert.same({ 0, 0 }, { restore(ROOT, 1) })
       assert.same({ one, two }, comment_store.list(ROOT))
     end)
 
-    it("keeps a comment whose range holds one written since, for a restore once that one is gone", function()
+    it("brings back the batch it is given though another was submitted since it was listed", function()
+      comment_store.keep(ROOT, one)
+      take(ROOT, { one }, 10)
+      local listed = assert(comment_store.submitted(ROOT))[1]
+      comment_store.keep(ROOT, two)
+      take(ROOT, { two }, 20)
+
+      assert.same({ 1, 0 }, { comment_store.restore(ROOT, listed) })
+      assert.same({ one }, comment_store.list(ROOT))
+    end)
+
+    it("brings back the batch it is given though a write moved its comments since it was listed", function()
+      comment_store.keep(ROOT, one)
+      take(ROOT, { one }, 10)
+      local listed = assert(comment_store.submitted(ROOT))[1]
+      local moved = vim.tbl_extend("force", one, { line = 4 })
+      comment_store.move(ROOT, { { from = one, to = moved } })
+
+      assert.same({ 1, 0 }, { comment_store.restore(ROOT, listed) })
+      assert.same({ moved }, comment_store.list(ROOT))
+    end)
+
+    it("brings back nothing for a batch no longer submitted", function()
+      comment_store.keep(ROOT, one)
+      take(ROOT, { one }, 10)
+      local listed = assert(comment_store.submitted(ROOT))[1]
+      restore(ROOT, 1)
+      comment_store.drop(ROOT, one)
+
+      assert.same({ 0, 0 }, { comment_store.restore(ROOT, listed) })
+      assert.same({}, comment_store.list(ROOT))
+    end)
+
+    it("brings back an older batch, leaving the others", function()
+      comment_store.keep(ROOT, one)
+      take(ROOT, { one }, 10)
+      comment_store.keep(ROOT, two)
+      take(ROOT, { two }, 20)
+
+      assert.same({ 1, 0 }, { restore(ROOT, 2) })
+
+      assert.same({ one }, comment_store.list(ROOT))
+      assert.same({ { comments = { two }, at = 20, to = "claude" } }, comment_store.submitted(ROOT))
+    end)
+
+    it("keeps a comment on a range holding a newer one in its batch, for a later restore", function()
       local since = comment({ body = "since", draft = true })
       comment_store.keep(ROOT, one)
       comment_store.keep(ROOT, two)
-      comment_store.take(ROOT, { one, two })
+      take(ROOT, { one, two }, 10)
       comment_store.keep(ROOT, since)
 
-      assert.same({ 1, 1 }, { comment_store.restore(ROOT) })
+      assert.same({ 1, 1 }, { restore(ROOT, 1) })
       assert.same({ since, one }, comment_store.list(ROOT))
+      assert.same({ { comments = { two }, at = 10, to = "claude" } }, comment_store.submitted(ROOT))
       comment_store.drop(ROOT, since)
-      assert.same({ 1, 0 }, { comment_store.restore(ROOT) })
+      assert.same({ 1, 0 }, { restore(ROOT, 1) })
       assert.same({ one, two }, comment_store.list(ROOT))
     end)
 
-    it("counts a malformed comment taken last as neither restored nor kept", function()
+    it("counts a malformed comment in the batch as neither restored nor kept", function()
       comment_store.keep(ROOT, one)
-      comment_store.take(ROOT, { one })
+      take(ROOT, { one })
       local data = jsonfile.read(comment_store.path())
-      table.insert(data.submitted[ROOT][""], { path = 1 })
+      table.insert(data.submitted[ROOT][""][1].comments, { path = 1 })
       jsonfile.write(comment_store.path(), data)
 
-      assert.same({ 1, 0 }, { comment_store.restore(ROOT) })
+      assert.same({ 1, 0 }, { restore(ROOT, 1) })
     end)
 
-    it("brings back only the comments taken last", function()
+    it("brings back the batch taken after every listed comment is dropped", function()
       comment_store.keep(ROOT, one)
-      comment_store.take(ROOT, { one })
-      comment_store.keep(ROOT, two)
-      comment_store.take(ROOT, { two })
-
-      comment_store.restore(ROOT)
-
-      assert.same({ two }, comment_store.list(ROOT))
-    end)
-
-    it("brings back the comments taken last after every listed comment is dropped", function()
-      comment_store.keep(ROOT, one)
-      comment_store.take(ROOT, { one })
+      take(ROOT, { one })
       comment_store.keep(ROOT, two)
 
       comment_store.drop_all(ROOT)
 
-      assert.same({ 1, 0 }, { comment_store.restore(ROOT) })
+      assert.same({ 1, 0 }, { restore(ROOT, 1) })
       assert.same({ one }, comment_store.list(ROOT))
     end)
 
     it("brings back another repository's comments only there", function()
       comment_store.keep(ROOT, one)
-      comment_store.take(ROOT, { one })
+      take(ROOT, { one })
 
-      assert.same({ 0, 0 }, { comment_store.restore("/other") })
-      assert.same({ 1, 0 }, { comment_store.restore(ROOT) })
+      assert.same({ 0, 0 }, { restore("/other", 1) })
+      assert.same({ 1, 0 }, { restore(ROOT, 1) })
+    end)
+  end)
+
+  it("lists the comments and the submitted batches in one read", function()
+    comment_store.keep(ROOT, comment({ body = "sent" }))
+    take(ROOT, { comment({ body = "sent" }) }, 10)
+    comment_store.keep(ROOT, comment({ body = "listed" }))
+
+    local listed, batches = comment_store.comments(ROOT)
+
+    assert.same({ comment({ body = "listed" }) }, listed)
+    assert.same({ { comments = { comment({ body = "sent" }) }, at = 10, to = "claude" } }, batches)
+  end)
+
+  describe("move", function()
+    it("moves the comments of every batch submitted as it moves the listed ones", function()
+      local sent, listed = comment({ body = "sent" }), comment({ line = 12, start_line = nil, body = "listed" })
+      comment_store.keep(ROOT, sent)
+      take(ROOT, { sent }, 10)
+      comment_store.keep(ROOT, listed)
+
+      comment_store.move(ROOT, {
+        { from = sent, to = comment({ line = 9, start_line = 7, body = "sent" }) },
+        { from = listed, to = comment({ line = 14, start_line = nil, body = "listed" }) },
+      })
+
+      assert.same({ comment({ line = 14, start_line = nil, body = "listed" }) }, comment_store.list(ROOT))
+      assert.same(
+        { { comments = { comment({ line = 9, start_line = 7, body = "sent" }) }, at = 10, to = "claude" } },
+        comment_store.submitted(ROOT)
+      )
     end)
   end)
 
@@ -374,7 +519,7 @@ describe("changeset.comment_store across branches", function()
     git("switch", "-q", "-c", "other")
     comment_store.keep(root, comment())
 
-    comment_store.take(root, { comment() })
+    take(root, { comment() })
 
     git("switch", "-q", "main")
     assert.same({ comment() }, comment_store.list(root))
@@ -382,12 +527,12 @@ describe("changeset.comment_store across branches", function()
 
   it("restores the comments taken on the branch checked out", function()
     comment_store.keep(root, comment())
-    comment_store.take(root, { comment() })
+    take(root, { comment() })
     git("switch", "-q", "-c", "other")
 
-    assert.same({ 0, 0 }, { comment_store.restore(root) })
+    assert.same({ 0, 0 }, { restore(root, 1) })
     git("switch", "-q", "main")
-    assert.same({ 1, 0 }, { comment_store.restore(root) })
+    assert.same({ 1, 0 }, { restore(root, 1) })
     assert.same({ comment() }, comment_store.list(root))
   end)
 

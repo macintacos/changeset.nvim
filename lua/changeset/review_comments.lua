@@ -54,6 +54,10 @@ end
 ---@type table<integer, string[]>
 local snapshots = {}
 
+---The changedtick each snapshot was taken at: a buffer still at it holds the same lines, so a redraw needn't copy them.
+---@type table<integer, integer>
+local snapshot_ticks = {}
+
 ---The branch each buffer's marks were last drawn for.
 ---@type table<integer, string>
 local drawn_for = {}
@@ -270,22 +274,47 @@ local function mark_file(buf, comments)
   return #marked > 0
 end
 
+---A repository's comments, as a pass reads them once.
+---@class changeset.RepositoryComments
+---@field listed changeset.ReviewComment[]
+---@field sent changeset.ReviewComment[] Those of every batch the branch submitted: no mark shows them, but edits move them.
+
+---`root`'s comments, read into `by_root` on a pass's first ask.
+---@param by_root table<string, changeset.RepositoryComments>
+---@param root string
+---@return changeset.RepositoryComments
+local function read(by_root, root)
+  if not by_root[root] then
+    local listed, submitted = comment_store.comments(root)
+    local sent = vim.iter(submitted):map(function(batch)
+      return batch.comments
+    end)
+    by_root[root] = { listed = listed, sent = sent:flatten():totable() }
+  end
+  return by_root[root]
+end
+
 ---Redraws `buf`'s marks from `by_root`, the store's comments by repository, read once a pass.
 ---@param buf integer
----@param by_root table<string, changeset.ReviewComment[]>
+---@param by_root table<string, changeset.RepositoryComments>
 local function draw(buf, by_root)
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   vim.api.nvim_buf_clear_namespace(buf, sign_ns, 0, -1)
   review_comment_blocks.draw(buf, {})
   local root = Paths.root(buf)
-  by_root[root] = by_root[root] or comment_store.list(root)
+  local stored = read(by_root, root)
   drawn_for[buf] = comment_store.branch(root)
-  local comments = on_lines(buf, root, by_root[root])
+  local comments = on_lines(buf, root, stored.listed)
   if vim.bo[buf].modified then
     -- On the stored lines, a modified buffer's marks would leave the code its edits moved.
     comments = where_edited(buf, comments)
   else
-    snapshots[buf] = #comments > 0 and vim.api.nvim_buf_get_lines(buf, 0, -1, false) or nil
+    local tick = vim.api.nvim_buf_get_changedtick(buf)
+    if not (#comments > 0 or #on_lines(buf, root, stored.sent) > 0) then
+      snapshots[buf], snapshot_ticks[buf] = nil, nil
+    elseif snapshot_ticks[buf] ~= tick then
+      snapshots[buf], snapshot_ticks[buf] = vim.api.nvim_buf_get_lines(buf, 0, -1, false), tick
+    end
   end
   if mark_file(buf, comments) then
     attach_hover(buf, root)
@@ -315,8 +344,9 @@ end
 ---@param buf integer
 local function store_moves(buf)
   local root = Paths.root(buf)
-  local by_root = { [root] = comment_store.list(root) }
-  local found = moves(buf, on_lines(buf, root, by_root[root]))
+  local by_root = {}
+  local stored = read(by_root, root)
+  local found = moves(buf, vim.list_extend(on_lines(buf, root, stored.listed), on_lines(buf, root, stored.sent)))
   if #found == 0 then
     return draw(buf, by_root)
   end
@@ -388,7 +418,7 @@ vim.api.nvim_create_autocmd("BufUnload", {
   group = "changeset.review_comments",
   desc = "changeset: forget what an unloaded buffer's review comments were drawn from",
   callback = function(args)
-    snapshots[args.buf], drawn_for[args.buf] = nil, nil
+    snapshots[args.buf], snapshot_ticks[args.buf], drawn_for[args.buf] = nil, nil, nil
   end,
 })
 
