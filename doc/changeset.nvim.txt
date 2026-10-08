@@ -125,7 +125,7 @@ the merge base with the first of these that shares history with your branch:
    only its own changes, pushed or not, with or without a PR.
 2. The target of the branch's open PR, when `gh` finds one.
 3. The default branch: the one `origin/HEAD` names, else the first of `main`,
-   `master` and `trunk` that exists.
+   `master` and `trunk` that exists locally or on `origin`.
 
 A branch has no parent when it was created from:
 
@@ -145,8 +145,9 @@ is built again against it.
 The tree rebuilds by itself when you write a file, when Neovim notices that a
 file you have open changed outside it (|FileChangedShellPost|), when Neovim
 regains focus, and when gitsigns sees `HEAD` move. Switching branches rebuilds
-it against the new branch's base. `:Changeset refresh` or `R` in the sidebar
-rebuilds it at once.
+it against the new branch's base, and moving `HEAD`, as a commit or a rebase
+does, measures the base again and asks `gh` about the PR again.
+`:Changeset refresh` or `R` in the sidebar rebuilds it at once.
 
 When none of them shares history with your branch, the sidebar doesn't open,
 and changeset warns "no merge base with the default branch".
