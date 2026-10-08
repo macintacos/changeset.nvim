@@ -242,9 +242,11 @@ to the path section's copy. When the row is off screen — folded, filtered, or 
 compressed chain — its nearest visible ancestor wears the highlight instead.
 
 Focusing the sidebar, by `:Changeset`, a click or `<C-w>`, puts its cursor on that same
-row, and previews it the way moving onto it would. Focused before your file's symbols
-are in, it lands on the file row and follows you into your symbol when they arrive,
-unless you have moved the cursor or left the sidebar by then. From a file outside the
+row, and previews it the way moving onto it would. A click from another window only
+focuses, landing there too rather than on the row clicked, which would take your row's
+place; once the sidebar has focus, a click moves to the row clicked. Focused before your
+file's symbols are in, it lands on the file row and follows you into your symbol when
+they arrive, unless you have moved the cursor or left the sidebar by then. From a file outside the
 changeset the cursor stays where you left it. Closing the kind menu is not a new arrival:
 you never left the sidebar for it, so the cursor stays on the row you were on.
 

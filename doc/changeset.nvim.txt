@@ -469,6 +469,10 @@ The tree marks three rows in its right margin: `◀` the selected row, while the
 sidebar has focus; `◁` the row for where your cursor is; `•` the row you
 opened last.
 
+A click from another window focuses the sidebar on the row for where your
+cursor is, as |changeset-<C-g>g| does. Once the sidebar has focus, a click
+moves to the row clicked.
+
 PREVIEWS                                                   *changeset-preview*
 
 Moving the cursor in the sidebar previews the row in the window you were last
