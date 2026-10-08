@@ -811,6 +811,18 @@ describe("changeset.window", function()
       assert.is_true(vim.api.nvim_win_is_valid(left))
     end)
 
+    it("previews past a window the user pinned with 'winfixbuf'", function()
+      local left, right, one, two = staged()
+      vim.wo[right].winfixbuf = true
+
+      local ok, err = pcall(window.preview, fixture("three"), 1, BAND)
+      vim.wo[right].winfixbuf = false
+
+      assert.is_true(ok, err)
+      assert.equal(vim.fn.resolve(two), showing(right))
+      assert.not_equal(vim.fn.resolve(one), showing(left))
+    end)
+
     it("puts back every window it previewed into", function()
       local left, right, one, two = staged()
       window.preview(one, 2, BAND)

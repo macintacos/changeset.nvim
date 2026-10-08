@@ -143,11 +143,12 @@ function M._clamp(lnum, line_count)
   return math.max(1, math.min(lnum, line_count))
 end
 
----A window a preview can go to: still open, not the sidebar, not a float, and holding a file or a stand-in for one.
+---A window a preview can go to: still open, not the sidebar, not pinned to its buffer, not a float, and holding a
+---file or a stand-in for one.
 ---@param win integer
 ---@return boolean
 local function usable(win)
-  if not vim.api.nvim_win_is_valid(win) or win == sidebar.win then
+  if not vim.api.nvim_win_is_valid(win) or win == sidebar.win or vim.wo[win].winfixbuf then
     return false
   end
   if vim.api.nvim_win_get_config(win).relative ~= "" then
