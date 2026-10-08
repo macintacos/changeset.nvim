@@ -2,7 +2,7 @@
 
 local cells = require("changeset.cells")
 local help = require("changeset.help")
-local render = require("changeset.render")
+local highlights = require("changeset.highlights")
 local review_comment = require("changeset.review_comment")
 
 local M = {}
@@ -220,9 +220,9 @@ function M.open(opts)
   end
   local hint = {
     { " " },
-    { " " .. vim.fn.keytrans(vim.keycode(opts.keys[1])) .. " ", render.KEYCAP_HL },
+    { " " .. vim.fn.keytrans(vim.keycode(opts.keys[1])) .. " ", highlights.KEYCAP_HL },
     { " save  " },
-    { " q ", render.KEYCAP_HL },
+    { " q ", highlights.KEYCAP_HL },
     { " draft " },
   }
   local hint_width = cells.chunks(hint)
@@ -263,7 +263,8 @@ function M.open(opts)
       height = HEIGHT,
       style = "minimal",
       border = "rounded",
-      title = opts.icon and { { " " .. opts.icon[1], render.title_icon(opts.icon[2]) }, { " " .. opts.title .. " " } }
+      title = opts.icon
+          and { { " " .. opts.icon[1], highlights.title_icon(opts.icon[2]) }, { " " .. opts.title .. " " } }
         or " " .. opts.title .. " ",
       title_pos = "left",
       footer_pos = "right",
