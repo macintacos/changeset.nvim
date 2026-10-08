@@ -427,6 +427,12 @@ function M.open(opts)
       if not saved then
         opts.keep(text(), drafting or nil)
       end
+      -- :e! reloads the buffer in place, leaving the window behind with nothing managing it.
+      vim.schedule(function()
+        if vim.api.nvim_win_is_valid(win) then
+          vim.api.nvim_win_close(win, true)
+        end
+      end)
     end,
   })
 
