@@ -197,11 +197,21 @@ function M.reveal_header(win)
   end)
 end
 
+---Whether the totals hang over `buf`'s first line.
+---@param buf integer
+---@return boolean
+local function has_header(buf)
+  return vim.iter(vim.api.nvim_buf_get_extmarks(buf, ns, 0, 0, { details = true })):any(function(mark)
+    return mark[4].virt_lines_above == true
+  end)
+end
+
 ---Put the ref in the winbar and hang the totals above the tree's first line.
 ---@param buf integer
 ---@param win integer
 ---@param width integer
-local function draw_header(buf, win, width)
+---@param topfill integer? The header rows showing before the redraw, kept rather than revealed when given.
+local function draw_header(buf, win, width, topfill)
   local state = sidebar_state.current()
   assert(state, "changeset: no tree built yet")
   local header = summary()
@@ -213,7 +223,15 @@ local function draw_header(buf, win, width)
       virt_lines_above = true,
     })
   end
-  M.reveal_header(win)
+  if topfill then
+    vim.api.nvim_win_call(win, function()
+      if vim.fn.winsaveview().topline == 1 then
+        vim.fn.winrestview({ topfill = topfill })
+      end
+    end)
+  else
+    M.reveal_header(win)
+  end
 end
 
 ---Scroll `win` by the lines its cursor's row moved, so the row keeps its place on screen.
@@ -269,6 +287,8 @@ function M.draw(kinds_key)
     }
   end
 
+  -- Read before the lines go, which takes the header's filler rows with them.
+  local topfill = has_header(buf) and vim.api.nvim_win_call(win, vim.fn.winsaveview).topfill or nil
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, text)
   vim.bo[buf].modifiable = false
@@ -282,7 +302,7 @@ function M.draw(kinds_key)
 
   vim.api.nvim_win_set_cursor(win, { lnum, 0 })
   -- After the header, whose rows decide whether the cursor's row still fits under the top.
-  draw_header(buf, win, width)
+  draw_header(buf, win, width, topfill)
   if lnum ~= cursor and not (top == 1 and in_view_from_top(win, lnum)) then
     hold_place(win, top, lnum - cursor)
   end

@@ -1250,6 +1250,20 @@ describe("changeset sidebar", function()
     end)
   end)
 
+  it("leaves the header scrolled away at the tree's top across a redraw", function()
+    open_sidebar()
+    local win = assert(window.win())
+    vim.api.nvim_set_current_win(win)
+    vim.cmd.normal(vim.keycode("<C-e><C-e>"))
+    local before = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+    assert.same({ 1, 0 }, { before.topline, before.topfill })
+
+    require("changeset.draw").draw()
+
+    local after = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+    assert.same({ 1, 0 }, { after.topline, after.topfill })
+  end)
+
   it("leaves the tree's lines empty when a filter matches no row", function()
     local buf = open_sidebar()
     vim.api.nvim_set_current_win((assert(window.win())))
