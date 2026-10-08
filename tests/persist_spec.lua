@@ -233,6 +233,16 @@ describe("changeset position in a session", function()
     assert.same({ path = "mod.lua", lnum = 2 }, vim.json.decode(vim.g.ChangesetPosition).here)
   end)
 
+  it("opens no sidebar on a session that left none", function()
+    vim.cmd.edit("mod.lua")
+    local wins = vim.api.nvim_tabpage_list_wins(0)
+
+    changeset.restore()
+
+    assert.is_nil(window.buf())
+    assert.same(wins, vim.api.nvim_tabpage_list_wins(0))
+  end)
+
   it("closes a restored sidebar window it cannot fill", function()
     local outside = vim.fn.tempname()
     vim.fn.mkdir(outside, "p")

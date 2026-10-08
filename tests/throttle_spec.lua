@@ -99,6 +99,31 @@ describe("the sidebar's redraw after a rebuild", function()
       assert.equal(2, draws)
     end)
 
+    it("draws once, at once, when something else redraws while it waits", function()
+      answer("a.lua")
+      answer("b.lua")
+
+      vim.api.nvim_exec_autocmds("VimResized", {})
+
+      assert.equal(2, draws)
+      assert.truthy(Sidebar.text():find("f_b", 1, true))
+      vim.wait(400)
+      assert.equal(2, draws)
+    end)
+
+    it("still settles once the wait is over after a sidebar key drew the tree meanwhile", function()
+      answer("a.lua")
+      answer("b.lua")
+      vim.api.nvim_set_current_win((assert(window.win())))
+
+      vim.cmd.normal("L")
+
+      assert.equal(2, draws)
+      assert.is_true(vim.wait(2000, function()
+        return draws == 3
+      end, 10))
+    end)
+
     it("steps over the rows of answers whose draw still waits", function()
       answer("a.lua")
       answer("b.lua")

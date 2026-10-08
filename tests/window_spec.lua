@@ -869,6 +869,25 @@ describe("changeset.window", function()
       assert.not_equal(vim.fn.resolve(one), showing(left))
     end)
 
+    it("previews past a float, into a window beside it", function()
+      local _, right, one = staged()
+      vim.api.nvim_set_current_win(right)
+      local float = vim.api.nvim_open_win(vim.fn.bufadd(one), true, {
+        relative = "editor",
+        row = 0,
+        col = 0,
+        width = 20,
+        height = 2,
+      })
+
+      window.preview(fixture("three"), 1, BAND)
+      local floated = showing(float)
+      vim.api.nvim_win_close(float, true)
+
+      assert.equal(vim.fn.resolve(one), floated)
+      assert.not_equal(vim.fn.resolve(one), showing(right))
+    end)
+
     it("puts back every window it previewed into", function()
       local left, right, one, two = staged()
       window.preview(one, 2, BAND)

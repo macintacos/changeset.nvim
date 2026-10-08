@@ -762,6 +762,27 @@ describe("changeset sidebar", function()
       assert.falsy(table.concat(lines_of(buf), "\n"):find("load", 1, true))
     end)
 
+    it("docks the kind menu against the sidebar again once the editor is resized", function()
+      open_unanswered()
+      answer_all()
+      local sidebar = assert(window.win())
+      press("F")
+      local menu_win = vim.api.nvim_get_current_win()
+
+      local columns = vim.o.columns
+      vim.o.columns = 200
+      vim.api.nvim_exec_autocmds("VimResized", {})
+      local docked = vim.api.nvim_win_get_config(menu_win)
+      vim.api.nvim_win_close(menu_win, true)
+      vim.api.nvim_set_current_win(sidebar)
+      press("F")
+      local fresh = vim.api.nvim_win_get_config(0)
+      vim.api.nvim_win_close(0, true)
+      vim.o.columns = columns
+
+      assert.same({ fresh.row, fresh.col, fresh.width }, { docked.row, docked.col, docked.width })
+    end)
+
     describe("while a kind is hidden", function()
       local prefs = require("changeset.prefs")
 
@@ -1228,6 +1249,16 @@ describe("changeset sidebar", function()
     os.remove("other.lua")
 
     assert.is_true(vim.b[preview_row(buf, "other.lua")].changeset_stand_in)
+  end)
+
+  it("previews a stand-in for a changed text file past 1.5 MiB", function()
+    local line = ("x"):rep(99) .. "\n"
+    local file = assert(io.open("big.txt", "wb"))
+    file:write(line:rep(20 * 1024))
+    file:close()
+    Fixture.commit("big", tmp)
+
+    assert.is_true(vim.b[preview_row(open_sidebar(), "big.txt")].changeset_stand_in)
   end)
 
   it("previews a notice that a submodule's row is a submodule", function()
