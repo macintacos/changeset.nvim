@@ -155,7 +155,6 @@ describe("changeset.comment_store", function()
     '{"path":"a","body":"b","line":3,"start_line":"1"}',
     '{"path":"a","body":"b","line":0}',
     '{"path":"a","body":"b","line":3,"start_line":3}',
-    '{"path":"a","body":"b","line":3,"draft":false}',
   }) do
     it("skips the entry " .. entry .. " in a list, and keeps it through a write", function()
       write_record('{"/repo":[' .. entry .. "]}")
@@ -166,6 +165,20 @@ describe("changeset.comment_store", function()
       assert.same(vim.json.decode(entry), jsonfile.read(comment_store.path())[ROOT][1])
     end)
   end
+
+  it("lists a comment a hand edit marked draft false as saved", function()
+    write_record('{"/repo":[{"path":"lua/a.lua","line":7,"start_line":5,"body":"hi","draft":false}]}')
+
+    assert.same({ comment() }, comment_store.list(ROOT))
+  end)
+
+  it("moves a comment a hand edit marked draft false", function()
+    write_record('{"/repo":[{"path":"lua/a.lua","line":7,"start_line":5,"body":"hi","draft":false}]}')
+
+    comment_store.move(ROOT, { { from = comment(), to = comment({ line = 9, start_line = 7 }) } })
+
+    assert.same({ comment({ line = 9, start_line = 7 }) }, comment_store.list(ROOT))
+  end)
 
   it("lists a draft as one", function()
     comment_store.keep(ROOT, comment({ draft = true }))

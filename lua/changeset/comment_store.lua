@@ -61,7 +61,7 @@ local function valid(entry)
     and type(entry.path) == "string"
     and type(entry.body) == "string"
     and (entry.line == nil or (type(entry.line) == "number" and entry.line % 1 == 0 and entry.line >= 1))
-    and (entry.draft == nil or entry.draft == true)
+    and (entry.draft == nil or type(entry.draft) == "boolean")
     and (entry.branch == nil or type(entry.branch) == "string")
     and (
       entry.start_line == nil
@@ -292,7 +292,7 @@ local function shown(data, root, branch)
         line = entry.line,
         start_line = entry.start_line,
         body = entry.body,
-        draft = entry.draft,
+        draft = entry.draft or nil,
       }
     end)
     :totable()
@@ -432,7 +432,7 @@ end
 local function moved(entry, moves, branch)
   local copy = vim.deepcopy(entry)
   local move = vim.iter(moves):find(function(each)
-    return same_range(entry, each.from) and entry.body == each.from.body and entry.draft == each.from.draft
+    return same_range(entry, each.from) and entry.body == each.from.body and (entry.draft or nil) == each.from.draft
   end)
   if move then
     copy.line, copy.start_line, copy.branch = move.to.line, move.to.start_line, entry.branch or branch
