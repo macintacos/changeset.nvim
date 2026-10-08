@@ -753,6 +753,36 @@ describe("changeset.window", function()
       assert.same({ number = true, signcolumn = "auto" }, seen)
     end)
 
+    it("closes the window a preview split off a lone sidebar along with the sidebar", function()
+      vim.cmd.enew()
+      local outside = vim.api.nvim_get_current_win()
+      local sidebar = window.open(vim.api.nvim_create_buf(false, true))
+      vim.wo[sidebar].winbar = "header"
+      vim.api.nvim_win_close(outside, true)
+      local one = fixture("one")
+      window.preview(one, 1, BAND)
+
+      window.close()
+
+      local wins = vim.api.nvim_tabpage_list_wins(0)
+      assert.same({ sidebar }, wins)
+      assert.not_equal(vim.fn.resolve(one), showing(sidebar))
+    end)
+
+    it("leaves the window a commit claimed from a lone sidebar's split", function()
+      vim.cmd.enew()
+      local outside = vim.api.nvim_get_current_win()
+      window.open(vim.api.nvim_create_buf(false, true))
+      vim.api.nvim_win_close(outside, true)
+      local one = fixture("one")
+      window.preview(one, 1, BAND)
+      window.commit(one, 1, "reuse")
+
+      window.close()
+
+      assert.equal(vim.fn.resolve(one), showing(vim.api.nvim_get_current_win()))
+    end)
+
     it("puts back every window it previewed into", function()
       local left, right, one, two = staged()
       window.preview(one, 2, BAND)

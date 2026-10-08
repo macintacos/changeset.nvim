@@ -32,6 +32,7 @@ local NO_CURSOR = "n-v:" .. render.NO_CURSOR_HL
 ---@field winbar string
 ---@field standing_buf integer? The buffer a preview put here while the cursor stood in the window.
 ---@field pick any What the caller previewed here, handed back when the window is claimed.
+---@field split boolean? The sidebar split this window off to preview into, so it held nothing of the user's.
 
 ---Beside the files, or below them as a drawer.
 ---@alias changeset.Layout "sidebar"|"drawer"
@@ -174,7 +175,8 @@ local function reachable()
   )
 end
 
----@return integer
+---@return integer win
+---@return boolean? split Whether `win` was split off the sidebar for this.
 local function target()
   local win = M._pick_target(reachable(), usable)
   if win then
@@ -189,7 +191,7 @@ local function target()
   end)
   -- Copied from the sidebar with the rest of its options.
   setlocal(split, "winfixbuf", false)
-  return split
+  return split, true
 end
 
 ---The window a commit would open into, without splitting for one; nil when there is none.
@@ -239,9 +241,10 @@ end
 ---@param pick any Handed back by `claim`; nil clears whatever the last preview here left.
 ---@return integer win
 local function borrow(buf, band, pick)
-  local win = target()
+  local win, split = target()
   local standing = win == vim.api.nvim_get_current_win()
   remember(win)
+  sidebar.borrowed[win].split = sidebar.borrowed[win].split or split
   sidebar.borrowed[win].standing_buf = standing and buf or nil
   sidebar.borrowed[win].pick = pick
   show(win, buf)
@@ -563,7 +566,7 @@ function M.commit(path, lnum, how)
     vim.notify("Changeset: cannot open " .. path, vim.log.levels.WARN)
     return false
   end
-  promote(target(), buf, lnum, how)
+  promote((target()), buf, lnum, how)
   return true
 end
 
@@ -595,6 +598,18 @@ function M.close()
   local focus = M._pick_target(reachable(), usable)
   local borrowed, win = sidebar.borrowed, sidebar.win
   sidebar.win, sidebar.buf, sidebar.borrowed = nil, nil, {}
+
+  -- Closed rather than put back: it showed nothing before the sidebar made it.
+  for borrowed_win, snapshot in pairs(borrowed) do
+    if
+      snapshot.split
+      and vim.api.nvim_win_is_valid(borrowed_win)
+      and #vim.api.nvim_tabpage_list_wins(vim.api.nvim_win_get_tabpage(borrowed_win)) > 1
+    then
+      vim.api.nvim_win_close(borrowed_win, true)
+      borrowed[borrowed_win] = nil
+    end
+  end
 
   if win and vim.api.nvim_win_is_valid(win) then
     if #panes() > 1 then
