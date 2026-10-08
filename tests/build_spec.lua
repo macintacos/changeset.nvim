@@ -344,7 +344,9 @@ describe("changeset.build", function()
 
   describe("when the diff cannot be read", function()
     local diff = require("changeset.diff")
-    local real_collect, restore_notify = diff.collect, nil
+    local real_collect = diff.collect
+    ---@type fun()
+    local restore_notify
 
     before_each(function()
       diff.collect = function(_, _, on_done)
