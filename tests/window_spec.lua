@@ -351,6 +351,27 @@ describe("changeset.window", function()
       assert.is_true(vim.api.nvim_win_is_valid(win))
       assert.not_equal(tree, vim.api.nvim_win_get_buf(win))
     end)
+
+    it("gives the window it hands back the user's own options", function()
+      vim.cmd("only")
+      local number, signcolumn, wrap = vim.o.number, vim.o.signcolumn, vim.o.wrap
+      vim.o.number, vim.o.signcolumn, vim.o.wrap = true, "auto", true
+      local outside = vim.api.nvim_get_current_win()
+      local win = window.open(vim.api.nvim_create_buf(false, true))
+      vim.api.nvim_win_close(outside, true)
+
+      window.close()
+      vim.cmd.enew()
+      local seen = {
+        number = vim.wo[win].number,
+        signcolumn = vim.wo[win].signcolumn,
+        wrap = vim.wo[win].wrap,
+        winfixwidth = vim.wo[win].winfixwidth,
+      }
+      vim.o.number, vim.o.signcolumn, vim.o.wrap = number, signcolumn, wrap
+
+      assert.same({ number = true, signcolumn = "auto", wrap = true, winfixwidth = false }, seen)
+    end)
   end)
 
   describe("previewing", function()
@@ -712,6 +733,24 @@ describe("changeset.window", function()
       vim.o.columns = columns
 
       assert.equal("bottom", edge(win))
+    end)
+
+    it("gives the window a preview splits off a lone sidebar the user's own options", function()
+      local number, signcolumn = vim.o.number, vim.o.signcolumn
+      vim.o.number, vim.o.signcolumn = true, "auto"
+      vim.cmd.enew()
+      local outside = vim.api.nvim_get_current_win()
+      local sidebar = window.open(vim.api.nvim_create_buf(false, true))
+      vim.api.nvim_win_close(outside, true)
+
+      window.preview(fixture("one"), 1, BAND)
+      local split = vim.tbl_filter(function(win)
+        return win ~= sidebar
+      end, vim.api.nvim_tabpage_list_wins(0))[1]
+      local seen = { number = vim.wo[split].number, signcolumn = vim.wo[split].signcolumn }
+      vim.o.number, vim.o.signcolumn = number, signcolumn
+
+      assert.same({ number = true, signcolumn = "auto" }, seen)
     end)
 
     it("puts back every window it previewed into", function()

@@ -57,12 +57,40 @@ local function split_for(layout, lines)
   return { split = "right", win = -1, width = SIDEBAR_WIDTH }
 end
 
+---Set `name` on `win` as `:setlocal` does. `vim.wo` sets the window's global copy too, which
+---the next buffer shown in it, and every split off it, would then take for the user's own.
+---@param win integer
+---@param name string
+---@param value any
+local function setlocal(win, name, value)
+  vim.api.nvim_set_option_value(name, value, { win = win, scope = "local" })
+end
+
+-- What the sidebar sets on its window, which `close` puts back to the user's when it keeps that window.
+local SIDEBAR_OPTIONS = {
+  number = false,
+  relativenumber = false,
+  signcolumn = "no",
+  -- Rows are sized to the window's full width, and a global one draws even with
+  -- every column above switched off.
+  statuscolumn = "",
+  -- The selected row marks the cursor's line instead.
+  wrap = false,
+  cursorline = false,
+  foldcolumn = "0",
+  -- For the sentence an empty tree shows, the one line `draw` lets wrap.
+  list = false,
+  linebreak = true,
+  -- Or a reflexive `<C-o>` there swaps the tree out of its window and wipes it.
+  winfixbuf = true,
+}
+
 ---Keep the size `layout` gave `win` when other windows open and close.
 ---@param win integer
 ---@param layout changeset.Layout
 local function pin(win, layout)
-  vim.wo[win].winfixwidth = layout == "sidebar"
-  vim.wo[win].winfixheight = layout == "drawer"
+  setlocal(win, "winfixwidth", layout == "sidebar")
+  setlocal(win, "winfixheight", layout == "drawer")
 end
 
 ---Windows a preview could go to, most recently used first.
@@ -160,7 +188,7 @@ local function target()
     return vim.api.nvim_get_current_win()
   end)
   -- Copied from the sidebar with the rest of its options.
-  vim.wo[split].winfixbuf = false
+  setlocal(split, "winfixbuf", false)
   return split
 end
 
@@ -324,7 +352,7 @@ function M.open(buf)
     local stale = vim.api.nvim_win_get_buf(placeholder)
     sidebar.win = placeholder
     -- A session saved with 'localoptions' brings it back.
-    vim.wo[placeholder].winfixbuf = false
+    setlocal(placeholder, "winfixbuf", false)
     vim.api.nvim_win_set_buf(placeholder, buf)
     pcall(vim.api.nvim_buf_delete, stale, { force = true })
     -- Laid out as the session was saved, which `relayout` below settles for this editor.
@@ -337,17 +365,9 @@ function M.open(buf)
   sidebar.buf = buf
   vim.api.nvim_buf_set_name(buf, NAME .. buf)
 
-  local wo = vim.wo[sidebar.win]
-  wo.number, wo.relativenumber, wo.signcolumn = false, false, "no"
-  -- Rows are sized to the window's full width, and a global one draws even with
-  -- every column above switched off.
-  wo.statuscolumn = ""
-  -- The selected row marks the cursor's line instead.
-  wo.wrap, wo.cursorline, wo.foldcolumn = false, false, "0"
-  -- For the sentence an empty tree shows, the one line `draw` lets wrap.
-  wo.list, wo.linebreak = false, true
-  -- Or a reflexive `<C-o>` there swaps the tree out of its window and wipes it.
-  wo.winfixbuf = true
+  for name, value in pairs(SIDEBAR_OPTIONS) do
+    setlocal(sidebar.win, name, value)
+  end
   M.relayout()
 
   -- Opening a window is the editor's business to settle, and 'equalalways' is
@@ -582,9 +602,14 @@ function M.close()
     else
       -- The last window cannot be closed, and leaving the tree in it would leave a
       -- panel on screen whose keys no longer answer.
-      vim.wo[win].winfixbuf = false
+      setlocal(win, "winfixbuf", false)
       vim.api.nvim_win_call(win, function()
         vim.cmd("enew")
+        -- The new buffer still takes the sidebar's local values.
+        for name in pairs(SIDEBAR_OPTIONS) do
+          vim.cmd.setlocal(name .. "<")
+        end
+        vim.cmd("setlocal winfixwidth< winfixheight<")
       end)
       -- A new buffer takes the window's options, header and footer included.
       vim.wo[win].winbar, vim.wo[win].statusline = "", ""
