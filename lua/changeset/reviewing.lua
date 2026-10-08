@@ -395,10 +395,17 @@ local function stored_as(repository, comment)
   end)
 end
 
+---The repository of the window `open` was opened from, or the current one once that window has closed.
+---@param open changeset.ReviewCommentWindow
+---@return string
+local function source_root(open)
+  return vim.api.nvim_win_is_valid(open.source) and vim.api.nvim_win_call(open.source, root) or root()
+end
+
 ---Deletes the comment being written in `open`: asks first when it is stored or holds text, else just closes.
 ---@param open changeset.ReviewCommentWindow
 function delete_open(open)
-  local repository = vim.api.nvim_win_call(open.source, root)
+  local repository = source_root(open)
   local stored = stored_as(repository, open.comment)
   local text = open.text()
   if not stored and not text:find("%S") then
@@ -456,7 +463,7 @@ function M.from_window(open, name, run)
     return open.draft()
   end
   if name == "comment last" then
-    local last = last_saved(vim.api.nvim_win_call(open.source, root))
+    local last = last_saved(source_root(open))
     if
       last
       and last.path == open.comment.path

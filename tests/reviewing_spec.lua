@@ -554,6 +554,48 @@ describe("changeset.reviewing", function()
     end)
   end)
 
+  describe("from_window", function()
+    ---A review comment window on `comment()` whose source window has closed.
+    local function orphaned()
+      local calls = {}
+      return {
+        source = -1,
+        comment = comment(),
+        text = function()
+          return ""
+        end,
+        discard = function()
+          table.insert(calls, "discard")
+        end,
+        close = function()
+          table.insert(calls, "close")
+        end,
+        resume = function()
+          table.insert(calls, "resume")
+        end,
+      },
+        calls
+    end
+
+    it("deletes from the current repository once the source window has closed", function()
+      edit_file()
+      local open, calls = orphaned()
+
+      reviewing.from_window(open, "comment del", function() end)
+
+      assert.same({ "discard" }, calls)
+    end)
+
+    it("goes to the comment saved last once the source window has closed", function()
+      edit_file()
+      local open, calls = orphaned()
+
+      reviewing.from_window(open, "comment last", function() end)
+
+      assert.same({ "close" }, calls)
+    end)
+  end)
+
   describe("abandon", function()
     it("deletes drafts too, saying how many of the comments are drafts", function()
       edit_file()
