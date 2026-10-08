@@ -107,21 +107,23 @@ local function tail(text, room)
   return vim.fn.strcharpart(text, from)
 end
 
----`text` in lines at most `width` cells wide, broken between words, and inside a word wider than that.
+---`text` in lines at most `width` cells wide, broken between words, and inside a word wider than that. A line keeps
+---its indentation and the spaces between its words, save those where it breaks.
 ---@param text string
 ---@param width integer
 ---@return string[]
 function M.wrap(text, width)
   local lines = {}
   for _, paragraph in ipairs(vim.split(text, "\n", { plain = true })) do
-    local line = ""
-    for word in paragraph:gmatch("%S+") do
-      if line ~= "" and cells(line .. " " .. word) <= width then
-        line = line .. " " .. word
+    local line, first = "", true
+    for space, word in paragraph:gmatch("(%s*)(%S+)") do
+      if line ~= "" and cells(line .. space .. word) <= width then
+        line = line .. space .. word
       else
         if line ~= "" then
           lines[#lines + 1] = line
         end
+        word = first and space .. word or word
         while cells(word) > width do
           local piece = head(word, width)
           lines[#lines + 1] = piece
@@ -129,6 +131,7 @@ function M.wrap(text, width)
         end
         line = word
       end
+      first = false
     end
     lines[#lines + 1] = line
   end

@@ -478,6 +478,17 @@ describe("changeset.dialog", function()
       assert.same({ "one", "two" }, texts(dialog._body({ { text = "one\ntwo" } }, 10)))
     end)
 
+    it("keeps a quoted line's indentation and its runs of spaces", function()
+      assert.same(
+        { "▎ try:", "▎     if x  then", "▎       y()" },
+        texts(dialog._body({ { text = "try:\n    if x  then\n      y()", quote = "Q" } }, 20))
+      )
+    end)
+
+    it("drops the spaces where a line breaks", function()
+      assert.same({ "one", "two" }, texts(dialog._body({ { text = "one    two" } }, 5)))
+    end)
+
     it("bars every line of a quote", function()
       assert.same({ "▎ one two", "▎ three" }, texts(dialog._body({ { text = "one two three", quote = "Q" } }, 9)))
     end)
