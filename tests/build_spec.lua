@@ -99,6 +99,21 @@ describe("changeset.build", function()
     end, argvs))
   end)
 
+  it("keeps and refreshes the tree after a switch to a branch with no fork point", function()
+    build_and_collect()
+    local kept = build.current()
+    Fixture.git({ "checkout", "-q", "--orphan", "unrelated" }, tmp)
+    Fixture.git({ "commit", "-q", "-m", "unrelated history" }, tmp)
+    events = {}
+
+    build.update()
+
+    assert.equal(kept, build.current())
+    assert.is_true(vim.wait(5000, function()
+      return vim.list_contains(events, "diff")
+    end, 10))
+  end)
+
   describe("while gh is slow to answer", function()
     before_each(function()
       vim.env.FAKE_GH_DELAY = "1"
