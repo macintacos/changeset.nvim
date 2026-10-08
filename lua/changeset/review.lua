@@ -214,7 +214,7 @@ local function tracked(buf)
   local status = vim.b[buf].gitsigns_status_dict
   -- A detached HEAD, such as each commit of a rebase, is no new branch, so what is applied stays. Asked of git's own
   -- files: gitsigns publishes it as a short hash, which a branch may be named like.
-  local detached = status and status.root and Git.head(status.root) == "HEAD"
+  local detached = status and status.root and Git.detached(status.root)
   if status and status.root and status.head and status.head ~= "" and not detached then
     return status.root, status.head
   end

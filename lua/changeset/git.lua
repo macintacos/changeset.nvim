@@ -72,6 +72,22 @@ function M.head(root)
   return out[2], out[1]
 end
 
+---Whether HEAD at `root` is detached, a stopped rebase's included. Read off `HEAD` alone, which needs no commit, so a
+---packed branch costs no git; git runs only for a reftable repository or an unreadable `HEAD`.
+---@param root string
+---@return boolean
+function M.detached(root)
+  local line = M.first_line(vim.fs.joinpath(M.git_dir(root), "HEAD")) or ""
+  if line:match("^%x+$") then
+    return true
+  end
+  local name = line:match("^ref: refs/heads/(.+)")
+  if name and name ~= ".invalid" then
+    return false
+  end
+  return M.head(root) == "HEAD"
+end
+
 ---The coroutines `async` runs.
 ---@type table<thread, true>
 local async_threads = setmetatable({}, { __mode = "k" })

@@ -430,4 +430,58 @@ describe("changeset.git", function()
       assert.same({}, { Git.head(tmp) })
     end)
   end)
+
+  describe("detached", function()
+    local real_systemlist, real_system, spawned
+
+    before_each(function()
+      spawned = 0
+      real_systemlist, real_system = vim.fn.systemlist, vim.system
+      vim.fn.systemlist = function(...)
+        spawned = spawned + 1
+        return real_systemlist(...)
+      end
+      vim.system = function(...)
+        spawned = spawned + 1
+        return real_system(...)
+      end
+    end)
+
+    after_each(function()
+      vim.fn.systemlist, vim.system = real_systemlist, real_system
+    end)
+
+    it("is false on a branch", function()
+      Fixture.init_repo("trunk", tmp)
+
+      assert.is_false(Git.detached(tmp))
+    end)
+
+    it("is true on a detached HEAD, without running git", function()
+      Fixture.init_repo("trunk", tmp)
+      Fixture.git({ "checkout", "-q", "--detach" }, tmp)
+      spawned = 0
+
+      assert.is_true(Git.detached(tmp))
+      assert.equal(0, spawned)
+    end)
+
+    it("reads a worktree's HEAD through its .git file, without running git", function()
+      Fixture.init_repo("trunk", tmp)
+      Fixture.git({ "worktree", "add", "-q", "-b", "feature", tmp .. "/wt" }, tmp)
+      spawned = 0
+
+      assert.is_false(Git.detached(tmp .. "/wt"))
+      assert.equal(0, spawned)
+    end)
+
+    it("is false on a branch whose ref is packed, without running git", function()
+      Fixture.init_repo("trunk", tmp)
+      Fixture.git({ "pack-refs", "--all" }, tmp)
+      spawned = 0
+
+      assert.is_false(Git.detached(tmp))
+      assert.equal(0, spawned)
+    end)
+  end)
 end)
