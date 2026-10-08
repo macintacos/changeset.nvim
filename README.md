@@ -33,16 +33,37 @@ Neovim 0.12 or newer, and `git`. Everything else is optional:
 
 ## Installation
 
+Each example also installs and sets up the optional plugins from the table above. Drop any you
+don't want.
+
 With `vim.pack`:
 
 ```lua
-vim.pack.add({ "https://github.com/macintacos/changeset.nvim" })
+vim.pack.add({
+  "https://github.com/macintacos/changeset.nvim",
+  "https://github.com/lewis6991/gitsigns.nvim",
+  "https://github.com/nvim-mini/mini.icons",
+  "https://github.com/nvim-mini/mini.pick",
+  "https://github.com/folke/which-key.nvim",
+})
+require("gitsigns").setup()
+require("mini.icons").setup()
+require("mini.pick").setup()
+require("which-key").setup()
 ```
 
 With lazy.nvim:
 
 ```lua
-{ "macintacos/changeset.nvim" }
+{
+  "macintacos/changeset.nvim",
+  dependencies = {
+    { "lewis6991/gitsigns.nvim", opts = {} },
+    { "nvim-mini/mini.icons", opts = {} },
+    { "nvim-mini/mini.pick", opts = {} },
+    { "folke/which-key.nvim", opts = {} },
+  },
+}
 ```
 
 `setup()` is optional. To change an option, call `require("changeset").setup({ … })`, or add
