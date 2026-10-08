@@ -198,8 +198,9 @@ local function target()
     vim.cmd(sidebar.layout == "drawer" and "leftabove split" or "leftabove vsplit")
     return vim.api.nvim_get_current_win()
   end)
-  -- Copied from the sidebar with the rest of its options.
+  -- Copied from the sidebar with the rest of its options. Its header winbar would be put back as the user's.
   setlocal(split, "winfixbuf", false)
+  setlocal(split, "winbar", "")
   return split, true
 end
 

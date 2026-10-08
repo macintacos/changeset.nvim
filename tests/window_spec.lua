@@ -792,6 +792,41 @@ describe("changeset.window", function()
       assert.not_equal(vim.fn.resolve(one), showing(sidebar))
     end)
 
+    ---A lone sidebar whose header is "header", previewing a file into a window split off it.
+    ---@return integer sidebar
+    ---@return integer split
+    ---@return string path
+    local function lone_preview()
+      vim.cmd.enew()
+      local outside = vim.api.nvim_get_current_win()
+      local sidebar = window.open(vim.api.nvim_create_buf(false, true))
+      vim.wo[sidebar].winbar = "header"
+      vim.api.nvim_win_close(outside, true)
+      local one = fixture("one")
+      window.preview(one, 1, BAND)
+      local split = vim.tbl_filter(function(win)
+        return win ~= sidebar
+      end, vim.api.nvim_tabpage_list_wins(0))[1]
+      return sidebar, split, one
+    end
+
+    it("leaves the sidebar's header off a lone sidebar's split once the sidebar's window closes", function()
+      local sidebar, split = lone_preview()
+
+      vim.api.nvim_win_close(sidebar, true)
+      window.close()
+
+      assert.not_equal("header", vim.wo[split].winbar)
+    end)
+
+    it("leaves the sidebar's header off a lone sidebar's split once its preview is opened", function()
+      local _, split, one = lone_preview()
+
+      window.commit(one, 1, "reuse")
+
+      assert.not_equal("header", vim.wo[split].winbar)
+    end)
+
     it("leaves the window a commit claimed from a lone sidebar's split", function()
       vim.cmd.enew()
       local outside = vim.api.nvim_get_current_win()
