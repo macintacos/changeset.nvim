@@ -295,7 +295,10 @@ local function draw_child(section, child, folds, opts, hidden, is_open)
     hidden = hidden,
     folds = folds,
   }
-  drawn[child] = now
+  -- A comment row is made anew on every draw, so it never hits; and its entry, holding its own weak key, never goes.
+  if child.kind ~= "comment" then
+    drawn[child] = now
+  end
   return now
 end
 

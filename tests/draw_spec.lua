@@ -2,6 +2,7 @@ vim.opt.rtp:prepend(require("support.deps").path("mini.icons"))
 require("mini.icons").setup()
 
 local changeset = require("changeset")
+local comment_store = require("changeset.comment_store")
 local draw = require("changeset.draw")
 local sidebar_state = require("changeset.sidebar_state")
 local window = require("changeset.window")
@@ -97,6 +98,7 @@ describe("changeset draw", function()
     vim.cmd("silent! %bwipeout!")
     vim.fn.chdir(previous_dir)
     vim.fn.delete(tmp, "rf")
+    os.remove(comment_store.path())
   end)
 
   ---@param path string
@@ -141,6 +143,30 @@ describe("changeset draw", function()
     for _, range in ipairs(ranges) do
       assert.is_true(range[1] >= first and range[2] <= last, vim.inspect({ range, first, last }))
     end
+  end)
+
+  it("holds no more memory after many draws with review comments than after a few", function()
+    local root = vim.fn.resolve(tmp)
+    for _, path in ipairs({ "a.lua", "b.lua" }) do
+      for line = 1, 10 do
+        comment_store.keep(root, { path = path, line = line, body = "a review comment on line " .. line })
+      end
+    end
+    for _ = 1, 50 do
+      draw.draw()
+    end
+    collectgarbage("collect")
+    collectgarbage("collect")
+    local before = collectgarbage("count")
+
+    for _ = 1, 2000 do
+      draw.draw()
+    end
+    collectgarbage("collect")
+    collectgarbage("collect")
+
+    local grown = collectgarbage("count") - before
+    assert.is_true(grown < 500, ("grew %.0f KiB over 2000 draws"):format(grown))
   end)
 
   it("draws every line again once something else changed the sidebar's buffer", function()
