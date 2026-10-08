@@ -123,11 +123,29 @@ function M.get_async(root, branch, on_done)
   end)
 end
 
----Forget the PR target gh named for `branch` at `root`, so the next `get` asks gh again.
+---Ask gh again about the PR it named for `branch` at `root`, keeping that target in force until it answers. Subscribers
+---hear the point measured from its answer, so a PR retargeted, merged or closed since is noticed.
 ---@param root string
 ---@param branch string
-function M.forget(root, branch)
-  targets[root .. "\n" .. branch] = nil
+function M.recheck(root, branch)
+  local key = root .. "\n" .. branch
+  if not targets[key] or asking[key] then
+    return
+  end
+  Git.pr_target(root, function(target, number)
+    targets[key] = target and { target = target, number = number } or nil
+    local pr = targets[key]
+    Git.async(function()
+      return measure(root, branch, pr)
+    end, function(point)
+      if not point then
+        return
+      end
+      for fn in pairs(subscribers) do
+        fn(root, branch, point)
+      end
+    end)
+  end)
 end
 
 ---Hear every gh answer, for any repository and branch. Subscribing `fn` again does nothing.

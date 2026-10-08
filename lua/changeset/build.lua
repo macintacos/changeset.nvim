@@ -374,9 +374,11 @@ function M.update()
   if not branch or branch == "HEAD" or (branch == tree.branch and commit == tree.head) then
     return M.refresh()
   end
-  if commit ~= tree.head then
+  if branch == tree.branch then
     -- A moved HEAD can come with a PR retargeted, merged or closed.
-    fork_point.forget(tree.root, branch)
+    fork_point.recheck(tree.root, branch)
+    M.remeasure()
+    return M.refresh()
   end
   local kept = tree
   if not build_at(tree.root) or tree == kept then
@@ -389,8 +391,8 @@ fork_point.subscribe(function(root, branch, point)
   if not (tree and tree.root == root and tree.branch == branch) then
     return
   end
-  -- An answer that leaves no PR holds a point no fresher than the tree's; rebuilding on it would ask gh again.
-  if not point.pr then
+  -- An answer that leaves no PR holds a point no fresher than the tree's, unless the tree's PR is gone.
+  if not point.pr and not tree.pr then
     return
   end
   if tree.base == point.base and tree.pr == point.pr then

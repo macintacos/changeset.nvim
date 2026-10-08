@@ -430,3 +430,105 @@ describe("changeset.build", function()
     end)
   end)
 end)
+
+describe("changeset.build on a branch measured against its PR's target", function()
+  local root, previous_dir, source, parent_base
+
+  ---@param name string
+  ---@return string
+  local function commit_file(name)
+    vim.fn.writefile({ name }, root .. "/" .. name)
+    return Fixture.commit(name, root)
+  end
+
+  ---Build the tree, waiting for gh's PR to move it onto parent.
+  local function build_on_pr()
+    assert.is_true(build.build())
+    assert.is_true(vim.wait(5000, function()
+      local tree = build.current()
+      return tree and tree.pr == 7 and tree.collected
+    end, 10))
+    assert.equal(parent_base, build.current().base)
+  end
+
+  before_each(function()
+    root = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(root, "p")
+    Fixture.init_repo("main", root)
+    commit_file("main.txt")
+    Fixture.git({ "checkout", "-q", "-b", "parent" }, root)
+    parent_base = commit_file("parent.txt")
+    -- Created from a commit, as `gh pr checkout` leaves it: no parent branch in the reflog.
+    Fixture.git({ "checkout", "-q", "-b", "feature", parent_base }, root)
+    commit_file("feature.txt")
+    previous_dir = vim.fn.getcwd()
+    vim.fn.chdir(root)
+    vim.cmd.edit("feature.txt")
+    source = symbols.install()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
+  end)
+
+  after_each(function()
+    vim.env.FAKE_GH_PR = nil
+    vim.env.FAKE_GH_DELAY = nil
+    source.restore()
+    vim.cmd("silent! %bwipeout!")
+    vim.fn.chdir(previous_dir)
+    vim.fn.delete(root, "rf")
+  end)
+
+  it("keeps the tree on the PR's target across a commit", function()
+    build_on_pr()
+    local kept = build.current()
+    vim.env.FAKE_GH_DELAY = "0.5"
+    commit_file("more.txt")
+
+    build.update()
+    vim.wait(400)
+
+    assert.equal(kept, build.current())
+    assert.equal(parent_base, kept.base)
+  end)
+
+  it("measures a commit's fork point without blocking Neovim", function()
+    build_on_pr()
+    commit_file("more.txt")
+
+    local waited, real_systemlist = {}, vim.fn.systemlist
+    vim.fn.systemlist = function(argv, ...)
+      waited[#waited + 1] = argv
+      return real_systemlist(argv, ...)
+    end
+    local ok, err = pcall(build.update)
+    vim.fn.systemlist = real_systemlist
+    assert(ok, err)
+
+    assert.same({}, waited)
+  end)
+
+  it("measures against the PR's target at once when switching back to the branch", function()
+    build_on_pr()
+    Fixture.git({ "switch", "-q", "parent" }, root)
+    build.update()
+    vim.env.FAKE_GH_DELAY = "0.5"
+    Fixture.git({ "switch", "-q", "feature" }, root)
+
+    build.update()
+
+    assert.equal("feature", build.current().branch)
+    assert.equal(parent_base, build.current().base)
+  end)
+
+  it("moves to the default branch once a commit finds the PR closed", function()
+    build_on_pr()
+    vim.env.FAKE_GH_PR = ""
+    commit_file("more.txt")
+
+    build.update()
+
+    assert.is_true(vim.wait(5000, function()
+      local tree = build.current()
+      return tree.base ~= parent_base and tree.pr == nil
+    end, 25))
+  end)
+end)
