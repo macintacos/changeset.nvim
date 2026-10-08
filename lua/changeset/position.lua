@@ -52,7 +52,7 @@ local function nearest(visible, id)
   local best, best_len = nil, 0
   for lnum, row in ipairs(visible) do
     local shown = row.id
-    if #shown > best_len and vim.startswith(id, shown) and (#id == #shown or id:byte(#shown + 1) == 0) then
+    if #shown > best_len and (id == shown or Rows.under(id, shown)) then
       best, best_len = lnum, #shown
     end
   end

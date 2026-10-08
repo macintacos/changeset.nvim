@@ -343,11 +343,12 @@ local function symbol_rows(nodes, parent)
   local rows, seen = {}, {}
   for _, node in ipairs(nodes) do
     -- Nesting alone cannot separate two siblings of one name, which is what a
-    -- function's overloads are. `#`-prefixed segments are already synthetic ids.
+    -- function's overloads are. The ordinal stays inside the name's segment, so the
+    -- second sibling's id doesn't read as a child of the first's.
     local id = parent.id .. "\0" .. node.sym.name
     seen[id] = (seen[id] or 0) + 1
     local row = {
-      id = seen[id] == 1 and id or ("%s\0#%d"):format(id, seen[id]),
+      id = seen[id] == 1 and id or ("%s\1%d"):format(id, seen[id]),
       kind = "symbol",
       depth = parent.depth + 1,
       name = node.sym.name,
@@ -861,6 +862,15 @@ function M.locate(rows, path, lnum)
     end
   end
   return best or copies[1]
+end
+
+---Whether the row with `id` sits under the row with `ancestor`, at any depth: a row id extends its parent's by a
+---`\0`-joined segment.
+---@param id string
+---@param ancestor string
+---@return boolean
+function M.under(id, ancestor)
+  return vim.startswith(id, ancestor .. "\0")
 end
 
 ---The row with `id`, at any depth.

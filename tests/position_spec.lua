@@ -112,6 +112,22 @@ describe("changeset.position", function()
       end
     )
 
+    it("marks where you are on the file when a filter hides your block but keeps a same-named one", function()
+      -- 1 Implementation, 2 store.rs, 3 impl Store, 4 load, 5 impl Store, 6 save.
+      local rows = Rows.build({ Changes.file("store.rs", { 3, 13 }) }, {
+        ["store.rs"] = {
+          Changes.sym("impl Store", "Object", 0, 1, 8),
+          Changes.sym("load", "Method", 1, 2, 4),
+          Changes.sym("impl Store", "Object", 0, 10, 15),
+          Changes.sym("save", "Method", 1, 12, 14),
+        },
+      })
+      local p = position.new()
+      p:track({ path = "store.rs", lnum = 13 })
+
+      assert.same({ { kind = "here", lnum = 2 } }, p:marks(view(rows, { visible = vim.list_slice(shown(rows), 1, 4) })))
+    end)
+
     it("marks nothing for where you are when a filter hides your row's whole section", function()
       local p = position.new()
       p:track({ path = RS, lnum = 4 })

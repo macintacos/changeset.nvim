@@ -391,6 +391,27 @@ describe("changeset.view", function()
     end)
   end)
 
+  describe("View reveal", function()
+    it("unfolds only the block of two same-named siblings that holds the row", function()
+      -- Two `impl Store` blocks, as Rust splits one type's methods.
+      local rows = Rows.build({ Changes.file("src/store.rs", { 3, 6, 13 }) }, {
+        ["src/store.rs"] = {
+          Changes.sym("impl Store", "Object", 0, 1, 8),
+          Changes.sym("load", "Method", 1, 2, 4),
+          Changes.sym("drop", "Method", 1, 5, 7),
+          Changes.sym("impl Store", "Object", 0, 10, 15),
+          Changes.sym("save", "Method", 1, 12, 14),
+        },
+      })
+      local first, second = rows[1].children[1].children[1], rows[1].children[1].children[2]
+      local v = view.new({ collapsed = { [first.id] = true, [second.id] = true }, chains = {} }, {})
+
+      v:reveal(second.children[1].id)
+
+      assert.same({ "Implementation", "src/store.rs", "impl Store", "impl Store › save" }, show(v, rows))
+    end)
+  end)
+
   describe("View step_out", function()
     it("steps out to the parent when nothing is showing below the row", function()
       local v = fresh()

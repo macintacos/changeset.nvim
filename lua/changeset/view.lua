@@ -270,7 +270,7 @@ end
 function View:reveal(id)
   local unfolded = false
   for folded in pairs(self.folds.collapsed) do
-    if vim.startswith(id, folded .. "\0") then
+    if Rows.under(id, folded) then
       self.folds.collapsed[folded] = nil
       unfolded = true
     end
