@@ -66,17 +66,24 @@ local QUOTED = 4
 ---could act on the wrong line.
 M.UNSAVED = "save the file first: marks move with unsaved edits, review comments don't"
 
+---Whether `buf` has unsaved edits, so a verb that acts by line must refuse; warns `M.UNSAVED` when so.
+---@param buf integer
+---@return boolean
+local function unsaved(buf)
+  if vim.bo[buf].modified then
+    say(vim.log.levels.WARN, M.UNSAVED)
+    return true
+  end
+  return false
+end
+
 ---Whether `path` of `repository` has unsaved edits, so a verb that acts by line must refuse; warns `M.UNSAVED` when so.
 ---@param repository string
 ---@param path string
 ---@return boolean
 function M.unsaved(repository, path)
   local buf = buffers.loaded(vim.fs.joinpath(repository, path))
-  if buf and vim.bo[buf].modified then
-    say(vim.log.levels.WARN, M.UNSAVED)
-    return true
-  end
-  return false
+  return buf ~= nil and unsaved(buf)
 end
 
 ---Asks whether to delete `comment`, quoting `text`, and calls `yes` on a yes.
@@ -322,9 +329,8 @@ local function comment_row(from)
   if not (first and last) then
     return comment_on_file(repository, row.path)
   end
-  local file = buffers.loaded(vim.fs.joinpath(repository, row.path))
-  if file and vim.bo[file].modified then
-    return say(vim.log.levels.WARN, M.UNSAVED)
+  if M.unsaved(repository, row.path) then
+    return
   end
   local existing = existing_on(repository, row.path, first, last)
   if existing then
@@ -342,8 +348,8 @@ local function commentable(repository)
   if not path then
     return say(vim.log.levels.WARN, "run `:Changeset comment new` from a file in %s", repository)
   end
-  if vim.bo.modified then
-    return say(vim.log.levels.WARN, M.UNSAVED)
+  if unsaved(0) then
+    return
   end
   return path
 end
@@ -497,8 +503,8 @@ end
 ---@param repository string
 ---@return changeset.ReviewComment?
 local function on_cursor_line(repository)
-  if vim.bo.modified then
-    return say(vim.log.levels.WARN, M.UNSAVED)
+  if unsaved(0) then
+    return
   end
   local path = file_path(repository, 0)
   local lnum = vim.api.nvim_win_get_cursor(0)[1]
@@ -946,8 +952,8 @@ local function jump(count)
   if #comments == 0 then
     return say(vim.log.levels.INFO, "no review comments in %s", repository)
   end
-  if not from_sidebar and vim.bo[buf].modified then
-    return say(vim.log.levels.WARN, M.UNSAVED)
+  if not from_sidebar and unsaved(buf) then
+    return
   end
   local path = not from_sidebar and file_path(repository, buf) or nil
   local cursor = vim.api.nvim_win_get_cursor(win)[1]
@@ -974,8 +980,8 @@ function M.last_comment()
   if not vim.uv.fs_stat(vim.fs.joinpath(repository, last.path)) then
     return say(vim.log.levels.WARN, "the review comment saved last is on %s, which is gone", last.path)
   end
-  if not from_sidebar and vim.bo[vim.api.nvim_win_get_buf(win)].modified then
-    return say(vim.log.levels.WARN, M.UNSAVED)
+  if not from_sidebar and unsaved(vim.api.nvim_win_get_buf(win)) then
+    return
   end
   if land(win, from_sidebar, repository, last) then
     M.open(last)
