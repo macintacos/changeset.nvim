@@ -1,4 +1,5 @@
----What can be asked of one review comment's lines: its first line, its range, its order and its labels.
+---What can be asked of one review comment's lines: its first line, its range, its order, its labels and where edits
+---move them.
 
 local M = {}
 
@@ -93,6 +94,79 @@ function M.place(comment)
     return "the whole of " .. comment.path
   end
   return ("%s of %s"):format(M.lines_label(M.first(comment), comment.line), comment.path)
+end
+
+---Where line `lnum` stands after the changes `hunks`, `vim.text.diff` indices, made: as a range's first line and as
+---its last. They differ only for a deleted line, the first going to the line after the deletion, the last to the one
+---before it. A line in a rewritten block keeps its place in the block, as far as the new block reaches.
+---@param hunks integer[][]
+---@param lnum integer
+---@return integer first
+---@return integer last
+local function map_line(hunks, lnum)
+  local shift = 0
+  for _, hunk in ipairs(hunks) do
+    local old_start, old_count, new_start, new_count = unpack(hunk)
+    -- An insertion's start is the line it follows.
+    if lnum < old_start or old_count == 0 and lnum == old_start then
+      break
+    end
+    if lnum < old_start + old_count then
+      if new_count == 0 then
+        return new_start + 1, new_start
+      end
+      local line = new_start + math.min(lnum - old_start, new_count - 1)
+      return line, line
+    end
+    shift = shift + new_count - old_count
+  end
+  return lnum + shift, lnum + shift
+end
+
+---`comment`, a line comment, on the lines `hunks` moved its own to, within `line_count`; nil when they stayed. A
+---comment whose lines were all deleted goes to the line after them.
+---@param comment changeset.ReviewComment
+---@param hunks integer[][]
+---@param line_count integer
+---@return changeset.ReviewComment?
+local function moved(comment, hunks, line_count)
+  local line = comment.line --[[@as integer]]
+  local first = map_line(hunks, M.first(comment) --[[@as integer]])
+  local _, last = map_line(hunks, line)
+  last = math.min(math.max(first, last), line_count)
+  first = math.min(first, line_count)
+  if first == M.first(comment) and last == line then
+    return nil
+  end
+  local to = vim.deepcopy(comment)
+  to.line, to.start_line = last, first < last and first or nil
+  return to
+end
+
+---`lines` as one text, each line ended, as `vim.text.diff` takes it.
+---@param lines string[]
+---@return string
+local function text(lines)
+  return table.concat(lines, "\n") .. "\n"
+end
+
+---Each of `comments`, line comments of a file, that the edits from lines `before` to lines `after` moved, with the
+---lines they moved to.
+---@param before string[]
+---@param after string[]
+---@param comments changeset.ReviewComment[]
+---@return changeset.ReviewCommentMove[]
+function M.moves(before, after, comments)
+  local hunks = vim.text.diff(text(before), text(after), { result_type = "indices", algorithm = "histogram" })
+  ---@cast hunks integer[][]
+  local found = {}
+  for _, comment in ipairs(comments) do
+    local to = moved(comment, hunks, #after)
+    if to then
+      found[#found + 1] = { from = comment, to = to }
+    end
+  end
+  return found
 end
 
 return M

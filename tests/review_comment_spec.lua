@@ -81,4 +81,70 @@ describe("changeset.review_comment", function()
     assert.equal("lines 3-5 of a.lua", review_comment.place(RANGE))
     assert.equal("the whole of a.lua", review_comment.place(FILE))
   end)
+
+  describe("moves", function()
+    ---Lines "line 1" to "line `n`".
+    ---@param n integer
+    ---@return string[]
+    local function lines(n)
+      local out = {}
+      for i = 1, n do
+        out[i] = "line " .. i
+      end
+      return out
+    end
+
+    ---`list` with `values` put in at `at`, after the line before it.
+    local function inserted(list, at, values)
+      local out = vim.list_slice(list)
+      for i, value in ipairs(values) do
+        table.insert(out, at + i - 1, value)
+      end
+      return out
+    end
+
+    ---`list` without lines `first` to `last`.
+    local function deleted(list, first, last)
+      return vim.list_extend(vim.list_slice(list, 1, first - 1), vim.list_slice(list, last + 1))
+    end
+
+    local range = { path = "a.lua", line = 10, start_line = 8, body = "hi" }
+
+    it("keeps a range on its first and last lines as lines are added above, inside and below it", function()
+      local after = inserted(lines(20), 11, { "below" })
+      after = inserted(after, 10, { "above the last" })
+      after = inserted(after, 8, { "above the first" })
+
+      assert.same(
+        { { from = range, to = { path = "a.lua", line = 12, start_line = 9, body = "hi" } } },
+        review_comment.moves(lines(20), after, { range })
+      )
+    end)
+
+    it("puts a comment whose lines were all deleted on the line that followed them", function()
+      assert.same(
+        { { from = range, to = { path = "a.lua", line = 8, body = "hi" } } },
+        review_comment.moves(lines(20), deleted(lines(20), 8, 10), { range })
+      )
+    end)
+
+    it("keeps a range on its first line and the one before its last when the last is deleted", function()
+      assert.same(
+        { { from = range, to = { path = "a.lua", line = 9, start_line = 8, body = "hi" } } },
+        review_comment.moves(lines(20), deleted(lines(20), 10, 10), { range })
+      )
+    end)
+
+    it("puts a comment on the file's last line on the new last line when that line is deleted", function()
+      local last = { path = "a.lua", line = 20, body = "hi" }
+      assert.same(
+        { { from = last, to = { path = "a.lua", line = 19, body = "hi" } } },
+        review_comment.moves(lines(20), deleted(lines(20), 20, 20), { last })
+      )
+    end)
+
+    it("leaves out a comment the edits didn't move", function()
+      assert.same({}, review_comment.moves(lines(20), inserted(lines(20), 15, { "below" }), { range }))
+    end)
+  end)
 end)
