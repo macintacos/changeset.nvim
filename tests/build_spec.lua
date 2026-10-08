@@ -632,7 +632,7 @@ describe("changeset.build on a branch measured against its PR's target", functio
 
   it("moves to the default branch once a commit finds the PR closed", function()
     build_on_pr()
-    vim.env.FAKE_GH_PR = ""
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7, state = "CLOSED" })
     commit_file("more.txt")
 
     build.update()
@@ -641,6 +641,20 @@ describe("changeset.build on a branch measured against its PR's target", functio
       local tree = assert(build.current())
       return tree.base ~= parent_base and tree.pr == nil
     end, 25))
+  end)
+
+  it("keeps the tree on the PR's target when gh fails after a commit", function()
+    build_on_pr()
+    -- gh exits non-zero offline, on its timeout, or with an expired login.
+    vim.env.FAKE_GH_PR = ""
+    commit_file("more.txt")
+
+    build.update()
+    vim.wait(1500)
+
+    local tree = assert(build.current())
+    assert.equal(parent_base, tree.base)
+    assert.equal(7, tree.pr)
   end)
 end)
 

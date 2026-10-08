@@ -137,7 +137,10 @@ function M.recheck(root, branch)
   if not targets[key] or asking[key] then
     return
   end
-  Git.pr_target(root, function(target, number)
+  Git.pr_target(root, function(target, number, failed)
+    if failed then
+      return
+    end
     targets[key] = target and { target = target, number = number } or nil
     local pr = targets[key]
     Git.async(function()

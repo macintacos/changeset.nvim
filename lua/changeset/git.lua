@@ -250,11 +250,12 @@ end
 
 ---Ask gh which branch the current branch's open PR targets.
 ---@param cwd string? Repository to ask about; Neovim's own directory when absent.
----@param cb fun(target: string?, number: integer?) Both nil without an open PR, or when gh fails or times out.
+---@param cb fun(target: string?, number: integer?, failed: boolean) `target` and `number` nil without an open PR, or
+---when gh fails or times out; `failed` true for the failure, which says nothing about the PR.
 function M.pr_target(cwd, cb)
   if vim.fn.executable("gh") == 0 then
     return vim.schedule(function()
-      cb(nil)
+      cb(nil, nil, true)
     end)
   end
   M.system(
@@ -262,8 +263,9 @@ function M.pr_target(cwd, cb)
     { cwd = cwd, text = true, timeout = 5000 },
     function(res)
       local ok, pr = pcall(vim.json.decode, res.stdout or "")
-      local open = res.code == 0 and ok and type(pr) == "table" and pr.state == "OPEN"
-      cb(open and pr.baseRefName or nil, open and pr.number or nil)
+      local answered = res.code == 0 and ok and type(pr) == "table"
+      local open = answered and pr.state == "OPEN"
+      cb(open and pr.baseRefName or nil, open and pr.number or nil, not answered)
     end
   )
 end
