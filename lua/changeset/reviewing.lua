@@ -145,7 +145,7 @@ function M.open(comment)
   local kind = comment.draft and "Edit draft review comment · " or "Edit review comment · "
   review_comment_window.open({
     line = last and not window.is_focused() and last or vim.api.nvim_win_get_cursor(0)[1],
-    title = kind .. lines_label(comment.start_line or last, last),
+    title = kind .. lines_label(review_comment.first(comment), last),
     icon = icon_of(comment),
     save_desc = "Save the review comment",
     close_desc = "Close, keeping the text as a draft, and select its block",
@@ -220,7 +220,7 @@ end
 local function open_new(repository, comment, line)
   review_comment_window.open({
     line = line,
-    title = "Review comment · " .. lines_label(comment.start_line or comment.line, comment.line),
+    title = "Review comment · " .. lines_label(review_comment.first(comment), comment.line),
     icon = icon_of(comment),
     save_desc = "Save the review comment",
     close_desc = "Close, keeping the text as a draft, and select its block",
@@ -279,7 +279,7 @@ end
 local function row_lines(row)
   local comment = row.review_comment
   if comment then
-    return comment.start_line or comment.line, comment.line
+    return review_comment.first(comment), comment.line
   end
   if row.kind == "orphan" then
     return row.range[1], row.range[2]
@@ -460,7 +460,7 @@ function M.from_window(open, name, run)
     local last = open.comment.line
     -- Under a sidebar row, the comment's line is not one of the window's.
     if last and vim.bo[open.source_buf].buftype == "" then
-      local lnum = math.min(open.comment.start_line or last, vim.api.nvim_buf_line_count(0))
+      local lnum = math.min(review_comment.first(open.comment) --[[@as integer]], vim.api.nvim_buf_line_count(0))
       vim.api.nvim_win_set_cursor(open.source, { lnum, 0 })
     end
     run()
@@ -592,7 +592,7 @@ end
 ---@param comment changeset.ReviewComment
 ---@return integer
 local function first_line(comment)
-  return comment.start_line or comment.line or 0
+  return review_comment.first(comment) or 0
 end
 
 ---`comments` in the order every view lists them in.
@@ -661,7 +661,7 @@ end
 local function block(repository, comment, read)
   local parts = { vim.fs.joinpath(repository, location(comment)) }
   local last = comment.line
-  local lines = last and read(comment.path, comment.start_line or last, last)
+  local lines = last and read(comment.path, review_comment.first(comment) --[[@as integer]], last)
   if lines then
     local fence = ("`"):rep(longest_backticks(lines) + 1)
     parts[#parts + 1] = fence .. (vim.filetype.match({ filename = comment.path }) or "")

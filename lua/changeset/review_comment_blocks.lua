@@ -117,7 +117,7 @@ local function box(comment, widest, is_parked)
   local edge = comment.draft and DASHED or SOLID
   local plain_border = comment.draft and render.BLOCK_DRAFT_HL or render.BLOCK_BORDER_HL
   local border = is_parked and render.BLOCK_PARKED_HL or plain_border
-  local label = review_comment.lines_label(comment.start_line or comment.line, comment.line)
+  local label = review_comment.lines_label(review_comment.first(comment), comment.line)
   -- Named as hover names it.
   local title = (comment.draft and " Draft review comment · " or " Review comment · ") .. label .. " "
   local text = dialog.wrap(vim.trim((comment.body:gsub("\r\n", "\n"))), math.max(widest - 2, 1))

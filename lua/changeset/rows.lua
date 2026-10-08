@@ -686,7 +686,7 @@ function M.comments(review_comments)
     children = vim.tbl_map(function(comment)
       return {
         id = comment.line
-            and ("%s\0%s:%d-%d"):format(COMMENTS_ID, comment.path, comment.start_line or comment.line, comment.line)
+            and ("%s\0%s:%d-%d"):format(COMMENTS_ID, comment.path, review_comment.first(comment), comment.line)
           or ("%s\0%s"):format(COMMENTS_ID, comment.path),
         kind = "comment",
         depth = 1,

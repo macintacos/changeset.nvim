@@ -50,7 +50,7 @@ local drawn_for = {}
 ---@param buf integer
 ---@param comment changeset.ReviewComment
 local function mark(buf, comment)
-  local row = (comment.start_line or comment.line) - 1
+  local row = review_comment.first(comment) - 1
   local bubble, hl = M.glyph(comment)
   local circle = comment.draft and render.REVIEW_COMMENT_DRAFT_CIRCLE or render.REVIEW_COMMENT_CIRCLE
   vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
@@ -112,11 +112,11 @@ end
 ---@return changeset.ReviewComment?
 local function moved(comment, hunks, line_count)
   local line = comment.line --[[@as integer]]
-  local first = map_line(hunks, comment.start_line or line)
+  local first = map_line(hunks, review_comment.first(comment) --[[@as integer]])
   local _, last = map_line(hunks, line)
   last = math.min(math.max(first, last), line_count)
   first = math.min(first, line_count)
-  if first == (comment.start_line or line) and last == line then
+  if first == review_comment.first(comment) and last == line then
     return nil
   end
   local to = vim.deepcopy(comment)
@@ -217,7 +217,7 @@ local function hover_text(fname, lnum)
   end
   local entries = {}
   for _, comment in ipairs(comments) do
-    local first, last = comment.start_line or comment.line, comment.line
+    local first, last = review_comment.first(comment), comment.line
     if first <= lnum and lnum <= last then
       local body = comment.body:gsub("\r\n", "\n")
       local heading = comment.draft and "Draft review comment" or "Review comment"
@@ -304,7 +304,7 @@ local function warn_merged(merged)
     vim.notify(
       ("Changeset: merged %d review comments on %s of %s%s"):format(
         merge.count,
-        review_comment.lines_label(comment.start_line or comment.line, comment.line),
+        review_comment.lines_label(review_comment.first(comment), comment.line),
         comment.path,
         comment.draft and " into a draft" or ""
       ),
