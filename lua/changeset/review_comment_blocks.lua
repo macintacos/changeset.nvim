@@ -272,24 +272,6 @@ local function unpark()
   end
 end
 
----Rows of the current window from its first screen row to the end of line `line`, its filler included.
----@param view vim.fn.winsaveview.ret
----@param line integer
----@return integer
-local function rows_through(view, line)
-  local hidden = vim.api.nvim_win_text_height(0, { start_row = view.topline - 1, end_row = view.topline - 1 }).fill
-    - view.topfill
-  return vim.api.nvim_win_text_height(0, { start_row = view.topline - 1, end_row = line - 1 }).all - hidden
-end
-
----Rows line `line` takes, its filler above it left out.
----@param line integer
----@return integer
-local function text_rows(line)
-  local height = vim.api.nvim_win_text_height(0, { start_row = line - 1, end_row = line - 1 })
-  return height.all - height.fill
-end
-
 ---Screen rows, from the top of the current window, of the first and last row of the parked block in `state`; 0
 ---for both while it is above the window.
 ---@param state changeset.ParkedBlock
@@ -311,12 +293,16 @@ local function block_rows(state, view)
   local next_line = line + 1
   local last
   if next_line > vim.api.nvim_buf_line_count(state.buf) and line >= view.topline then
-    last = rows_through(view, line) + above + height
+    last = review_comment_window.rows_through(0, view, line) + above + height
   elseif next_line >= view.topline then
     -- The stack heads the filler above the next line, ahead of other marks' virtual lines there, such as gitsigns'
     -- deleted lines.
     local filler = vim.api.nvim_win_text_height(0, { start_row = line, end_row = line }).fill
-    last = rows_through(view, next_line) - text_rows(next_line) - filler + above + height
+    last = review_comment_window.rows_through(0, view, next_line)
+      - review_comment_window.rows(0, next_line)
+      - filler
+      + above
+      + height
   else
     return 0, 0
   end
@@ -332,8 +318,8 @@ local function reveal(state)
     for _ = 1, win_height do
       local view = vim.fn.winsaveview()
       local first, last = block_rows(state, view)
-      local cursor_last = rows_through(view, at)
-      local cursor_first = cursor_last - text_rows(at) + 1
+      local cursor_last = review_comment_window.rows_through(0, view, at)
+      local cursor_first = cursor_last - review_comment_window.rows(0, at) + 1
       if last > win_height and first > 1 and cursor_first > 1 then
         vim.cmd.normal({ vim.keycode("<C-e>"), bang = true })
       elseif first < 1 and cursor_last < win_height then
@@ -433,7 +419,7 @@ local function step(state, down)
     vim.api.nvim_win_set_cursor(0, { at, math.max(col - 1, 0) })
     vim.fn.winrestview({ curswant = state.curswant })
     -- Up lands on the screen row next to the block, a wrapped line's last, at the wanted column within that row.
-    local rows = vim.wo.wrap and text_rows(at) or 1
+    local rows = vim.wo.wrap and review_comment_window.rows(0, at) or 1
     if not down and rows > 1 and vim.fn.foldclosed(line) == -1 then
       local last = math.max(#vim.api.nvim_get_current_line() - 1, 0)
       vim.api.nvim_win_set_cursor(0, { at, last })

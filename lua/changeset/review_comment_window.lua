@@ -133,13 +133,25 @@ local function window_desc(key)
   return "Keep a draft, then: " .. key.desc
 end
 
----Rows `line` takes in `win` once wrapped, less the virtual lines above it.
+---Rows `line` takes in `win` once wrapped, less the virtual lines above it. For changeset's own modules.
 ---@param win integer
 ---@param line integer
 ---@return integer
-local function rows(win, line)
+function M.rows(win, line)
   local height = vim.api.nvim_win_text_height(win, { start_row = line - 1, end_row = line - 1 })
   return height.all - height.fill
+end
+
+---Rows of `win` from its first screen row to the end of line `line`, its filler included. For changeset's own modules.
+---@param win integer
+---@param view vim.fn.winsaveview.ret `win`'s view.
+---@param line integer
+---@return integer
+function M.rows_through(win, view, line)
+  -- The filler above the top line shows only `topfill` deep.
+  local hidden = vim.api.nvim_win_text_height(win, { start_row = view.topline - 1, end_row = view.topline - 1 }).fill
+    - view.topfill
+  return vim.api.nvim_win_text_height(win, { start_row = view.topline - 1, end_row = line - 1 }).all - hidden
 end
 
 ---Whether the row the box starts on, past the gap under `line`'s last row, is inside `win`.
@@ -152,10 +164,8 @@ local function under_in_view(win, line)
     return false
   end
   -- Counted in rows rather than read off a screen position: a line running past the edge of a window that doesn't
-  -- wrap has its end off screen. The count takes in the filler above the top line, which shows only `topfill` deep.
-  local through = vim.api.nvim_win_text_height(win, { start_row = view.topline - 1, end_row = line - 1 }).all
-  local filler = vim.api.nvim_win_text_height(win, { start_row = view.topline - 1, end_row = view.topline - 1 }).fill
-  return through - (filler - view.topfill) + GAP < vim.api.nvim_win_get_height(win)
+  -- wrap has its end off screen.
+  return M.rows_through(win, view, line) + GAP < vim.api.nvim_win_get_height(win)
 end
 
 ---Scroll `win` the least that shows `line` with the box under it, moving its cursor to `line` if it must scroll.
@@ -245,7 +255,7 @@ function M.open(opts)
       win = source,
       bufpos = { line() - 1, 0 },
       -- bufpos is the line's first row; a wrapped line's other rows come before the box.
-      row = rows(source, line()) + GAP,
+      row = M.rows(source, line()) + GAP,
       col = GAP,
       width = width,
       -- Neovim cuts a footer too wide from its left, which would name another key.
