@@ -934,12 +934,12 @@ describe("changeset.render", function()
 
     it("names the branch and the ref it is compared against, right after the badge", function()
       local footer = shown({ file = 3 })
-      local branch = assert(footer:find(" feature", 1, true))
-      local ref = assert(footer:find(" origin/trunk", 1, true))
+      local branch_at = assert(footer:find(" feature", 1, true))
+      local ref_at = assert(footer:find(" origin/trunk", 1, true))
 
-      assert.truthy(footer:find("Changeset", 1, true) < branch)
-      assert.truthy(branch < ref)
-      assert.truthy(ref < footer:find("file 3 of 12", 1, true))
+      assert.truthy(footer:find("Changeset", 1, true) < branch_at)
+      assert.truthy(branch_at < ref_at)
+      assert.truthy(ref_at < footer:find("file 3 of 12", 1, true))
     end)
 
     it("escapes % in the branch so the statusline does not read it as an item", function()
