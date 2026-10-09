@@ -466,7 +466,14 @@ function M.footer()
     return ""
   end
   local file, files = view.position(state.view:visible(), lnum)
-  return render.footer({ file = file, files = files, query = state.view:query(), keys = bound_keys })
+  return render.footer({
+    file = file,
+    files = files,
+    query = state.view:query(),
+    keys = bound_keys,
+    branch = state.tree.branch,
+    ref = state.tree.ref,
+  })
 end
 
 ---Public API: the file rows under the sidebar's sections, less the kinds it hides, for the current buffer's repository.

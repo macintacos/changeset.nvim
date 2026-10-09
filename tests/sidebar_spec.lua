@@ -221,6 +221,15 @@ describe("changeset sidebar", function()
     assert.truthy(vim.wo[window.win()].winbar:find("trunk", 1, true))
   end)
 
+  it("names the branch and what it is compared against in the footer", function()
+    open_sidebar()
+    local win = assert(window.win())
+
+    local footer = vim.api.nvim_eval_statusline(vim.wo[win].statusline, { winid = win }).str
+    assert.truthy(footer:find("feature", 1, true))
+    assert.truthy(footer:find("trunk", 1, true))
+  end)
+
   it("totals the branch above the tree, scrolled into view", function()
     local buf = open_sidebar()
 

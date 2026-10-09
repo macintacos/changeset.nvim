@@ -923,12 +923,27 @@ describe("changeset.render", function()
     ---@return string
     local function shown(info)
       local keys = { jump = "<CR>", filter = "f", filter_kinds = "F", help = "?" }
-      local full = vim.tbl_extend("force", { files = 12, query = "", keys = keys }, info)
+      local full =
+        vim.tbl_extend("force", { files = 12, query = "", keys = keys, branch = "feature", ref = "origin/trunk" }, info)
       return vim.api.nvim_eval_statusline(render.footer(full), { maxwidth = 120 }).str
     end
 
     it("says which of the files shown the cursor is in", function()
       assert.truthy(shown({ file = 3 }):find("file 3 of 12", 1, true))
+    end)
+
+    it("names the branch and the ref it is compared against, right after the badge", function()
+      local footer = shown({ file = 3 })
+      local branch = assert(footer:find(" feature", 1, true))
+      local ref = assert(footer:find(" origin/trunk", 1, true))
+
+      assert.truthy(footer:find("Changeset", 1, true) < branch)
+      assert.truthy(branch < ref)
+      assert.truthy(ref < footer:find("file 3 of 12", 1, true))
+    end)
+
+    it("escapes % in the branch so the statusline does not read it as an item", function()
+      assert.truthy(shown({ branch = "50%-off" }):find("50%-off", 1, true))
     end)
 
     it("leaves the position out when the cursor is in no file", function()
