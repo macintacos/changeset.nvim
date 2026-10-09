@@ -1,4 +1,4 @@
----The text a Review is pasted as: a block per review comment, its backticked place and its feedback.
+---The text a Review is pasted as: the configured header, a block per review comment, then the footer.
 local review_comment = require("changeset.review_comment")
 
 local M = {}
@@ -17,8 +17,8 @@ local function block(repository, comment)
   return ("`%s`\nFeedback: %s"):format(place, (comment.body:gsub("%s+$", "")))
 end
 
----The text a review is pasted as: a block per comment, its backticked `path:Lfirst-Llast` then `Feedback:` and its
----body, in `review_comment.before`'s order, between `framing`'s header and footer, a blank line between each part.
+---The text a review is pasted as: `framing`'s header, a block per comment in `review_comment.before`'s order, then its
+---footer, a blank line apart; a blank header or footer adds nothing.
 ---@param repository string
 ---@param comments changeset.ReviewComment[]
 ---@param framing changeset.Config.Review

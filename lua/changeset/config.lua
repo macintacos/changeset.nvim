@@ -36,8 +36,8 @@ local M = {}
 ---@field enabled? boolean Turn PR Review Mode on for every branch but the default. Only a restart turns it off again. Default false.
 
 ---@class changeset.Config.Review
----@field header? string Text pasted above the review, a blank line apart; an empty one adds nothing. Default "".
----@field footer? string Text pasted below the review, a blank line apart; an empty one adds nothing. Default "".
+---@field header? string Text pasted above the review, trimmed, a blank line apart; a blank one adds nothing. Default "".
+---@field footer? string Text pasted below the review, trimmed, a blank line apart; a blank one adds nothing. Default "".
 
 ---@class changeset.Config.ReviewComment
 ---@field save? string[] Keys that save a review comment and close its window, in insert and normal mode. Default { "<C-CR>", "<C-s>" }.

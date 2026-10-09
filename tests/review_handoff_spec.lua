@@ -3,6 +3,7 @@ local Fixture = require("support.git")
 local Notify = require("support.notify")
 local Paths = require("changeset.paths")
 local comment_store = require("changeset.comment_store")
+local config = require("changeset.config")
 
 describe("changeset.review_handoff", function()
   local handoff, restore_notify, notes, windows, dir, tree, focused, echoes, echo
@@ -558,6 +559,7 @@ describe("changeset.review_handoff", function()
 
     after_each(function()
       vim.fn.has = has
+      config.setup()
     end)
 
     it(
@@ -572,10 +574,7 @@ describe("changeset.review_handoff", function()
 
         handoff.yank()
 
-        assert.equal(
-          require("changeset.review_text").text(dir, { comment() }, require("changeset.config").get().review),
-          vim.fn.getreg('"')
-        )
+        assert.equal(require("changeset.review_text").text(dir, { comment() }, config.get().review), vim.fn.getreg('"'))
         assert.same({ comment() }, comment_store.list(dir))
         assert.equal(vim.log.levels.INFO, notes[1].level)
         assert.truthy(notes[1].msg:find('"', 1, true))
@@ -586,12 +585,11 @@ describe("changeset.review_handoff", function()
       vim.fn.has = function(feature)
         return feature == "clipboard" and 0 or has(feature)
       end
-      require("changeset.config").setup({ review = { header = "H", footer = "F" } })
+      config.setup({ review = { header = "H", footer = "F" } })
       edit_file()
       comment_store.keep(dir, comment())
 
       handoff.yank()
-      require("changeset.config").setup()
 
       local text = vim.fn.getreg('"')
       assert.equal("H\n\n", text:sub(1, 3))

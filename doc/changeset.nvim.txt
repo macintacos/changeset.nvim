@@ -965,7 +965,8 @@ one line, `:L12-L13` for a range and the bare path for a whole file, then
     Feedback: Why read the reflog rather than the config?
 <
 |changeset-option-review.header| and |changeset-option-review.footer| add
-text above and below it, such as a skill to invoke.
+text above and below it, such as a skill to invoke and standing
+instructions.
 
 DIALOGS                                                    *changeset-dialogs*
 
@@ -1055,6 +1056,7 @@ Pass |changeset.setup()| the options you change. These are the defaults: >lua
       },
       layout = { min_file_width = 80 },
       pr_review = { enabled = false },
+      review = { header = "", footer = "" },
       review_comment = {
         save = { "<C-CR>", "<C-s>" },
         sign = true,
@@ -1083,12 +1085,13 @@ pr_review.enabled                         *changeset-option-pr_review.enabled*
 	it off again takes a restart.
 
 review.header                                 *changeset-option-review.header*
-	String. Default `""`. Text pasted above the review, a blank line
-	apart (|changeset-review-format|). An empty one adds nothing.
+	String. Default `""`. Text pasted above the review, trimmed, a blank
+	line apart (|changeset-review-format|). An empty or blank one adds
+	nothing.
 
 review.footer                                 *changeset-option-review.footer*
-	String. Default `""`. Text pasted below the review, a blank line
-	apart. An empty one adds nothing.
+	String. Default `""`. Text pasted below the review, trimmed, a blank
+	line apart. An empty or blank one adds nothing.
 
 review_comment.save                     *changeset-option-review_comment.save*
 	List of keys. Default `{ "<C-CR>", "<C-s>" }`. The keys that save a

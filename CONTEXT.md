@@ -108,7 +108,8 @@ _Avoid_: send, post; "submit" never means GitHub here
 
 **Review text**:
 What a review is pasted or copied as: a part for each saved review comment, in order. Each part gives the comment's
-place by absolute path, its lines fenced, and its body.
+place as a backticked absolute `path:Lfirst-Llast` (`path:Lline` for one line, the bare path for a whole file), then
+`Feedback:` and its body. The configured header and footer, when set, go above and below the parts.
 _Avoid_: payload, prompt
 
 **Hand-off**:

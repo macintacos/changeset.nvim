@@ -809,7 +809,9 @@ path for a whole file, then `Feedback:` and its body. The path is absolute, beca
 agent's pane can run in another directory or worktree than the repository's. The block
 quotes no lines: the agent opens the path and range itself, so the paste stays short.
 Blocks go in the Comments section's order, a blank line apart, a whole file's ahead of the
-blocks on its lines.
+blocks on its lines. `review.header` and `review.footer` frame the paste with what every
+review repeats, such as a skill to invoke or standing instructions; what this review alone
+needs is still typed after the paste. A blank one leaves no blank line behind.
 
 The paste is left unsent and the agent's pane focused. The review is the start of a
 conversation, not all of it: the user adds what the comments don't say, such as what to
