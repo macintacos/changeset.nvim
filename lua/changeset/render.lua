@@ -44,6 +44,8 @@ local symbols = require("changeset.symbols")
 ---@field files integer  Files shown.
 ---@field query string   Filter in force; empty for none.
 ---@field keys changeset.Config.Keymaps The keys the sidebar bound.
+---@field branch string Branch checked out; "HEAD" when detached.
+---@field ref string Ref the tree is compared against, e.g. "origin/trunk".
 
 ---@class changeset.Band The strip over a window the sidebar is previewing into.
 ---@field icon string       Glyph for the previewed file's type.
@@ -114,8 +116,9 @@ local RAIL = "▎"
 -- Opens every tree row, so its icons line up under the header's.
 local MARGIN = " "
 
--- The branch and diff glyphs are the ones mini.statusline already draws.
+-- The branch and diff glyphs are the ones mini.statusline already draws; the compare glyph is their devicon sibling.
 local BRANCH_ICON = ""
+local COMPARE_ICON = ""
 local PR_ICON = ""
 local FILES_ICON = ""
 local COMMIT_ICON = ""
@@ -661,9 +664,20 @@ end
 ---@param info changeset.Footer
 ---@return string
 function M.footer(info)
-  local parts = { ("%%#%s# Changeset "):format(highlights.BADGE_HL) }
+  local remote = info.ref:match("^origin/") or ""
+  local parts = {
+    ("%%#%s# Changeset "):format(highlights.BADGE_HL),
+    ("%%#%s# %s %%#%s#%s"):format(highlights.FOOTER_HL, BRANCH_ICON, highlights.FOOTER_KEY_HL, escaped(info.branch)),
+    ("%%#%s#  %s %s%%#%s#%s"):format(
+      highlights.FOOTER_HL,
+      COMPARE_ICON,
+      remote,
+      highlights.FOOTER_KEY_HL,
+      escaped(info.ref:sub(#remote + 1))
+    ),
+  }
   if info.file then
-    parts[#parts + 1] = ("%%#%s# file %d of %d"):format(highlights.FOOTER_HL, info.file, info.files)
+    parts[#parts + 1] = ("%%#%s#  file %d of %d"):format(highlights.FOOTER_HL, info.file, info.files)
   end
   if info.query ~= "" then
     parts[#parts + 1] = ("%%#%s#  %s %%#%s#%s"):format(

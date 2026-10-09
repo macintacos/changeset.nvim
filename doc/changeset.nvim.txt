@@ -406,7 +406,8 @@ number when there is one, the number of files and commits, and the `+N -N`
 lines added and removed. While symbols are read it shows
 `⋯ reading symbols 3/10` instead.
 
-The footer shows which file of how many the cursor is in, the filter
+The footer names the branch you are on (`HEAD` when detached) and the ref it
+is compared against, then which file of how many the cursor is in, the filter
 (|changeset-filter|), and the keys `<CR>`, `f`, `F` and `?`, under the names
 you bound them to.
 

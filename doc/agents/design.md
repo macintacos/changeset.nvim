@@ -924,13 +924,14 @@ leaving the last preview standing.
 ### Footer
 
 ```text
- Changeset  file 3 of 12  󰈲 sess           <CR> open  f filter  F kinds  ? all keys
+ Changeset   feature   origin/trunk  file 3 of 12  󰈲 sess      <CR> open  f filter  F kinds  ? all keys
 ```
 
 The sidebar's own `statusline`. With `laststatus=3` a window's own statusline is drawn
 only while that window has focus, so it takes the global bar's place exactly when the
 sidebar's keys are worth naming, and hands it back the moment you leave. The badge is the
-header glyph's `Directory` colour, reversed, standing where the mode badge would. The
+header glyph's `Directory` colour, reversed, standing where the mode badge would.
+Right after it come the branch you are on and the ref the tree is compared against: nothing else on screen names the branch, and repeating the header's ref makes the pair read as one comparison. Both sit left of `%<`, so a bar too narrow gives up the keys before them. The
 position counts the files on screen — a folded section's files are not — and names no file
 while the cursor is on a section header or a comment row. A file shown in more than one section counts
 once, at its first row. The filter in force is named, since once its prompt closes the lit
