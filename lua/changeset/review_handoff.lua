@@ -1,8 +1,8 @@
 ---`:Changeset review submit`, `restore`, `yank` and `abandon` and `:Changeset comment list`, which act on the whole
 ---Review: paste it into an agent's prompt, bring a submitted batch back, copy it, clear it, or list it.
 local Paths = require("changeset.paths")
-local buffers = require("changeset.buffers")
 local comment_store = require("changeset.comment_store")
+local config = require("changeset.config")
 local dialog = require("changeset.dialog")
 local highlights = require("changeset.highlights")
 local origin = require("changeset.origin")
@@ -88,18 +88,6 @@ function M.abandon()
   end)
 end
 
----Reads lines of `repository`'s files from their loaded buffers, which hold unsaved edits, else from disk.
----@param repository string
----@return changeset.review_text.ReadLines
-local function reader(repository)
-  return function(path, first, last)
-    local lines = buffers.lines(vim.fs.joinpath(repository, path), first, last)
-    if #lines == last - first + 1 then
-      return lines
-    end
-  end
-end
-
 -- How long a submit counts as in flight with no answer: past herdr's round trips, for a picker closed under
 -- `noautocmd`, whose callback never comes.
 local SUBMIT_TIMEOUT = 20000
@@ -125,7 +113,7 @@ local function saved_review(repository, verb)
     end
     return nil, drafts, ""
   end
-  return comments, drafts, review_text.text(repository, comments, reader(repository))
+  return comments, drafts, review_text.text(repository, comments, config.get().review)
 end
 
 ---Pastes the repository's saved review comments into an agent's prompt through herdr, then takes the ones pasted out

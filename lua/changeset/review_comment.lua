@@ -88,8 +88,8 @@ function M.span(comment)
   return first < comment.line and ("%d-%d"):format(first, comment.line) or tostring(comment.line)
 end
 
----Where `comment` sits, as the Comments row and the pasted review name it: "a.lua:4", "a.lua:3-5" for a range, or
----"a.lua" for the whole file.
+---Where `comment` sits, as the Comments row names it: "a.lua:4", "a.lua:3-5" for a range, or "a.lua" for the
+---whole file.
 ---@param comment changeset.ReviewComment
 ---@return string
 function M.location(comment)

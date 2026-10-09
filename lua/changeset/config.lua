@@ -6,6 +6,7 @@ local M = {}
 ---@field keymaps? changeset.Config.Keymaps The sidebar's keys, each a key or `false` to leave it unbound.
 ---@field layout? changeset.Config.Layout
 ---@field pr_review? changeset.Config.PrReview
+---@field review? changeset.Config.Review
 ---@field review_comment? changeset.Config.ReviewComment
 
 ---@class changeset.Config.Keymaps
@@ -34,6 +35,10 @@ local M = {}
 ---@class changeset.Config.PrReview
 ---@field enabled? boolean Turn PR Review Mode on for every branch but the default. Only a restart turns it off again. Default false.
 
+---@class changeset.Config.Review
+---@field header? string Text pasted above the review, trimmed, a blank line apart; a blank one adds nothing. Default "".
+---@field footer? string Text pasted below the review, trimmed, a blank line apart; a blank one adds nothing. Default "".
+
 ---@class changeset.Config.ReviewComment
 ---@field save? string[] Keys that save a review comment and close its window, in insert and normal mode. Default { "<C-CR>", "<C-s>" }.
 ---@field sign? boolean Put a comment bubble in the sign column on each review comment's first line; `false` leaves it to a statuscolumn that draws `require("changeset").bubble()`. Default true.
@@ -44,6 +49,7 @@ local M = {}
 ---@field keymaps changeset.Config.Keymaps
 ---@field layout changeset.Config.Layout
 ---@field pr_review changeset.Config.PrReview
+---@field review changeset.Config.Review
 ---@field review_comment changeset.Config.ReviewComment
 
 ---@type changeset.Options
@@ -70,6 +76,7 @@ local DEFAULTS = {
   },
   layout = { min_file_width = 80 },
   pr_review = { enabled = false },
+  review = { header = "", footer = "" },
   review_comment = { save = { "<C-CR>", "<C-s>" }, sign = true, blocks = false },
 }
 
@@ -82,6 +89,7 @@ local function validate(options)
   vim.validate("keymaps", options.keymaps, "table")
   vim.validate("layout", options.layout, "table")
   vim.validate("pr_review", options.pr_review, "table")
+  vim.validate("review", options.review, "table")
   vim.validate("review_comment", options.review_comment, "table")
   for action, lhs in pairs(options.keymaps) do
     vim.validate("keymaps." .. action, lhs, function(v)
@@ -90,6 +98,8 @@ local function validate(options)
   end
   vim.validate("layout.min_file_width", options.layout.min_file_width, "number")
   vim.validate("pr_review.enabled", options.pr_review.enabled, "boolean")
+  vim.validate("review.header", options.review.header, "string")
+  vim.validate("review.footer", options.review.footer, "string")
   vim.validate("review_comment.save", options.review_comment.save, function(v)
     -- `vim.islist({})` is true, and an empty list would leave no way to save.
     return vim.islist(v)

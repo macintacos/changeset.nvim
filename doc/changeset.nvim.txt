@@ -955,21 +955,18 @@ recorded branches. Other branches' comments and the submitted batches stay.
 THE PASTED REVIEW                                    *changeset-review-format*
 
 The review holds one block per comment, in the Comments section's order.
-Each block names its place by absolute path, quotes its lines as they are now,
-unsaved edits included, in a fence marked with the file's language, and ends
-with the comment's text: >
-    /home/me/changeset.nvim/lua/changeset/git.lua:12-13
-    ```lua
-    local function parent(cwd, branch)
-      local log = M.lines({ "git", "reflog" }, cwd)
-    ```
-    Why read the reflog rather than the config?
+Each block is the comment's absolute path and lines in backticks, `:L40` for
+one line, `:L12-L13` for a range and the bare path for a whole file, then
+`Feedback:` and the comment's text: >
+    `/home/me/changeset.nvim/README.md`
+    Feedback: Say what it maps.
 
-    /home/me/changeset.nvim/README.md
-    Say what it maps.
+    `/home/me/changeset.nvim/lua/changeset/git.lua:L12-L13`
+    Feedback: Why read the reflog rather than the config?
 <
-A whole file's block, and a block whose lines can't be read, as when its file
-is gone, has no quote.
+|changeset-option-review.header| and |changeset-option-review.footer| add
+text above and below it, such as a skill to invoke and standing
+instructions.
 
 DIALOGS                                                    *changeset-dialogs*
 
@@ -1059,6 +1056,7 @@ Pass |changeset.setup()| the options you change. These are the defaults: >lua
       },
       layout = { min_file_width = 80 },
       pr_review = { enabled = false },
+      review = { header = "", footer = "" },
       review_comment = {
         save = { "<C-CR>", "<C-s>" },
         sign = true,
@@ -1085,6 +1083,15 @@ pr_review.enabled                         *changeset-option-pr_review.enabled*
 	Boolean. Default `false`. Turn PR Review Mode on for every branch but
 	the default (|changeset-pr-review|). It takes effect at once; turning
 	it off again takes a restart.
+
+review.header                                 *changeset-option-review.header*
+	String. Default `""`. Text pasted above the review, trimmed, a blank
+	line apart (|changeset-review-format|). An empty or blank one adds
+	nothing.
+
+review.footer                                 *changeset-option-review.footer*
+	String. Default `""`. Text pasted below the review, trimmed, a blank
+	line apart. An empty or blank one adds nothing.
 
 review_comment.save                     *changeset-option-review_comment.save*
 	List of keys. Default `{ "<C-CR>", "<C-s>" }`. The keys that save a

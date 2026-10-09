@@ -3,6 +3,7 @@ local Fixture = require("support.git")
 local Notify = require("support.notify")
 local Paths = require("changeset.paths")
 local comment_store = require("changeset.comment_store")
+local config = require("changeset.config")
 
 describe("changeset.review_handoff", function()
   local handoff, restore_notify, notes, windows, dir, tree, focused, echoes, echo
@@ -143,14 +144,13 @@ describe("changeset.review_handoff", function()
       }
     end)
 
-    it("hands send the review, the buffer's unsaved lines included", function()
+    it("hands send the review", function()
       edit_file()
-      vim.api.nvim_buf_set_lines(0, 3, 4, false, { "unsaved" })
       comment_store.keep(dir, comment())
 
       handoff.submit()
 
-      assert.equal(dir .. "/a.lua:4\n```lua\nunsaved\n```\nhi", sent[1])
+      assert.equal("`" .. dir .. "/a.lua:L4`\nFeedback: hi", sent[1])
     end)
 
     it("refuses a second submit while the first is being delivered, saying so", function()
@@ -209,18 +209,6 @@ describe("changeset.review_handoff", function()
       assert.same({ title = "Submit 2 review comments", root = dir }, opts)
     end)
 
-    it("quotes an unloaded file from disk beside a loaded file whose name it prefixes", function()
-      edit_file()
-      vim.fn.writefile({ "js 1", "js 2", "js 3", "js 4" }, dir .. "/index.js")
-      vim.fn.writefile({ "json 1", "json 2", "json 3", "json 4" }, dir .. "/index.json")
-      vim.cmd.edit(dir .. "/index.json")
-      comment_store.keep(dir, comment({ path = "index.js" }))
-
-      handoff.submit()
-
-      assert.equal(dir .. "/index.js:4\n```javascript\njs 4\n```\nhi", sent[1])
-    end)
-
     it("warns that the sent comments are still listed when they can't be removed", function()
       edit_file()
       comment_store.keep(dir, comment())
@@ -235,15 +223,6 @@ describe("changeset.review_handoff", function()
       assert.equal(vim.log.levels.WARN, notes[#notes].level)
     end)
 
-    it("drops the fence for a file that is gone", function()
-      edit_file()
-      comment_store.keep(dir, comment({ path = "gone.lua" }))
-
-      handoff.submit()
-
-      assert.equal(dir .. "/gone.lua:4\nhi", sent[1])
-    end)
-
     it("sends only saved comments, keeping the drafts and saying how many stay", function()
       edit_file()
       comment_store.keep(dir, comment())
@@ -252,7 +231,7 @@ describe("changeset.review_handoff", function()
 
       handoff.submit()
 
-      assert.equal(dir .. "/a.lua:4\n```lua\nx\n```\nhi", sent[1])
+      assert.equal("`" .. dir .. "/a.lua:L4`\nFeedback: hi", sent[1])
       assert.same({ comment({ line = 7, body = "draft", draft = true }) }, comment_store.list(dir))
       assert.truthy(notes[#notes].msg:find("1 draft stays", 1, true), notes[#notes].msg)
     end)
@@ -580,6 +559,7 @@ describe("changeset.review_handoff", function()
 
     after_each(function()
       vim.fn.has = has
+      config.setup()
     end)
 
     it(
@@ -594,17 +574,27 @@ describe("changeset.review_handoff", function()
 
         handoff.yank()
 
-        assert.equal(
-          require("changeset.review_text").text(dir, { comment() }, function()
-            return { "x" }
-          end),
-          vim.fn.getreg('"')
-        )
+        assert.equal(require("changeset.review_text").text(dir, { comment() }, config.get().review), vim.fn.getreg('"'))
         assert.same({ comment() }, comment_store.list(dir))
         assert.equal(vim.log.levels.INFO, notes[1].level)
         assert.truthy(notes[1].msg:find('"', 1, true))
       end
     )
+
+    it("frames the copied review with the header and footer", function()
+      vim.fn.has = function(feature)
+        return feature == "clipboard" and 0 or has(feature)
+      end
+      config.setup({ review = { header = "H", footer = "F" } })
+      edit_file()
+      comment_store.keep(dir, comment())
+
+      handoff.yank()
+
+      local text = vim.fn.getreg('"')
+      assert.equal("H\n\n", text:sub(1, 3))
+      assert.equal("\n\nF", text:sub(-3))
+    end)
 
     it("copies only saved comments", function()
       vim.fn.has = function(feature)
