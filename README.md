@@ -109,6 +109,7 @@ has a `<Plug>(changeset-…)` map named after its words, and these default keys:
 | --------------------- | ------------------------------- | ------------------------------------------------------- |
 | `<C-g>g`              | `toggle`                        | Open, focus or close the sidebar                        |
 | `<C-g>j`              | `pick`                          | Pick a change to open from a list                       |
+| `<C-g>d`              | `diff`                          | Turn the unified diff on or off                         |
 | `<C-g>r`              | `refresh`                       | Rebuild the tree                                        |
 | `<C-g>nn` / `<C-g>np` | `next` / `prev`                 | Open the next / previous change                         |
 | `<C-g>ns` / `<C-g>nS` | `next symbol` / `prev symbol`   | Open the next / previous changed symbol                 |
@@ -174,10 +175,12 @@ Both need gitsigns.
   uncommitted work. It is the sidebar's base on every branch, the default branch included,
   from the start of the session, so `setup()` is not needed. `:Gitsigns change_base <rev>`
   still sets a buffer's base by hand, and changeset leaves that buffer alone.
-- **The unified diff** turns on once the sidebar has opened: every file shows its removed
-  lines inline, above the lines that replaced them. It compares against the same base as
-  the gutter. Running `:Gitsigns diffthis unified=true` in a window closes it there and
-  keeps it off for the files you open afterwards, until Neovim exits.
+- **The unified diff** turns on when the sidebar opens: every file the sidebar lists shows
+  its removed lines inline, above the lines that replaced them. It compares against the same
+  base as the gutter. Closing the sidebar turns it off, or, as `unified_diff.keep` says, keeps
+  it on for the files you entered (opened from the sidebar, a step or the picker) or for all
+  of them. `<C-g>d` turns it off or on at any time, and `:Gitsigns diffthis unified=true`
+  closes one file's view until it next turns on.
 
 ## Configuration
 
@@ -223,6 +226,10 @@ require("changeset").setup({
     sign = true,
     -- Start each session showing comments' whole text in blocks.
     blocks = false,
+  },
+  unified_diff = {
+    -- Once the sidebar closes, keep the diff on "none", the "entered" files or "all".
+    keep = "none",
   },
 })
 ```

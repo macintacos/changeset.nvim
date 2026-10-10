@@ -33,6 +33,20 @@ _Avoid_: arrival row, focus row
 A position a saved session recorded, waiting for the rebuilt tree to hold its rows.
 _Avoid_: pending restore, saved cursor
 
+### The unified diff
+
+**Reach**:
+Which files of the tree the unified diff shows in: none, the entered files, or all of them,
+less those whose view the user closed by hand. Opening the sidebar sets it to all; closing
+it lowers it to `unified_diff.keep`, never raising it.
+_Avoid_: diff mode, diff state
+
+**Entered file**:
+A file of the tree the user went to rather than only previewed: opened from the sidebar, a
+step or the picker, or reached while the sidebar was open. Entered files accumulate for the
+whole session, where the **Pick** is one row, the last opened, and moves.
+_Avoid_: picked file, visited file
+
 ### The view
 
 The `keymaps` option names and key descriptions keep the user-facing words expand, collapse

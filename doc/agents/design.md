@@ -1106,14 +1106,14 @@ claim it.
 
 ## Every file shows its diff inline
 
-Once the sidebar has opened, every file window shows gitsigns' unified diff, the view
+While the sidebar is open, every file the tree lists shows gitsigns' unified diff, the view
 `:Gitsigns diffthis unified=true` draws: the base's removed lines as virtual lines above
 what replaced them, the added lines lit. The sidebar maps where the branch changed, and
-this keeps those changes in sight in the file being worked on, long after the sidebar has
-closed. Opening the sidebar is the switch rather than an option, because a session that
-opens it is reading a branch, and one that never does is left as gitsigns left it. It
-compares against gitsigns' own base, the sidebar's fork point, so the gutter and the inline
-lines always agree.
+this keeps those changes in sight in the file being worked on. A file the tree doesn't list
+has no change of the branch's to show, so it is left as gitsigns left it. The view compares
+against gitsigns' own base, the sidebar's fork point, so the gutter and the inline lines
+always agree. The tree's first diff arrives a moment after the sidebar opens, and the views
+open as it does.
 
 gitsigns keeps one view per window and drops it when the buffer leaves the window, so
 changeset opens one wherever a file comes to be shown: a window taking a buffer, a buffer or
@@ -1142,10 +1142,7 @@ one too old to have unified views, nothing happens. Skipping `diffthis` also giv
 conflicted file a view in its own window, instead of the three-way split `diffthis` opens
 for one.
 
-Closing one of changeset's views in any window, with gitsigns' toggle or by switching to
-its split diff, turns it off for every file opened later, until Neovim exits; views already
-open stay until closed. Nothing writes it down, so the next session's first sidebar turns it
-on again. A view counts as closed by the user when it is gone as focus leaves its buffer or
+A view counts as closed by the user when it is gone as focus leaves its buffer or
 window with that buffer still in it: before gitsigns' `BufWinLeave` drops a view on a
 buffer leaving its window. A reload (`:e!`) takes the view with the buffer's unload, so an
 unload forgets the views still standing on it, or on its base, and they reopen on the
@@ -1192,11 +1189,34 @@ stay directly under their line, the deleted lines after them. A parked block's r
 counted from the head of the filler above the next line rather than its end, since the
 deleted lines over the next line sit between the stack and that line.
 
+### The diff follows the sidebar
+
+Opening the sidebar is an implicit request to read the branch, so it turns the diff on
+rather than an option doing so; a session that never opens it is left as gitsigns left it.
+Closing it ends the request but not always the reading: the user may close it to work in
+the files they just opened. So a close only lowers the diff's reach, to `unified_diff.keep`:
+no file by default, the entered files, or all of them. It never raises it. A diff turned off
+with `:Changeset diff` while the sidebar was open stays off as it closes, since bringing
+back views the user just turned off would undo their last word.
+
+An entered file is one the user went to, not one they looked at: a row opened, a preview
+moved into, a step, the picker, or a file reached any other way while the sidebar is open.
+Previews as the sidebar's cursor moves, and `]g`, are browsing; counting them would keep a
+diff on every file the cursor passed over. The set lasts the session, so a file worked in
+an hour ago keeps its diff after the next close. It records which files, not when, since
+nothing reads a time.
+
+Closing one of changeset's views by hand, with gitsigns' toggle or by switching to its split
+diff, is about that file. Its diff stays closed until the diff next turns on, by the sidebar
+or the toggle, each the user asking for the diff again; nothing writes it down. Turning
+every file off for it would make one stray toggle cost the session's diff.
+
 ## What it remembers
 
 The tree is built the first time something asks for it — `:Changeset`, `:Changeset
-refresh`, the picker (`:Changeset pick`, or `require("changeset.pick").pick()`), or a
-restored session refilling the sidebar — for the current buffer's repository: the fork point
+refresh`, the picker (`:Changeset pick`, or `require("changeset.pick").pick()`),
+`:Changeset diff` turning the unified diff on, or a restored session refilling the sidebar
+— for the current buffer's repository: the fork point
 is measured at once,
 the diff and symbols in the background. Reading symbols loads each changed file the cache
 can't answer, Generated ones aside, so those buffers and their language servers arrive with that first

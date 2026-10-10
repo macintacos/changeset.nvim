@@ -66,8 +66,9 @@ or press one of its keys. From then on:
   as the branch changes (|changeset-base|);
 - the highlight groups are defined (|changeset-highlights|).
 
-The first time the sidebar opens, the unified diff turns on in every file
-window (|changeset-unified-diff|).
+Opening the sidebar turns the unified diff on in the files it lists, and
+closing it turns the diff off again unless `unified_diff.keep` keeps it on
+(|changeset-unified-diff|).
 
 ==============================================================================
 2. Requirements                                       *changeset-requirements*
@@ -198,6 +199,18 @@ PICKER
 <C-g>j                                                      *changeset-<C-g>j*
 	Open the picker of |changeset-picker| on the changes of the current
 	buffer's repository.
+
+UNIFIED DIFF
+
+:Changeset diff                                              *:Changeset-diff*
+<Plug>(changeset-diff)                                *<Plug>(changeset-diff)*
+<C-g>d                                                      *changeset-<C-g>d*
+	Turn the unified diff off everywhere when it is on, else on for every
+	file the sidebar lists, as opening the sidebar does, with the sidebar
+	open or closed (|changeset-unified-diff|). It says which, in one line.
+	Before any tree was built, it first builds one for the current
+	buffer's repository, or warns "no merge base with the default branch"
+	and stays off.
 
 STEPPING
 
@@ -339,6 +352,7 @@ its subcommand:
 Key       Mode            Runs ~
 <C-g>g    Normal          |:Changeset-toggle|
 <C-g>j    Normal          |:Changeset-pick|
+<C-g>d    Normal          |:Changeset-diff|
 <C-g>r    Normal          |:Changeset-refresh|
 <C-g>nn   Normal          |:Changeset-next|
 <C-g>np   Normal          |:Changeset-prev|
@@ -1006,11 +1020,39 @@ quiet fallback. A buffer whose base you set by hand with
 ==============================================================================
 12. Unified diff                                      *changeset-unified-diff*
 
-Once the sidebar has opened, every file you open shows gitsigns' unified diff,
-as `:Gitsigns diffthis unified=true` draws it: the lines removed since
-gitsigns' base sit inline above the lines that replaced them. It compares
-against the same base as gitsigns' gutter (|changeset-gutter-base|), the
-sidebar's base. It stays on after the sidebar closes, and needs gitsigns.
+The unified diff is gitsigns' unified view in the files the sidebar lists, as
+`:Gitsigns diffthis unified=true` draws it: the lines removed since gitsigns'
+base sit inline above the lines that replaced them. It compares against the
+same base as gitsigns' gutter (|changeset-gutter-base|), the sidebar's base,
+and needs gitsigns. changeset opens it in no other file.
+
+It is off when Neovim starts. Opening the sidebar, by any route, turns it on
+for every file the sidebar lists, in every window, files you open later
+included. Closing the sidebar, by any route, keeps it on only as far as
+`unified_diff.keep` says (|changeset-option-unified_diff.keep|):
+
+  `"none"`      Off: every view closes, the one `<S-CR>` opened among them.
+  `"entered"`   On for the files you entered, every other view closing.
+  `"all"`       On for every file the sidebar lists, as while it was open.
+
+A view closes at once, in every window and tabpage, and the cursor stays on
+its line as the removed lines go. Closing the sidebar never turns the diff on
+where it was off, as after |:Changeset-diff| turned it off.
+
+                                                     *changeset-entered-files*
+You enter a file when you open it from the sidebar, with `<CR>`, `<S-CR>`, a
+split or tab key, or by moving into its preview; when a step opens it
+(|changeset-stepping|); when the picker opens it (|changeset-picker|); and
+when your cursor reaches it any other way while the sidebar is open, as with
+`:edit`. A file the sidebar only previews, as its cursor moves or with `]g`
+and `[g`, is not entered. A file stays entered until Neovim exits. With the
+sidebar closed, the picker still enters the file it opens, and shows its diff
+unless the diff is off.
+
+Closing one file's view yourself, with `:Gitsigns diffthis unified=true` or
+anything else gitsigns offers, keeps that file's diff closed until the diff
+next turns on, by the sidebar opening or |:Changeset-diff|. Other files keep
+theirs.
 
 A file new since that base, untracked or not, shows every line added. While
 the diff is on, gitsigns attaches to untracked files, as its
@@ -1020,10 +1062,6 @@ option back as you set it.
 It draws in changeset's own groups (|ChangesetDiffAdd| and the rest), which
 tint each line's background and keep its syntax colours, rather than gitsigns'
 preview groups.
-
-Closing it in any window, with `:Gitsigns diffthis unified=true`, turns it off
-for every file you open afterwards, until Neovim exits. Files already showing
-it keep it until you close it there too.
 
 ==============================================================================
 13. Picker                                                  *changeset-picker*
@@ -1081,6 +1119,7 @@ Pass |changeset.setup()| the options you change. These are the defaults: >lua
         sign = true,
         blocks = false,
       },
+      unified_diff = { keep = "none" },
     })
 <
 Each `setup()` call starts from the defaults, not from the previous call. An
@@ -1120,6 +1159,12 @@ review_comment.sign                     *changeset-option-review_comment.sign*
 review_comment.blocks                 *changeset-option-review_comment.blocks*
 	Boolean. Default `false`. Start each session showing review comments
 	as blocks of their whole text (|changeset-blocks|).
+
+unified_diff.keep                         *changeset-option-unified_diff.keep*
+	`"none"`, `"entered"` or `"all"`. Default `"none"`. How far the unified
+	diff stays on once the sidebar closes: for no file, for the files you
+	entered, or for every file the sidebar lists (|changeset-unified-diff|).
+	Read each time the sidebar closes.
 
 ==============================================================================
 15. Highlight groups                                    *changeset-highlights*
@@ -1340,7 +1385,8 @@ nothing, starts no language server and makes no network request.
 - Sessions: |:mksession| restores the sidebar, in whichever tabpage it stood,
   when 'sessionoptions' contains `blank`, as it does by default, and its
   cursor row and scroll too when it also contains `globals`.
-- Kept in memory until Neovim exits: folds, the agent last submitted to, and
-  the unified diff turned off.
+- Kept in memory until Neovim exits: folds, the agent last submitted to, how
+  far the unified diff reaches, the files you entered
+  (|changeset-entered-files|), and the files whose view you closed.
 
  vim:tw=78:ts=8:noet:ft=help:norl:

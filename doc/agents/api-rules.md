@@ -48,7 +48,8 @@ after it, its key under `<C-g>n`, which which-key names "navigation". A verb tha
 lists or shows review comments goes under `comment`, its key under `<C-g>c`. One that hands
 off or ends the whole review goes under `review`. A verb that opens a change the user picks
 from a list, such as `pick`, chooses rather than walks, so its key is top level, beside
-`<C-g>g` and `<C-g>r`. `:Changeset comment` and `:Changeset review` alone are
+`<C-g>g` and `<C-g>r`. So is the key of a verb that turns something on or off for every file
+of the branch, such as `diff`. `:Changeset comment` and `:Changeset review` alone are
 errors that name their verbs, not defaults.
 
 `footer()` in `lua/changeset/init.lua` stays public although only the plugin calls it. The
