@@ -1124,6 +1124,15 @@ entering the window, reopen a view whose base gitsigns has since replaced, as PR
 Mode's arrival does moments after the sidebar opens. A move that leaves the counts alone
 publishes nothing, so its view follows on the next entry.
 
+The tree counts an untracked file as added, but gitsigns leaves one alone unless its
+`attach_to_untracked` is set, and a file gitsigns hasn't attached gets no view. So turning
+the view on sets that option, and attaches the buffers gitsigns already passed over: those
+it gave a status, which it does once it finds a buffer's repository, but no cache. Turning
+the view off puts the option back. A file new since the base, untracked or not, has empty
+base text, which gitsigns writes into the base's buffer as one blank line with its newline
+still on; the view would read that back as a blank line and draw the file's first blank
+line unchanged. So the view's base buffer drops 'endofline' when the base text is empty.
+
 It doesn't run `diffthis`. That takes the current window only once it has made the buffer
 holding the base, which can wait on git, and from a preview or a `GitSignsUpdate` the
 current window by then is the sidebar or another file. changeset makes that buffer and

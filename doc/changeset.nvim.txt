@@ -1008,6 +1008,11 @@ against the same base as gitsigns' gutter, the branch's base under PR Review
 Mode and the index otherwise. It stays on after the sidebar closes, and needs
 gitsigns.
 
+A file new since that base, untracked or not, shows every line added. While
+the diff is on, gitsigns attaches to untracked files, as its
+`attach_to_untracked` option would have it; turning the diff off puts that
+option back as you set it.
+
 It draws in changeset's own groups (|ChangesetDiffAdd| and the rest), which
 tint each line's background and keep its syntax colours, rather than gitsigns'
 preview groups.
