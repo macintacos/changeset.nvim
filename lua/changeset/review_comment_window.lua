@@ -113,6 +113,13 @@ function M.current()
   return open_windows[vim.api.nvim_get_current_win()]
 end
 
+-- Vim's own insert-mode CTRL-G commands (`:help i_CTRL-G_j` and those beside it), which a default key never takes
+-- over while a comment is typed. Spelled as `keytrans` spells a key.
+local INSERT_CTRL_G = {}
+for _, lhs in ipairs({ "<C-g>j", "<C-g>k", "<C-g>u", "<C-g>U", "<C-g><C-j>", "<C-g><C-k>", "<C-g><Down>", "<C-g><Up>" }) do
+  INSERT_CTRL_G[vim.fn.keytrans(vim.keycode(lhs))] = true
+end
+
 ---The default `<C-g>` keys `plugin/changeset.lua` mapped in normal mode, each with its subcommand and `desc`; none
 ---while the default keys are off.
 ---@return { lhs: string, name: string, desc: string }[]
@@ -494,7 +501,7 @@ function M.open(opts)
   end, default_keys())
   local free = {}
   for _, key in ipairs(keys) do
-    free[key.lhs] = vim.fn.mapcheck(key.lhs, "i") == ""
+    free[key.lhs] = vim.fn.mapcheck(key.lhs, "i") == "" and not INSERT_CTRL_G[vim.fn.keytrans(vim.keycode(key.lhs))]
   end
   for _, key in ipairs(keys) do
     local desc = window_desc(key, opts.routes or {})

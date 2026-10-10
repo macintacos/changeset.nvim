@@ -258,6 +258,15 @@ describe(":Changeset from the review comment window", function()
     assert.truthy(review_comment_window.current())
   end)
 
+  it("leaves Vim's own insert-mode <C-g>j to move down a line in the window", function()
+    write(4, "")
+
+    vim.api.nvim_feedkeys(vim.keycode("ione<CR>two<Esc>gg0i<C-g>jX<Esc>"), "x", false)
+
+    assert.truthy(review_comment_window.current())
+    assert.same({ "one", "Xtwo" }, vim.api.nvim_buf_get_lines(0, 0, -1, false))
+  end)
+
   it("hands keys typed ahead of <C-g>cd in insert mode to the delete dialog", function()
     write(4, "")
     vim.api.nvim_feedkeys(vim.keycode("Ahello world<C-g>cdD"), "x", false)
