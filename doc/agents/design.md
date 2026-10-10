@@ -1121,7 +1121,9 @@ for a branch switched to, a sidebar build, and again as HEAD moves once it has n
 Every fork point measured without blocking reaches both the gutter and the tree, which takes
 it as its own re-measure would, so the two measure once between them where they can and
 never disagree after a push. A measure is taken again when HEAD moves while it runs, so none
-answers for a HEAD left behind, nor lands after a newer one with an older fork point. While
+answers for a HEAD left behind, nor lands after a newer one with an older fork point; but
+three times at most, since a blocking measure would freeze Neovim for as long as another
+process kept moving HEAD, and HEAD's next move measures again through the watcher. While
 gh is still being asked, its answer carries the newest measure rather than the one it was
 asked with.
 
