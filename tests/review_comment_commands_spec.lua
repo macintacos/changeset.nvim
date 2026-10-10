@@ -331,7 +331,6 @@ describe(":Changeset from the review comment window", function()
     end
 
     assert.equal("Save the review comment", desc("<C-g>cc"))
-    assert.equal("Save the review comment", desc("<C-g>c"))
     assert.equal("Delete this review comment", desc("<C-g>cd"))
     assert.equal("Keep this review comment as a draft", desc("<C-g>ch"))
     assert.equal("Keep a draft, then: Next review comment", desc("<C-g>cn"))

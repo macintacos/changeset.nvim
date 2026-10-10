@@ -431,9 +431,6 @@ local function map_defaults()
   if vim.g.changeset_no_default_maps then
     return
   end
-  -- Decided before any default is mapped, which would all clash with it. A user's map that blocks `<C-g>cc` blocks it
-  -- too.
-  local pause = { n = not taken("<C-g>c", "n"), x = not taken("<C-g>c", "x") }
   -- The `<C-g>` keys mapped in normal mode, which the review comment window maps again on its own buffer. Not `]g`,
   -- which the window would map in insert mode too, where it is text.
   local window_keys = {}
@@ -441,15 +438,11 @@ local function map_defaults()
   local icon_specs = {}
   local named = {}
   ---@param mode string
-  ---@param lhs string
   ---@param key changeset.DefaultKey
-  local function map(mode, lhs, key)
+  local function map(mode, key)
+    local lhs = key.lhs
     vim.keymap.set(mode, lhs, plug(key.name), { desc = key.desc })
-    -- A group's own key takes its group's spec: which-key keeps the last of two specs for one key, and names a key
-    -- with keys under it after its desc unless its spec names the group.
-    if not GROUPS[lhs] then
-      icon_specs[#icon_specs + 1] = { lhs, mode = mode, icon = key.icon }
-    end
+    icon_specs[#icon_specs + 1] = { lhs, mode = mode, icon = key.icon }
     if mode == "n" and vim.startswith(lhs, "<C-g>") then
       window_keys[#window_keys + 1] = { lhs = lhs, name = key.name, desc = key.desc }
     end
@@ -463,15 +456,8 @@ local function map_defaults()
   for _, key in ipairs(keys) do
     for _, mode in ipairs(key.modes or { "n" }) do
       if not taken(key.lhs, mode) then
-        map(mode, key.lhs, key)
+        map(mode, key)
       end
-    end
-  end
-  -- So a pause after the <C-g>c prefix comments, rather than leaving Select mode's or a pending `c`. Mapped last, or
-  -- `cn` and `cp` would see it as a clash.
-  for mode, comments in pairs(pause) do
-    if comments then
-      map(mode, "<C-g>c", comment_new)
     end
   end
   vim.g.changeset_window_keys = window_keys

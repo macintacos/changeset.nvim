@@ -510,38 +510,6 @@ describe("plugin/changeset.lua", function()
     )
   end)
 
-  describe("a pause after <C-g>c", function()
-    ---Types `keys` into ten numbered lines with `'timeoutlen'` short, then reports the comment's range, the mode and
-    ---the lines.
-    ---@param keys string
-    ---@return string
-    local function pause_after(keys)
-      local typed = "lua vim.o.timeoutlen = 50;"
-        .. " vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.split(('x'):rep(10, '\\n'), '\\n'));"
-        .. " package.loaded['changeset.reviewing'] = {"
-        .. " comment = function(a, b) io.write(a, '-', b, ' ') end,"
-        .. " comment_here = function() io.write('here ') end };"
-        .. (" vim.api.nvim_input('%s')"):format(keys)
-      local probe =
-        "io.write(vim.api.nvim_get_mode().mode, ' ', table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false)))"
-      return after_startup({ "-c", typed }, probe, 400)
-    end
-
-    it("comments at the cursor in normal mode", function()
-      assert.equal("here n xxxxxxxxxx", pause_after("3G<C-g>c"))
-    end)
-
-    it("comments on the selection in visual mode", function()
-      assert.equal("3-4 n xxxxxxxxxx", pause_after("3GVj<C-g>c"))
-    end)
-
-    it("leaves <C-g>c alone when the user maps under it", function()
-      local probe = "io.write(vim.fn.maparg('<C-g>c', 'n'))"
-
-      assert.equal("", after_startup({ "-c", "nnoremap <C-g>cx :echo 1<CR>" }, probe))
-    end)
-  end)
-
   it("gives which-key a mini.icons icon for each default key it maps", function()
     local stub = "lua package.loaded['which-key'] = { add = function(spec) added = spec end }"
     local probe = "for _, spec in ipairs(added) do"
@@ -554,19 +522,16 @@ describe("plugin/changeset.lua", function()
     )
   end)
 
-  it(
-    "names the <C-g>c, <C-g>n and <C-g>b groups for which-key, <C-g>c's on its one spec though it is a key too",
-    function()
-      local stub = "lua package.loaded['which-key'] = { add = function(spec) added = spec end }"
-      local probe = "for _, spec in ipairs(added) do if vim.list_contains({ '<C-g>c', '<C-g>n', '<C-g>b' }, spec[1]) then"
-        .. " io.write(spec.mode, spec[1], ' ', tostring(spec.group), ' ') end end"
+  it("names the <C-g>c, <C-g>n and <C-g>b groups for which-key", function()
+    local stub = "lua package.loaded['which-key'] = { add = function(spec) added = spec end }"
+    local probe = "for _, spec in ipairs(added) do if vim.list_contains({ '<C-g>c', '<C-g>n', '<C-g>b' }, spec[1]) then"
+      .. " io.write(spec.mode, spec[1], ' ', tostring(spec.group), ' ') end end"
 
-      assert.equal(
-        "n<C-g>c comment x<C-g>c comment n<C-g>n navigation n<C-g>b base ",
-        after_startup({ "-c", stub }, probe)
-      )
-    end
-  )
+    assert.equal(
+      "n<C-g>c comment x<C-g>c comment n<C-g>n navigation n<C-g>b base ",
+      after_startup({ "-c", stub }, probe)
+    )
+  end)
 
   it("gives the <C-g>b group an icon of its own, not its first key's", function()
     local stub = "lua package.loaded['which-key'] = { add = function(spec) added = spec end }"
