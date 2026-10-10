@@ -4,10 +4,24 @@ require("mini.pick").setup()
 require("mini.icons").setup()
 
 local pick = require("changeset.pick")
+local window = require("changeset.window")
 local ns = vim.api.nvim_create_namespace("changeset.pick")
 local Fixture = require("support.git")
 local Notify = require("support.notify")
 require("support.gh")
+
+---Press <CR> once the picker is up, so it chooses its current item, and return what `pick()` returned.
+---@return any
+local function choose_current()
+  local function step()
+    if not MiniPick.is_picker_active() then
+      return vim.defer_fn(step, 20)
+    end
+    vim.api.nvim_feedkeys(vim.keycode("<CR>"), "t", false)
+  end
+  vim.defer_fn(step, 20)
+  return pick.pick()
+end
 
 ---A changeset row with the fields the picker reads.
 ---@param fields table
@@ -236,6 +250,24 @@ describe("changeset.pick", function()
       assert(ok, err)
       assert.equal(1, #notes)
       assert.equal(vim.log.levels.WARN, notes[1].level)
+    end)
+
+    it("opens the chosen file in the window the sidebar was opened from, not in the sidebar", function()
+      local from = vim.api.nvim_get_current_win()
+      -- A window left of the file's, so that the file's is not the first one in the tab.
+      vim.cmd("leftabove vnew")
+      vim.api.nvim_set_current_win(from)
+      require("changeset").open()
+      local sidebar = assert(window.win())
+      vim.api.nvim_set_current_win(sidebar)
+
+      local chosen = choose_current()
+
+      assert.equal(from, vim.api.nvim_get_current_win())
+      assert.truthy(vim.endswith(vim.api.nvim_buf_get_name(0), "mod.lua"))
+      assert.equal(sidebar, window.win())
+      assert.equal(window.buf(), vim.api.nvim_win_get_buf(sidebar))
+      assert.truthy(chosen.path:find("mod.lua", 1, true))
     end)
   end)
 end)

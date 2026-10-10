@@ -101,7 +101,7 @@ describe("plugin/changeset.lua", function()
 
   it("completes the subcommands that match the argument", function()
     assert.same(
-      { "comment", "next", "prev", "preview", "refresh", "review", "toggle" },
+      { "comment", "next", "pick", "prev", "preview", "refresh", "review", "toggle" },
       vim.fn.getcompletion("Changeset ", "cmdline")
     )
     assert.same({ "refresh", "review" }, vim.fn.getcompletion("Changeset re", "cmdline"))
@@ -139,6 +139,17 @@ describe("plugin/changeset.lua", function()
 
     package.loaded.changeset = nil
     assert.equal(1, calls.toggle)
+  end)
+
+  it("routes pick and its <Plug> map to the picker", function()
+    local calls = {}
+    package.loaded["changeset.pick"] = { pick = counter(calls, "pick") }
+
+    vim.cmd("Changeset pick")
+    vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-pick)"), "x", false)
+
+    package.loaded["changeset.pick"] = nil
+    assert.equal(2, calls.pick)
   end)
 
   it("runs the command after a | once the subcommand ran", function()
@@ -393,7 +404,7 @@ describe("plugin/changeset.lua", function()
   end)
 
   it("maps the default keys once startup is done", function()
-    local probe = "for _, lhs in ipairs({ 'cc', 'cd', 'cq', 'd', 'l', 's', 'n', 'nn', 'np', 'ns', 'nS', 'nf', 'nF', 'g', 't' }) do"
+    local probe = "for _, lhs in ipairs({ 'cc', 'cd', 'cq', 'd', 'l', 's', 'n', 'nn', 'np', 'ns', 'nS', 'nf', 'nF', 'g', 'j', 't' }) do"
       .. " io.write(vim.fn.maparg('<C-g>' .. lhs, 'n'), ' ') end"
       .. " io.write(vim.fn.maparg('<C-g>cc', 'x'), ' ', vim.fn.maparg(']g', 'n'), ' ', vim.fn.maparg('[g', 'n'))"
 
@@ -401,7 +412,7 @@ describe("plugin/changeset.lua", function()
       "<Plug>(changeset-comment-new) <Plug>(changeset-comment-del) <Plug>(changeset-comment-list)   "
         .. "<Plug>(changeset-review-submit)  <Plug>(changeset-next) <Plug>(changeset-prev) "
         .. "<Plug>(changeset-next-symbol) <Plug>(changeset-prev-symbol) <Plug>(changeset-next-file) "
-        .. "<Plug>(changeset-prev-file) <Plug>(changeset-toggle)  "
+        .. "<Plug>(changeset-prev-file) <Plug>(changeset-toggle) <Plug>(changeset-pick)  "
         .. "<Plug>(changeset-comment-new) "
         .. "<Plug>(changeset-preview-next) <Plug>(changeset-preview-prev)",
       after_startup({}, probe)

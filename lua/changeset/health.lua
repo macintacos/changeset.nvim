@@ -146,10 +146,10 @@ end
 ---@param facts changeset.health.Facts
 local function mini_pick(facts)
   if not facts.mini_pick then
-    return finding("info", "`mini.pick` not found: the picker is unavailable")
+    return finding("info", "`mini.pick` not found: the picker uses `vim.ui.select`")
   end
   if facts.mini_pick == "installed" then
-    return finding("info", "`mini.pick` is installed but not set up: the picker is unavailable")
+    return finding("info", "`mini.pick` is installed but not set up: the picker uses `vim.ui.select`")
   end
   return finding("ok", "`mini.pick` found and set up")
 end

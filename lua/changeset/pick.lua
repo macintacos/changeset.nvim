@@ -10,6 +10,7 @@ local icons = require("changeset.icons")
 local pick_preview = require("changeset.pick_preview")
 local render = require("changeset.render")
 local symbols = require("changeset.symbols")
+local window = require("changeset.window")
 
 local M = {}
 
@@ -140,25 +141,52 @@ end
 M._items = items
 M._show = show
 
----Open the picker on the changeset of the current buffer's repository.
----Needs mini.pick set up; warns and returns otherwise. Blocks until the picker closes.
+---Open the picker on the changeset of the current buffer's repository, with mini.pick when it is set up and
+---`vim.ui.select` otherwise. With mini.pick, blocks until the picker closes and returns the item chosen. With
+---`vim.ui.select`, returns nil at once and opens the choice when it is made, since a UI may answer later.
+---Warns and returns nil when there is no changeset.
 ---@return changeset.PickItem? chosen
 function M.pick()
-  -- `require` first so a lazy-loading manager can load and set mini.pick up; then
-  -- `MiniPick`, which only `setup()` creates and `MiniPick.start` needs.
-  if not (pcall(require, "mini.pick") and MiniPick) then
-    return vim.notify("Changeset: the picker needs mini.pick set up", vim.log.levels.WARN)
-  end
   local tree, err = require("changeset").rows()
   if not tree then
     return vim.notify("Changeset: " .. err, vim.log.levels.WARN)
+  end
+  -- Taken before the picker takes focus, so a pick from the sidebar opens where its `<CR>` would.
+  local from = window.peek_target()
+  local list = items(tree.rows, tree.root)
+  local title = "Changeset (vs " .. tree.ref .. ")"
+
+  -- `require` first so a lazy-loading manager can load and set mini.pick up; then
+  -- `MiniPick`, which only `setup()` creates and `MiniPick.start` needs.
+  if not (pcall(require, "mini.pick") and MiniPick) then
+    vim.ui.select(list, {
+      prompt = title,
+      format_item = function(item)
+        return item.text
+      end,
+    }, function(item)
+      if item then
+        window.commit(item.path, item.lnum, "reuse", from)
+      end
+    end)
+    return nil
   end
   -- Here, not at require time: the sidebar defines its groups only when it opens,
   -- and nothing may touch MiniPick before the guard.
   highlights.define_highlights()
   pick_preview.setup()
   return MiniPick.start({
-    source = { items = items(tree.rows, tree.root), name = "Changeset (vs " .. tree.ref .. ")", show = show },
+    source = {
+      items = list,
+      name = title,
+      show = show,
+      choose = function(item)
+        if window.commit(item.path, item.lnum, "reuse", from) then
+          -- mini.pick refocuses the window the picker started in, which is the sidebar when it started there.
+          MiniPick.set_picker_target_window(vim.api.nvim_get_current_win())
+        end
+      end,
+    },
     window = pick_preview.window(),
   })
 end

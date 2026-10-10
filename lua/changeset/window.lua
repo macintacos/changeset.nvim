@@ -583,14 +583,15 @@ end
 ---@param path string
 ---@param lnum integer?
 ---@param how "reuse"|"vsplit"|"split"|"tab"
+---@param win integer? The window to open it in; the one a preview would go to when nil.
 ---@return boolean committed false when the file could not be opened.
-function M.commit(path, lnum, how)
+function M.commit(path, lnum, how, win)
   local buf = buffers.load(path)
   if not buf then
     vim.notify("Changeset: cannot open " .. path, vim.log.levels.WARN)
     return false
   end
-  promote((target()), buf, lnum, how)
+  promote(win or target(), buf, lnum, how)
   return true
 end
 
