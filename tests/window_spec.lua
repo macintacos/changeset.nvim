@@ -496,7 +496,7 @@ describe("changeset.window", function()
       window.preview(one, 2, BAND)
       window.focus()
 
-      window.commit(one, 2, "reuse")
+      window.commit({ path = one, lnum = 2, how = "reuse" })
 
       assert.equal("", vim.wo[right].winbar)
     end)
@@ -518,7 +518,7 @@ describe("changeset.window", function()
       local _, right, one = staged()
       local before = #vim.api.nvim_tabpage_list_wins(0)
 
-      window.commit(one, 2, "vsplit")
+      window.commit({ path = one, lnum = 2, how = "vsplit" })
 
       local split = vim.api.nvim_get_current_win()
       assert.equal(before + 1, #vim.api.nvim_tabpage_list_wins(0))
@@ -530,7 +530,7 @@ describe("changeset.window", function()
       local _, right, one = staged()
       local before = #vim.api.nvim_tabpage_list_wins(0)
 
-      window.commit(one, 2, "split")
+      window.commit({ path = one, lnum = 2, how = "split" })
 
       local split = vim.api.nvim_get_current_win()
       assert.equal(before + 1, #vim.api.nvim_tabpage_list_wins(0))
@@ -542,7 +542,7 @@ describe("changeset.window", function()
       local _, _, one = staged()
       local before = #vim.api.nvim_list_tabpages()
 
-      window.commit(one, 2, "tab")
+      window.commit({ path = one, lnum = 2, how = "tab" })
 
       assert.equal(before + 1, #vim.api.nvim_list_tabpages())
     end)
@@ -556,7 +556,7 @@ describe("changeset.window", function()
       local stood_buf = vim.api.nvim_win_get_buf(right)
       window.preview(two, 2, BAND)
 
-      window.commit(one, 2, "tab")
+      window.commit({ path = one, lnum = 2, how = "tab" })
 
       local jumps = vim.fn.getjumplist()[1]
       local lnums = {}
@@ -575,7 +575,7 @@ describe("changeset.window", function()
       staged()
       local three = fixture("three")
 
-      window.commit(three, 2, "reuse")
+      window.commit({ path = three, lnum = 2, how = "reuse" })
 
       assert.is_true(vim.bo[vim.api.nvim_get_current_buf()].buflisted)
     end)
@@ -822,7 +822,7 @@ describe("changeset.window", function()
     it("leaves the sidebar's header off a lone sidebar's split once its preview is opened", function()
       local _, split, one = lone_preview()
 
-      window.commit(one, 1, "reuse")
+      window.commit({ path = one, lnum = 1, how = "reuse" })
 
       assert.not_equal("header", vim.wo[split].winbar)
     end)
@@ -834,7 +834,7 @@ describe("changeset.window", function()
       vim.api.nvim_win_close(outside, true)
       local one = fixture("one")
       window.preview(one, 1, BAND)
-      window.commit(one, 1, "reuse")
+      window.commit({ path = one, lnum = 1, how = "reuse" })
 
       window.close()
 

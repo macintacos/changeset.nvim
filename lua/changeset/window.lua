@@ -591,19 +591,23 @@ local function promote(win, buf, lnum, how)
   end
 end
 
+---Where a commit opens a file, and how.
+---@class changeset.window.Commit
+---@field path string
+---@field lnum integer?
+---@field how "reuse"|"vsplit"|"split"|"tab"
+---@field win integer? The window to open it in; the one a preview would go to when nil.
+
 ---Commit the previewed location in the window the preview went to.
----@param path string
----@param lnum integer?
----@param how "reuse"|"vsplit"|"split"|"tab"
----@param win integer? The window to open it in; the one a preview would go to when nil.
+---@param commit changeset.window.Commit
 ---@return boolean committed false when the file could not be opened.
-function M.commit(path, lnum, how, win)
-  local buf = buffers.load(path)
+function M.commit(commit)
+  local buf = buffers.load(commit.path)
   if not buf then
-    vim.notify("Changeset: cannot open " .. path, vim.log.levels.WARN)
+    vim.notify("Changeset: cannot open " .. commit.path, vim.log.levels.WARN)
     return false
   end
-  promote(win or target(), buf, lnum, how)
+  promote(commit.win or target(), buf, commit.lnum, commit.how)
   return true
 end
 

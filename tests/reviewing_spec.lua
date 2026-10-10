@@ -654,14 +654,14 @@ describe("changeset.reviewing", function()
       three_comments()
       focused, tree = true, { root = dir }
       local committed = {}
-      package.loaded["changeset.window"].commit = function(...)
-        table.insert(committed, { ... })
+      package.loaded["changeset.window"].commit = function(commit)
+        table.insert(committed, commit)
         return true
       end
 
       reviewing.next_comment(1)
 
-      assert.same({ { dir .. "/a.lua", 2, "reuse" } }, committed)
+      assert.same({ { path = dir .. "/a.lua", lnum = 2, how = "reuse" } }, committed)
     end)
 
     it("lands on the last line of a file that shrank under its comment, and moves on from it", function()

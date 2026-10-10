@@ -635,7 +635,7 @@ local function land(win, from_sidebar, repository, comment)
   local full = vim.fs.joinpath(repository, comment.path)
   local lnum = review_comment.first(comment) or 0
   if from_sidebar then
-    return window.commit(full, lnum, "reuse")
+    return window.commit({ path = full, lnum = lnum, how = "reuse" })
   end
   local file = buffers.load(full)
   if not file then

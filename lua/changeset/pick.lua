@@ -143,7 +143,7 @@ end
 ---@param win integer?
 ---@return boolean opened false when the file could not be opened.
 local function open(item, win)
-  if not window.commit(item.path, item.lnum, "reuse", win) then
+  if not window.commit({ path = item.path, lnum = item.lnum, how = "reuse", win = win }) then
     return false
   end
   unified_diff.enter(item.path)

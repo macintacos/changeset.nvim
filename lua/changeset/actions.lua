@@ -51,7 +51,7 @@ local function commit(how, hooks)
     return vim.notify(row.path .. " was deleted on this branch", vim.log.levels.INFO)
   end
   assert(state, "changeset: no tree built yet")
-  if window.commit(state.tree.root .. "/" .. row.path, row.lnum or 1, how) then
+  if window.commit({ path = state.tree.root .. "/" .. row.path, lnum = row.lnum or 1, how = how }) then
     hooks.pick(row)
     return row
   end
