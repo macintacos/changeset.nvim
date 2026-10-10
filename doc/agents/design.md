@@ -1195,8 +1195,9 @@ deleted lines over the next line sit between the stack and that line.
 ## What it remembers
 
 The tree is built the first time something asks for it — `:Changeset`, `:Changeset
-refresh`, the picker (`require("changeset.pick").pick()`), or a restored session refilling
-the sidebar — for the current buffer's repository: the fork point is measured at once,
+refresh`, the picker (`:Changeset pick`, or `require("changeset.pick").pick()`), or a
+restored session refilling the sidebar — for the current buffer's repository: the fork point
+is measured at once,
 the diff and symbols in the background. Reading symbols loads each changed file the cache
 can't answer, Generated ones aside, so those buffers and their language servers arrive with that first
 ask, and a session that never asks starts none. The picker waits a moment for the diff,

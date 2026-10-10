@@ -26,7 +26,7 @@ Neovim 0.12 or newer, and `git`. Everything else is optional:
 | [herdr](https://herdr.dev), a terminal multiplexer for coding agents       | `:Changeset review submit`, which pastes your review into an agent's prompt.                          |
 | `gh`                                                                       | The open PR's target as the base, for a branch with no parent.                                        |
 | [mini.icons](https://github.com/nvim-mini/mini.icons) or nvim-web-devicons | Icons.                                                                                                |
-| [mini.pick](https://github.com/nvim-mini/mini.pick)                        | `:Pick changeset`, a picker over the same changes.                                                    |
+| [mini.pick](https://github.com/nvim-mini/mini.pick)                        | `:Pick changeset`, a picker over the same changes. Without it, `<C-g>j` uses `vim.ui.select`.         |
 | [which-key.nvim](https://github.com/folke/which-key.nvim)                  | `?` opens its popup; version 3 also names the default keys' groups.                                   |
 
 `:checkhealth changeset` shows which of these it finds.
@@ -108,6 +108,7 @@ has a `<Plug>(changeset-…)` map named after its words, and these default keys:
 | Key                   | `:Changeset …`                  | Does                                                    |
 | --------------------- | ------------------------------- | ------------------------------------------------------- |
 | `<C-g>g`              | `toggle`                        | Open, focus or close the sidebar                        |
+| `<C-g>j`              | `pick`                          | Pick a change to open from a list                       |
 | `<C-g>r`              | `refresh`                       | Rebuild the tree                                        |
 | `<C-g>nn` / `<C-g>np` | `next` / `prev`                 | Open the next / previous change                         |
 | `<C-g>ns` / `<C-g>nS` | `next symbol` / `prev symbol`   | Open the next / previous changed symbol                 |

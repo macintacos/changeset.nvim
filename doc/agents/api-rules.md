@@ -46,7 +46,9 @@ recovery verb, such as `review restore`, gets only its `<Plug>` map. A verb
 that walks the tree and opens what it reaches is `next` or `prev`, with what it counts
 after it, its key under `<C-g>n`, which which-key names "navigation". A verb that writes, walks,
 lists or shows review comments goes under `comment`, its key under `<C-g>c`. One that hands
-off or ends the whole review goes under `review`. `:Changeset comment` and `:Changeset review` alone are
+off or ends the whole review goes under `review`. A verb that opens a change the user picks
+from a list, such as `pick`, chooses rather than walks, so its key is top level, beside
+`<C-g>g` and `<C-g>r`. `:Changeset comment` and `:Changeset review` alone are
 errors that name their verbs, not defaults.
 
 `footer()` in `lua/changeset/init.lua` stays public although only the plugin calls it. The

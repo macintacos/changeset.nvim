@@ -43,7 +43,8 @@ sidebar, changeset:
   agent's prompt or copies them (|changeset-review-comments|);
 - points gitsigns' gutter and its inline diff at the same base
   (|changeset-gutter-base|, |changeset-unified-diff|);
-- lists the same changes in mini.pick (|changeset-picker|).
+- lists the same changes in mini.pick, or in |vim.ui.select()| without it
+  (|changeset-picker|).
 
 WHAT IT ADDS TO YOUR EDITOR                                *changeset-startup*
 
@@ -95,7 +96,8 @@ Each optional integration adds one feature:
   file icons only.
 - which-key.nvim: `?` opens its popup instead of a float. Version 3 also names
   the default keys' groups and shows an icon beside each key.
-- mini.pick, set up: the picker (|changeset-picker|).
+- mini.pick, set up: the picker (|changeset-picker|). Without it, the picker
+  is |vim.ui.select()|.
 
 `:checkhealth changeset` reports which of these it finds (|changeset-health|).
 
@@ -188,6 +190,14 @@ SIDEBAR
 	Rebuild the tree now. Before any tree was built, build one for the
 	current buffer's repository, as |:Changeset| would, or warn "no merge
 	base with the default branch".
+
+PICKER
+
+:Changeset pick                                              *:Changeset-pick*
+<Plug>(changeset-pick)                                *<Plug>(changeset-pick)*
+<C-g>j                                                      *changeset-<C-g>j*
+	Open the picker of |changeset-picker| on the changes of the current
+	buffer's repository.
 
 STEPPING
 
@@ -328,6 +338,7 @@ its subcommand:
 
 Key       Mode            Runs ~
 <C-g>g    Normal          |:Changeset-toggle|
+<C-g>j    Normal          |:Changeset-pick|
 <C-g>r    Normal          |:Changeset-refresh|
 <C-g>nn   Normal          |:Changeset-next|
 <C-g>np   Normal          |:Changeset-prev|
@@ -1022,6 +1033,15 @@ the sidebar: changed symbols, changes outside them, and files with nothing
 under them. It leaves out deleted files and review comments, and the symbol
 kinds the sidebar hides.
 
+Without mini.pick, |vim.ui.select()| offers the same changes, each shown by
+its trail and name, under the same title. Choosing one opens its file at its
+line; cancelling opens nothing. Because |vim.ui.select()| may answer later,
+|changeset.pick.pick()| then returns nil at once and opens the choice when it
+is made.
+
+A pick from the sidebar opens its file where `<CR>` on a row would, never in
+the sidebar.
+
 `:Pick changeset` works too when mini.pick is set up by the end of startup. If
 you set it up later, register the picker yourself: >lua
     MiniPick.registry.changeset = function()
@@ -1289,9 +1309,12 @@ require("changeset").bubble({buf}, {lnum})                *changeset.bubble()*
 	`review_comment.sign` is.
 
 require("changeset.pick").pick()                       *changeset.pick.pick()*
-	Open mini.pick on the changes of the current buffer's repository
-	(|changeset-picker|). Blocks until the picker closes and returns the
-	item chosen, or nil. Warns when mini.pick isn't set up.
+	Open the picker on the changes of the current buffer's repository
+	(|changeset-picker|), with mini.pick when it is set up and
+	|vim.ui.select()| otherwise. With mini.pick, blocks until the picker
+	closes and returns the item chosen, or nil. With |vim.ui.select()|,
+	returns nil at once; the choice opens its file when it is made. Warns
+	when there is no changeset.
 
 ==============================================================================
 17. Health                                                  *changeset-health*
