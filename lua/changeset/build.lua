@@ -404,14 +404,15 @@ fork_point.subscribe(function(root, branch, point)
   if not (tree and tree.root == root and tree.branch == branch) then
     return
   end
-  -- A point that leaves no PR is one the tree's own re-measure finds too, unless the tree's PR is gone.
-  if not point.pr and not tree.pr then
-    return
-  end
   if tree.base == point.base and tree.pr == point.pr then
     return
   end
-  build_at(root)
+  -- Placed as a re-measure places its point, since a point measured without blocking is as fresh as a blocking one.
+  -- A HEAD gone to another branch is that branch's to build.
+  local head, commit = Git.head(root)
+  if (head or "HEAD") == branch then
+    place(root, branch, commit, point)
+  end
 end)
 
 ---The tree the last build() made; nil before the first.

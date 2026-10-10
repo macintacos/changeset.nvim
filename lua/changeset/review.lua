@@ -132,11 +132,12 @@ local function follow(root, branch, point)
   end
 end
 
----Measure the fork point again without blocking, then follow it.
+---Measure the fork point again without blocking, then follow it. gh is asked only as the branch changes, and again as
+---HEAD moves once it has named a PR, never each time the remote branch may have moved.
 ---@param root string
 ---@param branch string
 local function remeasure(root, branch)
-  fork_point.get_async(root, branch, function(point)
+  fork_point.measure_async(root, branch, function(point)
     follow(root, branch, point)
   end)
 end

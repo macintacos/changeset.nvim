@@ -15,7 +15,7 @@ describe("the gutter's base", function()
 
   after_each(function()
     gutter.teardown(dir, cwd)
-    vim.env.FAKE_GH_PR, vim.env.FAKE_GH_DELAY = nil, nil
+    vim.env.FAKE_GH_PR, vim.env.FAKE_GH_DELAY, vim.env.FAKE_GH_LOG = nil, nil, nil
   end)
 
   it("moves attached buffers to the new merge base after an external branch switch", function()
@@ -271,6 +271,60 @@ describe("the gutter's base", function()
     assert.is_false(vim.wait(3000, function()
       return revision(bufs[1]) ~= pulled
     end, 20))
+  end)
+
+  it("asks gh nothing as it measures again on focus and HEAD's moves, where gh named no PR", function()
+    vim.fn.writefile({ "one" }, dir .. "/a.txt")
+    local pushed = support.commit("pushed", dir)
+    support.git({ "update-ref", "refs/remotes/origin/main", pushed }, dir)
+    vim.fn.writefile({ "one", "two" }, dir .. "/a.txt")
+    local unpushed = support.commit("unpushed", dir)
+    vim.env.FAKE_GH_LOG = vim.fn.tempname()
+    vim.fn.chdir(dir)
+    local bufs = edit({ "a.txt" })
+    assert.is_true(await(bufs, pushed, 5000))
+    -- The branch's own lookup, as it is first seen.
+    assert.is_true(vim.wait(5000, function()
+      return gh.calls() == 1
+    end, 20))
+
+    support.git({ "update-ref", "refs/remotes/origin/main", unpushed }, dir)
+    vim.api.nvim_exec_autocmds("FocusGained", {})
+    assert.is_true(await(bufs, unpushed, 10000))
+    vim.fn.writefile({ "one", "two", "three" }, dir .. "/a.txt")
+    local pulled = support.commit("pulled", dir)
+    support.git({ "update-ref", "refs/remotes/origin/main", pulled }, dir)
+    assert.is_true(await(bufs, pulled, 10000))
+    assert.is_true(settle())
+
+    assert.equal(1, gh.calls())
+  end)
+
+  it("moves an open sidebar's tree with it onto the base a push leaves, once Neovim regains focus", function()
+    vim.fn.writefile({ "one" }, dir .. "/a.txt")
+    local pushed = support.commit("pushed", dir)
+    support.git({ "update-ref", "refs/remotes/origin/main", pushed }, dir)
+    vim.fn.writefile({ "one", "two" }, dir .. "/a.txt")
+    local unpushed = support.commit("unpushed", dir)
+    vim.fn.chdir(dir)
+    local bufs = edit({ "a.txt" })
+    assert.is_true(await(bufs, pushed, 5000))
+    local changeset, build = require("changeset"), require("changeset.build")
+    changeset.open()
+    assert.is_true(vim.wait(5000, function()
+      local tree = build.current()
+      return tree ~= nil and tree.collected and tree.base == pushed
+    end, 20))
+    assert.is_true(settle())
+
+    support.git({ "update-ref", "refs/remotes/origin/main", unpushed }, dir)
+    vim.api.nvim_exec_autocmds("FocusGained", {})
+
+    assert.is_true(await(bufs, unpushed, 10000))
+    assert.is_true(vim.wait(5000, function()
+      return assert(build.current()).base == unpushed
+    end, 20))
+    changeset.close()
   end)
 
   it("follows a branch rebased onto a newer default branch to its new fork point", function()
