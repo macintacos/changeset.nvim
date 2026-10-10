@@ -1467,8 +1467,10 @@ repository's deliberate choice is none of that save's business.
 - **Previews follow the window you were last in** — the focused one, or, while the cursor
   is in the sidebar, the one it came from. `winnr("#")` answers 0 once that window has
   been closed, and 0 is an alias for the current window wherever it would then be passed,
-  so it has to be dropped rather than carried through. Nothing usable at all: the rest of
-  the tabpage, then a split of its own.
+  so it has to be dropped rather than carried through. A picker's prompt closing takes
+  `winnr("#")` with it, so the last window a file could open in is remembered on leaving
+  it and offered first, unless it stands in another tabpage. Nothing usable at all: the
+  rest of the tabpage, then a split of its own.
 - **A previewed file is highlighted, not opened.** Its buffer stays unlisted until a
   commit promotes it — `<CR>`, or the cursor arriving in its window by any route (mouse,
   `<C-w>`, `:wincmd`, another plugin). A deleted row's preview is the exception: it stands
@@ -1556,10 +1558,19 @@ repository's deliberate choice is none of that save's business.
   entering one, and the autocmds that watch the sidebar all hold its window id, which
   `nvim_win_set_config` keeps. Neovim will not move the last window, so a sidebar standing
   alone stays where it is.
-- **The sidebar's window keeps its buffer**, through `winfixbuf`: a reflexive `<C-o>` there
-  would otherwise swap the tree out of its window and wipe it. Every path that puts
-  another buffer in that window — the session placeholder, the preview split, the
-  last-window close — clears it first.
+- **A buffer put in the sidebar's window opens where a preview would.** `:edit`, `<C-o>`,
+  a picker or a jump to a definition from the focused sidebar opens in the window you
+  were last in, with focus and the cursor the command placed. `winfixbuf` can't do this:
+  it refuses the switch before any autocmd fires, and pickers swallow the error. So the
+  sidebar lets the buffer in and moves it out on the next `SafeState`, which comes after
+  the command has placed its cursor (a picker or an LSP jump does that after the switch)
+  and before the screen is drawn. A scheduled move comes after the draw, so the file
+  would flash in the sidebar. Anything that redraws before the move shows it there too,
+  and `WinEnter` handlers often do (`:redrawstatus` draws the whole screen). So the move
+  puts the tree back before it focuses the file's new window, and a mini.pick choice
+  moves on `MiniPickStop`, before the picker refocuses the sidebar it started in. The
+  tree's `bufhidden` is `hide` so it outlives the switch; a `BufHidden` handler wipes it
+  once no window shows it.
 - **The sidebar's window options are set as `:setlocal`.** `vim.wo` would set the window's
   global copy too, which the next buffer in it and every split off it would take for the
   user's own. When the sidebar is the last window, closing it shows an empty buffer there

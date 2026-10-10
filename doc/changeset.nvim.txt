@@ -471,8 +471,12 @@ leave the files fewer than `layout.min_file_width` columns
 (|changeset-option-layout.min_file_width|), it opens as a drawer along the
 bottom instead, a third of the editor's height and at least 10 lines. It moves
 between the two as you resize the editor. Its buffer is read-only, with
-'filetype' `changeset`. Its window sets 'winfixbuf', so |CTRL-O| or `:edit`
-there leaves the tree in place.
+'filetype' `changeset`.
+
+A buffer opened while the cursor is in the sidebar, by `:edit`, |CTRL-O|, a
+picker or a jump to a definition, opens in the window you were last in
+instead, with the cursor where the command put it. The tree stays, and the
+cursor moves to that window.
 
 The header over the tree names the ref the tree is compared against, the PR's
 number when there is one, the number of files and commits, and the `+N -N`
