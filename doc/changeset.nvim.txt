@@ -131,13 +131,14 @@ The tree lists what changed between your working tree and its base, untracked
 files included. Unsaved edits don't count until you write them. The base is
 the merge base with the first of these that shares history with your branch:
 
-1. The branch's parent: the branch the command named, as in
+1. The ref you set for the branch with |:Changeset-base|.
+2. The branch's parent: the branch the command named, as in
    `git switch -c feature parent`, or the branch you were on when you ran
    `git switch -c feature` or `git checkout -b feature` in the same worktree.
    changeset reads this from git's reflog. A stacked branch therefore shows
    only its own changes, pushed or not, with or without a PR.
-2. The target of the branch's open PR, when `gh` finds one.
-3. The default branch: the one `origin/HEAD` names, else the first of `main`,
+3. The target of the branch's open PR, when `gh` finds one.
+4. The default branch: the one `origin/HEAD` names, else the first of `main`,
    `master` and `trunk` that exists locally or on `origin`.
 
 On the default branch itself, the base is the merge base with its remote,
@@ -178,7 +179,8 @@ leaves none keeps the tree as it was.
 :Changeset [{subcommand}]                                         *:Changeset*
 	Without a subcommand, `toggle`. `<Tab>` completes the subcommands.
 	`:Changeset comment`, `:Changeset review` and `:Changeset preview`
-	take a verb, and `next` and `prev` take an optional one. With no verb
+	take a verb, and `next` and `prev` take an optional one. `base`
+	takes a ref or its verb `reset`, or neither. With no verb
 	where one is needed, or a verb a subcommand doesn't have, it reports
 	an error that lists the verbs; words past a full subcommand report
 	that it takes no arguments. Only `comment new` uses a range. From the
@@ -211,6 +213,27 @@ PICKER
 <C-g>j                                                      *changeset-<C-g>j*
 	Open the picker of |changeset-picker| on the changes of the current
 	buffer's repository.
+
+BASE
+
+:Changeset base [{ref}]                                      *:Changeset-base*
+<Plug>(changeset-base)                                *<Plug>(changeset-base)*
+<C-g>b                                                      *changeset-<C-g>b*
+	Without {ref}, pick a branch, local or remote, to compare the current
+	branch against, the one committed to last first, with
+	|vim.ui.select()|. While a base is set, the first item, "(guess
+	again)", forgets it. With {ref}, a branch, tag or commit, compare
+	against that. The sidebar, the gutter and the unified diff follow it
+	at once. changeset remembers it per repository and branch, across
+	sessions, until you reset it. While the ref shares no history with
+	`HEAD`, as once it is deleted, the base is guessed as |changeset-base|
+	says. A {ref} that shares none when you set it is an error, and so is
+	a detached `HEAD`.
+
+:Changeset base reset                                  *:Changeset-base-reset*
+<Plug>(changeset-base-reset)                    *<Plug>(changeset-base-reset)*
+	Forget the base set for the current branch, and compare against the
+	one changeset guesses again.
 
 UNIFIED DIFF
 
@@ -365,6 +388,7 @@ its subcommand:
 Key       Mode            Runs ~
 <C-g>g    Normal          |:Changeset-toggle|
 <C-g>j    Normal          |:Changeset-pick|
+<C-g>b    Normal          |:Changeset-base|
 <C-g>d    Normal          |:Changeset-diff|
 <C-g>r    Normal          |:Changeset-refresh|
 <C-g>nn   Normal          |:Changeset-next|
@@ -1420,6 +1444,7 @@ nothing, starts no language server and makes no network request.
   `stdpath("cache")/changeset/`. You can delete it; the next build is slow
   once.
 - Hidden symbol kinds: `stdpath("state")/changeset/filters.json`.
+- Bases set with |:Changeset-base|: `stdpath("state")/changeset/bases.json`.
 - Swap files: a file changeset reads or previews gets none until you enter
   its buffer, so another Neovim opening it shows no |E325| warning.
 - Review comments, and each branch's last 10 submitted batches:

@@ -110,6 +110,7 @@ has a `<Plug>(changeset-…)` map named after its words, and these default keys:
 | --------------------- | ------------------------------- | ------------------------------------------------------- |
 | `<C-g>g`              | `toggle`                        | Open, focus or close the sidebar                        |
 | `<C-g>j`              | `pick`                          | Pick a change to open from a list                       |
+| `<C-g>b`              | `base [{ref}]`                  | Pick the branch to compare against, or name any ref     |
 | `<C-g>d`              | `diff`                          | Turn the unified diff on or off                         |
 | `<C-g>r`              | `refresh`                       | Rebuild the tree                                        |
 | `<C-g>nn` / `<C-g>np` | `next` / `prev`                 | Open the next / previous change                         |
@@ -127,6 +128,7 @@ has a `<Plug>(changeset-…)` map named after its words, and these default keys:
 | `<C-g>y`              | `review yank`                   | Copy the review as text                                 |
 | `<C-g>a`              | `review abandon`                | Delete this branch's comments                           |
 |                       | `review restore`                | Bring back a batch of submitted comments                |
+|                       | `base reset`                    | Compare against the base changeset guesses again        |
 
 - A default key that clashes with one you've mapped is left alone.
 - Set `vim.g.changeset_no_default_maps = true` to map none of them, then map the `<Plug>`
@@ -168,6 +170,10 @@ The tree shows what changed since your branch left the branch you created it fro
 its open PR's target (found with `gh`), else the default branch. On the default branch it
 shows what you haven't pushed. The header names that base; `:help changeset-base` has the
 full rules.
+
+When that guess is wrong, `<C-g>b` picks the branch to compare against instead, and
+`:Changeset base <ref>` takes any branch, tag or commit. changeset remembers it for the branch
+until `:Changeset base reset`.
 
 ## The gutter's base and the unified diff
 

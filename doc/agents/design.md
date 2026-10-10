@@ -1129,6 +1129,18 @@ HEAD, which would show only uncommitted work. So it is measured against its own 
 alone: what reading `main` before a push needs is what hasn't been pushed. Without a remote
 there is nothing else to measure against, and the base is HEAD.
 
+A base set by hand with `:Changeset base` comes before every rule above. Each rule is a
+guess with a case it gets wrong, such as an expired reflog, a PR gh can't see, or a release
+to compare against a tag, and without the override the user has no way out. It is kept per
+repository and branch under `stdpath("state")`, since it is a choice nothing can derive again,
+and `measure` reads it, so the tree and the gutter take it from where they take the guess
+and can't disagree. A ref that stops sharing history with HEAD, as a deleted branch does, is
+skipped rather than forgotten, so fetching it back brings it back. A tree is kept only while
+both its fork point and its ref match the point measured, since a ref set by hand can fork
+where the guess does and the header must name the one chosen. The picker is
+`vim.ui.select`, not mini.pick as the change picker is: its items are branch names, which
+need none of that picker's trails or previews.
+
 The gutter follows the base as it moves, not only as the branch changes. gitsigns publishes
 `GitSignsUpdate` only when a buffer's signs or branch change, and a pull or rebase that
 leaves every open file's signs alone publishes none, so HEAD's moves are heard from
