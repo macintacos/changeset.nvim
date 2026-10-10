@@ -287,7 +287,7 @@ place = function(root, branch, commit, point)
     return false
   end
   local base = point.base
-  if tree and tree.root == root and tree.base == base and tree.branch == branch then
+  if tree and tree.root == root and tree.base == base and tree.ref == point.ref and tree.branch == branch then
     tree.head = commit
     if tree.pr ~= point.pr then
       tree.pr = point.pr
@@ -404,7 +404,7 @@ fork_point.subscribe(function(root, branch, point)
   if not (tree and tree.root == root and tree.branch == branch) then
     return
   end
-  if tree.base == point.base and tree.pr == point.pr then
+  if tree.base == point.base and tree.ref == point.ref and tree.pr == point.pr then
     return
   end
   -- Placed as a re-measure places its point, since a point measured without blocking is as fresh as a blocking one.

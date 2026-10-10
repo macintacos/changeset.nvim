@@ -21,6 +21,16 @@ local subcommands = {
   diff = function()
     require("changeset").diff()
   end,
+  base = function(opts)
+    local base = require("changeset.base")
+    if opts.fargs[2] then
+      return base.set(opts.fargs[2])
+    end
+    base.pick()
+  end,
+  ["base reset"] = function()
+    require("changeset.base").reset()
+  end,
   next = function()
     require("changeset").step(1)
   end,
@@ -87,6 +97,9 @@ local subcommands = {
   end,
 }
 
+---Subcommands that take one word after them, unless it is one of their verbs.
+local TAKES_REF = { base = true }
+
 ---The review comment window, when it is current. Never loads its module: no window is open until it is loaded.
 ---@return changeset.ReviewCommentWindow?
 local function comment_window()
@@ -115,6 +128,9 @@ end
 ---@return string
 local function unknown(fargs)
   local verbs = next_words(fargs[1] .. " ")
+  if TAKES_REF[fargs[1]] then
+    return (":Changeset %s takes one ref, or a verb: %s"):format(fargs[1], table.concat(verbs, ", "))
+  end
   if #verbs == 0 and subcommands[fargs[1]] then
     return (":Changeset %s takes no arguments"):format(fargs[1])
   end
@@ -137,6 +153,9 @@ end
 
 vim.api.nvim_create_user_command("Changeset", function(opts)
   local name = #opts.fargs == 0 and "toggle" or table.concat(opts.fargs, " ")
+  if not subcommands[name] and #opts.fargs == 2 and TAKES_REF[opts.fargs[1]] then
+    name = opts.fargs[1]
+  end
   local run = subcommands[name]
   if not run then
     return vim.notify("Changeset: " .. unknown(opts.fargs), vim.log.levels.ERROR)
@@ -152,7 +171,7 @@ end, {
   nargs = "*",
   range = true,
   bar = true,
-  desc = "Toggle the changeset sidebar, rebuild it, pick a change from a list, turn the unified diff on or off, step through its changes, symbols or files, open or preview them, submit, restore, copy or abandon the review, or write, delete, draft, walk, reopen, list or show review comments",
+  desc = "Toggle the changeset sidebar, rebuild it, pick a change from a list, set the base it compares against, turn the unified diff on or off, step through its changes, symbols or files, open or preview them, submit, restore, copy or abandon the review, or write, delete, draft, walk, reopen, list or show review comments",
   complete = function(lead, line)
     -- The words between `Changeset`, with any range before it, and `lead`.
     local typed = vim.trim(line:match("^%S+%s+(.-)%S*$") or "")
@@ -306,6 +325,12 @@ local keys = {
     icon = { cat = "filetype", name = "diff" },
   },
   {
+    lhs = "<C-g>b",
+    name = "base",
+    desc = "Pick the branch to compare against",
+    icon = { cat = "filetype", name = "git" },
+  },
+  {
     lhs = "<C-g>d",
     name = "diff",
     desc = "Turn the unified diff on or off",
@@ -343,6 +368,12 @@ for _, key in ipairs(keys) do
 end
 -- `:`, not <Cmd>, so the selection arrives as the '<,'> range.
 vim.keymap.set("x", plug("comment new"), ":Changeset comment new<CR>", { silent = true, desc = comment_new.desc })
+vim.keymap.set(
+  "n",
+  plug("base reset"),
+  "<Cmd>Changeset base reset<CR>",
+  { desc = "Compare against the base changeset guesses again" }
+)
 vim.keymap.set(
   "n",
   plug("review restore"),

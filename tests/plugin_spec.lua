@@ -101,7 +101,7 @@ describe("plugin/changeset.lua", function()
 
   it("completes the subcommands that match the argument", function()
     assert.same(
-      { "comment", "diff", "next", "pick", "prev", "preview", "refresh", "review", "toggle" },
+      { "base", "comment", "diff", "next", "pick", "prev", "preview", "refresh", "review", "toggle" },
       vim.fn.getcompletion("Changeset ", "cmdline")
     )
     assert.same({ "refresh", "review" }, vim.fn.getcompletion("Changeset re", "cmdline"))
@@ -116,6 +116,7 @@ describe("plugin/changeset.lua", function()
     assert.same({ "abandon", "restore", "submit", "yank" }, vim.fn.getcompletion("Changeset review ", "cmdline"))
     assert.same({ "file", "symbol" }, vim.fn.getcompletion("Changeset next ", "cmdline"))
     assert.same({ "next", "prev" }, vim.fn.getcompletion("Changeset preview ", "cmdline"))
+    assert.same({ "reset" }, vim.fn.getcompletion("Changeset base ", "cmdline"))
     assert.same({}, vim.fn.getcompletion("Changeset toggle ", "cmdline"))
   end)
 
@@ -161,6 +162,42 @@ describe("plugin/changeset.lua", function()
 
     package.loaded["changeset.pick"] = nil
     assert.equal(2, calls.pick)
+  end)
+
+  it("routes base to the branch picker, base with a ref to setting it, base reset to forgetting it", function()
+    local calls, refs = {}, {}
+    package.loaded["changeset.base"] = {
+      pick = counter(calls, "pick"),
+      reset = counter(calls, "reset"),
+      set = function(ref)
+        table.insert(refs, ref)
+      end,
+    }
+
+    vim.cmd("Changeset base")
+    vim.cmd("Changeset base v1.0")
+    vim.cmd("Changeset base reset")
+    vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-base)"), "x", false)
+    vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-base-reset)"), "x", false)
+
+    package.loaded["changeset.base"] = nil
+    assert.same({ pick = 2, reset = 2 }, calls)
+    assert.same({ "v1.0" }, refs)
+  end)
+
+  it("reports base given more than one ref as an error", function()
+    local refs = {}
+    package.loaded["changeset.base"] = {
+      set = function(ref)
+        table.insert(refs, ref)
+      end,
+    }
+
+    vim.cmd("Changeset base main trunk")
+
+    package.loaded["changeset.base"] = nil
+    assert.same({}, refs)
+    assert.same({ vim.log.levels.ERROR }, { notes[1].level })
   end)
 
   it("runs the command after a | once the subcommand ran", function()
@@ -415,7 +452,7 @@ describe("plugin/changeset.lua", function()
   end)
 
   it("maps the default keys once startup is done", function()
-    local probe = "for _, lhs in ipairs({ 'cc', 'cd', 'cq', 'd', 'l', 's', 'n', 'nn', 'np', 'ns', 'nS', 'nf', 'nF', 'g', 'j', 't' }) do"
+    local probe = "for _, lhs in ipairs({ 'cc', 'cd', 'cq', 'd', 'l', 's', 'n', 'nn', 'np', 'ns', 'nS', 'nf', 'nF', 'g', 'j', 'b', 't' }) do"
       .. " io.write(vim.fn.maparg('<C-g>' .. lhs, 'n'), ' ') end"
       .. " io.write(vim.fn.maparg('<C-g>cc', 'x'), ' ', vim.fn.maparg(']g', 'n'), ' ', vim.fn.maparg('[g', 'n'))"
 
@@ -423,7 +460,7 @@ describe("plugin/changeset.lua", function()
       "<Plug>(changeset-comment-new) <Plug>(changeset-comment-del) <Plug>(changeset-comment-list) <Plug>(changeset-diff)  "
         .. "<Plug>(changeset-review-submit)  <Plug>(changeset-next) <Plug>(changeset-prev) "
         .. "<Plug>(changeset-next-symbol) <Plug>(changeset-prev-symbol) <Plug>(changeset-next-file) "
-        .. "<Plug>(changeset-prev-file) <Plug>(changeset-toggle) <Plug>(changeset-pick)  "
+        .. "<Plug>(changeset-prev-file) <Plug>(changeset-toggle) <Plug>(changeset-pick) <Plug>(changeset-base)  "
         .. "<Plug>(changeset-comment-new) "
         .. "<Plug>(changeset-preview-next) <Plug>(changeset-preview-prev)",
       after_startup({}, probe)

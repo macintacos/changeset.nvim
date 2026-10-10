@@ -473,4 +473,65 @@ describe("fork_point", function()
     assert.is_nil(fork_point.get(dir, "feature"))
     assert.equal(0, asks)
   end)
+
+  describe("with a base set by hand", function()
+    it("measures against it over the branch it was created from", function()
+      local root, default_base = repo("parent")
+      fork_point.pin(root, "feature", "main")
+
+      local point = assert(fork_point.get(root, "feature"))
+
+      assert.same({ default_base, "main", "main" }, { point.base, point.against, point.ref })
+    end)
+
+    it("guesses again once it is forgotten", function()
+      local root, _, parent_base = repo("parent")
+      fork_point.pin(root, "feature", "main")
+      fork_point.pin(root, "feature", nil)
+
+      local point = assert(fork_point.get(root, "feature"))
+
+      assert.same({ parent_base, "parent" }, { point.base, point.against })
+    end)
+
+    it("guesses while it names nothing HEAD forked from, as once it is deleted", function()
+      local root, _, parent_base = repo("parent")
+      fork_point.pin(root, "feature", "deleted")
+
+      assert.equal(parent_base, assert(fork_point.get(root, "feature")).base)
+    end)
+
+    it("keeps it to its own branch", function()
+      local root = repo("parent")
+      fork_point.pin(root, "feature", "main")
+      local feature_tip = fixture.git({ "rev-parse", "feature" }, root)
+      fixture.git({ "checkout", "-q", "-b", "child" }, root)
+      commit_file(root, "child.txt")
+
+      local point = assert(fork_point.get(root, "child"))
+
+      assert.same({ feature_tip, "feature" }, { point.base, point.against })
+    end)
+
+    it("tells subscribers the point measured from it", function()
+      local root, default_base = repo("parent")
+
+      fork_point.pin(root, "feature", "main")
+      assert.is_true(await_heard(root, 1))
+
+      assert.equal(default_base, heard_in(root)[1].point.base)
+    end)
+
+    it("names the PR whose target it is", function()
+      vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "main", number = 7 })
+      local root = repo("parent")
+      fork_point.get(root, "feature")
+      assert.is_true(await_heard(root, 1))
+
+      fork_point.pin(root, "feature", "main")
+      assert.is_true(await_heard(root, 2))
+
+      assert.equal(7, heard_in(root)[2].point.pr)
+    end)
+  end)
 end)

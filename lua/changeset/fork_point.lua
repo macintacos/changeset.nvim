@@ -1,12 +1,14 @@
----Where the branch forked: from the branch it was created from, else from its open PR's target, else from the default branch.
+---Where the branch forked: from a base set by hand, else from the branch it was created from, else from its open PR's
+---target, else from the default branch.
 local Git = require("changeset.git")
+local jsonfile = require("changeset.jsonfile")
 
 local M = {}
 
 ---@class changeset.ForkPoint
 ---@field base string Commit HEAD forked at.
 ---@field ref string Ref whose history holds `base`, e.g. "origin/trunk".
----@field against string Branch `base` was measured against: the one the branch was created from, the open PR's target, or the default branch.
+---@field against string What `base` was measured against: the ref set by hand, the branch the branch was created from, the open PR's target, or the default branch.
 ---@field default_branch string The repository's default branch, whatever `against` is.
 ---@field pr integer? The open PR's number, while `base` is measured against its target.
 ---@field skipped string? The open PR's target when HEAD shares no fork point with it, so `base` stayed on the default branch's.
@@ -31,6 +33,33 @@ local rechecking = {}
 ---@type table<fun(root: string, branch: string, point: changeset.ForkPoint), true>
 local subscribers = {}
 
+---Where the bases set by hand are kept, by root and then by branch. Under `state`: losing it loses a choice.
+---@return string
+local function pins_path()
+  return vim.fs.joinpath(vim.fn.stdpath("state"), "changeset", "bases.json")
+end
+
+---The ref set by hand for `branch` at `root`, if any.
+---@param root string
+---@param branch string
+---@return string?
+function M.pinned(root, branch)
+  local repo = jsonfile.read(pins_path())[root]
+  local ref = type(repo) == "table" and repo[branch]
+  return type(ref) == "string" and ref or nil
+end
+
+---`pr`'s number while its target is `against`, or forks from HEAD at `base` as `against` does, so the PR the header
+---names is the diff it shows.
+---@param root string
+---@param pr changeset.fork_point.PrTarget?
+---@param against string
+---@param base string
+---@return integer?
+local function pr_number(root, pr, against, base)
+  return pr and (pr.target == against or Git.merge_base(root, pr.target) == base) and pr.number or nil
+end
+
 ---Whether the default branch's fork point has moved past the parent's, as it does once the branch is
 ---rebased onto the default branch after its parent merged.
 ---@param root string
@@ -41,14 +70,23 @@ local function outgrown(root, parent_base, default_base)
   return default_base ~= nil and default_base ~= parent_base and Git.is_ancestor(root, parent_base, default_base)
 end
 
----HEAD's fork point from the branch `branch` was created from, unless the branch has outgrown it, else from
----`pr`'s target, taking each only when HEAD shares a fork point with it, else from the default branch.
+---HEAD's fork point from the ref set by hand for `branch`, else from the branch it was created from, unless the branch
+---has outgrown it, else from `pr`'s target, taking each only when HEAD shares a fork point with it, else from the
+---default branch.
 ---@param root string
 ---@param branch string
 ---@param pr changeset.fork_point.PrTarget?
 ---@return changeset.ForkPoint?
 local function measure(root, branch, pr)
   local default_branch = Git.default_base(root)
+  local pinned = M.pinned(root, branch)
+  if pinned then
+    local pinned_base, pinned_ref = Git.merge_base(root, pinned)
+    if pinned_base then
+      local number = pr_number(root, pr, pinned, pinned_base)
+      return { base = pinned_base, ref = pinned_ref, against = pinned, default_branch = default_branch, pr = number }
+    end
+  end
   local base, ref
   -- Its remote's fork point, so its unpushed commits show. Elsewhere the newer of the two, so a stacked branch
   -- leaves out its parent's unpushed commits.
@@ -61,9 +99,7 @@ local function measure(root, branch, pr)
   if parent and parent ~= default_branch then
     local parent_base, parent_ref = Git.merge_base(root, parent)
     if parent_base and not outgrown(root, parent_base, base) then
-      -- The header names the PR only while its target forks from HEAD where `parent` does, so the PR it
-      -- names is the one this diff is.
-      local number = pr and (pr.target == parent or Git.merge_base(root, pr.target) == parent_base) and pr.number or nil
+      local number = pr_number(root, pr, parent, parent_base)
       return { base = parent_base, ref = parent_ref, against = parent, default_branch = default_branch, pr = number }
     end
   end
@@ -240,6 +276,25 @@ function M.recheck(root, branch)
       end
     end)
   end)
+end
+
+---Measure `branch` at `root` from `ref` from now on, in this session and later ones, or guess again when `ref` is nil.
+---Subscribers hear the point measured from it.
+---@param root string
+---@param branch string
+---@param ref string?
+---@return boolean written false when it could not be kept, which leaves the base as it was.
+function M.pin(root, branch, ref)
+  local file = pins_path()
+  local pins = jsonfile.read(file)
+  local repo = type(pins[root]) == "table" and pins[root] or {}
+  repo[branch] = ref
+  pins[root] = next(repo) and repo or nil
+  if not jsonfile.write(file, pins) then
+    return false
+  end
+  measure_async(root, branch, carry, function() end)
+  return true
 end
 
 ---Hear every gh answer, and every fork point measured without blocking, for any repository and branch. Subscribing `fn`

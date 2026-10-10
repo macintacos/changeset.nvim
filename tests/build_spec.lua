@@ -114,6 +114,17 @@ describe("changeset.build", function()
     end, 10))
   end)
 
+  it("names the ref set by hand as its base when that ref forks where the base does", function()
+    build_and_collect()
+    Fixture.git({ "tag", "v1", "trunk" }, tmp)
+
+    require("changeset.fork_point").pin(assert(build.current()).root, "feature", "v1")
+
+    assert.is_true(vim.wait(5000, function()
+      return assert(build.current()).ref == "v1"
+    end, 10))
+  end)
+
   describe("while gh is slow to answer", function()
     before_each(function()
       vim.env.FAKE_GH_DELAY = "1"
