@@ -52,7 +52,7 @@ describe("the gutter's base", function()
     vim.fn.chdir(dir)
 
     local bufs = edit({ "a.txt", "b.txt" })
-    assert.is_true(await_cached(bufs))
+    assert.is_true(await(bufs, gutter.merge_base(dir), 5000))
     vim.api.nvim_buf_call(present(bufs[1]), function()
       require("gitsigns").change_base(parent)
     end)
