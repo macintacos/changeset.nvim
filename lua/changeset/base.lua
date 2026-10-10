@@ -13,22 +13,24 @@ local M = {}
 
 local ns = vim.api.nvim_create_namespace("changeset.base")
 
----@alias changeset.BaseKind "branch"|"tag"|"commit"
-
 ---@class changeset.BaseItem
 ---@field text string What a query matches: the ref, and a commit's subject after it.
 ---@field ref string What the branch is compared against once it is picked.
 ---@field date string When it was last committed to, as git says it.
----@field kind changeset.BaseKind
+---@field kind changeset.RefKind
 
 ---@class changeset.base.Source
 ---@field noun string
+---@field none string? What the picker says instead of opening on nothing; absent for a source that streams.
 ---@field command string[] Prints a candidate per line: its ref, its date and, for a commit, its subject, split by tabs.
+---@field stream boolean? Whether its items arrive as git prints them, rather than before the picker opens: a commit's
+---source is HEAD's whole history.
 
----@type table<changeset.BaseKind, changeset.base.Source>
+---@type table<changeset.RefKind, changeset.base.Source>
 local SOURCES = {
   branch = {
     noun = "a branch",
+    none = "no other branches",
     command = {
       "git",
       "for-each-ref",
@@ -41,6 +43,7 @@ local SOURCES = {
   },
   tag = {
     noun = "a tag",
+    none = "no tags",
     command = {
       "git",
       "for-each-ref",
@@ -49,7 +52,7 @@ local SOURCES = {
       "refs/tags",
     },
   },
-  commit = { noun = "a commit", command = { "git", "log", "--format=%h%x09%cr%x09%s", "HEAD" } },
+  commit = { noun = "a commit", command = { "git", "log", "--format=%h%x09%cr%x09%s", "HEAD" }, stream = true },
 }
 
 ---The current buffer's repository and the branch checked out there, or nothing, having said why.
@@ -78,7 +81,7 @@ local function pin(root, branch, ref)
 end
 
 ---The candidates `SOURCES[kind].command` printed, less `branch` itself.
----@param kind changeset.BaseKind
+---@param kind changeset.RefKind
 ---@param branch string
 ---@param lines string[]
 ---@return changeset.BaseItem[]
@@ -153,7 +156,7 @@ end
 
 ---Pick a ref of `kind` to compare the current branch against: with mini.pick when it is set up, beside a preview of
 ---what the sidebar would hold against it, and `vim.ui.select` otherwise.
----@param kind changeset.BaseKind
+---@param kind changeset.RefKind
 function M.pick(kind)
   local root, branch = current()
   if not (root and branch) then
@@ -171,10 +174,14 @@ function M.pick(kind)
       pin(root, branch, item.ref)
     end
   end
+  local listed = not source.stream and items(Git.lines(source.command, root)) or nil
+  if listed and #listed == 0 then
+    return vim.notify(("Changeset: %s to compare against"):format(source.none), vim.log.levels.WARN)
+  end
   -- `require` first so a lazy-loading manager can load and set mini.pick up; then `MiniPick`, which only `setup()`
   -- creates.
   if not (pcall(require, "mini.pick") and MiniPick) then
-    return vim.ui.select(items(Git.lines(source.command, root)), {
+    return vim.ui.select(listed or items(Git.lines(source.command, root)), {
       prompt = title,
       format_item = function(item)
         return item.text
@@ -183,12 +190,15 @@ function M.pick(kind)
   end
   highlights.define_highlights()
   pick_preview.setup()
-  MiniPick.builtin.cli({ command = source.command, postprocess = items, spawn_opts = { cwd = root } }, {
+  MiniPick.start({
     source = {
+      items = listed or function()
+        MiniPick.set_picker_items_from_cli(source.command, { postprocess = items, spawn_opts = { cwd = root } })
+      end,
       name = title,
       show = show,
       preview = function(buf, item)
-        base_preview.show(buf, root, item.ref)
+        base_preview.show(buf, root, item.ref, item.kind)
       end,
       choose = choose,
     },

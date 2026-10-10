@@ -23,6 +23,7 @@ local M = {}
 ---@field root string
 ---@field base string
 ---@field ref string Ref the fork point was measured against, e.g. "origin/trunk".
+---@field kind changeset.RefKind What `ref` names.
 ---@field branch string
 ---@field head string? HEAD's commit when the tree was built.
 ---@field default_branch string
@@ -309,6 +310,7 @@ place = function(root, branch, commit, point)
     root = root,
     base = base,
     ref = point.ref,
+    kind = point.kind,
     branch = branch,
     head = commit,
     default_branch = point.default_branch,

@@ -221,6 +221,17 @@ describe("changeset sidebar", function()
     assert.truthy(vim.wo[window.win()].winbar:find("trunk", 1, true))
   end)
 
+  it("leads the window bar with the glyph of the kind of ref the branch is compared against", function()
+    Fixture.git({ "tag", "v1", "trunk" }, tmp)
+    vim.cmd.edit("mod.lua")
+    require("changeset.fork_point").pin(require("changeset.paths").root(0), "feature", "v1")
+
+    open_sidebar()
+
+    local winbar = vim.wo[window.win()].winbar
+    assert.truthy(winbar:find(require("changeset.render").REF_ICONS.tag, 1, true), winbar)
+  end)
+
   it("names the branch and what it is compared against in the footer", function()
     open_sidebar()
     local win = assert(window.win())

@@ -117,6 +117,15 @@ describe(":Changeset base", function()
     assert.same({ "v2", "v1" }, refs(assert(offered).items))
   end)
 
+  it("says there are no tags rather than offering none", function()
+    fixture.git({ "tag", "-d", "v1", "v2" }, root)
+
+    base.pick("tag")
+
+    assert.is_nil(offered)
+    assert.equal(1, #Notify.messages(notes, vim.log.levels.WARN))
+  end)
+
   it("offers HEAD's commits, the newest first", function()
     base.pick("commit")
 

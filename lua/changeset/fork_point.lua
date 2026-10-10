@@ -5,9 +5,12 @@ local jsonfile = require("changeset.jsonfile")
 
 local M = {}
 
+---@alias changeset.RefKind "branch"|"tag"|"commit"
+
 ---@class changeset.ForkPoint
 ---@field base string Commit HEAD forked at.
 ---@field ref string Ref whose history holds `base`, e.g. "origin/trunk".
+---@field kind changeset.RefKind What `ref` names; only a ref set by hand is ever not a branch.
 ---@field against string What `base` was measured against: the ref set by hand, the branch the branch was created from, the open PR's target, or the default branch.
 ---@field default_branch string The repository's default branch, whatever `against` is.
 ---@field pr integer? The open PR's number, while `base` is measured against its target.
@@ -84,7 +87,14 @@ local function measure(root, branch, pr)
     local pinned_base, pinned_ref = Git.merge_base(root, by_hand)
     if pinned_base then
       local number = pr_number(root, pr, by_hand, pinned_base)
-      return { base = pinned_base, ref = pinned_ref, against = by_hand, default_branch = default_branch, pr = number }
+      return {
+        base = pinned_base,
+        ref = pinned_ref,
+        kind = Git.ref_kind(root, by_hand),
+        against = by_hand,
+        default_branch = default_branch,
+        pr = number,
+      }
     end
   end
   local base, ref
@@ -100,13 +110,20 @@ local function measure(root, branch, pr)
     local parent_base, parent_ref = Git.merge_base(root, parent)
     if parent_base and not outgrown(root, parent_base, base) then
       local number = pr_number(root, pr, parent, parent_base)
-      return { base = parent_base, ref = parent_ref, against = parent, default_branch = default_branch, pr = number }
+      return {
+        base = parent_base,
+        ref = parent_ref,
+        kind = "branch",
+        against = parent,
+        default_branch = default_branch,
+        pr = number,
+      }
     end
   end
   if not base then
     return
   end
-  local point = { base = base, ref = ref, against = default_branch, default_branch = default_branch }
+  local point = { base = base, ref = ref, kind = "branch", against = default_branch, default_branch = default_branch }
   if pr then
     local stacked, stacked_ref = Git.merge_base(root, pr.target)
     if stacked then

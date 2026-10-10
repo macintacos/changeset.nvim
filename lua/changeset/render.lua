@@ -32,6 +32,7 @@ local symbols = require("changeset.symbols")
 
 ---@class changeset.Summary
 ---@field ref string        What the branch is compared against, e.g. "origin/trunk".
+---@field kind? changeset.RefKind What `ref` names; a branch when absent.
 ---@field pr integer?       Number of the branch's open PR, when it merges into `ref`.
 ---@field files integer
 ---@field commits integer?  Commits on the branch since it forked from `ref`.
@@ -183,6 +184,7 @@ function M.compose(row, chunks, stat)
 end
 
 ---The glyph of each kind of ref a branch can be compared against.
+---@type table<changeset.RefKind, string>
 M.REF_ICONS = { branch = BRANCH_ICON, tag = TAG_ICON, commit = COMMIT_ICON }
 
 ---The `+N -N` virtual text for a row, or for a file the diff read.
@@ -592,18 +594,17 @@ end
 ---A ref too long for the width loses its tail, not its head: a stacked branch is
 ---told apart by the start of its name. The statusline's own `%<` would cut the
 ---other way.
----@param summary { ref: string, pr: integer? }
+---@param summary { ref: string, kind: changeset.RefKind?, pr: integer? }
 ---@param width integer Cells the winbar spans.
 ---@return string
 function M.header(summary, width)
   local pr = summary.pr and ("%s #%d"):format(PR_ICON, summary.pr)
-  local room = width
-    - vim.fn.strdisplaywidth((" %s "):format(BRANCH_ICON))
-    - (pr and vim.fn.strdisplaywidth(pr) + 2 or 0)
+  local glyph = M.REF_ICONS[summary.kind or "branch"]
+  local room = width - vim.fn.strdisplaywidth((" %s "):format(glyph)) - (pr and vim.fn.strdisplaywidth(pr) + 2 or 0)
   local ref = cells.clip(summary.ref, room)
   local remote = ref:match("^origin/") or ""
   return table.concat({
-    ("%%#%s# %s "):format(highlights.HEADER_ICON_HL, BRANCH_ICON),
+    ("%%#%s# %s "):format(highlights.HEADER_ICON_HL, glyph),
     ("%%#%s#%s"):format(highlights.HEADER_DIM_HL, remote),
     ("%%#%s#%s"):format(highlights.HEADER_REF_HL, escaped(ref:sub(#remote + 1))),
     ("%%#%s#%%="):format(highlights.HEADER_HL),
@@ -614,10 +615,11 @@ end
 ---The header's first row as chunks for a buffer line, where `header` is a winbar's: the ref padded to `width`, so its
 ---strip runs the full width.
 ---@param ref string
+---@param kind changeset.RefKind
 ---@param width integer
 ---@return table[] chunks
-function M.header_ref(ref, width)
-  local lead = (" %s "):format(BRANCH_ICON)
+function M.header_ref(ref, kind, width)
+  local lead = (" %s "):format(M.REF_ICONS[kind])
   local clipped = cells.clip(ref, width - cells.width(lead))
   local remote = clipped:match("^origin/") or ""
   local chunks = {

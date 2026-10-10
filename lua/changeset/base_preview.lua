@@ -126,13 +126,14 @@ end
 ---@param buf integer
 ---@param root string
 ---@param ref string
-function M.show(buf, root, ref)
+---@param kind changeset.RefKind
+function M.show(buf, root, ref, kind)
   local win = vim.fn.bufwinid(buf)
   local width = win ~= -1 and vim.api.nvim_win_get_width(win) or 80
   if win ~= -1 then
     vim.wo[win].wrap = false
   end
-  local head = line(render.header_ref(ref, width))
+  local head = line(render.header_ref(ref, kind, width))
   paint(buf, { head, line({}), meta("⋯ reading the diff") })
   Git.async(function()
     local base = Git.merge_base(root, ref)

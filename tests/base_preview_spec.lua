@@ -1,5 +1,6 @@
 local Fixture = require("support.git")
 local base_preview = require("changeset.base_preview")
+local render = require("changeset.render")
 
 ---Each line of `buf` as it reads on screen, right-aligned text included, glyphs dropped and runs of spaces squeezed.
 ---@param buf integer
@@ -50,7 +51,7 @@ describe("changeset.base_preview", function()
   ---@param ref string
   ---@return string[]
   local function shown(ref)
-    base_preview.show(buf, root, ref)
+    base_preview.show(buf, root, ref, "branch")
     assert.is_true(vim.wait(5000, function()
       return not vim.iter(screen(buf)):any(function(line)
         return line:find("reading", 1, true) ~= nil
@@ -87,9 +88,32 @@ describe("changeset.base_preview", function()
   end)
 
   it("names the ref at once, while the diff is still being read", function()
-    base_preview.show(buf, root, "trunk")
+    base_preview.show(buf, root, "trunk", "branch")
 
     assert.equal("trunk", screen(buf)[1])
+  end)
+
+  it("leads the header with the glyph of the ref's kind", function()
+    local sha = Fixture.git({ "rev-parse", "--short", "trunk" }, root)
+
+    base_preview.show(buf, root, sha, "commit")
+
+    local first = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
+    assert.truthy(vim.startswith(vim.trim(first), render.REF_ICONS.commit), first)
+  end)
+
+  -- A picker waiting on a key repaints nothing itself.
+  it("repaints once the diff lands", function()
+    local painted
+    -- rawset: `vim.cmd` makes each command's function on first use, so clearing the field brings the real one back.
+    rawset(vim.cmd, "redraw", function()
+      painted = screen(buf)
+    end)
+
+    local lines = shown("trunk")
+    rawset(vim.cmd, "redraw", nil)
+
+    assert.same(lines, painted)
   end)
 
   it("says when HEAD shares no history with the ref", function()
@@ -100,7 +124,7 @@ describe("changeset.base_preview", function()
   end)
 
   it("leaves a preview the picker has moved past alone", function()
-    base_preview.show(buf, root, "trunk")
+    base_preview.show(buf, root, "trunk", "branch")
     vim.api.nvim_win_close(win, true)
     vim.api.nvim_buf_delete(buf, { force = true })
 

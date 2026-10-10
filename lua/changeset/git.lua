@@ -170,6 +170,18 @@ function M.default_base(cwd)
   return "main"
 end
 
+---What `ref` names at `cwd`: a tag, a branch, local or remote, or else a commit.
+---@param cwd string
+---@param ref string
+---@return changeset.RefKind
+function M.ref_kind(cwd, ref)
+  local full = M.lines({ "git", "rev-parse", "--symbolic-full-name", ref }, cwd)[1] or ""
+  if vim.startswith(full, "refs/tags/") then
+    return "tag"
+  end
+  return (vim.startswith(full, "refs/heads/") or vim.startswith(full, "refs/remotes/")) and "branch" or "commit"
+end
+
 ---What HEAD moved from when it moved to `branch` at `commit`, as this worktree's HEAD reflog records it.
 ---@param cwd string?
 ---@param branch string

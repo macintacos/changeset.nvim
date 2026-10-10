@@ -513,6 +513,19 @@ describe("fork_point", function()
       assert.same({ feature_tip, "feature" }, { point.base, point.against })
     end)
 
+    it("says whether it is a tag, a commit or a branch, as a guess always is", function()
+      local root, default_base = repo("parent")
+      fixture.git({ "tag", "v1", "main" }, root)
+      local kinds = {}
+
+      for _, ref in ipairs({ "v1", default_base:sub(1, 12), "main", false }) do
+        fork_point.pin(root, "feature", ref or nil)
+        kinds[#kinds + 1] = assert(fork_point.get(root, "feature")).kind
+      end
+
+      assert.same({ "tag", "commit", "branch", "branch" }, kinds)
+    end)
+
     it("tells subscribers the point measured from it", function()
       local root, default_base = repo("parent")
 
