@@ -46,10 +46,14 @@ describe("the unified diff over a session", function()
     assert.is_false(shows(file_window("mod.lua")))
   end)
 
-  it("opens it in the windows already open once the sidebar opens", function()
+  it("opens it in the windows already open once the sidebar opens, an untracked file's among them", function()
+    vim.fn.writefile({ "return 4" }, "untracked.lua")
+    vim.cmd.split("untracked.lua")
+
     changeset.open()
 
     assert.is_true(shows(file_window("mod.lua")))
+    assert.is_true(shows(file_window("untracked.lua")))
   end)
 
   it("stays on after the sidebar closes", function()
@@ -77,6 +81,7 @@ describe("the unified diff over a session", function()
     vim.cmd.edit("plain.lua")
 
     assert.is_false(shows(file_window("plain.lua")))
+    assert.is_false(require("gitsigns.config").config.attach_to_untracked)
   end)
 
   it("stays off when the sidebar opens again", function()

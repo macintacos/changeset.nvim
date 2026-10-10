@@ -75,6 +75,22 @@ describe("changeset.unified_diff", function()
     assert.is_true(shows(vim.api.nvim_get_current_win()))
   end)
 
+  it("opens it in an untracked file, every line added", function()
+    vim.fn.writefile({ "first", "second" }, "new.txt")
+
+    vim.cmd.edit("new.txt")
+
+    assert.is_true(vim.wait(5000, function()
+      return (view(vim.api.nvim_get_current_win()) or {}).hunks ~= nil
+    end, 20))
+    assert.same(
+      { { start = 1, count = 2 } },
+      vim.tbl_map(function(hunk)
+        return { start = hunk.added.start, count = hunk.added.count }
+      end, view(vim.api.nvim_get_current_win()).hunks)
+    )
+  end)
+
   it("opens it in a split of a window already showing it", function()
     vim.cmd.edit("a.txt")
     assert.is_true(shows(vim.api.nvim_get_current_win()))
@@ -304,8 +320,8 @@ describe("changeset.unified_diff", function()
       assert.same("4", vim.trim((gutter(row))))
     end)
 
-    -- gitsigns' view compares a file new since its base against a base of one blank line, and finds it in the file.
-    it("hides the sign gitsigns puts on a new file's blank line, which the view draws unchanged", function()
+    -- gitsigns holds a base without the file as empty text, which its view would read back as one blank line.
+    it("draws every line of a file new since its base added, a blank one among them", function()
       vim.fn.writefile({ "first", "", "last" }, "new.txt")
       Fixture.commit("new", dir)
       require("gitsigns").change_base(base, true)
@@ -316,7 +332,8 @@ describe("changeset.unified_diff", function()
         return (view(vim.api.nvim_get_current_win()) or {}).hunks ~= nil
       end, 20))
 
-      assert.same("2", vim.trim((gutter(row_showing("first") + 1))))
+      local blank, tints = gutter(row_showing("first") + 1)
+      assert.same({ "2", { vim.api.nvim_get_hl(0, { name = highlights.DIFF_ADD_HL }).bg } }, { vim.trim(blank), tints })
     end)
 
     it("keeps the window's own highlight overrides beside them", function()

@@ -36,6 +36,9 @@ local opening = {}
 ---@type table<integer, integer>
 local covered = {}
 
+---gitsigns' `attach_to_untracked` as it was before `activate` turned it on.
+local untracked_was = false
+
 -- Reaches into gitsigns internals: its buffer cache, its unified views, and the base buffer `diffthis` makes for them.
 
 ---@param win integer
@@ -55,7 +58,26 @@ end
 local function turn_off()
   state = "off"
   opened = {}
+  require("gitsigns.config").config.attach_to_untracked = untracked_was
   vim.api.nvim_clear_autocmds({ group = GROUP })
+end
+
+---Have gitsigns attach to untracked files, those loaded now included: the sidebar counts one as added, but gitsigns
+---leaves it alone by default, so it would get no view.
+local function attach_untracked()
+  local config = require("gitsigns.config").config
+  untracked_was = config.attach_to_untracked
+  config.attach_to_untracked = true
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    -- gitsigns gives a buffer its status once it finds the buffer's repository, before deciding to attach.
+    if
+      vim.api.nvim_buf_is_loaded(buf)
+      and vim.b[buf].gitsigns_status_dict
+      and not require("gitsigns.cache").cache[buf]
+    then
+      require("gitsigns").attach({ bufnr = buf })
+    end
+  end
 end
 
 ---Draw gitsigns' diff groups in `win` as changeset's, beside the window's own overrides. Sorted, so painting a window
@@ -147,6 +169,10 @@ local function open(win, buf, git_obj, text)
       return
     end
     if state == "on" and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
+      if table.concat(text, "\n") == "" then
+        -- gitsigns writes a base without the file as one blank line, which the view reads back with its newline.
+        vim.bo[base].endofline = false
+      end
       -- Before `show`, which registers the view at once but then waits on its diff.
       opened[win] = { buf = buf, base = base, text = text }
       paint(win)
@@ -276,6 +302,7 @@ function M.activate()
       return false
     end,
   })
+  attach_untracked()
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     M.sync(win)
   end
