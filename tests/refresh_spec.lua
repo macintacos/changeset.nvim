@@ -1,15 +1,18 @@
 local comment_store = require("changeset.comment_store")
 local Fixture = require("support.git")
 local Notify = require("support.notify")
+local present = require("support.present")
 local Paths = require("changeset.paths")
 
 vim.cmd("runtime plugin/changeset.lua")
 
 describe(":Changeset refresh", function()
-  local tmp, previous_dir, restore_notify, notes
+  local tmp ---@type string
+  local previous_dir ---@type string
+  local restore_notify ---@type fun()
+  local notes ---@type support.notify.Note[]
 
   ---`changeset.build` as it loads fresh, holding no tree.
-  ---@return table
   local function build()
     return require("changeset.build")
   end
@@ -43,7 +46,7 @@ describe(":Changeset refresh", function()
 
     vim.cmd("Changeset refresh")
 
-    assert.equal(Paths.root(0), assert(build().current()).root)
+    assert.equal(Paths.root(0), present(build().current()).root)
   end)
 
   it("marks the review comments of the files open when it builds the tree", function()

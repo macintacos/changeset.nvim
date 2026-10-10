@@ -1,13 +1,17 @@
 local Dialog = require("support.dialog")
 local Fixture = require("support.git")
 local fake = require("support.herdr")
+local present = require("support.present")
 local herdr = require("changeset.herdr")
 
 describe("changeset.herdr", function()
   ---@param fields table
-  ---@return table
+  ---@return changeset.HerdrAgent
   local function agent(fields)
-    return vim.tbl_extend("force", { agent = "claude", agent_status = "idle", workspace_id = "w1", title = "" }, fields)
+    local merged =
+      vim.tbl_extend("force", { agent = "claude", agent_status = "idle", workspace_id = "w1", title = "" }, fields)
+    ---@cast merged changeset.HerdrAgent
+    return merged
   end
 
   local mine = agent({ pane_id = "w1:p0" })
@@ -88,20 +92,21 @@ describe("changeset.herdr", function()
     assert.same({ "  1  ● alpha  idle     parser  fix-parser  Fix the parser", "  2  ● codex  working" }, rows)
     assert.is_nil(err)
     assert.equal("codex", name)
-    assert.equal("w1:p2", writes()[1][3])
+    assert.equal("w1:p2", present(writes()[1])[3])
   end)
 
   describe("with a repository checked out in two places", function()
-    local root, worktree
+    local root ---@type string
+    local worktree ---@type string
 
     before_each(function()
       root = vim.fn.tempname()
       vim.fn.mkdir(root, "p")
-      root = vim.fs.normalize(assert(vim.uv.fs_realpath(root)))
+      root = vim.fs.normalize(present(vim.uv.fs_realpath(root)))
       Fixture.init_repo("main", root)
       worktree = vim.fn.tempname()
       Fixture.git({ "worktree", "add", "-q", worktree, "-b", "feature" }, root)
-      worktree = vim.fs.normalize(assert(vim.uv.fs_realpath(worktree)))
+      worktree = vim.fs.normalize(present(vim.uv.fs_realpath(worktree)))
     end)
 
     after_each(function()
@@ -143,7 +148,7 @@ describe("changeset.herdr", function()
 
     it("counts an agent working in it through a link", function()
       local link = vim.fn.tempname()
-      assert(vim.uv.fs_symlink(worktree, link))
+      assert.is_truthy(vim.uv.fs_symlink(worktree, link))
       busy.cwd = link
 
       local rows = offered({ other, busy })
@@ -249,7 +254,7 @@ describe("changeset.herdr", function()
   it("labels a status through the agent's state labels", function()
     local row =
       herdr._row({ pane_id = "p", agent = "x", agent_status = "working", state_labels = { working = "Thinking" } })
-    assert.equal("Thinking", row.cells[2][1])
+    assert.equal("Thinking", present(row.cells[2])[1])
   end)
 
   it("shows where an agent works by the directory of the program in its pane, over the pane's own", function()
@@ -278,13 +283,13 @@ describe("changeset.herdr", function()
   it("refuses outside herdr without calling it", function()
     vim.env.HERDR_WORKSPACE_ID = nil
     local err = send("hi")
-    assert.matches("not inside a herdr pane", err)
+    assert.matches("not inside a herdr pane", present(err))
     assert.same({}, fake.calls())
   end)
 
   it("says herdr isn't on PATH inside a herdr pane without it, without calling it", function()
     local err = require("support.gh").without(send, "hi")
-    assert.matches("isn't on PATH", err)
+    assert.matches("isn't on PATH", present(err))
     assert.same({}, fake.calls())
   end)
 

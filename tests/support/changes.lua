@@ -8,7 +8,7 @@ local M = {}
 ---@param depth integer
 ---@param first integer
 ---@param last integer
----@return table
+---@return changeset.Symbol
 function M.sym(name, kind, depth, first, last)
   return {
     name = name,

@@ -1,10 +1,11 @@
 local kinds = require("changeset.kinds")
+local present = require("support.present")
 
 describe("changeset.kinds", function()
   describe("for_filetype", function()
     it("keeps declaration kinds", function()
-      assert.is_true(kinds.for_filetype("go").Function)
-      assert.is_true(kinds.for_filetype("go").Class)
+      assert.is_true(present(kinds.for_filetype("go")).Function)
+      assert.is_true(present(kinds.for_filetype("go")).Class)
     end)
 
     it("keeps nothing back for data filetypes, where every kind is structure", function()
@@ -14,16 +15,16 @@ describe("changeset.kinds", function()
     end)
 
     it("drops Package for lua, where lua_ls uses it for control-flow blocks", function()
-      assert.is_nil(kinds.for_filetype("lua").Package)
+      assert.is_nil(present(kinds.for_filetype("lua")).Package)
     end)
 
     it("keeps Package for languages that use it for real packages", function()
-      assert.is_true(kinds.for_filetype("go").Package)
+      assert.is_true(present(kinds.for_filetype("go")).Package)
     end)
 
     it("does not let one filetype's exclusions leak into the next call", function()
       kinds.for_filetype("lua")
-      assert.is_true(kinds.for_filetype("go").Package)
+      assert.is_true(present(kinds.for_filetype("go")).Package)
     end)
   end)
 end)

@@ -8,9 +8,11 @@ local Dialog = require("support.dialog")
 local Fixture = require("support.git")
 local Notify = require("support.notify")
 local Sidebar = require("support.sidebar")
+local present = require("support.present")
 
 describe("the sidebar's Comments section", function()
-  local tmp, previous_dir
+  local tmp ---@type string
+  local previous_dir ---@type string
 
   before_each(function()
     tmp, previous_dir = Fixture.enter_tempdir()
@@ -67,9 +69,9 @@ describe("the sidebar's Comments section", function()
 
     local comments, implementation = line_of("Comments"), line_of("Implementation")
     assert.equal(1, comments)
-    assert.truthy(Sidebar.lines()[1]:find("3 comments", 1, true))
-    assert.equal(comments + 1, line_of("alpha.txt:5-6"))
-    assert.equal(comments + 2, line_of("alpha.txt:13"))
+    assert.truthy((present(Sidebar.lines()[1]):find("3 comments", 1, true)))
+    assert.equal(present(comments) + 1, line_of("alpha.txt:5-6"))
+    assert.equal(present(comments) + 2, line_of("alpha.txt:13"))
     assert.is_true(implementation > line_of("alpha.txt:30"))
   end)
 
@@ -85,7 +87,7 @@ describe("the sidebar's Comments section", function()
 
     build.refresh = refresh
     assert.is_nil(line_of("a range"))
-    assert.truthy(Sidebar.lines()[1]:find("2 comments", 1, true))
+    assert.truthy((present(Sidebar.lines()[1]):find("2 comments", 1, true)))
     assert.equal(0, refreshed)
   end)
 
@@ -99,7 +101,7 @@ describe("the sidebar's Comments section", function()
     Sidebar.settle()
 
     assert.is_nil(line_of("Comments"))
-    assert.truthy(Sidebar.lines()[1]:find("Implementation", 1, true))
+    assert.truthy((present(Sidebar.lines()[1]):find("Implementation", 1, true)))
   end)
 
   it("previews a comment row's line", function()
@@ -139,15 +141,15 @@ describe("the sidebar's Comments section", function()
 
   it("folds from its header, and steps to the next section", function()
     open_with_review_comments()
-    local win = assert(window.win())
+    local win = present(window.win())
     vim.api.nvim_set_current_win(win)
     vim.api.nvim_win_set_cursor(win, { 1, 0 })
 
     vim.cmd.normal("h")
-    assert.truthy(Sidebar.lines()[2]:find("Implementation", 1, true))
+    assert.truthy((present(Sidebar.lines()[2]):find("Implementation", 1, true)))
 
     vim.cmd.normal("]]")
-    assert.truthy(Sidebar.cursor_line():find("Implementation", 1, true))
+    assert.truthy((Sidebar.cursor_line():find("Implementation", 1, true)))
   end)
 
   it("counts no comment row as a file in the footer", function()
@@ -155,7 +157,7 @@ describe("the sidebar's Comments section", function()
 
     Sidebar.cursor_to("alpha.txt:13")
 
-    assert.is_nil(changeset.footer():find("file %d"))
+    assert.is_nil((changeset.footer():find("file %d")))
   end)
 
   ---Presses `key` in the sidebar with its cursor on the first line containing `text`.
@@ -178,11 +180,11 @@ describe("the sidebar's Comments section", function()
 
     press_on("alpha.txt:13", "<CR>")
 
-    local win = assert(CommentWindow.win())
+    local win = present(CommentWindow.win())
     local config = vim.api.nvim_win_get_config(win)
     assert.equal("check this\nmore", CommentWindow.text(win))
     assert.same({ 12, 0 }, config.bufpos)
-    assert.equal("alpha.txt", vim.fs.basename(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(config.win))))
+    assert.equal("alpha.txt", vim.fs.basename(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(present(config.win)))))
   end)
 
   it("opens a range's window, holding its text, after a split's jump", function()
@@ -191,7 +193,7 @@ describe("the sidebar's Comments section", function()
 
     press_on("alpha.txt:5-6", "<C-x>")
 
-    local win = assert(CommentWindow.win())
+    local win = present(CommentWindow.win())
     assert.equal("a range", CommentWindow.text(win))
     assert.equal(before + 2, #vim.api.nvim_tabpage_list_wins(0))
   end)
@@ -201,7 +203,7 @@ describe("the sidebar's Comments section", function()
 
     press_on("alpha.txt:13", "<S-CR>")
 
-    local win = assert(CommentWindow.win())
+    local win = present(CommentWindow.win())
     assert.is_nil(window.win())
     assert.equal(win, vim.api.nvim_get_current_win())
   end)
@@ -217,14 +219,14 @@ describe("the sidebar's Comments section", function()
         vim.wait(200)
       end)
       restore()
-      assert(ok, err)
+      assert.is_truthy(ok, tostring(err))
       local warnings = Notify.messages(notes, vim.log.levels.WARN)
 
-      assert.is_nil(vim.iter(vim.api.nvim_list_wins()):find(function(w)
+      assert.is_nil((vim.iter(vim.api.nvim_list_wins()):find(function(w)
         return vim.api.nvim_win_get_config(w).relative == "win"
-      end))
+      end)))
       assert.equal(1, #warnings)
-      assert.truthy(warnings[1]:find("save the file first", 1, true))
+      assert.truthy((present(warnings[1]):find("save the file first", 1, true)))
     end)
   end
 
@@ -233,32 +235,32 @@ describe("the sidebar's Comments section", function()
 
     press_on("alpha.txt:13", "<CR>")
 
-    assert.truthy(Sidebar.line_with(highlights.PICKED_HL):find("alpha.txt:13", 1, true))
+    assert.truthy((present(Sidebar.line_with(highlights.PICKED_HL)):find("alpha.txt:13", 1, true)))
   end)
 
   it("replaces the review comment's text when its window saves", function()
     local root = open_with_review_comments()
     press_on("alpha.txt:13", "<CR>")
-    local win = assert(CommentWindow.win())
+    local win = present(CommentWindow.win())
     vim.api.nvim_buf_set_lines(vim.api.nvim_win_get_buf(win), 0, -1, false, { "update: after", "second line" })
 
     save(win)
 
     assert.equal(
       "update: after\nsecond line",
-      require("changeset.review_comment").at(comment_store.list(root), "alpha.txt", 13).body
+      present(require("changeset.review_comment").at(comment_store.list(root), "alpha.txt", 13)).body
     )
   end)
 
   it("asks to delete the review comment when its window saves blank", function()
     local root = open_with_review_comments()
     press_on("alpha.txt:13", "<CR>")
-    local win = assert(CommentWindow.win())
+    local win = present(CommentWindow.win())
     vim.api.nvim_buf_set_lines(vim.api.nvim_win_get_buf(win), 0, -1, false, { "" })
 
     save(win)
 
-    assert.truthy(Dialog.lines()[2]:find("alpha.txt:13", 1, true))
+    assert.truthy((present(Dialog.lines()[2]):find("alpha.txt:13", 1, true)))
     assert.equal(3, #comment_store.list(root))
   end)
 
@@ -266,13 +268,13 @@ describe("the sidebar's Comments section", function()
     local root = open_with_review_comments()
 
     press_on("alpha.txt:13", "d")
-    assert.truthy(Dialog.lines()[2]:find("alpha.txt:13", 1, true))
+    assert.truthy((present(Dialog.lines()[2]):find("alpha.txt:13", 1, true)))
     Dialog.press("D")
 
     assert.is_true(vim.wait(5000, function()
       return #comment_store.list(root) == 2
     end, 25))
-    assert.truthy(Sidebar.lines()[1]:find("2 comments", 1, true))
+    assert.truthy((present(Sidebar.lines()[1]):find("2 comments", 1, true)))
   end)
 
   it("stops at the question on dd, deleting nothing until asked", function()
@@ -280,7 +282,7 @@ describe("the sidebar's Comments section", function()
 
     press_on("alpha.txt:13", "dd")
 
-    assert.truthy(Dialog.lines()[2]:find("alpha.txt:13", 1, true))
+    assert.truthy((present(Dialog.lines()[2]):find("alpha.txt:13", 1, true)))
     assert.equal(3, #comment_store.list(root))
   end)
 

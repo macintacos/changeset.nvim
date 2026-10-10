@@ -1,10 +1,18 @@
 local cache = require("changeset.cache")
+local present = require("support.present")
 
 ---@param path string
 ---@param added integer?
 ---@return changeset.File
 local function file(path, added)
-  return { path = path, status = "modified", added = added or 1, removed = 0, hunks = {} }
+  return {
+    path = path,
+    status = "modified",
+    section = require("changeset.sections").classify(path),
+    added = added or 1,
+    removed = 0,
+    hunks = {},
+  }
 end
 
 ---A stamp function answering from a table, as `fresh` would read the disk.
@@ -19,6 +27,7 @@ end
 describe("changeset.cache", function()
   describe("fresh", function()
     it("keeps the symbols of a file that has not changed since they were read", function()
+      ---@type table
       local entries = { ["api.ts"] = { stamp = "120:9", symbols = { { name = "send" } } } }
 
       local known, unknown = cache.fresh(entries, { file("api.ts") }, stamps({ ["api.ts"] = "120:9" }))
@@ -28,16 +37,18 @@ describe("changeset.cache", function()
     end)
 
     it("asks again for a file that has changed since", function()
+      ---@type table
       local entries = { ["api.ts"] = { stamp = "120:9", symbols = { { name = "send" } } } }
 
       local known, unknown = cache.fresh(entries, { file("api.ts") }, stamps({ ["api.ts"] = "340:11" }))
 
       assert.same({}, known)
       assert.equal(1, #unknown)
-      assert.equal("api.ts", unknown[1].path)
+      assert.equal("api.ts", present(unknown[1]).path)
     end)
 
     it("asks again about a file whose entry is not a record of symbols", function()
+      ---@type table
       local entries = { ["a.ts"] = 5, ["b.ts"] = vim.NIL, ["c.ts"] = { stamp = "120:9", symbols = 5 } }
       local files = { file("a.ts"), file("b.ts"), file("c.ts") }
 
@@ -56,6 +67,7 @@ describe("changeset.cache", function()
     end)
 
     it("asks again for a file it can no longer stamp", function()
+      ---@type table
       local entries = { ["gone.ts"] = { stamp = "120:9", symbols = {} } }
 
       local known, unknown = cache.fresh(entries, { file("gone.ts") }, stamps({}))
@@ -81,12 +93,12 @@ describe("changeset.cache", function()
         { name = "load", kind = "Function", depth = 0, lnum = 1, range_lnum = 1, range_end_lnum = 3, test = true },
       })
 
-      assert.is_true(projected[1].test)
+      assert.is_true(present(projected[1]).test)
     end)
   end)
 
   describe("the file on disk", function()
-    local path
+    local path ---@type string
 
     before_each(function()
       path = vim.fn.tempname() .. ".json"
@@ -97,6 +109,7 @@ describe("changeset.cache", function()
     end)
 
     it("leaves out what no server answered, which only this Neovim remembers", function()
+      ---@type table
       local entries = {
         ["api.ts"] = { stamp = "120:9", symbols = { { name = "send", lnum = 12 } } },
         ["go.sum"] = { stamp = "80:3", symbols = {}, silent = true },
@@ -107,6 +120,7 @@ describe("changeset.cache", function()
     end)
 
     it("reads back the entries it saved", function()
+      ---@type table
       local entries = {
         ["api.ts"] = { stamp = "120:9", symbols = { { name = "send", lnum = 12 } } },
         ["db.ts"] = { stamp = "80:3", symbols = {}, comments = { new = { comment = { { 1, 2 } } } } },
@@ -119,16 +133,19 @@ describe("changeset.cache", function()
     end)
 
     it("saves the entry filed in place of another", function()
+      ---@type table
       local entries = { ["api.ts"] = { stamp = "120:9", symbols = { { name = "send" } } } }
       cache.save(path, entries)
 
-      entries["api.ts"] = { stamp = "121:9", symbols = { { name = "receive" } } }
-      cache.save(path, entries)
+      ---@type table
+      local filed = { ["api.ts"] = { stamp = "121:9", symbols = { { name = "receive" } } } }
+      cache.save(path, filed)
 
-      assert.same(entries, cache.load(path))
+      assert.same(filed, cache.load(path))
     end)
 
     it("encodes an entry once, however often it is saved", function()
+      ---@type table
       local entries = { ["api.ts"] = { stamp = "120:9", symbols = { { name = "send" } } } }
       cache.encode(entries["api.ts"])
       local real_encode, encoded = vim.json.encode, 0
@@ -137,13 +154,12 @@ describe("changeset.cache", function()
         return real_encode(value, ...)
       end
 
-      local ok, err = pcall(function()
-        cache.save(path, entries)
-        cache.save(path, entries)
-      end)
+      local first_ok, first_err = pcall(cache.save, path, entries)
+      local second_ok, second_err = pcall(cache.save, path, entries)
       vim.json.encode = real_encode
 
-      assert(ok, err)
+      assert.is_true(first_ok, tostring(first_err))
+      assert.is_true(second_ok, tostring(second_err))
       assert.equal(0, encoded)
     end)
   end)
@@ -170,11 +186,11 @@ describe("changeset.cache", function()
     it("changes when the file is rewritten at the same size", function()
       local path = vim.fn.tempname()
       vim.fn.writefile({ "one" }, path)
-      assert(vim.uv.fs_utime(path, 1000, 1000))
+      assert.is_truthy(vim.uv.fs_utime(path, 1000, 1000))
       local before = cache.stamp(path, "base")
 
       vim.fn.writefile({ "two" }, path)
-      assert(vim.uv.fs_utime(path, 2000, 2000))
+      assert.is_truthy(vim.uv.fs_utime(path, 2000, 2000))
 
       assert.is_string(before)
       assert.not_equal(before, cache.stamp(path, "base"))

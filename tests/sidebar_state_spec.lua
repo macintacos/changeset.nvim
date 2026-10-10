@@ -1,13 +1,16 @@
 local Changes = require("support.changes")
 local Fixture = require("support.git")
 local Symbols = require("support.symbols")
+local present = require("support.present")
 require("support.gh")
 
 describe("changeset.sidebar_state", function()
   local build = require("changeset.build")
   local Rows = require("changeset.rows")
   local sidebar_state = require("changeset.sidebar_state")
-  local tmp, previous_dir, symbols
+  local tmp ---@type string
+  local previous_dir ---@type string
+  local symbols ---@type support.symbols.Source
 
   local ROWS = Rows.build(
     { Changes.file("mod.lua", { 1 }) },
@@ -20,7 +23,7 @@ describe("changeset.sidebar_state", function()
   local function built()
     build.build()
     assert.is_true(vim.wait(10000, function()
-      return assert(build.current()).collected
+      return present(build.current()).collected
     end, 10))
   end
 
@@ -59,7 +62,7 @@ describe("changeset.sidebar_state", function()
     built()
     local state = sidebar_state.current()
 
-    assert.equal(build.current(), assert(state).tree)
+    assert.equal(build.current(), present(state).tree)
     assert.equal(state, sidebar_state.current())
     assert.is_nil(package.loaded["changeset"])
   end)
@@ -67,17 +70,17 @@ describe("changeset.sidebar_state", function()
   it("starts afresh for a tree that replaced the last one, keeping the repository's folds", function()
     Fixture.feature_one_file(tmp)
     built()
-    local state = assert(sidebar_state.current())
+    local state = present(sidebar_state.current())
     state.rows = ROWS
     state.view:narrow("mod")
     state.view:fold_files(ROWS)
-    state.position:pick(Rows.files(ROWS)[1])
+    state.position:pick(present(Rows.files(ROWS)[1]))
     local folded = shown(state.view)
     assert.equal(1, #state.position:marks(MARKED))
 
     Fixture.git({ "checkout", "-q", "-b", "other" }, tmp)
     built()
-    local fresh = assert(sidebar_state.current())
+    local fresh = present(sidebar_state.current())
 
     assert.is_false(state == fresh)
     assert.equal(build.current(), fresh.tree)

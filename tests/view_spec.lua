@@ -1,13 +1,16 @@
 local Changes = require("support.changes")
 local Rows = require("changeset.rows")
 local view = require("changeset.view")
+local present = require("support.present")
 
 ---@param id string
 ---@param name string
 ---@param children changeset.Row[]?
 ---@return changeset.Row
 local function row(id, name, children)
-  return { id = id, name = name, children = children or {} }
+  -- Partial on purpose: the view functions these specs drive read only these fields.
+  local partial = { id = id, name = name, children = children or {} }
+  return partial --[[@as changeset.Row]]
 end
 
 ---Names of a row tree, depth-first, parents before children.
@@ -31,7 +34,8 @@ end
 ---@param children changeset.Row[]?
 ---@return changeset.Row
 local function sym(id, name, kind, children)
-  return { id = id, kind = "symbol", name = name, symbol_kind = kind, children = children or {} }
+  local partial = { id = id, kind = "symbol", name = name, symbol_kind = kind, children = children or {} }
+  return partial --[[@as changeset.Row]]
 end
 
 describe("changeset.view", function()
@@ -81,7 +85,7 @@ describe("changeset.view", function()
       it("keeps a section for a matching file, with its whole-section totals", function()
         local rows = { tests_section({ row("f1", "a_spec.lua"), row("f2", "b_spec.lua") }) }
 
-        local kept = view.filter(rows, "a_spec")[1]
+        local kept = present(view.filter(rows, "a_spec")[1])
         assert.same({ "Tests", "a_spec.lua" }, names({ kept }))
         assert.same({ 2, 7, 3 }, { kept.files, kept.added, kept.removed })
       end)
@@ -126,7 +130,15 @@ describe("changeset.view", function()
     end)
 
     it("keeps an orphan-hunk group, which names no symbol", function()
-      local orphans = { id = "o", kind = "orphans", name = "Other changes", children = {} }
+      local orphans = {
+        id = "o",
+        kind = "orphans",
+        name = "Other changes",
+        children = {},
+        depth = 1,
+        path = "Makefile",
+        ancestor = false,
+      }
       local rows = { row("f1", "Makefile", { orphans }) }
 
       assert.same({ "Makefile", "Other changes" }, names(view.by_kind(rows, { Variable = true })))
@@ -165,13 +177,13 @@ describe("changeset.view", function()
     -- One row per line, as the renderer hands them back: a header, two files, the
     -- first with a symbol nested two deep, then a second header over a third file.
     local lines = {
-      { depth = 0 },
+      { depth = 0, path = "" },
       { depth = 1, path = "a.lua" },
-      { depth = 2 },
-      { depth = 3 },
+      { depth = 2, path = "a.lua" },
+      { depth = 3, path = "a.lua" },
       { depth = 1, path = "b.lua" },
-      { depth = 2 },
-      { depth = 0 },
+      { depth = 2, path = "b.lua" },
+      { depth = 0, path = "" },
       { depth = 1, path = "c.lua" },
     }
 
@@ -188,17 +200,20 @@ describe("changeset.view", function()
     end)
 
     it("leaves a folded section's files out of the total", function()
-      assert.same({ 1, 1 }, { view.position({ { depth = 0 }, { depth = 0 }, { depth = 1, path = "a.lua" } }, 3) })
+      assert.same(
+        { 1, 1 },
+        { view.position({ { depth = 0, path = "" }, { depth = 0, path = "" }, { depth = 1, path = "a.lua" } }, 3) }
+      )
     end)
 
     describe("with a file shown in two sections", function()
       local split = {
-        { depth = 0 },
+        { depth = 0, path = "" },
         { depth = 1, path = "a.rs" },
         { depth = 1, path = "b.rs" },
-        { depth = 0 },
+        { depth = 0, path = "" },
         { depth = 1, path = "a.rs" },
-        { depth = 2 },
+        { depth = 2, path = "a.rs" },
       }
 
       it("counts the file once", function()
@@ -217,7 +232,7 @@ describe("changeset.view", function()
     it("counts a file shown in three sections once", function()
       local rows = {}
       for _, path in ipairs({ "a.rs", "b.rs", "a.rs", "a.rs" }) do
-        vim.list_extend(rows, { { depth = 0 }, { depth = 1, path = path } })
+        vim.list_extend(rows, { { depth = 0, path = "" }, { depth = 1, path = path } })
       end
 
       assert.same({ 1, 2 }, { view.position(rows, 8) })
@@ -225,9 +240,9 @@ describe("changeset.view", function()
 
     it("names no file on a Comments row, nor counts one", function()
       local with_comments = {
-        { depth = 0, kind = "section" },
+        { depth = 0, path = "", kind = "section" },
         { depth = 1, kind = "comment", path = "a.lua" },
-        { depth = 0, kind = "section" },
+        { depth = 0, path = "", kind = "section" },
         { depth = 1, kind = "file", path = "a.lua" },
       }
 
@@ -253,7 +268,7 @@ describe("changeset.view", function()
       cursor = cursor or 1,
     })
     return vim.tbl_map(function(line)
-      return line.row.name
+      return present(line.row).name
     end, lines), lnum
   end
 
@@ -298,7 +313,7 @@ describe("changeset.view", function()
       local v = fresh()
       v:fold_files(ROWS)
 
-      assert.same(FILES_ONLY, show(v, ROWS))
+      assert.same(FILES_ONLY, (show(v, ROWS)))
     end)
 
     it("unfolds every file but keeps a folded section folded", function()
@@ -309,7 +324,7 @@ describe("changeset.view", function()
 
       v:unfold_files()
 
-      assert.same({ "Implementation", "mod.lua", "Store › load", "Other changes", "L30", "Tests" }, show(v, ROWS))
+      assert.same({ "Implementation", "mod.lua", "Store › load", "Other changes", "L30", "Tests" }, (show(v, ROWS)))
     end)
 
     it("keeps a folded section folded under unfold_files across a rebuild that empties it", function()
@@ -329,7 +344,7 @@ describe("changeset.view", function()
 
     it("keeps the Comments section folded under unfold_files", function()
       local review_comment = { path = "mod.lua", line = 5, body = "why?" }
-      local with_comments = { assert(Rows.comments({ review_comment })), unpack(ROWS) }
+      local with_comments = { present(Rows.comments({ review_comment })), unpack(ROWS) }
       local v = fresh()
       show(v, with_comments)
       v:step_out(1)
@@ -347,7 +362,7 @@ describe("changeset.view", function()
       assert.same({ "Implementation", "Tests" }, vim.list_slice(show(v, ROWS), 1, 2))
 
       assert.is_true(v:open(1))
-      assert.same(expanded, show(v, ROWS))
+      assert.same(expanded, (show(v, ROWS)))
     end)
 
     it("folds each copy of a file split across sections on its own", function()
@@ -356,7 +371,7 @@ describe("changeset.view", function()
 
       v:step_out(5)
 
-      assert.same({ "Implementation", RS, "load", "Tests", RS }, show(v, SPLIT))
+      assert.same({ "Implementation", RS, "load", "Tests", RS }, (show(v, SPLIT)))
     end)
 
     it("opens a shut chain's rows rather than unfolding the row", function()
@@ -385,7 +400,7 @@ describe("changeset.view", function()
 
       assert.is_true(v:open(3))
 
-      assert.same(unfolded, show(v, rows))
+      assert.same(unfolded, (show(v, rows)))
     end)
 
     it("folds an opened chain's head, then steps out of it, leaving the chain open", function()
@@ -423,12 +438,13 @@ describe("changeset.view", function()
           Changes.sym("save", "Method", 1, 12, 14),
         },
       })
-      local first, second = rows[1].children[1].children[1], rows[1].children[1].children[2]
-      local v = view.new({ collapsed = { [first.id] = true, [second.id] = true }, chains = {} }, {})
+      local first, second =
+        present(present(rows[1]).children[1]).children[1], present(present(rows[1]).children[1]).children[2]
+      local v = view.new({ collapsed = { [present(first).id] = true, [present(second).id] = true }, chains = {} }, {})
 
-      v:reveal(second.children[1].id)
+      v:reveal(present(present(second).children[1]).id)
 
-      assert.same({ "Implementation", "src/store.rs", "impl Store", "impl Store › save" }, show(v, rows))
+      assert.same({ "Implementation", "src/store.rs", "impl Store", "impl Store › save" }, (show(v, rows)))
     end)
   end)
 
@@ -472,7 +488,7 @@ describe("changeset.view", function()
       local v = fresh()
       v:narrow("(")
 
-      assert.same({}, show(v, ROWS))
+      assert.same({}, (show(v, ROWS)))
     end)
 
     it("keeps no file on screen for a match only a hidden kind holds", function()
@@ -483,7 +499,7 @@ describe("changeset.view", function()
       v:hide({ Variable = true })
       v:narrow("needle")
 
-      assert.same({}, show(v, rows))
+      assert.same({}, (show(v, rows)))
     end)
   end)
 
@@ -562,7 +578,7 @@ describe("changeset.view", function()
       local v = fresh()
       show(v, ROWS)
 
-      assert.equal("mod.lua", v:row(2).name)
+      assert.equal("mod.lua", present(v:row(2)).name)
       assert.equal(9, #v:visible())
     end)
   end)

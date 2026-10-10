@@ -7,9 +7,13 @@ local Sidebar = require("support.sidebar")
 local Symbols = require("support.symbols")
 local comment_store = require("changeset.comment_store")
 local window = require("changeset.window")
+local present = require("support.present")
 
 describe("changeset.step", function()
-  local tmp, previous_dir, echoed, echo
+  local tmp ---@type string
+  local previous_dir ---@type string
+  local echoed ---@type string[]
+  local echo ---@type function
 
   before_each(function()
     os.remove(comment_store.path())
@@ -17,7 +21,8 @@ describe("changeset.step", function()
     Fixture.feature_numbered(tmp)
     echoed, echo = {}, vim.api.nvim_echo
     vim.api.nvim_echo = function(chunks)
-      table.insert(echoed, chunks[1][1])
+      table.insert(echoed, present(chunks[1])[1])
+      return -1
     end
   end)
 
@@ -38,17 +43,17 @@ describe("changeset.step", function()
   local function edit(lnum)
     vim.cmd.edit("mod.lua")
     vim.api.nvim_win_set_cursor(0, { lnum, 0 })
-    comment_store.keep(vim.fs.normalize(assert(vim.uv.cwd())), { path = "other.lua", line = 3, body = "why" })
+    comment_store.keep(vim.fs.normalize(present(vim.uv.cwd())), { path = "other.lua", line = 3, body = "why" })
     return vim.api.nvim_get_current_win()
   end
 
   ---Waits for the tree's rows, every file's symbols read.
   local function settle()
     Sidebar.settle()
-    assert(vim.wait(5000, function()
+    assert.is_truthy((vim.wait(5000, function()
       local text = Sidebar.text()
       return text:find("L2", 1, true) and text:find("L3", 1, true) and not text:find("reading", 1, true)
-    end))
+    end)))
   end
 
   ---@param win integer
@@ -117,15 +122,15 @@ describe("changeset.step", function()
 
     local ok, err = pcall(function()
       changeset.step(1)
-      assert(vim.wait(2000, function()
+      assert.is_truthy((vim.wait(2000, function()
         return failed
-      end))
+      end)))
       require("changeset.build").refresh()
       settle()
     end)
 
     restore()
-    assert(ok, err)
+    assert.is_truthy(ok, tostring(err))
     assert.same({ "mod.lua", 2 }, { shown(win) })
   end)
 
@@ -152,12 +157,12 @@ describe("changeset.step", function()
     assert.same({ "mod.lua", 8 }, { shown(win) })
     changeset.step(-1)
     assert.same({ "mod.lua", 2 }, { shown(win) })
-    assert.truthy(Sidebar.cursor_line():find("L2", 1, true))
+    assert.truthy((Sidebar.cursor_line():find("L2", 1, true)))
     changeset.step(2)
 
     assert.equal(win, vim.api.nvim_get_current_win())
     assert.same({ "other.lua", 3 }, { shown(win) })
-    assert.truthy(Sidebar.cursor_line():find("other.lua", 1, true))
+    assert.truthy((Sidebar.cursor_line():find("other.lua", 1, true)))
   end)
 
   describe("from a line between the sidebar's rows", function()
@@ -239,14 +244,14 @@ describe("changeset.step", function()
 
     local ok, err = pcall(changeset.step, 1)
     restore()
-    assert(ok, err)
+    assert.is_truthy(ok, tostring(err))
     vim.api.nvim_set_current_win(win)
     vim.api.nvim_win_set_cursor(win, { 2, 0 })
     local sidebar = window.win() or 0
     vim.api.nvim_set_current_win(sidebar)
 
     -- Off the row the failed step left it on, onto mod.lua's own.
-    assert.is_nil(Sidebar.cursor_line():find("other.lua", 1, true))
+    assert.is_nil((Sidebar.cursor_line():find("other.lua", 1, true)))
   end)
 
   it("drops a waiting step taken while the sidebar is on another tabpage", function()
@@ -254,10 +259,10 @@ describe("changeset.step", function()
 
     changeset.step(1)
     vim.cmd.tabnew()
-    assert(vim.wait(5000, function()
+    assert.is_truthy((vim.wait(5000, function()
       local tree = require("changeset.build").current()
       return tree ~= nil and tree.collected and not Sidebar.text():find("reading", 1, true)
-    end))
+    end)))
     vim.cmd.tabprevious()
     vim.api.nvim_win_set_cursor(win, { 5, 0 })
     require("changeset.build").refresh()
@@ -308,7 +313,7 @@ describe("changeset.step", function()
     local ok, err = pcall(changeset.step, 1)
 
     restore()
-    assert(ok, err)
+    assert.is_truthy(ok, tostring(err))
     assert.same({}, notes)
     assert.same({ "no next change" }, echoed)
     assert.same({ "other.lua", 3 }, { shown(win) })
@@ -318,7 +323,7 @@ describe("changeset.step", function()
     local win = edit(2)
     changeset.toggle()
     settle()
-    local sidebar = assert(window.win())
+    local sidebar = present(window.win())
     Sidebar.cursor_to("L8")
     local left = {}
     vim.api.nvim_create_autocmd("WinLeave", {
@@ -358,7 +363,7 @@ describe("changeset.step", function()
 
       assert.equal(win, vim.api.nvim_get_current_win())
       assert.same({ "other.lua", 3 }, { shown(win) })
-      assert.truthy(Sidebar.cursor_line():find("other.lua:3", 1, true))
+      assert.truthy((Sidebar.cursor_line():find("other.lua:3", 1, true)))
     end)
 
     it("repeats the step from the sidebar", function()
@@ -385,13 +390,13 @@ describe("changeset.step", function()
 
       -- Yours is mod.lua's Other changes, which holds line 8.
       assert.equal(win, vim.api.nvim_get_current_win())
-      assert.truthy(Sidebar.cursor_line():find("L2", 1, true))
+      assert.truthy((Sidebar.cursor_line():find("L2", 1, true)))
       assert.same({ "mod.lua", 2 }, { shown(win) })
     end)
   end)
 
   describe("by symbol and by file", function()
-    local source
+    local source ---@type support.symbols.Source
 
     before_each(function()
       source = Symbols.install()
@@ -413,11 +418,11 @@ describe("changeset.step", function()
     ---Answers mod.lua's symbols with `mod_symbols` and other.lua's with `tail`, around its change on line 3.
     ---@param mod_symbols changeset.Symbol[]
     local function answer(mod_symbols)
-      assert(vim.wait(5000, function()
+      assert.is_truthy((vim.wait(5000, function()
         return #source.asks > 0
-      end))
-      source.asks[1].answer("mod.lua", mod_symbols)
-      source.asks[1].answer("other.lua", { symbol("tail", "Function", 0, 3, 3) })
+      end)))
+      present(source.asks[1]).answer("mod.lua", mod_symbols)
+      present(source.asks[1]).answer("other.lua", { symbol("tail", "Function", 0, 3, 3) })
       Sidebar.settle()
     end
 
@@ -451,7 +456,7 @@ describe("changeset.step", function()
 
       changeset.step(1, "symbol")
       assert.same({ "mod.lua", 7 }, { shown(win) })
-      assert.truthy(Sidebar.cursor_line():find("second", 1, true))
+      assert.truthy((Sidebar.cursor_line():find("second", 1, true)))
       changeset.step(1, "symbol")
       assert.same({ "other.lua", 3 }, { shown(win) })
       changeset.step(1, "symbol")
@@ -501,7 +506,7 @@ describe("changeset.step", function()
 
       changeset.step(1, "file")
       assert.same({ "other.lua", 3 }, { shown(win) })
-      assert.truthy(Sidebar.cursor_line():find("other.lua", 1, true))
+      assert.truthy((Sidebar.cursor_line():find("other.lua", 1, true)))
       changeset.step(-1, "file")
 
       assert.same({ "mod.lua", 2 }, { shown(win) })

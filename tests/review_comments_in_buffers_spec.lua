@@ -2,10 +2,12 @@ local changeset = require("changeset")
 local comment_store = require("changeset.comment_store")
 local Fixture = require("support.git")
 local Paths = require("changeset.paths")
+local present = require("support.present")
 local review_comments = require("changeset.review_comments")
 
 describe("review comments in buffers", function()
-  local tmp, previous_dir
+  local tmp ---@type string
+  local previous_dir ---@type string
 
   before_each(function()
     tmp, previous_dir = Fixture.enter_tempdir()
@@ -45,9 +47,11 @@ describe("review comments in buffers", function()
     local details = mark_details(keep_on_alpha())
 
     assert.are.equal(1, #details)
-    assert.are.same({ "● ", "ChangesetReviewComment" }, details[1].virt_text[1])
-    assert.are.same({ "one", "ChangesetReviewCommentBody" }, details[1].virt_text[2])
-    assert.are.equal("ChangesetReviewComment", details[1].number_hl_group)
+    local detail = present(details[1])
+    local virt_text = present(detail.virt_text)
+    assert.are.same({ "● ", "ChangesetReviewComment" }, virt_text[1])
+    assert.are.same({ "one", "ChangesetReviewCommentBody" }, virt_text[2])
+    assert.are.equal("ChangesetReviewComment", detail.number_hl_group)
   end)
 
   it("tells a statuscolumn the bubble that the sign column leaves out", function()
@@ -80,7 +84,7 @@ describe("review comments in buffers", function()
       end
       local ok, err = pcall(fn)
       comment_store.branch = real
-      assert(ok, err)
+      assert.is_true(ok, tostring(err))
       return reads
     end
 
@@ -118,15 +122,16 @@ describe("review comments in buffers", function()
       local ok, err = pcall(require("changeset.review_comments").redraw)
       blocks.draw = real
 
-      assert(ok, err)
+      assert.is_true(ok, tostring(err))
       assert.are.same({ [alpha] = true }, drawn)
     end)
   end)
 
   it("keeps a file's mark through a redraw beside a buffer with 'buftype' set, the cwd elsewhere", function()
     local root = vim.fn.resolve(tmp)
-    vim.fn.mkdir(vim.fn.stdpath("cache"), "p")
-    vim.fn.chdir(vim.fn.stdpath("cache"))
+    local cache = vim.fn.stdpath("cache") --[[@as string]]
+    vim.fn.mkdir(cache, "p")
+    vim.fn.chdir(cache)
     -- Keeps the first buffer from being reused, so the special buffer is listed ahead of the file.
     vim.api.nvim_buf_set_lines(0, 0, -1, false, { "scratch" })
     -- As vim-gnupg leaves a decrypted file, or `:help` a repository's own doc file.

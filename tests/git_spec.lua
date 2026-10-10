@@ -1,8 +1,10 @@
 local Git = require("changeset.git")
 local Fixture = require("support.git")
+local present = require("support.present")
 
 describe("changeset.git", function()
-  local tmp, previous_dir
+  local tmp ---@type string
+  local previous_dir ---@type string
 
   -- Every assertion here calls `Git` with no cwd, so the fixture repo has to be
   -- the process cwd rather than merely a directory git is pointed at.
@@ -256,7 +258,7 @@ describe("changeset.git", function()
     end)
 
     it("keeps the last line of output that ends without a newline", function()
-      local fd = assert(io.open(tmp .. "/blob", "w"))
+      local fd = present(io.open(tmp .. "/blob", "w"))
       fd:write("one\ntwo")
       fd:close()
       local oid = Fixture.git({ "hash-object", "-w", "blob" }, tmp)
@@ -288,6 +290,7 @@ describe("changeset.git", function()
       end, function() end)
 
       assert.is_false(ok)
+      ---@cast err string
       assert.matches("measure failed.*stack traceback", err)
     end)
   end)
@@ -298,7 +301,8 @@ describe("changeset.git", function()
       vim.system = function()
         error("E2BIG")
       end
-      local got, fast
+      local got ---@type vim.SystemCompleted?
+      local fast
       Git.system({ "git", "status" }, {}, function(result)
         got, fast = result, vim.in_fast_event()
       end)
@@ -307,21 +311,24 @@ describe("changeset.git", function()
       vim.wait(1000, function()
         return got ~= nil
       end)
-      assert.equal(-1, got.code)
-      assert.matches("E2BIG", got.stderr)
+      local result = present(got)
+      assert.equal(-1, result.code)
+      assert.matches("E2BIG", present(result.stderr))
       assert.is_false(fast)
     end)
 
     it("calls on_exit on the main loop with the process's result", function()
-      local got, fast
+      local got ---@type vim.SystemCompleted?
+      local fast
       Git.system({ "git", "--version" }, { text = true }, function(result)
         got, fast = result, vim.in_fast_event()
       end)
       vim.wait(5000, function()
         return got ~= nil
       end)
-      assert.equal(0, got.code)
-      assert.matches("^git version", got.stdout)
+      local result = present(got)
+      assert.equal(0, result.code)
+      assert.matches("^git version", present(result.stdout))
       assert.is_false(fast)
     end)
   end)
@@ -333,7 +340,8 @@ describe("changeset.git", function()
       vim.system = function()
         error("E2BIG")
       end
-      local answered, target = false, "unset"
+      local answered = false
+      local target = "unset" ---@type string?
       local ok = pcall(Git.pr_target, tmp, function(t)
         answered, target = true, t
       end)
@@ -346,7 +354,8 @@ describe("changeset.git", function()
     end)
   end)
   describe("head", function()
-    local real_systemlist, spawned
+    local real_systemlist ---@type fun(...): string[]
+    local spawned ---@type integer
 
     before_each(function()
       spawned = 0
@@ -502,7 +511,7 @@ describe("changeset.git", function()
         local ok, detached = pcall(Git.detached, tmp)
         Git.head = real_head
 
-        assert(ok, detached)
+        assert.is_true(ok, tostring(detached))
         assert.is_true(detached)
       end)
     end

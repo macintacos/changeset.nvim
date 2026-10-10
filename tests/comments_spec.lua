@@ -1,24 +1,25 @@
 local comments = require("changeset.comments")
+local present = require("support.present")
 
 ---Each line's kind, in order.
 ---@param path string
 ---@param lines string[]
 ---@return string[]
 local function kinds(path, lines)
-  local read
+  local read ---@type changeset.LineKinds?
   comments.read(table.concat(lines, "\n"), path, function(found)
     read = found
   end)
-  assert(read, "no kinds read before read returned")
+  local known = present(read, "no kinds read before read returned")
   return vim.tbl_map(function(lnum)
-    return comments.kind(read, lnum)
+    return comments.kind(known, lnum)
   end, vim.fn.range(1, #lines))
 end
 
 describe("comments", function()
   -- `read` answers nil without a parser, so every case below would fail on `assert` instead of naming the cause.
   for _, lang in ipairs({ "lua", "python", "rust", "toml", "typescript" }) do
-    assert(vim.treesitter.language.add(lang), lang .. " parser missing: run `mise run parsers` once")
+    assert.is_truthy(vim.treesitter.language.add(lang), lang .. " parser missing: run `mise run parsers` once")
   end
 
   it("reads Lua line, doc and block comments", function()
@@ -137,7 +138,7 @@ describe("comments", function()
     vim.treesitter.get_string_parser = function(...)
       local parser = real(...)
       local parse = parser.parse
-      parser.parse = function(self, range, on_parse)
+      function parser:parse(range, on_parse)
         if on_parse then
           return nil
         end
@@ -164,11 +165,11 @@ describe("comments", function()
 
   it("ignores a slice that answers after the stalled parse already did", function()
     local real = vim.treesitter.get_string_parser
-    local late
+    local late ---@type fun()?
     vim.treesitter.get_string_parser = function(...)
       local parser = real(...)
       local parse = parser.parse
-      parser.parse = function(self, range, on_parse)
+      function parser:parse(range, on_parse)
         if on_parse then
           late = function()
             on_parse(nil, parse(self, range))
@@ -188,7 +189,7 @@ describe("comments", function()
     assert.is_true(vim.wait(10000, function()
       return #answers > 0
     end, 25))
-    assert(late)()
+    present(late)()
     assert.equal(1, #answers)
   end)
 
@@ -197,7 +198,7 @@ describe("comments", function()
     vim.treesitter.get_string_parser = function(...)
       local parser = real(...)
       local parse = parser.parse
-      parser.parse = function(self, range, on_parse)
+      function parser:parse(range, on_parse)
         if on_parse then
           error("parser failed")
         end
@@ -237,7 +238,7 @@ describe("comments", function()
     end)
 
     it("calls back after read returns, with every line's kind", function()
-      local found
+      local found ---@type changeset.LineKinds?
       comments.read(source, "big.lua", function(kinds_read)
         found = kinds_read
       end)
@@ -245,19 +246,19 @@ describe("comments", function()
       assert.is_true(vim.wait(10000, function()
         return found ~= nil
       end, 1))
-      assert_alternating(found)
+      assert_alternating(present(found))
     end)
 
     it("still reads every line's kind once its parse outlasts 'redrawtime'", function()
       vim.o.redrawtime = 1
-      local found
+      local found ---@type changeset.LineKinds?
       comments.read(source, "big.lua", function(kinds_read)
         found = kinds_read
       end)
       assert.is_true(vim.wait(10000, function()
         return found ~= nil
       end, 1))
-      assert_alternating(found)
+      assert_alternating(present(found))
     end)
   end)
 end)

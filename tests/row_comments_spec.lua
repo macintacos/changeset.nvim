@@ -7,9 +7,14 @@ local Fixture = require("support.git")
 local Notify = require("support.notify")
 local Sidebar = require("support.sidebar")
 local Symbols = require("support.symbols")
+local present = require("support.present")
 
 describe("a review comment from a symbol's or a change's row", function()
-  local tmp, previous_dir, symbols, restore_notify, notes
+  local tmp ---@type string
+  local previous_dir ---@type string
+  local symbols ---@type support.symbols.Source
+  local restore_notify ---@type fun()
+  local notes ---@type support.notify.Note[]
 
   before_each(function()
     if not vim.g.loaded_changeset then
@@ -53,8 +58,8 @@ describe("a review comment from a symbol's or a change's row", function()
     assert.is_true(vim.wait(10000, function()
       return #symbols.asks > 0
     end, 25))
-    for _, path in ipairs(symbols.asks[1].paths) do
-      symbols.asks[1].answer(path, path == "mod.lua" and { Changes.sym("M.one", "Function", 0, 7, 9) } or {})
+    for _, path in ipairs(present(symbols.asks[1]).paths) do
+      present(symbols.asks[1]).answer(path, path == "mod.lua" and { Changes.sym("M.one", "Function", 0, 7, 9) } or {})
     end
     Sidebar.settle()
     return root
@@ -83,10 +88,10 @@ describe("a review comment from a symbol's or a change's row", function()
 
     vim.cmd("Changeset comment new")
 
-    local win = assert(CommentWindow.find())
+    local win = present(CommentWindow.find())
     assert.equal(window.win(), vim.api.nvim_win_get_config(win).win)
     assert.same({ lnum - 1, 0 }, vim.api.nvim_win_get_config(win).bufpos)
-    assert.truthy(CommentWindow.title(win):find("line 7", 1, true))
+    assert.truthy((CommentWindow.title(win):find("line 7", 1, true)))
     save(win, "why?")
     assert.same({ { path = "mod.lua", line = 7, body = "why?" } }, comment_store.list(root))
   end)
@@ -97,9 +102,9 @@ describe("a review comment from a symbol's or a change's row", function()
 
     vim.cmd("Changeset comment new")
 
-    local win = assert(CommentWindow.find())
+    local win = present(CommentWindow.find())
     assert.same({ lnum - 1, 0 }, vim.api.nvim_win_get_config(win).bufpos)
-    assert.truthy(CommentWindow.title(win):find("lines 2-3", 1, true))
+    assert.truthy((CommentWindow.title(win):find("lines 2-3", 1, true)))
     save(win, "both?")
     assert.same({ { path = "mod.lua", line = 3, start_line = 2, body = "both?" } }, comment_store.list(root))
   end)
@@ -110,7 +115,7 @@ describe("a review comment from a symbol's or a change's row", function()
 
     vim.cmd("Changeset comment new")
 
-    local win = assert(CommentWindow.find())
+    local win = present(CommentWindow.find())
     assert.same({ lnum - 1, 0 }, vim.api.nvim_win_get_config(win).bufpos)
     assert.equal("already", CommentWindow.text(win))
   end)
@@ -124,7 +129,7 @@ describe("a review comment from a symbol's or a change's row", function()
 
     vim.cmd("Changeset comment new")
 
-    assert.equal("narrow", CommentWindow.text(assert(CommentWindow.find())))
+    assert.equal("narrow", CommentWindow.text(present(CommentWindow.find())))
   end)
 
   it("is written on the line an Other changes row opens, its first change's first", function()
@@ -133,7 +138,7 @@ describe("a review comment from a symbol's or a change's row", function()
 
     vim.cmd("Changeset comment new")
 
-    save(assert(CommentWindow.find()), "here?")
+    save(present(CommentWindow.find()), "here?")
     assert.same({ { path = "mod.lua", line = 2, body = "here?" } }, comment_store.list(root))
   end)
 
@@ -146,7 +151,7 @@ describe("a review comment from a symbol's or a change's row", function()
 
     vim.cmd("Changeset comment new")
 
-    local win = assert(CommentWindow.find())
+    local win = present(CommentWindow.find())
     assert.same({ lnum - 1, 0 }, vim.api.nvim_win_get_config(win).bufpos)
     assert.equal("listed", CommentWindow.text(win))
   end)
@@ -155,7 +160,7 @@ describe("a review comment from a symbol's or a change's row", function()
     local root = open_sidebar()
     cursor_to("M.one")
     vim.cmd("Changeset comment new")
-    local win = assert(CommentWindow.find())
+    local win = present(CommentWindow.find())
     vim.api.nvim_buf_set_lines(vim.api.nvim_win_get_buf(win), 0, -1, false, { "unsure" })
 
     vim.cmd("Changeset comment toggle")
@@ -165,7 +170,7 @@ describe("a review comment from a symbol's or a change's row", function()
       return #comment_store.list(root) == 1
     end, 10))
     assert.same({ { path = "mod.lua", line = 7, body = "unsure", draft = true } }, comment_store.list(root))
-    assert.truthy(Sidebar.cursor_line():find("M.one", 1, true))
+    assert.truthy((Sidebar.cursor_line():find("M.one", 1, true)))
   end)
 
   it("switches the comment a Comments row lists between saved and draft", function()

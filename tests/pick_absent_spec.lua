@@ -2,6 +2,7 @@ require("support.gh")
 local Fixture = require("support.git")
 local Notify = require("support.notify")
 local Sidebar = require("support.sidebar")
+local present = require("support.present")
 local changeset = require("changeset")
 local pick = require("changeset.pick")
 local window = require("changeset.window")
@@ -27,9 +28,15 @@ local function name_of(buf)
 end
 
 describe("changeset.pick without mini.pick", function()
-  assert(not pcall(require, "mini.pick") and MiniPick == nil, "mini.pick must be neither installed nor set up")
+  assert.is_true(not pcall(require, "mini.pick") and MiniPick == nil, "mini.pick must be neither installed nor set up")
 
-  local tmp, previous_dir, file_win, notes, restore_notify, calls, restore_select
+  local tmp ---@type string
+  local previous_dir ---@type string
+  local file_win ---@type integer
+  local notes ---@type support.notify.Note[]
+  local restore_notify ---@type fun()
+  local calls ---@type table[]
+  local restore_select ---@type fun()
 
   before_each(function()
     tmp, previous_dir = Fixture.enter_tempdir()
@@ -57,7 +64,7 @@ describe("changeset.pick without mini.pick", function()
     pick.pick()
 
     assert.equal(1, #calls)
-    assert.equal("Changeset (vs trunk)", calls[1].opts.prompt)
+    assert.equal("Changeset (vs trunk)", present(calls[1]).opts.prompt)
     assert.same(
       {
         "mod.lua › Other changes › L2 changed 2",
@@ -66,20 +73,23 @@ describe("changeset.pick without mini.pick", function()
       },
       vim.tbl_map(function(item)
         return item.text
-      end, calls[1].items)
+      end, present(calls[1]).items)
     )
   end)
 
   it("shows each change as its trail and name", function()
     pick.pick()
 
-    assert.equal("mod.lua › Other changes › L8 changed 8", calls[1].opts.format_item(calls[1].items[2]))
+    assert.equal(
+      "mod.lua › Other changes › L8 changed 8",
+      present(calls[1]).opts.format_item(present(calls[1]).items[2])
+    )
   end)
 
   it("opens the chosen file at its line", function()
     pick.pick()
 
-    calls[1].on_choice(calls[1].items[2], 2)
+    present(calls[1]).on_choice(present(calls[1]).items[2], 2)
 
     assert.truthy(vim.endswith(name_of(0), "mod.lua"))
     assert.equal(8, vim.api.nvim_win_get_cursor(0)[1])
@@ -88,7 +98,7 @@ describe("changeset.pick without mini.pick", function()
   it("opens nothing when the choice is cancelled", function()
     pick.pick()
 
-    calls[1].on_choice(nil, nil)
+    present(calls[1]).on_choice(nil, nil)
 
     assert.truthy(vim.endswith(name_of(0), "plain.lua"))
   end)
@@ -98,7 +108,7 @@ describe("changeset.pick without mini.pick", function()
 
     assert.is_nil(chosen)
     assert.truthy(vim.endswith(name_of(0), "plain.lua"))
-    calls[1].on_choice(calls[1].items[1], 1)
+    present(calls[1]).on_choice(present(calls[1]).items[1], 1)
     assert.truthy(vim.endswith(name_of(0), "mod.lua"))
   end)
 
@@ -106,11 +116,11 @@ describe("changeset.pick without mini.pick", function()
     -- A second window left of the file's, so that the file's is not the first one in the tab.
     vim.cmd("leftabove vnew")
     vim.api.nvim_set_current_win(file_win)
-    local sidebar = assert(window.win())
+    local sidebar = present(window.win())
     vim.api.nvim_set_current_win(sidebar)
 
     pick.pick()
-    calls[1].on_choice(calls[1].items[1], 1)
+    present(calls[1]).on_choice(present(calls[1]).items[1], 1)
 
     assert.equal(file_win, vim.api.nvim_get_current_win())
     assert.truthy(vim.endswith(name_of(0), "mod.lua"))
@@ -127,19 +137,19 @@ describe("changeset.pick without mini.pick", function()
     vim.api.nvim_win_set_buf(help, special)
 
     pick.pick()
-    calls[1].on_choice(calls[1].items[1], 1)
+    present(calls[1]).on_choice(present(calls[1]).items[1], 1)
 
     assert.equal(help, vim.api.nvim_get_current_win())
     assert.truthy(vim.endswith(name_of(0), "mod.lua"))
   end)
 
   it("splits a window off the sidebar for the chosen file when the sidebar is the only window", function()
-    local sidebar = assert(window.win())
+    local sidebar = present(window.win())
     vim.api.nvim_set_current_win(sidebar)
     vim.cmd("only")
 
     pick.pick()
-    calls[1].on_choice(calls[1].items[1], 1)
+    present(calls[1]).on_choice(present(calls[1]).items[1], 1)
 
     assert.equal(2, #vim.api.nvim_tabpage_list_wins(0))
     assert.truthy(vim.endswith(name_of(0), "mod.lua"))
@@ -155,8 +165,8 @@ describe("changeset.pick without mini.pick", function()
 
     assert.equal(0, #calls)
     assert.equal(1, #notes)
-    assert.equal(vim.log.levels.WARN, notes[1].level)
-    assert.truthy(notes[1].msg:find("no merge base", 1, true))
+    assert.equal(vim.log.levels.WARN, present(notes[1]).level)
+    assert.truthy((present(notes[1]).msg:find("no merge base", 1, true)))
   end)
 
   describe("installed but not set up", function()
@@ -165,7 +175,7 @@ describe("changeset.pick without mini.pick", function()
     before_each(function()
       rtp = vim.o.runtimepath
       vim.opt.runtimepath:prepend(require("support.deps").path("mini.pick"))
-      assert(pcall(require, "mini.pick") and MiniPick == nil, "mini.pick must be installed but not set up")
+      assert.is_true(pcall(require, "mini.pick") and MiniPick == nil, "mini.pick must be installed but not set up")
     end)
 
     after_each(function()
@@ -177,7 +187,7 @@ describe("changeset.pick without mini.pick", function()
       pick.pick()
 
       assert.equal(1, #calls)
-      assert.equal("Changeset (vs trunk)", calls[1].opts.prompt)
+      assert.equal("Changeset (vs trunk)", present(calls[1]).opts.prompt)
     end)
   end)
 end)

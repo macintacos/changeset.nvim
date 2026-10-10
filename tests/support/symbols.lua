@@ -7,8 +7,13 @@ local M = {}
 ---@field paths string[] The files asked about.
 ---@field answer fun(path: string, items: changeset.Symbol[]?, comments: changeset.Comments?) Answers this ask only.
 
+---@class support.symbols.Source
+---@field asks support.symbols.Ask[]
+---@field answer fun(path: string, items: changeset.Symbol[]?, comments: changeset.Comments?) Answers the latest ask.
+---@field restore fun() Puts `resolve.start` back.
+
 ---Replace `resolve.start` with a source that holds every ask for the spec to answer.
----@return { asks: support.symbols.Ask[], answer: fun(path: string, items: changeset.Symbol[]?, comments: changeset.Comments?), restore: fun() }
+---@return support.symbols.Source
 function M.install()
   local real_start = resolve.start
   local asks = {}

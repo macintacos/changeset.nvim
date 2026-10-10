@@ -2,11 +2,15 @@ local gh = require("support.gh")
 local support = require("support.git")
 local gutter = require("support.gutter")
 local Notify = require("support.notify")
+local present = require("support.present")
 
 local await, edit, revision = gutter.await, gutter.edit, gutter.revision
 
 describe("the gutter's base", function()
-  local dir, cwd, restore_notify, change_base
+  local dir ---@type string
+  local cwd ---@type string
+  local restore_notify ---@type fun()
+  local change_base
   ---@type { msg: string, level: integer? }[]
   local notices
 
@@ -91,7 +95,7 @@ describe("the gutter's base", function()
     assert.is_false(vim.wait(1000, function()
       return #notices > 0
     end, 20))
-    assert.is_nil(revision(bufs[1]))
+    assert.is_nil(revision(present(bufs[1])))
   end)
 
   it("follows a PR retargeted since, once HEAD moves", function()
@@ -112,7 +116,7 @@ describe("the gutter's base", function()
     gutter.fixture(dir, "change-failed", { "a.txt" })
     require("gitsigns").change_base = function(_, _, cb)
       vim.schedule(function()
-        cb("boom")
+        present(cb)("boom")
       end)
     end
     vim.fn.chdir(dir)
@@ -161,7 +165,7 @@ describe("the gutter's base", function()
       return #Notify.messages(notices, vim.log.levels.WARN) > 0
     end, 20))
 
-    assert.is_nil(revision(bufs[1]))
+    assert.is_nil(revision(present(bufs[1])))
   end)
 
   it("drops a PR lookup that a branch switch superseded", function()
@@ -182,7 +186,7 @@ describe("the gutter's base", function()
     end, 20))
 
     assert.is_false(vim.wait(1500, function()
-      return revision(bufs[1]) == parent_tip
+      return revision(present(bufs[1])) == parent_tip
     end, 20))
   end)
 end)

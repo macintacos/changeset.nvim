@@ -1,5 +1,6 @@
 local highlights = require("changeset.highlights")
 local render = require("changeset.render")
+local present = require("support.present")
 
 ---@param overrides? table
 ---@return changeset.Row
@@ -16,7 +17,7 @@ local function file(overrides)
     ancestor = false,
     read = "done",
     children = {},
-  }, overrides or {})
+  }, overrides or {}) --[[@as changeset.Row]]
 end
 
 ---@param overrides? table
@@ -34,7 +35,7 @@ local function symbol(overrides)
     removed = 1,
     ancestor = false,
     children = {},
-  }, overrides or {})
+  }, overrides or {}) --[[@as changeset.Row]]
 end
 
 ---@param overrides? table
@@ -52,11 +53,11 @@ local function section(overrides)
     removed = 3,
     ancestor = false,
     children = { file() },
-  }, overrides or {})
+  }, overrides or {}) --[[@as changeset.Row]]
 end
 
 ---@param overrides? table
----@return table
+---@return changeset.RenderOpts
 local function opts(overrides)
   return vim.tbl_extend("force", {
     icon = function(row)
@@ -66,7 +67,7 @@ local function opts(overrides)
       return false
     end,
     width = 80,
-  }, overrides or {})
+  }, overrides or {}) --[[@as changeset.RenderOpts]]
 end
 
 ---The mark whose highlight covers exactly `covered` in the line's text.
@@ -111,16 +112,16 @@ end
 describe("changeset.render", function()
   describe("section rows", function()
     it("heads a section with its label and file count", function()
-      local one = render.lines({ section() }, opts())[1]
-      local two = render.lines({ section({ files = 2 }) }, opts())[1]
+      local one = present(render.lines({ section() }, opts())[1])
+      local two = present(render.lines({ section({ files = 2 }) }, opts())[1])
 
-      assert.truthy(one.text:find("Implementation", 1, true))
-      assert.truthy(one.text:find("1 file$"))
-      assert.truthy(two.text:find("2 files$"))
+      assert.truthy((one.text:find("Implementation", 1, true)))
+      assert.truthy((one.text:find("1 file$")))
+      assert.truthy((two.text:find("2 files$")))
     end)
 
     it("leaves the cell before its icon blank, as the header strip does", function()
-      local line = render.lines({ section() }, opts())[1]
+      local line = present(render.lines({ section() }, opts())[1])
 
       assert.equal(" S", line.text:sub(1, 2))
     end)
@@ -128,18 +129,18 @@ describe("changeset.render", function()
     it("starts every header's count in the same column", function()
       local lines = render.lines({ section(), section({ id = "#docs", name = "Docs" }) }, opts())
 
-      assert.equal(lines[1].text:find("1 file"), lines[3].text:find("1 file"))
+      assert.equal(present(lines[1]).text:find("1 file"), (present(lines[3]).text:find("1 file")))
     end)
 
     it("shrinks the label's padding so a wide stat clears the count", function()
       local wide = section({ files = 123, added = 15234, removed = 8123 })
-      local narrow = render.lines({ wide }, opts({ width = 42 }))[1]
+      local narrow = present(render.lines({ wide }, opts({ width = 42 }))[1])
 
       assert.is_true(vim.fn.strdisplaywidth(narrow.text) + #"+15234 -8123" + 1 <= 42)
     end)
 
     it("draws the label as plain content", function()
-      local line = render.lines({ section() }, opts())[1]
+      local line = present(render.lines({ section() }, opts())[1])
 
       for _, mark in ipairs(line.marks) do
         assert.is_false(mark.end_col ~= nil and line.text:sub(mark.col + 1, mark.end_col):find("Implementation") ~= nil)
@@ -147,28 +148,28 @@ describe("changeset.render", function()
     end)
 
     it("draws the file count in the meta group", function()
-      local line = render.lines({ section({ files = 2 }) }, opts())[1]
+      local line = present(render.lines({ section({ files = 2 }) }, opts())[1])
 
-      assert.equal(highlights.META_HL, mark_over(line, "2 files").hl)
+      assert.equal(highlights.META_HL, present(mark_over(line, "2 files")).hl)
     end)
 
     it("draws the header's icon in the group the caller gives it", function()
-      local line = render.lines({ section() }, opts())[1]
+      local line = present(render.lines({ section() }, opts())[1])
 
-      assert.equal("IconHl", mark_over(line, "S").hl)
+      assert.equal("IconHl", present(mark_over(line, "S")).hl)
     end)
 
     it("right-aligns the section's stat", function()
-      local mark = assert(stat_mark(render.lines({ section() }, opts())[1]))
+      local mark = present(stat_mark(present(render.lines({ section() }, opts())[1])))
 
       assert.equal("right_align", mark.pos)
-      assert.equal("+12", mark.virt_text[1][1])
+      assert.equal("+12", present(present(mark.virt_text)[1])[1])
     end)
 
     it("draws no rail on a section header", function()
-      local line = render.lines({ section() }, opts())[1]
+      local line = present(render.lines({ section() }, opts())[1])
 
-      assert.is_nil(line.text:find("▎", 1, true))
+      assert.is_nil((line.text:find("▎", 1, true)))
     end)
 
     it("draws only the header of a folded section", function()
@@ -197,7 +198,7 @@ describe("changeset.render", function()
     end)
 
     it("does not mark a filter match on a header", function()
-      local line = render.lines({ section() }, opts({ query = "impl" }))[1]
+      local line = present(render.lines({ section() }, opts({ query = "impl" }))[1])
 
       assert.is_nil(mark_over(line, "Impl"))
     end)
@@ -224,7 +225,9 @@ describe("changeset.render", function()
     ---@param fields table?
     ---@return changeset.Row
     local function saved(fields)
-      return comment_row(vim.tbl_extend("force", { path = "src/a.lua", line = 42, body = "note\nmore" }, fields or {}))
+      return comment_row(
+        vim.tbl_extend("force", { path = "src/a.lua", line = 42, body = "note\nmore" }, fields or {}) --[[@as changeset.ReviewComment]]
+      )
     end
 
     ---@param children changeset.Row[]
@@ -243,17 +246,17 @@ describe("changeset.render", function()
     end
 
     it("counts what it lists on its header, with no stat", function()
-      local one = render.lines({ comments({ saved() }) }, opts())[1]
-      local two = render.lines({ comments({ saved(), saved({ line = 43 }) }) }, opts())[1]
+      local one = present(render.lines({ comments({ saved() }) }, opts())[1])
+      local two = present(render.lines({ comments({ saved(), saved({ line = 43 }) }) }, opts())[1])
 
-      assert.truthy(one.text:find("Comments", 1, true))
-      assert.truthy(one.text:find("1 comment$"))
-      assert.truthy(two.text:find("2 comments$"))
+      assert.truthy((one.text:find("Comments", 1, true)))
+      assert.truthy((one.text:find("1 comment$")))
+      assert.truthy((two.text:find("2 comments$")))
       assert.is_nil(stat_mark(one))
     end)
 
     it("ends its header's count where a stat would end", function()
-      local header = render.lines({ comments({ saved() }) }, opts({ width = 50 }))[1]
+      local header = present(render.lines({ comments({ saved() }) }, opts({ width = 50 }))[1])
 
       assert.equal(50 - 2, vim.fn.strdisplaywidth(header.text))
     end)
@@ -262,47 +265,48 @@ describe("changeset.render", function()
       local header = comments({ saved(), saved({ line = 43, draft = true }) })
       header.drafts = 1
 
-      assert.truthy(render.lines({ header }, opts())[1].text:find("2 comments · 1 draft$"))
+      assert.truthy((present(render.lines({ header }, opts())[1]).text:find("2 comments · 1 draft$")))
     end)
 
     it("leads a draft's row with a dotted circle in the draft group", function()
-      local line = render.lines({ comments({ saved({ draft = true }) }) }, opts())[2]
+      local line = present(render.lines({ comments({ saved({ draft = true }) }) }, opts())[2])
 
       assert.equal(" ◌ ", line.text:sub(1, #" ◌ "))
-      assert.equal(highlights.REVIEW_COMMENT_DRAFT_HL, mark_over(line, "◌").hl)
+      assert.equal(highlights.REVIEW_COMMENT_DRAFT_HL, present(mark_over(line, "◌")).hl)
     end)
 
     it("leads a review comment's row with a solid circle in its group", function()
-      local line = render.lines({ comments({ saved() }) }, opts())[2]
+      local line = present(render.lines({ comments({ saved() }) }, opts())[2])
 
       assert.equal(" ● ", line.text:sub(1, #" ● "))
-      assert.equal(highlights.REVIEW_COMMENT_HL, mark_over(line, "●").hl)
+      assert.equal(highlights.REVIEW_COMMENT_HL, present(mark_over(line, "●")).hl)
     end)
 
     it("names the file and the line or range, then the body's first line, quiet", function()
-      local one = render.lines({ comments({ saved() }) }, opts())[2]
-      local range = render.lines({ comments({ saved({ start_line = 40 }) }) }, opts())[2]
+      local one = present(render.lines({ comments({ saved() }) }, opts())[2])
+      local range = present(render.lines({ comments({ saved({ start_line = 40 }) }) }, opts())[2])
 
-      assert.truthy(one.text:find("a.lua:42%s%s+note$"))
-      assert.truthy(range.text:find("a.lua:40%-42%s%s+note$"))
-      assert.equal(highlights.REVIEW_COMMENT_BODY_HL, mark_over(one, "note").hl)
+      assert.truthy((one.text:find("a.lua:42%s%s+note$")))
+      assert.truthy((range.text:find("a.lua:40%-42%s%s+note$")))
+      assert.equal(highlights.REVIEW_COMMENT_BODY_HL, present(mark_over(one, "note")).hl)
     end)
 
     it("ends the body where a stat would end", function()
-      local line = render.lines({ comments({ saved() }) }, opts({ width = 50 }))[2]
+      local line = present(render.lines({ comments({ saved() }) }, opts({ width = 50 }))[2])
 
       assert.equal(50 - 2, vim.fn.strdisplaywidth(line.text))
     end)
 
     it("clips the body to the width", function()
-      local line = render.lines({ comments({ saved({ body = ("word "):rep(40) }) }) }, opts({ width = 40 }))[2]
+      local line = present(render.lines({ comments({ saved({ body = ("word "):rep(40) }) }) }, opts({ width = 40 }))[2])
 
       assert.is_true(vim.fn.strdisplaywidth(line.text) <= 40 - 2)
-      assert.truthy(line.text:find("…$"))
+      assert.truthy((line.text:find("…$")))
     end)
 
     it("clips a body of wide characters to the width", function()
-      local line = render.lines({ comments({ saved({ body = ("日本語"):rep(10) }) }) }, opts({ width = 30 }))[2]
+      local line =
+        present(render.lines({ comments({ saved({ body = ("日本語"):rep(10) }) }) }, opts({ width = 30 }))[2])
 
       assert.is_true(vim.fn.strdisplaywidth(line.text) <= 30 - 2, line.text)
     end)
@@ -310,10 +314,10 @@ describe("changeset.render", function()
     for _, width in ipairs({ 44, 30 }) do
       it(("fits a range on a long file name to width %d"):format(width), function()
         local long = saved({ path = "lua/changeset/review_comment_window.lua", line = 120, start_line = 112 })
-        local line = render.lines({ comments({ long }) }, opts({ width = width }))[2]
+        local line = present(render.lines({ comments({ long }) }, opts({ width = width }))[2])
 
         assert.is_true(vim.fn.strdisplaywidth(line.text) <= width - 2, line.text)
-        assert.truthy(line.text:find("review_comment_", 1, true))
+        assert.truthy((line.text:find("review_comment_", 1, true)))
       end)
     end
   end)
@@ -331,22 +335,22 @@ describe("changeset.render", function()
         it(("draws the rail in %s for status '%s'"):format(hl, status), function()
           local lines = file_lines({ file({ status = status }) }, opts())
 
-          assert.equal(" ▎", lines[1].text:sub(1, #" ▎"))
-          assert.same({ col = 1, end_col = 1 + #"▎", hl = hl }, mark_over(lines[1], "▎"))
+          assert.equal(" ▎", present(lines[1]).text:sub(1, #" ▎"))
+          assert.same({ col = 1, end_col = 1 + #"▎", hl = hl }, mark_over(present(lines[1]), "▎"))
         end)
       end
 
       it("puts the icon, coloured by the caller's group, between the rail and the filename", function()
         local lines = file_lines({ file() }, opts())
 
-        assert.equal(" ▎ F a.lua (src)", lines[1].text)
-        assert.equal("IconHl", mark_over(lines[1], "F").hl)
+        assert.equal(" ▎ F a.lua (src)", present(lines[1]).text)
+        assert.equal("IconHl", present(mark_over(present(lines[1]), "F")).hl)
       end)
 
       it("dims the directory after the filename", function()
         local lines = file_lines({ file() }, opts())
 
-        local mark = assert(mark_over(lines[1], "(src)"))
+        local mark = present(mark_over(present(lines[1]), "(src)"))
         assert.equal("Comment", mark.hl)
         assert.is_nil(mark.priority)
       end)
@@ -354,15 +358,15 @@ describe("changeset.render", function()
       it("draws a file at the repository root with no directory", function()
         local lines = file_lines({ file({ path = "a.lua" }) }, opts())
 
-        assert.equal(" ▎ F a.lua", lines[1].text)
+        assert.equal(" ▎ F a.lua", present(lines[1]).text)
       end)
 
       for _, status in ipairs({ "deleted", "renamed" }) do
         it(("ends a file with status '%s' with a Comment marker"):format(status), function()
           local lines = file_lines({ file({ status = status }) }, opts())
 
-          assert.equal(" ▎ F a.lua (src) " .. status, lines[1].text)
-          assert.equal("Comment", mark_over(lines[1], " " .. status).hl)
+          assert.equal(" ▎ F a.lua (src) " .. status, present(lines[1]).text)
+          assert.equal("Comment", present(mark_over(present(lines[1]), " " .. status)).hl)
         end)
       end
 
@@ -370,7 +374,7 @@ describe("changeset.render", function()
         it(("adds no marker for status '%s'"):format(status), function()
           local lines = file_lines({ file({ status = status }) }, opts())
 
-          assert.equal(" ▎ F a.lua (src)", lines[1].text)
+          assert.equal(" ▎ F a.lua (src)", present(lines[1]).text)
         end)
       end
     end)
@@ -387,14 +391,14 @@ describe("changeset.render", function()
       it("draws a name holding a line break on one line, its stat at the line's end", function()
         local lines = file_lines({ file({ children = { symbol({ name = "one\ntwo" }) } }) }, opts())
 
-        assert.equal("   └─S one two", lines[2].text)
-        assert.equal(#lines[2].text, assert(stat_mark(lines[2])).col)
+        assert.equal("   └─S one two", present(lines[2]).text)
+        assert.equal(#present(lines[2]).text, present(stat_mark(present(lines[2]))).col)
       end)
 
       it("draws a path holding a line break on one line", function()
         local lines = file_lines({ file({ path = "new\r\nline.lua" }) }, opts())
 
-        assert.equal(" ▎ F new  line.lua", lines[1].text)
+        assert.equal(" ▎ F new  line.lua", present(lines[1]).text)
       end)
 
       it("carries a bar down under a parent with later siblings, and blank under the last", function()
@@ -419,21 +423,21 @@ describe("changeset.render", function()
       it("draws the connectors in Comment", function()
         local lines = file_lines({ file({ children = { symbol() } }) }, opts())
 
-        assert.equal("Comment", mark_over(lines[2], "└─").hl)
+        assert.equal("Comment", present(mark_over(present(lines[2]), "└─")).hl)
       end)
 
       it("colours the kind icon with the caller's group", function()
         local lines = file_lines({ file({ children = { symbol() } }) }, opts())
 
-        assert.equal("IconHl", mark_over(lines[2], "S").hl)
+        assert.equal("IconHl", present(mark_over(present(lines[2]), "S")).hl)
       end)
 
       it("draws an ancestor's name in Comment but keeps its icon colour", function()
         local ancestor = symbol({ name = "Container", ancestor = true })
         local lines = file_lines({ file({ children = { ancestor } }) }, opts())
 
-        assert.equal("Comment", mark_over(lines[2], "Container").hl)
-        assert.equal("IconHl", mark_over(lines[2], "S").hl)
+        assert.equal("Comment", present(mark_over(present(lines[2]), "Container")).hl)
+        assert.equal("IconHl", present(mark_over(present(lines[2]), "S")).hl)
       end)
     end)
 
@@ -442,15 +446,16 @@ describe("changeset.render", function()
       ---@param line changeset.Line
       ---@return string, table[]
       local function stat_runs(line)
-        local mark = assert(stat_mark(line))
-        return mark.pos, vim.tbl_filter(function(chunk)
-          return chunk[2] ~= nil
-        end, mark.virt_text)
+        local mark = present(stat_mark(line))
+        return present(mark.pos),
+          vim.tbl_filter(function(chunk)
+            return chunk[2] ~= nil
+          end, present(mark.virt_text))
       end
 
       it("right-aligns +N in GitSignsAdd and -N in GitSignsDelete on a file row", function()
         local lines = file_lines({ file({ added = 12, removed = 3 }) }, opts())
-        local pos, runs = stat_runs(lines[1])
+        local pos, runs = stat_runs(present(lines[1]))
 
         assert.equal("right_align", pos)
         assert.same({ { "+12", "GitSignsAdd" }, { "-3", "GitSignsDelete" } }, runs)
@@ -459,7 +464,7 @@ describe("changeset.render", function()
       it("right-aligns them on a symbol row too", function()
         local rows = { file({ children = { symbol({ added = 8, removed = 1 }) } }) }
         local lines = file_lines(rows, opts())
-        local pos, runs = stat_runs(lines[2])
+        local pos, runs = stat_runs(present(lines[2]))
 
         assert.equal("right_align", pos)
         assert.same({ { "+8", "GitSignsAdd" }, { "-1", "GitSignsDelete" } }, runs)
@@ -469,7 +474,7 @@ describe("changeset.render", function()
         local added, removed, plus, minus = unpack(counts)
         it(("shows %s %s rather than dropping the zero"):format(plus, minus), function()
           local lines = file_lines({ file({ added = added, removed = removed }) }, opts())
-          local _, runs = stat_runs(lines[1])
+          local _, runs = stat_runs(present(lines[1]))
 
           assert.same({ { plus, "GitSignsAdd" }, { minus, "GitSignsDelete" } }, runs)
         end)
@@ -480,14 +485,14 @@ describe("changeset.render", function()
         bare.added, bare.removed = nil, nil
         local lines = file_lines({ file({ children = { bare } }) }, opts())
 
-        assert.is_nil(stat_mark(lines[2]))
+        assert.is_nil(stat_mark(present(lines[2])))
       end)
 
       it("emits no stat for an ancestor, even when numbers were left on it", function()
         local ancestor = symbol({ ancestor = true, added = 8, removed = 1 })
         local lines = file_lines({ file({ children = { ancestor } }) }, opts())
 
-        assert.is_nil(stat_mark(lines[2]))
+        assert.is_nil(stat_mark(present(lines[2])))
       end)
     end)
 
@@ -495,7 +500,8 @@ describe("changeset.render", function()
       ---@param state "selected"|"here"|"picked"
       ---@return vim.api.keyset.set_extmark tint, vim.api.keyset.set_extmark glyph
       local function marks(state)
-        local tint, glyph
+        local tint ---@type vim.api.keyset.set_extmark?
+        local glyph ---@type vim.api.keyset.set_extmark?
         for _, mark in ipairs(render.state_marks(state, 44)) do
           if mark.virt_text then
             glyph = mark
@@ -503,7 +509,7 @@ describe("changeset.render", function()
             tint = mark
           end
         end
-        return assert(tint), assert(glyph)
+        return present(tint), present(glyph)
       end
 
       it("tints the selected row to the window's edge, its glyph in the last column", function()
@@ -511,7 +517,7 @@ describe("changeset.render", function()
 
         assert.same(
           { highlights.SELECTED_HL, true, render.SELECTED_ICON, 43 },
-          { tint.hl_group, tint.hl_eol, glyph.virt_text[1][1], glyph.virt_text_win_col }
+          { tint.hl_group, tint.hl_eol, present(glyph.virt_text)[1][1], glyph.virt_text_win_col }
         )
       end)
 
@@ -520,7 +526,7 @@ describe("changeset.render", function()
 
         assert.same(
           { highlights.HERE_HL, true, render.HERE_ICON, 43 },
-          { tint.hl_group, tint.hl_eol, glyph.virt_text[1][1], glyph.virt_text_win_col }
+          { tint.hl_group, tint.hl_eol, present(glyph.virt_text)[1][1], glyph.virt_text_win_col }
         )
       end)
 
@@ -529,7 +535,7 @@ describe("changeset.render", function()
 
         assert.same(
           { highlights.PICKED_HL, true, render.PICKED_ICON, 43 },
-          { tint.hl_group, tint.hl_eol, glyph.virt_text[1][1], glyph.virt_text_win_col }
+          { tint.hl_group, tint.hl_eol, present(glyph.virt_text)[1][1], glyph.virt_text_win_col }
         )
       end)
 
@@ -548,7 +554,7 @@ describe("changeset.render", function()
 
       it("sets the glyph in the blank a row's stat ends with, a cell clear of the numbers", function()
         local lines = file_lines({ file({ added = 12, removed = 3 }) }, opts({ width = 44 }))
-        local stat = assert(assert(stat_mark(lines[1])).virt_text)
+        local stat = present(present(stat_mark(present(lines[1]))).virt_text)
         local tail = stat[#stat][1]
         local _, glyph = marks("selected")
 
@@ -562,7 +568,7 @@ describe("changeset.render", function()
         local lines = file_lines({ file({ read = "reading" }) }, opts())
 
         assert.same({ " ▎ F a.lua (src)", "   └─⋯ reading symbols" }, texts(lines))
-        assert.equal(highlights.META_HL, mark_over(lines[2], "⋯ reading symbols").hl)
+        assert.equal(highlights.META_HL, present(mark_over(present(lines[2]), "⋯ reading symbols")).hl)
       end)
 
       it("shows only the file row once a file is read but nothing inside it changed", function()
@@ -574,9 +580,9 @@ describe("changeset.render", function()
       it("nests the placeholder under the file as a row of its own", function()
         local lines = file_lines({ file({ read = "reading" }) }, opts())
 
-        assert.not_equal(lines[1].row.id, lines[2].row.id)
-        assert.equal(lines[1].row.depth + 1, lines[2].row.depth)
-        assert.equal("src/a.lua", lines[2].row.path)
+        assert.not_equal(present(present(lines[1]).row).id, present(present(lines[2]).row).id)
+        assert.equal(present(present(lines[1]).row).depth + 1, present(present(lines[2]).row).depth)
+        assert.equal("src/a.lua", present(present(lines[2]).row).path)
       end)
 
       it("shows no placeholder for a deleted file, whose subtree is empty by design", function()
@@ -597,14 +603,14 @@ describe("changeset.render", function()
       it("draws the group and its hunks in the meta group", function()
         local lines = file_lines(with_orphans(), opts())
 
-        assert.equal(highlights.META_HL, mark_over(lines[2], "Other changes").hl)
-        assert.equal(highlights.META_HL, mark_over(lines[3], "L4–6 local x = 1").hl)
+        assert.equal(highlights.META_HL, present(mark_over(present(lines[2]), "Other changes")).hl)
+        assert.equal(highlights.META_HL, present(mark_over(present(lines[3]), "L4–6 local x = 1")).hl)
       end)
 
       it("dims their icon instead of using the caller's colour", function()
         local lines = file_lines(with_orphans(), opts())
 
-        assert.equal(highlights.META_HL, mark_over(lines[2], "S").hl)
+        assert.equal(highlights.META_HL, present(mark_over(present(lines[2]), "S")).hl)
       end)
     end)
 
@@ -647,7 +653,7 @@ describe("changeset.render", function()
         local lines = file_lines(rows, opts({ collapsed = collapsed_ids("a.lua") }))
 
         local ids = vim.tbl_map(function(line)
-          return line.row.id
+          return present(line.row).id
         end, lines)
         assert.same({ "a.lua", "b.lua", "b-outer", "b-nested", "b-next" }, ids)
       end)
@@ -670,8 +676,8 @@ describe("changeset.render", function()
         local chain = symbol({ name = "SessionStore › refresh › deadline", added = 8, removed = 1 })
         local lines = file_lines({ file({ children = { chain } }) }, opts({ width = 31 }))
 
-        assert.equal("   └─S … › deadline", lines[2].text)
-        assert.not_nil(stat_mark(lines[2]))
+        assert.equal("   └─S … › deadline", present(lines[2]).text)
+        assert.not_nil(stat_mark(present(lines[2])))
       end)
 
       it("trims a long directory from the left, keeping the whole filename and the marker", function()
@@ -679,7 +685,7 @@ describe("changeset.render", function()
         deleted.added, deleted.removed = nil, nil
         local lines = file_lines({ deleted }, opts({ width = 47 }))
 
-        assert.equal(" ▎ F deleted_file.lua (…/structure) deleted", lines[1].text)
+        assert.equal(" ▎ F deleted_file.lua (…/structure) deleted", present(lines[1]).text)
       end)
 
       it("drops the directory when the filename leaves no room for it", function()
@@ -687,7 +693,7 @@ describe("changeset.render", function()
         deleted.added, deleted.removed = nil, nil
         local lines = file_lines({ deleted }, opts({ width = 31 }))
 
-        assert.equal(" ▎ F deleted_file.lua deleted", lines[1].text)
+        assert.equal(" ▎ F deleted_file.lua deleted", present(lines[1]).text)
       end)
 
       it("trims an orphan hunk of wide characters short of its stat", function()
@@ -695,7 +701,7 @@ describe("changeset.render", function()
         local lines = file_lines({ file({ children = { hunk } }) }, opts({ width = 31 }))
 
         local room = 31 - (vim.fn.strdisplaywidth("+8 -1") + 3)
-        assert.is_true(vim.fn.strdisplaywidth(lines[2].text) <= room, lines[2].text)
+        assert.is_true(vim.fn.strdisplaywidth(present(lines[2]).text) <= room, present(lines[2]).text)
       end)
 
       it("trims a symbol name of wide characters short of its stat", function()
@@ -703,7 +709,7 @@ describe("changeset.render", function()
           file_lines({ file({ children = { symbol({ name = ("名前"):rep(15) }) } }) }, opts({ width = 31 }))
 
         local room = 31 - (vim.fn.strdisplaywidth("+8 -1") + 3)
-        assert.is_true(vim.fn.strdisplaywidth(lines[2].text) <= room, lines[2].text)
+        assert.is_true(vim.fn.strdisplaywidth(present(lines[2]).text) <= room, present(lines[2]).text)
       end)
 
       it("trims an orphan hunk from the right, keeping its line range", function()
@@ -711,7 +717,7 @@ describe("changeset.render", function()
         hunk.added, hunk.removed = nil, nil
         local lines = file_lines({ file({ children = { hunk } }) }, opts({ width = 31 }))
 
-        assert.equal("   └─S L4–6 local x = 1 + so…", lines[2].text)
+        assert.equal("   └─S L4–6 local x = 1 + so…", present(lines[2]).text)
       end)
     end)
   end)
@@ -720,7 +726,7 @@ describe("changeset.render", function()
     it("marks the characters a filter query matched", function()
       local lines = file_lines({ file() }, opts({ query = "a.lua" }))
 
-      local mark = assert(mark_over(lines[1], "a.lua"))
+      local mark = present(mark_over(present(lines[1]), "a.lua"))
 
       assert.equal(highlights.MATCH_HL, mark.hl)
     end)
@@ -732,8 +738,8 @@ describe("changeset.render", function()
 
       local lines = file_lines(rows, opts({ query = "lph" }))
 
-      local match = assert(mark_over(lines[2], "lph"))
-      local name = assert(mark_over(lines[2], "Alpha"))
+      local match = present(mark_over(present(lines[2]), "lph"))
+      local name = present(mark_over(present(lines[2]), "Alpha"))
 
       assert.is_nil(name.priority)
       assert.is_true(match.priority > render.MARK_PRIORITY)
@@ -742,7 +748,7 @@ describe("changeset.render", function()
     it("takes the query as plain text, not as a pattern", function()
       local lines = file_lines({ file({ path = "a(b).lua" }) }, opts({ query = "(" }))
 
-      local mark = assert(mark_over(lines[1], "("))
+      local mark = present(mark_over(present(lines[1]), "("))
 
       assert.equal(highlights.MATCH_HL, mark.hl)
     end)
@@ -750,7 +756,7 @@ describe("changeset.render", function()
     it("leaves the rows unmarked when nothing is being filtered", function()
       local lines = file_lines({ file() }, opts())
 
-      for _, mark in ipairs(lines[1].marks) do
+      for _, mark in ipairs(present(lines[1]).marks) do
         assert.not_equal(highlights.MATCH_HL, mark.hl)
       end
     end)
@@ -776,9 +782,9 @@ describe("changeset.render", function()
     ---@param needle string
     ---@return string?
     local function group_at(shown, needle)
-      local at = shown.str:find(needle, 1, true) - 1
+      local at = present((shown.str:find(needle, 1, true))) - 1
       local found
-      for _, mark in ipairs(assert(shown.highlights)) do
+      for _, mark in ipairs(present(shown.highlights)) do
         if mark.start <= at then
           found = mark.group
         end
@@ -787,16 +793,16 @@ describe("changeset.render", function()
     end
 
     it("names what the tree is compared against", function()
-      assert.truthy(eval({ ref = "origin/trunk" }).str:find("origin/trunk", 1, true))
+      assert.truthy((eval({ ref = "origin/trunk" }).str:find("origin/trunk", 1, true)))
     end)
 
     it("keeps the head of a ref too long to fit, marking the cut at its end", function()
       local text = eval({ ref = LONG }, 30).str
 
-      assert.truthy(text:find("origin/jt/exc-1200", 1, true))
+      assert.truthy((text:find("origin/jt/exc-1200", 1, true)))
       assert.truthy(vim.endswith(vim.trim(text), "…"))
       -- The statusline marks a cut of its own with `<`, and keeps the tail.
-      assert.falsy(text:find("<", 1, true))
+      assert.falsy((text:find("<", 1, true)))
     end)
 
     it("names the branch's open PR at the right edge, a blank cell clear of it", function()
@@ -807,13 +813,13 @@ describe("changeset.render", function()
       local text = eval({ ref = LONG, pr = 412 }, 30).str
 
       assert.equal(" #412 ", text:sub(-6))
-      assert.truthy(text:find("origin/jt", 1, true))
-      assert.truthy(text:find("…", 1, true))
-      assert.falsy(text:find("<", 1, true))
+      assert.truthy((text:find("origin/jt", 1, true)))
+      assert.truthy((text:find("…", 1, true)))
+      assert.falsy((text:find("<", 1, true)))
     end)
 
     it("escapes % in the ref so the statusline does not read it as an item", function()
-      assert.truthy(eval({ ref = "origin/50%off" }).str:find("origin/50%off", 1, true))
+      assert.truthy((eval({ ref = "origin/50%off" }).str:find("origin/50%off", 1, true)))
     end)
 
     it("dims the remote so the branch name leads", function()
@@ -838,7 +844,7 @@ describe("changeset.render", function()
     ---@param overrides table?
     ---@return table[] chunks
     local function totals(overrides)
-      return render.header_totals(vim.tbl_extend("force", BASE, overrides or {}), 44)
+      return render.header_totals(vim.tbl_extend("force", BASE, overrides or {}) --[[@as changeset.Summary]], 44)
     end
 
     ---@param chunks table[]
@@ -850,32 +856,32 @@ describe("changeset.render", function()
     end
 
     it("counts the files, saying '1 file' for one", function()
-      assert.truthy(text(totals()):find("7 files", 1, true))
-      assert.truthy(text(totals({ files = 1 })):find("1 file", 1, true))
-      assert.falsy(text(totals({ files = 1 })):find("1 files", 1, true))
+      assert.truthy((text(totals()):find("7 files", 1, true)))
+      assert.truthy((text(totals({ files = 1 })):find("1 file", 1, true)))
+      assert.falsy((text(totals({ files = 1 })):find("1 files", 1, true)))
     end)
 
     it("counts the branch's commits, saying '1 commit' for one", function()
-      assert.truthy(text(totals({ commits = 3 })):find("3 commits", 1, true))
-      assert.falsy(text(totals({ commits = 1 })):find("1 commits", 1, true))
-      assert.truthy(text(totals({ commits = 1 })):find("1 commit", 1, true))
+      assert.truthy((text(totals({ commits = 3 })):find("3 commits", 1, true)))
+      assert.falsy((text(totals({ commits = 1 })):find("1 commits", 1, true)))
+      assert.truthy((text(totals({ commits = 1 })):find("1 commit", 1, true)))
     end)
 
     it("sets the commits beside the line totals", function()
-      assert.truthy(text(totals({ commits = 3 })):find("3 commits  +142 -38", 1, true))
+      assert.truthy((text(totals({ commits = 3 })):find("3 commits  +142 -38", 1, true)))
     end)
 
     it("leaves commits out when there are none to count", function()
-      assert.falsy(text(totals()):find("commit", 1, true))
-      assert.falsy(text(totals({ commits = 0 })):find("commit", 1, true))
+      assert.falsy((text(totals()):find("commit", 1, true)))
+      assert.falsy((text(totals({ commits = 0 })):find("commit", 1, true)))
     end)
 
     it("ends the line totals in the column the rows' stats end in, filling the width", function()
       local line = text(totals())
-      local row = file_lines({ file({ added = 142, removed = 38 }) }, opts({ width = 44 }))[1]
+      local row = present(file_lines({ file({ added = 142, removed = 38 }) }, opts({ width = 44 }))[1])
       local stat = table.concat(vim.tbl_map(function(chunk)
         return chunk[1]
-      end, assert(stat_mark(row)).virt_text))
+      end, present(present(stat_mark(row)).virt_text)))
 
       assert.truthy(vim.endswith(line, " " .. stat))
       assert.equal(44, vim.fn.strdisplaywidth(line))
@@ -884,10 +890,10 @@ describe("changeset.render", function()
     it("reports symbols being read in place of the counts on the left", function()
       local line = text(totals({ commits = 3, reading = { done = 12, total = 28 } }))
 
-      assert.truthy(line:find("reading symbols 12/28", 1, true))
-      assert.falsy(line:find("files", 1, true))
-      assert.falsy(line:find("commit", 1, true))
-      assert.truthy(line:find(" +142 -38", 1, true))
+      assert.truthy((line:find("reading symbols 12/28", 1, true)))
+      assert.falsy((line:find("files", 1, true)))
+      assert.falsy((line:find("commit", 1, true)))
+      assert.truthy((line:find(" +142 -38", 1, true)))
     end)
 
     it("draws every chunk on the header's strip", function()
@@ -924,38 +930,38 @@ describe("changeset.render", function()
     local function shown(info)
       local keys = { jump = "<CR>", filter = "f", filter_kinds = "F", help = "?" }
       local full =
-        vim.tbl_extend("force", { files = 12, query = "", keys = keys, branch = "feature", ref = "origin/trunk" }, info)
+        vim.tbl_extend("force", { files = 12, query = "", keys = keys, branch = "feature", ref = "origin/trunk" }, info) --[[@as changeset.Footer]]
       return vim.api.nvim_eval_statusline(render.footer(full), { maxwidth = 120 }).str
     end
 
     it("says which of the files shown the cursor is in", function()
-      assert.truthy(shown({ file = 3 }):find("file 3 of 12", 1, true))
+      assert.truthy((shown({ file = 3 }):find("file 3 of 12", 1, true)))
     end)
 
     it("names the branch and the ref it is compared against, right after the badge", function()
       local footer = shown({ file = 3 })
-      local branch_at = assert(footer:find(" feature", 1, true))
-      local ref_at = assert(footer:find(" origin/trunk", 1, true))
+      local branch_at = present((footer:find(" feature", 1, true)))
+      local ref_at = present((footer:find(" origin/trunk", 1, true)))
 
       assert.truthy(footer:find("Changeset", 1, true) < branch_at)
       assert.truthy(branch_at < ref_at)
-      assert.truthy(ref_at < footer:find("file 3 of 12", 1, true))
+      assert.truthy((ref_at < footer:find("file 3 of 12", 1, true)))
     end)
 
     it("escapes % in the branch so the statusline does not read it as an item", function()
-      assert.truthy(shown({ branch = "50%-off" }):find("50%-off", 1, true))
+      assert.truthy((shown({ branch = "50%-off" }):find("50%-off", 1, true)))
     end)
 
     it("leaves the position out when the cursor is in no file", function()
-      assert.falsy(shown({}):find(" of 12", 1, true))
+      assert.falsy((shown({}):find(" of 12", 1, true)))
     end)
 
     it("shows the filter in force", function()
-      assert.truthy(shown({ query = "sess" }):find("sess", 1, true))
+      assert.truthy((shown({ query = "sess" }):find("sess", 1, true)))
     end)
 
     it("escapes % in the filter so the statusline does not read it as an item", function()
-      assert.truthy(shown({ query = "50%" }):find("50%", 1, true))
+      assert.truthy((shown({ query = "50%" }):find("50%", 1, true)))
     end)
 
     it("points at ? for every key, at the right edge", function()
@@ -965,15 +971,15 @@ describe("changeset.render", function()
     it("names a remapped key, escaping %", function()
       local footer = shown({ keys = { jump = "o%", filter = "f", filter_kinds = "F", help = "?" } })
 
-      assert.truthy(footer:find("o% open", 1, true))
-      assert.falsy(footer:find("<CR>", 1, true))
+      assert.truthy((footer:find("o% open", 1, true)))
+      assert.falsy((footer:find("<CR>", 1, true)))
     end)
 
     it("leaves out a key set to false", function()
       local footer = shown({ keys = { jump = "<CR>", filter = false, filter_kinds = "F", help = "?" } })
 
-      assert.falsy(footer:find("filter", 1, true))
-      assert.truthy(footer:find("F kinds", 1, true))
+      assert.falsy((footer:find("filter", 1, true)))
+      assert.truthy((footer:find("F kinds", 1, true)))
     end)
   end)
 
@@ -1035,7 +1041,7 @@ describe("changeset.render", function()
         { use_winbar = true, maxwidth = 70 }
       ).str
 
-      assert.is_nil(shown:find("to open", 1, true))
+      assert.is_nil((shown:find("to open", 1, true)))
     end)
 
     it("gives up the path first when the window is too narrow for all three", function()
@@ -1116,15 +1122,15 @@ describe("changeset.render", function()
         { kind = "Variable", count = 31, hidden = true },
       }, menu_opts)
 
-      assert.equal("▎ K Method", lines[1].text:gsub("%s+%d+$", ""))
-      assert.equal("  K Variable", lines[2].text:gsub("%s+%d+$", ""))
+      assert.equal("▎ K Method", (present(lines[1]).text:gsub("%s+%d+$", "")))
+      assert.equal("  K Variable", (present(lines[2]).text:gsub("%s+%d+$", "")))
     end)
 
     it("puts each count against the right edge", function()
       local lines = render.kind_lines({ { kind = "Method", count = 11, hidden = false } }, menu_opts)
 
-      assert.equal(24, vim.fn.strdisplaywidth(lines[1].text))
-      assert.truthy(lines[1].text:find("11$"))
+      assert.equal(24, vim.fn.strdisplaywidth(present(lines[1]).text))
+      assert.truthy((present(lines[1]).text:find("11$")))
     end)
 
     it("strikes through a hidden kind, so it reads as switched off", function()
@@ -1132,7 +1138,7 @@ describe("changeset.render", function()
 
       local groups = vim.tbl_map(function(mark)
         return mark.hl
-      end, lines[1].marks)
+      end, present(lines[1]).marks)
       assert.truthy(vim.tbl_contains(groups, highlights.HIDDEN_HL))
     end)
 
@@ -1141,14 +1147,14 @@ describe("changeset.render", function()
 
       local groups = vim.tbl_map(function(mark)
         return mark.hl
-      end, lines[1].marks)
+      end, present(lines[1]).marks)
       assert.is_false(vim.tbl_contains(groups, highlights.HIDDEN_HL))
     end)
 
     it("carries each kind back on its line, so a cursor line names one", function()
       local lines = render.kind_lines({ { kind = "Method", count = 11, hidden = false } }, menu_opts)
 
-      assert.equal("Method", lines[1].kind)
+      assert.equal("Method", present(lines[1]).kind)
     end)
   end)
 
@@ -1176,26 +1182,26 @@ describe("changeset.render", function()
     end)
 
     it("names the one kind it is hiding", function()
-      assert.truthy(assert(render.hidden_note({ "Variable" }, 44, "F")):find("variables", 1, true))
+      assert.truthy((present(render.hidden_note({ "Variable" }, 44, "F")):find("variables", 1, true)))
     end)
 
     it("counts the kinds instead once naming them would not fit", function()
-      local note = assert(render.hidden_note({ "Constructor", "Interface", "Property", "Variable" }, 44, "F"))
+      local note = present(render.hidden_note({ "Constructor", "Interface", "Property", "Variable" }, 44, "F"))
 
-      assert.truthy(note:find("4", 1, true))
+      assert.truthy((note:find("4", 1, true)))
       for _, name in ipairs({ "constructors", "interfaces", "properties", "variables" }) do
-        assert.is_nil(note:find(name, 1, true))
+        assert.is_nil((note:find(name, 1, true)))
       end
     end)
 
     for _, kinds in ipairs({ { "Variable" }, { "Constructor", "Interface", "Property", "Variable" } }) do
       it(("names the key bound to the kind menu when hiding %d kind(s)"):format(#kinds), function()
-        assert.truthy(assert(render.hidden_note(kinds, 44, "<C-k>")):find("<C-k>", 1, true))
+        assert.truthy((present(render.hidden_note(kinds, 44, "<C-k>")):find("<C-k>", 1, true)))
       end)
     end
 
     it("ends at the kinds when the kind menu has no key", function()
-      assert.truthy(vim.endswith(assert(render.hidden_note({ "Variable" }, 44, false)), "variables."))
+      assert.truthy(vim.endswith(present(render.hidden_note({ "Variable" }, 44, false)), "variables."))
     end)
   end)
 end)

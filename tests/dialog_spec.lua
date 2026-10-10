@@ -1,4 +1,5 @@
 local Dialog = require("support.dialog")
+local present = require("support.present")
 local dialog = require("changeset.dialog")
 
 ---Waits for a scheduled answer, or a moment for one that never comes.
@@ -8,7 +9,7 @@ local function settle(answered)
 end
 
 describe("changeset.dialog", function()
-  local opener
+  local opener ---@type integer
 
   before_each(function()
     vim.cmd("silent! only")
@@ -34,7 +35,7 @@ describe("changeset.dialog", function()
           confirmed = true
         end
       )
-      assert(Dialog.win(), "no dialog opened")
+      assert.not_nil(Dialog.win(), "no dialog opened")
     end
 
     ---@param keys string
@@ -58,7 +59,7 @@ describe("changeset.dialog", function()
       ask()
 
       local lines = Dialog.lines()
-      assert.truthy(lines[#lines - 1]:find("Keep%s+Abandon$"))
+      assert.truthy((present(lines[#lines - 1]):find("Keep%s+Abandon$")))
       assert.equal("Abandon the review", Dialog.title())
     end)
 
@@ -159,7 +160,7 @@ describe("changeset.dialog", function()
 
         pcall(Dialog.press, keys:format(file))
 
-        assert.equal(buf, vim.api.nvim_win_get_buf((assert(Dialog.win()))))
+        assert.equal(buf, vim.api.nvim_win_get_buf((present(Dialog.win()))))
         assert.is_true(answer("A"))
         vim.fn.delete(file)
       end)
@@ -177,7 +178,7 @@ describe("changeset.dialog", function()
 
       assert.is_false(floating())
       assert.is_false(confirmed)
-      assert.equal(before, vim.o.guicursor)
+      assert.equal(before, vim.api.nvim_get_option_value("guicursor", {}))
       assert.equal(opener, vim.api.nvim_get_current_win())
     end)
 
@@ -189,7 +190,7 @@ describe("changeset.dialog", function()
       ask()
       answer("q")
 
-      assert.equal(before, vim.o.guicursor)
+      assert.equal(before, vim.api.nvim_get_option_value("guicursor", {}))
     end)
 
     it("stays open when a dialog cancelled in the same keys closes behind it", function()
@@ -252,8 +253,8 @@ describe("changeset.dialog", function()
 
       answer("q")
 
-      assert.truthy(hidden:find("ChangesetNoCursor", 1, true))
-      assert.equal(before, vim.o.guicursor)
+      assert.truthy((hidden:find("ChangesetNoCursor", 1, true)))
+      assert.equal(before, vim.api.nvim_get_option_value("guicursor", {}))
     end)
 
     it("scrolls back to its first line when a plugin scrolls it in the tick it opens", function()
@@ -276,7 +277,7 @@ describe("changeset.dialog", function()
 
     it("scrolls back to its first line when a plugin scrolls it in a later tick", function()
       ask()
-      local win = assert(Dialog.win())
+      local win = present(Dialog.win())
 
       -- As scrollEOF.nvim's deferred scroll, from a move made just before the dialog opened, does.
       vim.api.nvim_win_call(win, function()
@@ -299,7 +300,7 @@ describe("changeset.dialog", function()
     it("centres itself on the editor", function()
       ask()
 
-      local config = vim.api.nvim_win_get_config((assert(Dialog.win())))
+      local config = vim.api.nvim_win_get_config((present(Dialog.win())))
       assert.equal(math.floor((vim.o.columns - config.width - 2) / 2), config.col)
     end)
 
@@ -308,9 +309,9 @@ describe("changeset.dialog", function()
       vim.o.columns = 30
       ask({ title = "Abandon the review", body = { { text = ("word "):rep(40) } }, action = "Abandon" })
 
-      local config = vim.api.nvim_win_get_config((assert(Dialog.win())))
+      local config = vim.api.nvim_win_get_config((present(Dialog.win())))
       vim.o.columns = columns
-      assert.is_true(config.col >= 0 and config.col + config.width + 2 <= 30)
+      assert.is_true(config.col >= 0 and present(config.col) + config.width + 2 <= 30)
     end)
 
     it("fits and centres itself again when the editor is resized", function()
@@ -318,10 +319,10 @@ describe("changeset.dialog", function()
       ask({ title = "Abandon the review", body = { { text = ("word "):rep(40) } }, action = "Abandon" })
 
       vim.o.columns = 30
-      local config = vim.api.nvim_win_get_config((assert(Dialog.win())))
+      local config = vim.api.nvim_win_get_config((present(Dialog.win())))
       vim.o.columns = columns
 
-      assert.is_true(config.col + config.width + 2 <= 30)
+      assert.is_true(present(config.col) + config.width + 2 <= 30)
       assert.equal(math.floor((30 - config.width - 2) / 2), config.col)
     end)
   end)
@@ -352,7 +353,7 @@ describe("changeset.dialog", function()
           mine.chosen, mine.answered = index, true
         end
       )
-      assert(Dialog.win(), "no dialog opened")
+      assert.not_nil(Dialog.win(), "no dialog opened")
     end
 
     ---@param keys string
@@ -411,11 +412,11 @@ describe("changeset.dialog", function()
       pick(vim.tbl_map(function(n)
         return { cells = { { "agent " .. n } } }
       end, vim.fn.range(1, 9)))
-      local win = assert(Dialog.win())
+      local win = present(Dialog.win())
 
       Dialog.press("jjjjj")
       vim.api.nvim_exec_autocmds("WinScrolled", { pattern = tostring(win) })
-      local top = vim.fn.getwininfo(win)[1].topline
+      local top = present(vim.fn.getwininfo(win)[1]).topline
       vim.o.lines = lines
 
       assert.is_true(top > 1)
@@ -456,7 +457,7 @@ describe("changeset.dialog", function()
   end)
 
   describe("_body", function()
-    ---@param lines [string, string?][][]
+    ---@param lines changeset.DialogLine[]
     ---@return string[]
     local function texts(lines)
       return vim.tbl_map(function(chunks)

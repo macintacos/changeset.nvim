@@ -1,12 +1,18 @@
 local gh = require("support.gh")
 local support = require("support.git")
 local gutter = require("support.gutter")
+local present = require("support.present")
 
 local await, await_all, await_cached, edit, revision, settle =
   gutter.await, gutter.await_all, gutter.await_cached, gutter.edit, gutter.revision, gutter.settle
 
+local function moves()
+  return gutter.moves
+end
+
 describe("the gutter's base", function()
-  local dir, cwd
+  local dir ---@type string
+  local cwd ---@type string
 
   before_each(function()
     cwd = vim.fn.getcwd()
@@ -111,7 +117,7 @@ describe("the gutter's base", function()
       local base = gutter.merge_base(dir)
       assert.is_true(await(bufs, base, 10000), "iteration " .. i)
       assert.is_false(vim.wait(500, function()
-        return revision(bufs[1]) ~= base
+        return revision(present(bufs[1])) ~= base
       end, 20))
 
       vim.cmd("silent! %bwipeout!")
@@ -141,7 +147,7 @@ describe("the gutter's base", function()
 
     assert.is_true(settle())
     vim.fn.delete(other, "rf")
-    assert.equal(theirs, revision(their_bufs[1]))
+    assert.equal(theirs, revision(present(their_bufs[1])))
   end)
 
   it("leaves gitsigns' own blob buffers alone", function()
@@ -155,20 +161,20 @@ describe("the gutter's base", function()
       return bcache ~= nil and bcache.compare_text ~= nil
     end, 5000))
     require("gitsigns").diffthis()
-    local blob
+    local blob ---@type integer?
     assert.is_true(vim.wait(5000, function()
       blob = vim.iter(pairs(require("gitsigns.cache").cache)):find(function(buf)
         return vim.api.nvim_buf_get_name(buf):match("^gitsigns://")
       end)
       return blob ~= nil
     end, 20))
-    assert.is_nil(revision(blob))
+    assert.is_nil(revision(present(blob)))
 
     support.git({ "switch", "-q", "blob" }, dir)
     assert.is_true(await(bufs, gutter.merge_base(dir), 10000))
 
     assert.is_true(settle())
-    assert.is_nil(revision(blob))
+    assert.is_nil(revision(present(blob)))
   end)
 
   it("moves each buffer onto a new base once after a switch", function()
@@ -185,20 +191,20 @@ describe("the gutter's base", function()
     assert.is_true(await_cached(bufs))
     assert.is_true(await(bufs, gutter.merge_base(dir), 5000))
 
-    local before = gutter.moves
+    local before = moves()
 
     support.git({ "switch", "-q", "counted" }, dir)
     local base = gutter.merge_base(dir)
     -- The first buffer reaching the base marks the switch; the rest attach on the
     -- index while the moves run, and move once each.
     assert.is_true(vim.wait(10000, function()
-      return revision(bufs[1]) == base
+      return revision(present(bufs[1])) == base
     end, 1))
     vim.list_extend(bufs, edit(vim.list_slice(files, 13, 18)))
 
     assert.is_true(await(bufs, base, 10000))
     assert.is_true(settle())
-    assert.equal(18, gutter.moves - before)
+    assert.equal(18, moves() - before)
   end)
 
   it("follows a pull on the default branch onto its new base", function()
@@ -269,7 +275,7 @@ describe("the gutter's base", function()
     assert.is_true(await(bufs, pulled, 10000))
 
     assert.is_false(vim.wait(3000, function()
-      return revision(bufs[1]) ~= pulled
+      return revision(present(bufs[1])) ~= pulled
     end, 20))
   end)
 
@@ -322,7 +328,7 @@ describe("the gutter's base", function()
 
     assert.is_true(await(bufs, unpushed, 10000))
     assert.is_true(vim.wait(5000, function()
-      return assert(build.current()).base == unpushed
+      return present(build.current()).base == unpushed
     end, 20))
     changeset.close()
   end)
@@ -355,15 +361,16 @@ describe("the gutter's base", function()
     -- As if every buffer had attached on the old base, then caught a burst of
     -- events before its move landed.
     for _, buf in ipairs(bufs) do
-      require("gitsigns.cache").cache[buf].git_obj.revision = nil
+      local bcache = present(require("gitsigns.cache").cache[buf])
+      bcache.git_obj.revision = nil
     end
-    local before = gutter.moves
+    local before = moves()
     for _ = 1, 3 do
       vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate" })
     end
 
     assert.is_true(await(bufs, base, 10000))
     assert.is_true(settle())
-    assert.equal(#bufs, gutter.moves - before)
+    assert.equal(#bufs, moves() - before)
   end)
 end)

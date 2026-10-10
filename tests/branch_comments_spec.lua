@@ -1,9 +1,11 @@
 local Fixture = require("support.git")
+local present = require("support.present")
 local comment_store = require("changeset.comment_store")
 require("changeset.review_comments")
 
 describe("review comments in a buffer after a branch switch", function()
-  local dir, buf
+  local dir ---@type string
+  local buf ---@type integer
 
   ---@return integer[] rows Each mark's first row.
   local function marked_rows()
@@ -27,7 +29,7 @@ describe("review comments in a buffer after a branch switch", function()
     os.remove(comment_store.path())
     dir = vim.fn.tempname()
     vim.fn.mkdir(dir, "p")
-    dir = vim.fs.normalize(assert(vim.uv.fs_realpath(dir)))
+    dir = vim.fs.normalize(present(vim.uv.fs_realpath(dir)))
     Fixture.init_repo("main", dir)
     vim.fn.writefile(vim.split(("x"):rep(10, "\n"), "\n"), dir .. "/a.lua")
     Fixture.commit("a", dir)
@@ -81,7 +83,7 @@ describe("review comments in a buffer after a branch switch", function()
     it(("keeps a block parked when %s on the same branch"):format(trigger[1]), function()
       require("changeset.review_comments").show(true)
       local blocks = require("changeset.review_comment_blocks")
-      blocks.select(comment_store.list(dir)[1])
+      blocks.select(present(comment_store.list(dir)[1]))
       local parked = vim.fn.maparg("<CR>", "n", false, true).desc
       assert.not_nil(parked)
 

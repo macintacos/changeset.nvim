@@ -1,4 +1,6 @@
 ---Finds and reads the review comment window: the float opened over a window.
+local present = require("support.present")
+
 local M = {}
 
 ---The review comment window, if one is open.
@@ -31,9 +33,10 @@ end
 ---@param win integer
 ---@return string
 function M.title(win)
+  local title = present(vim.api.nvim_win_get_config(win).title)
   return table.concat(vim.tbl_map(function(chunk)
     return chunk[1]
-  end, vim.api.nvim_win_get_config(win).title))
+  end, title))
 end
 
 return M

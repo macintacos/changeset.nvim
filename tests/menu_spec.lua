@@ -1,24 +1,25 @@
 local menu = require("changeset.menu")
 local Notify = require("support.notify")
+local present = require("support.present")
 
 local ROOT = "/fixture/repo"
 local BRANCH = "feature"
 
 local function write_json(path, data)
-  local file = assert(io.open(path, "w"))
+  local file = present(io.open(path, "w"))
   file:write(vim.json.encode(data))
   file:close()
 end
 
 local function read_json(path)
-  local file = assert(io.open(path, "r"))
+  local file = present(io.open(path, "r"))
   local data = file:read("*a")
   file:close()
   return vim.json.decode(data)
 end
 
 local function read_bytes(path)
-  local file = assert(io.open(path, "rb"))
+  local file = present(io.open(path, "rb"))
   local data = file:read("*a")
   file:close()
   return data
@@ -45,8 +46,8 @@ describe("changeset.menu", function()
       local rows = menu._rows({ Variable = 31 }, { Variable = true })
 
       assert.equal(1, #rows)
-      assert.is_true(rows[1].hidden)
-      assert.equal(31, rows[1].count)
+      assert.is_true(present(rows[1]).hidden)
+      assert.equal(31, present(rows[1]).count)
     end)
 
     it("orders kinds of equal weight by name, so the list does not shuffle", function()
@@ -73,12 +74,18 @@ describe("changeset.menu", function()
     end)
 
     it("names the branch for a set saved on it", function()
-      assert.truthy(menu._footer({ Field = true }, { Field = true }, "branch"):find("branch", 1, true))
+      assert.truthy((menu._footer({ Field = true }, { Field = true }, "branch"):find("branch", 1, true)))
     end)
   end)
 
   describe("mappings", function()
-    local tmp, preferences_file, sidebar, sidebar_buf, reported_hidden, restore_notify, notices
+    local tmp ---@type string
+    local preferences_file ---@type string
+    local sidebar ---@type integer
+    local sidebar_buf ---@type integer
+    local reported_hidden ---@type table?
+    local restore_notify ---@type fun()
+    local notices ---@type support.notify.Note[]
 
     local function mapping_callback(lhs)
       local mapping = vim.fn.maparg(lhs, "n", false, true)
@@ -89,7 +96,7 @@ describe("changeset.menu", function()
     local function open_menu(saved_preferences, overrides)
       write_json(preferences_file, saved_preferences)
       reported_hidden = nil
-      menu.open(vim.tbl_extend("force", {
+      local opts = vim.tbl_extend("force", {
         root = ROOT,
         branch = BRANCH,
         file = preferences_file,
@@ -102,16 +109,19 @@ describe("changeset.menu", function()
         on_change = function(hidden)
           reported_hidden = hidden
         end,
-      }, overrides or {}))
+      }, overrides or {})
+      ---@cast opts changeset.MenuOpts
+      menu.open(opts)
       return vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
     end
 
     ---@param win integer
     ---@return string
     local function footer(win)
+      local chunks = present(vim.api.nvim_win_get_config(win).footer)
       return table.concat(vim.tbl_map(function(chunk)
         return chunk[1]
-      end, vim.api.nvim_win_get_config(win).footer))
+      end, chunks))
     end
 
     before_each(function()
@@ -146,13 +156,13 @@ describe("changeset.menu", function()
 
     it("toggles the focused row and reports the new hidden set", function()
       local buf = open_menu({}, { counts = { Variable = 31 } })
-      local before = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
+      local before = present(vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1])
 
       mapping_callback("x")()
 
-      local after = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
-      assert.equal("▎ K Variable", before:gsub("%s+31$", ""))
-      assert.equal("  K Variable", after:gsub("%s+31$", ""))
+      local after = present(vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1])
+      assert.equal("▎ K Variable", (before:gsub("%s+31$", "")))
+      assert.equal("  K Variable", (after:gsub("%s+31$", "")))
       assert.same({ Variable = true }, reported_hidden)
     end)
 
@@ -167,7 +177,7 @@ describe("changeset.menu", function()
       local drifted = footer(menu_win)
       mapping_callback("x")()
 
-      assert.truthy(drifted:find("unsaved", 1, true))
+      assert.truthy((drifted:find("unsaved", 1, true)))
       assert.equal(scoped, footer(menu_win))
       assert.not_equal(scoped, drifted)
     end)
@@ -204,9 +214,9 @@ describe("changeset.menu", function()
       mapping_callback("r")()
 
       assert.equal(1, #notices)
-      assert.truthy(notices[1].msg:find("repo", 1, true))
-      assert.is_nil(notices[1].msg:find("fixture", 1, true))
-      assert.is_nil(notices[1].msg:find(BRANCH, 1, true))
+      assert.truthy((present(notices[1]).msg:find("repo", 1, true)))
+      assert.is_nil((present(notices[1]).msg:find("fixture", 1, true)))
+      assert.is_nil((present(notices[1]).msg:find(BRANCH, 1, true)))
     end)
 
     it("confirms that every kind is showing after saving with nothing hidden", function()
@@ -215,7 +225,7 @@ describe("changeset.menu", function()
       mapping_callback("<CR>")()
 
       assert.equal(1, #notices)
-      assert.truthy(notices[1].msg:find("every kind", 1, true))
+      assert.truthy((present(notices[1]).msg:find("every kind", 1, true)))
     end)
 
     for _, how in ipairs({ "q", "<Esc>", ":close", ":quit" }) do
@@ -244,7 +254,7 @@ describe("changeset.menu", function()
       local config = vim.api.nvim_win_get_config(menu_win)
 
       assert.equal(sidebar_left - 2, width)
-      assert.equal(sidebar_left, config.col + width + 1)
+      assert.equal(sidebar_left, present(config.col) + width + 1)
     end)
 
     it("stands the float on top of a sidebar with no room to its left", function()
@@ -257,7 +267,7 @@ describe("changeset.menu", function()
 
       local config = vim.api.nvim_win_get_config(menu_win)
       -- Two border rows: the menu's bottom one lands on the row just above the sidebar.
-      assert.equal(16, config.row + vim.api.nvim_win_get_height(menu_win) + 2)
+      assert.equal(16, present(config.row) + vim.api.nvim_win_get_height(menu_win) + 2)
       assert.equal(0, config.col)
     end)
 
@@ -271,7 +281,7 @@ describe("changeset.menu", function()
       menu.relayout()
 
       local config = vim.api.nvim_win_get_config(menu_win)
-      assert.equal(16, config.row + vim.api.nvim_win_get_height(menu_win) + 2)
+      assert.equal(16, present(config.row) + vim.api.nvim_win_get_height(menu_win) + 2)
       assert.equal(0, config.col)
     end)
   end)

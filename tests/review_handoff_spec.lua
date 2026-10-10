@@ -4,16 +4,26 @@ local Notify = require("support.notify")
 local Paths = require("changeset.paths")
 local comment_store = require("changeset.comment_store")
 local config = require("changeset.config")
+local present = require("support.present")
 
 describe("changeset.review_handoff", function()
-  local handoff, restore_notify, notes, windows, dir, tree, focused, echoes, echo
+  local handoff ---@type table
+  local restore_notify ---@type fun()
+  local notes ---@type support.notify.Note[]
+  local windows ---@type table[]
+  local dir ---@type string
+  local tree ---@type { root: string }?
+  local focused ---@type boolean
+  local echoes ---@type string[]
+  local echo ---@type function
 
   before_each(function()
     os.remove(comment_store.path())
     windows, focused, tree = {}, false, nil
     echoes, echo = {}, vim.api.nvim_echo
     vim.api.nvim_echo = function(chunks)
-      table.insert(echoes, chunks[1][1])
+      table.insert(echoes, present(chunks[1])[1])
+      return -1
     end
     notes, restore_notify = Notify.capture()
     package.loaded["changeset.review_comment_window"] = {
@@ -50,7 +60,7 @@ describe("changeset.review_handoff", function()
   local function edit_file()
     dir = vim.fn.tempname()
     vim.fn.mkdir(dir, "p")
-    dir = vim.fs.normalize(assert(vim.uv.fs_realpath(dir)))
+    dir = vim.fs.normalize(present(vim.uv.fs_realpath(dir)))
     Fixture.init_repo("main", dir)
     vim.fn.writefile(vim.split(("x"):rep(10, "\n"), "\n"), dir .. "/a.lua")
     vim.cmd.edit(dir .. "/a.lua")
@@ -73,8 +83,9 @@ describe("changeset.review_handoff", function()
   end
 
   ---@param fields table?
+  ---@return changeset.ReviewComment
   local function comment(fields)
-    return vim.tbl_extend("force", { path = "a.lua", line = 4, body = "hi" }, fields or {})
+    return vim.tbl_extend("force", { path = "a.lua", line = 4, body = "hi" }, fields or {}) --[[@as changeset.ReviewComment]]
   end
 
   describe("abandon", function()
@@ -84,7 +95,7 @@ describe("changeset.review_handoff", function()
       comment_store.keep(dir, comment({ line = 7, draft = true }))
 
       handoff.abandon()
-      assert.truthy(table.concat(Dialog.lines(), " "):gsub("%s+", " "):find("1 is a draft", 1, true))
+      assert.truthy((table.concat(Dialog.lines(), " "):gsub("%s+", " "):find("1 is a draft", 1, true)))
       reply("A", function()
         return #comment_store.list(dir) == 0
       end)
@@ -98,7 +109,7 @@ describe("changeset.review_handoff", function()
       handoff.abandon()
 
       assert.is_false(asking())
-      assert.equal(vim.log.levels.INFO, notes[1].level)
+      assert.equal(vim.log.levels.INFO, present(notes[1]).level)
     end)
 
     it("asks, counting the comments, then clears the repository's", function()
@@ -108,7 +119,7 @@ describe("changeset.review_handoff", function()
       comment_store.keep("/other", comment())
 
       handoff.abandon()
-      assert.truthy(table.concat(Dialog.lines(), " "):find("2", 1, true))
+      assert.truthy((table.concat(Dialog.lines(), " "):find("2", 1, true)))
       reply("A", function()
         return #comment_store.list(dir) == 0
       end)
@@ -131,7 +142,9 @@ describe("changeset.review_handoff", function()
   end)
 
   describe("submit", function()
-    local sent, opts, answer
+    local sent ---@type string[]
+    local opts ---@type table?
+    local answer ---@type any[]
 
     before_each(function()
       sent, opts, answer = {}, nil, {}
@@ -170,9 +183,9 @@ describe("changeset.review_handoff", function()
       handoff.submit()
 
       assert.equal(1, #sent)
-      assert.equal(vim.log.levels.INFO, notes[1].level)
-      assert.truthy(notes[1].msg:find("already", 1, true))
-      assert.equal(1, #assert(comment_store.submitted(dir)))
+      assert.equal(vim.log.levels.INFO, present(notes[1]).level)
+      assert.truthy((present(notes[1]).msg:find("already", 1, true)))
+      assert.equal(1, #present(comment_store.submitted(dir)))
     end)
 
     it("lets a submit through once one herdr never answered has timed out", function()
@@ -184,6 +197,7 @@ describe("changeset.review_handoff", function()
       local timeouts, real_defer_fn = {}, vim.defer_fn
       vim.defer_fn = function(fn)
         table.insert(timeouts, fn)
+        return nil --[[@as uv.uv_timer_t]]
       end
       edit_file()
       comment_store.keep(dir, comment())
@@ -195,7 +209,7 @@ describe("changeset.review_handoff", function()
       end)
       vim.defer_fn = real_defer_fn
 
-      assert(ok, err)
+      assert.is_true(ok, tostring(err))
       assert.equal(2, #sent)
     end)
 
@@ -212,15 +226,17 @@ describe("changeset.review_handoff", function()
     it("warns that the sent comments are still listed when they can't be removed", function()
       edit_file()
       comment_store.keep(dir, comment())
-      package.loaded["changeset.herdr"].send = function(_, _, cb)
-        vim.fn.writefile({ "[1,2]" }, comment_store.path())
-        cb(nil, "claude")
-      end
+      package.loaded["changeset.herdr"] = {
+        send = function(_, _, cb)
+          vim.fn.writefile({ "[1,2]" }, comment_store.path())
+          cb(nil, "claude")
+        end,
+      }
 
       handoff.submit()
 
       os.remove(comment_store.path())
-      assert.equal(vim.log.levels.WARN, notes[#notes].level)
+      assert.equal(vim.log.levels.WARN, present(notes[#notes]).level)
     end)
 
     it("sends only saved comments, keeping the drafts and saying how many stay", function()
@@ -233,7 +249,7 @@ describe("changeset.review_handoff", function()
 
       assert.equal("`" .. dir .. "/a.lua:L4`\nFeedback: hi", sent[1])
       assert.same({ comment({ line = 7, body = "draft", draft = true }) }, comment_store.list(dir))
-      assert.truthy(notes[#notes].msg:find("1 draft stays", 1, true), notes[#notes].msg)
+      assert.truthy(present(notes[#notes]).msg:find("1 draft stays", 1, true), present(notes[#notes]).msg)
     end)
 
     it("sends nothing with only drafts, counting them", function()
@@ -243,18 +259,20 @@ describe("changeset.review_handoff", function()
       handoff.submit()
 
       assert.same({}, sent)
-      assert.truthy(notes[1].msg:find("1 draft", 1, true), notes[1].msg)
+      assert.truthy(present(notes[1]).msg:find("1 draft", 1, true), present(notes[1]).msg)
     end)
 
     it("removes only the sent comments once sent, and says where they went and how to get them back", function()
       edit_file()
       comment_store.keep(dir, comment())
       comment_store.keep(dir, comment({ line = 9, body = "as sent" }))
-      package.loaded["changeset.herdr"].send = function(_, _, cb)
-        comment_store.keep(dir, comment({ line = 7, body = "written meanwhile" }))
-        comment_store.keep(dir, comment({ line = 9, body = "edited meanwhile" }))
-        cb(nil, "claude")
-      end
+      package.loaded["changeset.herdr"] = {
+        send = function(_, _, cb)
+          comment_store.keep(dir, comment({ line = 7, body = "written meanwhile" }))
+          comment_store.keep(dir, comment({ line = 9, body = "edited meanwhile" }))
+          cb(nil, "claude")
+        end,
+      }
 
       handoff.submit()
 
@@ -265,7 +283,7 @@ describe("changeset.review_handoff", function()
       assert.same({
         msg = "Changeset: submitted 2 review comments to claude; :Changeset review restore brings them back",
         level = vim.log.levels.INFO,
-      }, notes[#notes])
+      }, present(notes[#notes]))
     end)
 
     it("keeps what it sent for restore, with when and to whom", function()
@@ -276,7 +294,7 @@ describe("changeset.review_handoff", function()
 
       handoff.submit()
 
-      local batch = assert(comment_store.submitted(dir))[1]
+      local batch = present(present(comment_store.submitted(dir))[1])
       assert.same({ comment() }, batch.comments)
       assert.equal("claude", batch.to)
       assert.is_true(batch.at >= before and batch.at <= os.time(), tostring(batch.at))
@@ -290,8 +308,8 @@ describe("changeset.review_handoff", function()
       handoff.submit()
 
       assert.same({ comment() }, comment_store.list(dir))
-      assert.equal(vim.log.levels.WARN, notes[#notes].level)
-      assert.truthy(notes[#notes].msg:find("answer claude's prompt first", 1, true))
+      assert.equal(vim.log.levels.WARN, present(notes[#notes]).level)
+      assert.truthy((present(notes[#notes]).msg:find("answer claude's prompt first", 1, true)))
     end)
 
     it("keeps every comment and says nothing on a cancelled pick", function()
@@ -310,7 +328,7 @@ describe("changeset.review_handoff", function()
       handoff.submit()
 
       assert.same({}, sent)
-      assert.equal(vim.log.levels.INFO, notes[1].level)
+      assert.equal(vim.log.levels.INFO, present(notes[1]).level)
     end)
   end)
 
@@ -344,7 +362,10 @@ describe("changeset.review_handoff", function()
       handoff.restore()
 
       assert.same({ comment(), comment({ line = 7 }) }, comment_store.list(dir))
-      assert.same({ msg = "Changeset: restored 2 review comments", level = vim.log.levels.INFO }, notes[#notes])
+      assert.same(
+        { msg = "Changeset: restored 2 review comments", level = vim.log.levels.INFO },
+        present(notes[#notes])
+      )
     end)
 
     it("says how many stay submitted for lines that hold a review comment written since", function()
@@ -359,7 +380,7 @@ describe("changeset.review_handoff", function()
       assert.same({ comment({ body = "since" }), comment({ line = 7 }) }, comment_store.list(dir))
       assert.equal(
         "Changeset: restored 1 review comment; 1 stays submitted: its lines hold a newer one",
-        notes[#notes].msg
+        present(notes[#notes]).msg
       )
     end)
 
@@ -373,7 +394,10 @@ describe("changeset.review_handoff", function()
 
       handoff.restore()
 
-      assert.equal("Changeset: 2 review comments stay submitted: their lines hold newer ones", notes[#notes].msg)
+      assert.equal(
+        "Changeset: 2 review comments stay submitted: their lines hold newer ones",
+        present(notes[#notes]).msg
+      )
     end)
 
     ---Submits two batches: a.lua:4 first, then a.lua:7.
@@ -394,8 +418,8 @@ describe("changeset.review_handoff", function()
 
         assert.equal("Restore submitted review comments", Dialog.title())
         local lines = Dialog.lines()
-        assert.truthy(lines[1]:find("claude%s+1 review comment%s+a.lua:7  second"), lines[1])
-        assert.truthy(lines[2]:find("a.lua:4  hi", 1, true), lines[2])
+        assert.truthy(present(lines[1]):find("claude%s+1 review comment%s+a.lua:7  second"), lines[1])
+        assert.truthy(present(lines[2]):find("a.lua:4  hi", 1, true), lines[2])
       end
     )
 
@@ -408,7 +432,7 @@ describe("changeset.review_handoff", function()
 
       handoff.restore()
 
-      local row = Dialog.lines()[2]
+      local row = present(Dialog.lines()[2])
       assert.truthy(row:find("^%s*2%s+1 review comment%s+a.lua:4  hi"), row)
     end)
 
@@ -421,7 +445,7 @@ describe("changeset.review_handoff", function()
       end)
 
       assert.same({ comment() }, comment_store.list(dir))
-      assert.equal(1, #assert(comment_store.submitted(dir)))
+      assert.equal(1, #present(comment_store.submitted(dir)))
     end)
 
     it("brings back the batch picked though another submit landed while the picker was open", function()
@@ -431,7 +455,7 @@ describe("changeset.review_handoff", function()
       handoff.restore()
       comment_store.keep(dir, comment({ line = 9, body = "third" }))
       vim.api.nvim_win_call(file, handoff.submit)
-      assert.equal(3, #assert(comment_store.submitted(dir)))
+      assert.equal(3, #present(comment_store.submitted(dir)))
       reply("2", function()
         return #comment_store.list(dir) == 1
       end)
@@ -443,13 +467,16 @@ describe("changeset.review_handoff", function()
       submit_twice()
 
       handoff.restore()
-      comment_store.restore(dir, assert(comment_store.submitted(dir))[2])
+      comment_store.restore(dir, present(present(comment_store.submitted(dir))[2]))
       reply("2", function()
-        return notes[#notes].msg:find("no longer", 1, true) ~= nil
+        return present(notes[#notes]).msg:find("no longer", 1, true) ~= nil
       end)
 
       assert.same({ comment() }, comment_store.list(dir))
-      assert.truthy(notes[#notes].msg:find("that batch is no longer submitted", 1, true), notes[#notes].msg)
+      assert.truthy(
+        present(notes[#notes]).msg:find("that batch is no longer submitted", 1, true),
+        present(notes[#notes]).msg
+      )
     end)
 
     it("brings back nothing on a cancelled pick", function()
@@ -461,7 +488,7 @@ describe("changeset.review_handoff", function()
       end)
 
       assert.same({}, comment_store.list(dir))
-      assert.equal(2, #assert(comment_store.submitted(dir)))
+      assert.equal(2, #present(comment_store.submitted(dir)))
     end)
 
     it("says when there is nothing to restore", function()
@@ -470,8 +497,11 @@ describe("changeset.review_handoff", function()
       handoff.restore()
 
       assert.same({}, comment_store.list(dir))
-      assert.equal(vim.log.levels.INFO, notes[1].level)
-      assert.truthy(notes[1].msg:find("no submitted review comments to restore", 1, true), notes[1].msg)
+      assert.equal(vim.log.levels.INFO, present(notes[1]).level)
+      assert.truthy(
+        present(notes[1]).msg:find("no submitted review comments to restore", 1, true),
+        present(notes[1]).msg
+      )
     end)
 
     it("reports a record it can't restore into", function()
@@ -482,7 +512,7 @@ describe("changeset.review_handoff", function()
       handoff.restore()
 
       os.remove(comment_store.path())
-      assert.equal(vim.log.levels.ERROR, notes[1].level)
+      assert.equal(vim.log.levels.ERROR, present(notes[1]).level)
     end)
   end)
 
@@ -546,12 +576,12 @@ describe("changeset.review_handoff", function()
 
       handoff.list()
 
-      assert.equal(vim.log.levels.INFO, notes[1].level)
+      assert.equal(vim.log.levels.INFO, present(notes[1]).level)
     end)
   end)
 
   describe("yank", function()
-    local has
+    local has ---@type fun(feature: string): integer
 
     before_each(function()
       has = vim.fn.has
@@ -576,8 +606,8 @@ describe("changeset.review_handoff", function()
 
         assert.equal(require("changeset.review_text").text(dir, { comment() }, config.get().review), vim.fn.getreg('"'))
         assert.same({ comment() }, comment_store.list(dir))
-        assert.equal(vim.log.levels.INFO, notes[1].level)
-        assert.truthy(notes[1].msg:find('"', 1, true))
+        assert.equal(vim.log.levels.INFO, present(notes[1]).level)
+        assert.truthy((present(notes[1]).msg:find('"', 1, true)))
       end
     )
 
@@ -591,7 +621,7 @@ describe("changeset.review_handoff", function()
 
       handoff.yank()
 
-      local text = vim.fn.getreg('"')
+      local text = vim.fn.getreg('"') --[[@as string]]
       assert.equal("H\n\n", text:sub(1, 3))
       assert.equal("\n\nF", text:sub(-3))
     end)
@@ -607,9 +637,17 @@ describe("changeset.review_handoff", function()
 
       handoff.yank()
 
-      assert.is_nil(vim.fn.getreg('"'):find("draft", 1, true))
-      assert.truthy(vim.fn.getreg('"'):find("hi", 1, true))
-      assert.truthy(notes[1].msg:find("1 draft left out", 1, true), notes[1].msg)
+      assert.is_nil(
+        (
+          (vim.fn.getreg('"') --[[@as string]]):find("draft", 1, true)
+        )
+      )
+      assert.truthy(
+        (
+          (vim.fn.getreg('"') --[[@as string]]):find("hi", 1, true)
+        )
+      )
+      assert.truthy(present(notes[1]).msg:find("1 draft left out", 1, true), present(notes[1]).msg)
     end)
 
     it("copies nothing with only drafts, counting them", function()
@@ -620,7 +658,7 @@ describe("changeset.review_handoff", function()
       handoff.yank()
 
       assert.equal("", vim.fn.getreg('"'))
-      assert.truthy(notes[1].msg:find("1 draft", 1, true), notes[1].msg)
+      assert.truthy(present(notes[1]).msg:find("1 draft", 1, true), present(notes[1]).msg)
     end)
 
     it("says when there is nothing to copy", function()
@@ -628,7 +666,7 @@ describe("changeset.review_handoff", function()
 
       handoff.yank()
 
-      assert.equal(vim.log.levels.INFO, notes[1].level)
+      assert.equal(vim.log.levels.INFO, present(notes[1]).level)
     end)
   end)
 end)

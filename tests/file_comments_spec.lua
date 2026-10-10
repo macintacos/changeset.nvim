@@ -7,9 +7,11 @@ local Dialog = require("support.dialog")
 local Fixture = require("support.git")
 local Notify = require("support.notify")
 local Sidebar = require("support.sidebar")
+local present = require("support.present")
 
 describe("a review comment on a whole file", function()
-  local tmp, previous_dir
+  local tmp ---@type string
+  local previous_dir ---@type string
 
   before_each(function()
     if not vim.g.loaded_changeset then
@@ -73,8 +75,8 @@ describe("a review comment on a whole file", function()
   ---@param text string
   ---@return integer lnum
   local function cursor_to_last(text)
-    local lnum = assert(lines_of(text)[#lines_of(text)], "no sidebar line contains " .. text)
-    local win = assert(window.win())
+    local lnum = present(lines_of(text)[#lines_of(text)], "no sidebar line contains " .. text)
+    local win = present(window.win())
     vim.api.nvim_set_current_win(win)
     vim.api.nvim_win_set_cursor(0, { lnum, 0 })
     vim.api.nvim_exec_autocmds("CursorMoved", { buffer = window.buf() })
@@ -94,7 +96,7 @@ describe("a review comment on a whole file", function()
 
     vim.cmd("Changeset comment new")
 
-    local win = assert(CommentWindow.win())
+    local win = present(CommentWindow.win())
     local config = vim.api.nvim_win_get_config(win)
     assert.equal(window.win(), config.win)
     assert.same({ lnum - 1, 0 }, config.bufpos)
@@ -106,7 +108,7 @@ describe("a review comment on a whole file", function()
   it("is listed under Comments by its file's name alone, ahead of its lines' comments", function()
     open_sidebar({ { path = "alpha.txt", line = 2, body = "a line" }, { path = "alpha.txt", body = "the file" } })
 
-    local file = lines_of("the file")[1]
+    local file = present(lines_of("the file")[1])
     assert.equal(2, file)
     assert.equal(file + 1, lines_of("alpha.txt:2")[1])
   end)
@@ -117,7 +119,7 @@ describe("a review comment on a whole file", function()
 
     vim.api.nvim_feedkeys(vim.keycode("<CR>"), "x", false)
 
-    local win = assert(CommentWindow.win())
+    local win = present(CommentWindow.win())
     local config = vim.api.nvim_win_get_config(win)
     assert.equal(window.win(), config.win)
     assert.same({ lnum - 1, 0 }, config.bufpos)
@@ -130,7 +132,7 @@ describe("a review comment on a whole file", function()
     cursor_to_last("why drop it?")
 
     local previewed = vim.api.nvim_win_get_buf(vim.fn.win_getid(vim.fn.winnr("#")))
-    assert.truthy(table.concat(vim.api.nvim_buf_get_lines(previewed, 0, -1, false)):find("deleted", 1, true))
+    assert.truthy((table.concat(vim.api.nvim_buf_get_lines(previewed, 0, -1, false)):find("deleted", 1, true)))
   end)
 
   it("is passed over by a step, having no line to open", function()
@@ -140,9 +142,9 @@ describe("a review comment on a whole file", function()
     local ok, err = pcall(changeset.step, -10)
 
     restore()
-    assert(ok, err)
+    assert.is_true(ok, tostring(err))
     assert.same({}, Notify.messages(notes, vim.log.levels.WARN))
-    assert.is_nil(Sidebar.cursor_line():find("why drop it?", 1, true))
+    assert.is_nil((Sidebar.cursor_line():find("why drop it?", 1, true)))
   end)
 
   it("is deleted by :Changeset comment del on its file's row", function()
@@ -158,7 +160,7 @@ describe("a review comment on a whole file", function()
     local root = open_sidebar({ { path = "gone.lua", body = "why drop it?" } })
     cursor_to_last("gone.lua")
     vim.cmd("Changeset comment new")
-    assert(CommentWindow.win())
+    assert.not_nil(CommentWindow.win())
     -- The window's buffer names no file, so only the sidebar's tree can say which repository it is in.
     local elsewhere = vim.fn.tempname()
     vim.fn.mkdir(elsewhere, "p")
@@ -177,7 +179,7 @@ describe("a review comment on a whole file", function()
     local root = open_sidebar()
     cursor_to_last("gone.lua")
     vim.cmd("Changeset comment new")
-    local win = assert(CommentWindow.win())
+    local win = present(CommentWindow.win())
     vim.api.nvim_buf_set_lines(vim.api.nvim_win_get_buf(win), 0, -1, false, { "unsure" })
 
     vim.cmd("Changeset comment list")

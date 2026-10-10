@@ -5,6 +5,7 @@ local Fixture = require("support.git")
 local Notify = require("support.notify")
 local symbols = require("support.symbols")
 local gh = require("support.gh") -- a fake gh on PATH: never the real one, never the network
+local present = require("support.present")
 
 ---Every announcement the tree makes, in order; emptied before each case.
 ---@type changeset.TreeEvent[]
@@ -30,7 +31,7 @@ local function recording(fn)
   end
   local ok, err = pcall(fn)
   vim.system, vim.fn.systemlist = real_system, real_systemlist
-  assert(ok, err)
+  assert.is_true(ok, tostring(err))
   return argvs
 end
 
@@ -52,8 +53,9 @@ local function build_and_collect()
 end
 
 describe("changeset.build", function()
-  local tmp, previous_dir
-  local source
+  local tmp ---@type string
+  local previous_dir ---@type string
+  local source ---@type support.symbols.Source
 
   before_each(function()
     tmp, previous_dir = Fixture.enter_tempdir()
@@ -73,12 +75,12 @@ describe("changeset.build", function()
   it("a refresh starts no merge-base, rev-parse or gh process", function()
     build_and_collect()
     assert.is_nil(package.loaded["changeset"])
-    local before = assert(build.current()).files
+    local before = present(build.current()).files
 
     local argvs = recording(function()
       build.refresh()
       assert.is_true(vim.wait(10000, function()
-        return build.current().files ~= before
+        return present(build.current()).files ~= before
       end, 25))
     end)
 
@@ -118,10 +120,10 @@ describe("changeset.build", function()
     build_and_collect()
     Fixture.git({ "tag", "v1", "trunk" }, tmp)
 
-    require("changeset.fork_point").pin(assert(build.current()).root, "feature", "v1")
+    require("changeset.fork_point").pin(present(build.current()).root, "feature", "v1")
 
     assert.is_true(vim.wait(5000, function()
-      return assert(build.current()).ref == "v1"
+      return present(build.current()).ref == "v1"
     end, 10))
   end)
 
@@ -152,7 +154,7 @@ describe("changeset.build", function()
         return runs(argv, "gh")
       end, argvs)
       assert.equal(1, #gh_asks)
-      assert.equal(Fixture.git({ "rev-parse", "trunk" }, tmp), build.current().base)
+      assert.equal(Fixture.git({ "rev-parse", "trunk" }, tmp), present(build.current()).base)
     end)
   end)
 
@@ -176,17 +178,17 @@ describe("changeset.build", function()
 
     ---Refresh, waiting for the new diff.
     local function refresh_and_collect()
-      local before = assert(build.current()).files
+      local before = present(build.current()).files
       build.refresh()
       assert.is_true(vim.wait(10000, function()
-        return build.current().files ~= before
+        return present(build.current()).files ~= before
       end, 25))
     end
 
     it("writes what it read to the cache before building in another repository", function()
       answer({ Changes.sym("f", "Function", 0, 1, 1) })
       build_and_collect()
-      local root = build.current().root
+      local root = present(build.current()).root
       local other = vim.fn.tempname()
       vim.fn.mkdir(other, "p")
       Fixture.feature_one_file(other)
@@ -206,12 +208,12 @@ describe("changeset.build", function()
         return #source.asks == 2
       end, 25))
       local items = { { name = "f", kind = "Function", depth = 0, lnum = 1, range_lnum = 1, range_end_lnum = 1 } }
-      source.asks[2].answer("mod.lua", items)
-      source.asks[1].answer("mod.lua", nil)
+      present(source.asks[2]).answer("mod.lua", items)
+      present(source.asks[1]).answer("mod.lua", nil)
 
       refresh_and_collect()
 
-      assert.equal(1, #assert(build.current().symbols["mod.lua"]))
+      assert.equal(1, #present(present(build.current()).symbols["mod.lua"]))
     end)
 
     it("shows the symbols an older walk filed when the current walk hears silence about the same file", function()
@@ -221,10 +223,10 @@ describe("changeset.build", function()
         return #source.asks == 2
       end, 25))
       local items = { { name = "f", kind = "Function", depth = 0, lnum = 1, range_lnum = 1, range_end_lnum = 1 } }
-      source.asks[1].answer("mod.lua", items)
-      source.asks[2].answer("mod.lua", nil)
+      present(source.asks[1]).answer("mod.lua", items)
+      present(source.asks[2]).answer("mod.lua", nil)
 
-      assert.equal(1, #assert(build.current().symbols["mod.lua"]))
+      assert.equal(1, #present(present(build.current()).symbols["mod.lua"]))
     end)
 
     it("asks again on the next refresh about a file whose server timed out", function()
@@ -240,45 +242,45 @@ describe("changeset.build", function()
       answer({ Changes.sym("f", "Function", 0, 1, 1) })
       build_and_collect()
       local cache = require("changeset.cache")
-      local file = cache.path(build.current().root)
+      local file = cache.path(present(build.current()).root)
 
       assert.is_true(vim.wait(3000, function()
         return (cache.load(file)["mod.lua"] or {}).symbols ~= nil
       end, 50))
-      assert.same(build.current().symbols["mod.lua"], cache.load(file)["mod.lua"].symbols)
+      assert.same(present(build.current()).symbols["mod.lua"], cache.load(file)["mod.lua"].symbols)
     end)
 
     it("keeps each file and its symbols the same objects across a refresh over an unchanged diff", function()
       answer({ Changes.sym("f", "Function", 0, 1, 1) })
       build_and_collect()
-      local tree = assert(build.current())
+      local tree = present(build.current())
       local file, read = tree.files[1], tree.symbols["mod.lua"]
 
       refresh_and_collect()
 
-      assert.equal(file, build.current().files[1])
-      assert.equal(read, build.current().symbols["mod.lua"])
+      assert.equal(file, present(build.current()).files[1])
+      assert.equal(read, present(build.current()).symbols["mod.lua"])
     end)
 
     it("hands a refresh a file of its own once its diff moves", function()
       build_and_collect()
-      local file = assert(build.current()).files[1]
+      local file = present(build.current()).files[1]
       vim.fn.writefile({ "local x = 4", "return x" }, "mod.lua")
 
       refresh_and_collect()
 
-      assert.not_equal(file, build.current().files[1])
+      assert.not_equal(file, present(build.current()).files[1])
     end)
 
     it("hands a refresh a file of its own once a hunk moves with the same totals", function()
       vim.fn.writefile({ "return 1", "local added" }, "mod.lua")
       build_and_collect()
-      local file = assert(build.current()).files[1]
+      local file = present(present(build.current()).files[1])
       vim.fn.writefile({ "local added", "return 1" }, "mod.lua")
 
       refresh_and_collect()
 
-      local moved = build.current().files[1]
+      local moved = present(present(build.current()).files[1])
       assert.same({ file.added, file.removed, #file.hunks }, { moved.added, moved.removed, #moved.hunks })
       assert.not_equal(file, moved)
     end)
@@ -325,7 +327,7 @@ describe("changeset.build", function()
       local ok, err = pcall(build_and_collect)
       vim.fs.normalize = real_normalize
 
-      assert(ok, err)
+      assert.is_true(ok, tostring(err))
       for _, buf in ipairs(fillers) do
         assert.is_false(vim.tbl_contains(normalised, vim.api.nvim_buf_get_name(buf)))
       end
@@ -342,7 +344,7 @@ describe("changeset.build", function()
       refresh_and_collect()
 
       assert.equal(1, asked)
-      assert.same(comment_lines, build.current().comments["mod.lua"])
+      assert.same(comment_lines, present(build.current()).comments["mod.lua"])
     end)
 
     it("does not cache the comment lines read from a silent file's buffer holding unwritten edits", function()
@@ -353,7 +355,7 @@ describe("changeset.build", function()
       refresh_and_collect()
 
       assert.equal(1, asked)
-      assert.is_nil(build.current().comments["mod.lua"])
+      assert.is_nil(present(build.current()).comments["mod.lua"])
     end)
 
     it("asks again about a silent file once a symbol-listing server attaches to it", function()
@@ -385,7 +387,7 @@ describe("changeset.build", function()
       local reasked = vim.wait(10000, function()
         return asked == 2
       end, 25)
-      assert(vim.lsp.get_client_by_id(assert(client))):stop(true)
+      present(vim.lsp.get_client_by_id(present(client))):stop(true)
 
       assert.is_true(reasked)
     end)
@@ -435,12 +437,12 @@ describe("changeset.build", function()
       local ok, err = pcall(function()
         build_and_collect()
         assert.is_true(vim.wait(5000, function()
-          return build.current().symbols["mod.lua"] ~= nil
+          return present(build.current()).symbols["mod.lua"] ~= nil
         end, 10))
         vim.wait(2 * ANSWER_MS)
         build.refresh()
         vim.wait(1500, function()
-          return #(build.current().symbols["mod.lua"] or {}) > 0
+          return #(present(build.current()).symbols["mod.lua"] or {}) > 0
         end, 10)
       end)
       vim.defer_fn = real_defer
@@ -449,8 +451,8 @@ describe("changeset.build", function()
         client:stop(true)
       end
 
-      assert(ok, err)
-      assert.equal(1, #(build.current().symbols["mod.lua"] or {}))
+      assert.is_true(ok, tostring(err))
+      assert.equal(1, #(present(build.current()).symbols["mod.lua"] or {}))
     end)
   end)
 
@@ -467,7 +469,7 @@ describe("changeset.build", function()
       wait_for_asks(1)
       assert.same({ "diff" }, events)
 
-      source.asks[1].answer("mod.lua", {})
+      present(source.asks[1]).answer("mod.lua", {})
 
       assert.same({ "diff", "symbols" }, events)
     end)
@@ -479,7 +481,7 @@ describe("changeset.build", function()
       wait_for_asks(2)
       events = {}
 
-      source.asks[1].answer("mod.lua", {})
+      present(source.asks[1]).answer("mod.lua", {})
 
       assert.same({}, events)
     end)
@@ -519,7 +521,7 @@ describe("changeset.build", function()
       vim.env.FAKE_GH_DELAY = nil
       vim.fn.delete(elsewhere, "rf")
       assert.is_true(heard)
-      assert.equal(7, build.current().pr)
+      assert.equal(7, present(build.current()).pr)
     end)
 
     it("asks gh again once HEAD moves", function()
@@ -569,7 +571,10 @@ describe("changeset.build", function()
 end)
 
 describe("changeset.build on a branch measured against its PR's target", function()
-  local root, previous_dir, source, parent_base
+  local root ---@type string
+  local previous_dir ---@type string
+  local source ---@type support.symbols.Source
+  local parent_base ---@type string
 
   ---@param name string
   ---@return string
@@ -585,7 +590,7 @@ describe("changeset.build on a branch measured against its PR's target", functio
       local tree = build.current()
       return tree ~= nil and tree.pr == 7 and tree.collected
     end, 10))
-    assert.equal(parent_base, build.current().base)
+    assert.equal(parent_base, present(build.current()).base)
   end
 
   before_each(function()
@@ -616,7 +621,7 @@ describe("changeset.build on a branch measured against its PR's target", functio
 
   it("keeps the tree on the PR's target across a commit", function()
     build_on_pr()
-    local kept = assert(build.current())
+    local kept = present(build.current())
     vim.env.FAKE_GH_DELAY = "0.5"
     commit_file("more.txt")
 
@@ -638,7 +643,7 @@ describe("changeset.build on a branch measured against its PR's target", functio
     end
     local ok, err = pcall(build.update)
     vim.fn.systemlist = real_systemlist
-    assert(ok, err)
+    assert.is_true(ok, tostring(err))
 
     assert.same({}, waited)
   end)
@@ -652,8 +657,8 @@ describe("changeset.build on a branch measured against its PR's target", functio
 
     build.update()
 
-    assert.equal("feature", build.current().branch)
-    assert.equal(parent_base, build.current().base)
+    assert.equal("feature", present(build.current()).branch)
+    assert.equal(parent_base, present(build.current()).base)
   end)
 
   it("moves to the default branch once a commit finds the PR closed", function()
@@ -664,7 +669,7 @@ describe("changeset.build on a branch measured against its PR's target", functio
     build.update()
 
     assert.is_true(vim.wait(5000, function()
-      local tree = assert(build.current())
+      local tree = present(build.current())
       return tree.base ~= parent_base and tree.pr == nil
     end, 25))
   end)
@@ -678,14 +683,16 @@ describe("changeset.build on a branch measured against its PR's target", functio
     build.update()
     vim.wait(1500)
 
-    local tree = assert(build.current())
+    local tree = present(build.current())
     assert.equal(parent_base, tree.base)
     assert.equal(7, tree.pr)
   end)
 end)
 
 describe("changeset.build after a rebase onto a moved default branch", function()
-  local root, previous_dir, source
+  local root ---@type string
+  local previous_dir ---@type string
+  local source ---@type support.symbols.Source
 
   ---@param name string
   ---@return string

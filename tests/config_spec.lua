@@ -1,4 +1,5 @@
 local Notify = require("support.notify")
+local present = require("support.present")
 
 describe("changeset.config", function()
   local config = require("changeset.config")
@@ -32,7 +33,8 @@ describe("changeset.config", function()
 
   it("rejects a bad value, naming the option, and keeps the options in force", function()
     config.setup({ layout = { min_file_width = 100 } })
-    for _, case in ipairs({
+    ---@type table[]
+    local cases = {
       { { keymaps = { jump = true } }, "keymaps.jump" },
       { { keymaps = { jump = "" } }, "keymaps.jump" },
       { { layout = { min_file_width = "80" } }, "layout.min_file_width" },
@@ -49,17 +51,19 @@ describe("changeset.config", function()
       { { unified_diff = false }, "unified_diff" },
       { { unified_diff = { keep = "some" } }, "unified_diff.keep" },
       { { unified_diff = { keep = false } }, "unified_diff.keep" },
-    }) do
+    }
+    for _, case in ipairs(cases) do
       local ok, err = pcall(config.setup, case[1])
       assert.is_false(ok)
       assert.is_string(err)
-      assert.truthy(string.find(tostring(err), case[2], 1, true), err)
+      assert.truthy(string.find(tostring(err), case[2], 1, true), tostring(err))
     end
     assert.equal(100, config.get().layout.min_file_width)
   end)
 
   describe("unknown options", function()
-    local notes, restore
+    local notes ---@type support.notify.Note[]
+    local restore ---@type fun()?
 
     ---Stand in for a notifier, such as mini.notify, that replaces `vim.notify` once it is set up.
     local function set_up_notifier()
@@ -90,8 +94,8 @@ describe("changeset.config", function()
         end)
         vim.wait(20)
         assert.equal(1, #notes)
-        assert.equal(vim.log.levels.WARN, notes[1].level)
-        assert.truthy(notes[1].msg:find("keymaps.next, keymaps.prev", 1, true), notes[1].msg)
+        assert.equal(vim.log.levels.WARN, present(notes[1]).level)
+        assert.truthy(present(notes[1]).msg:find("keymaps.next, keymaps.prev", 1, true), present(notes[1]).msg)
       end
     )
 
@@ -105,8 +109,8 @@ describe("changeset.config", function()
       end)
       vim.wait(20)
       assert.equal(1, #notes)
-      assert.equal(vim.log.levels.WARN, notes[1].level)
-      assert.truthy(notes[1].msg:find("pr_review", 1, true), notes[1].msg)
+      assert.equal(vim.log.levels.WARN, present(notes[1]).level)
+      assert.truthy(present(notes[1]).msg:find("pr_review", 1, true), present(notes[1]).msg)
     end)
 
     it("forgets the unknown options of an earlier setup()", function()

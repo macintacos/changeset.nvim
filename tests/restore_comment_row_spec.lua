@@ -14,7 +14,8 @@ local function setup_repo()
 end
 
 describe("a restored session", function()
-  local tmp, previous_dir
+  local tmp ---@type string
+  local previous_dir ---@type string
 
   after_each(function()
     changeset.close()

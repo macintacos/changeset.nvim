@@ -1,5 +1,6 @@
 local gh = require("support.gh")
 local fixture = require("support.git")
+local present = require("support.present")
 local Git = require("changeset.git")
 local fork_point = require("changeset.fork_point")
 
@@ -21,9 +22,9 @@ end
 ---@param count integer
 ---@return boolean
 local function await_heard(root, count)
-  return vim.wait(5000, function()
+  return (vim.wait(5000, function()
     return #heard_in(root) >= count
-  end)
+  end))
 end
 
 ---@param root string
@@ -85,7 +86,7 @@ describe("fork_point", function()
   it("measures against the default branch on a branch with no PR", function()
     local root, default_base = repo()
 
-    local point = assert(fork_point.get(root, "feature"))
+    local point = present((fork_point.get(root, "feature")))
 
     assert.equal(default_base, point.base)
     assert.equal("main", point.against)
@@ -107,7 +108,7 @@ describe("fork_point", function()
       return sha, ref
     end
 
-    local point
+    local point ---@type changeset.ForkPoint?
     fork_point.get_async(root, "feature", function(measured)
       point = measured
     end)
@@ -116,7 +117,7 @@ describe("fork_point", function()
     end)
     Git.merge_base = real_merge_base
 
-    assert.equal(newer, assert(point).base)
+    assert.equal(newer, present(point).base)
   end)
 
   it("stops measuring again after three measures while HEAD keeps moving, answering with the last", function()
@@ -138,13 +139,13 @@ describe("fork_point", function()
     local point = fork_point.get(root, "feature")
     Git.merge_base = real_merge_base
 
-    assert.same({ 3, default_base }, { measures, assert(point).base })
+    assert.same({ 3, default_base }, { measures, present(point).base })
   end)
 
   it("measures against the branch it was created from without waiting on gh", function()
     local root, _, parent_base = repo("parent")
 
-    local point = assert(fork_point.get(root, "feature"))
+    local point = present((fork_point.get(root, "feature")))
 
     assert.equal(parent_base, point.base)
     assert.equal("parent", point.against)
@@ -162,7 +163,7 @@ describe("fork_point", function()
     fixture.git({ "checkout", "-q", "-b", "feature", "parent" }, root)
     commit_file(root, "feature.txt")
 
-    local point = assert(fork_point.get(root, "feature"))
+    local point = present((fork_point.get(root, "feature")))
 
     assert.equal(fork, point.base)
     assert.equal("parent", point.against)
@@ -175,7 +176,7 @@ describe("fork_point", function()
     local squashed = fixture.commit("squash parent", root)
     fixture.git({ "rebase", "-q", "--onto", "main", "parent", "feature" }, root)
 
-    local point = assert(fork_point.get(root, "feature"))
+    local point = present((fork_point.get(root, "feature")))
 
     assert.equal(squashed, point.base)
     assert.equal("main", point.against)
@@ -187,7 +188,7 @@ describe("fork_point", function()
 
     fork_point.get(root, "feature")
     assert.is_true(await_heard(root, 1))
-    local point = heard_in(root)[1].point
+    local point = present(heard_in(root)[1]).point
 
     assert.equal(parent_base, point.base)
     assert.equal(7, point.pr)
@@ -199,7 +200,7 @@ describe("fork_point", function()
 
     fork_point.get(root, "feature")
     assert.is_true(await_heard(root, 1))
-    local point = heard_in(root)[1].point
+    local point = present(heard_in(root)[1]).point
     local again = fork_point.get(root, "feature")
 
     for _, p in ipairs({ point, again }) do
@@ -219,7 +220,7 @@ describe("fork_point", function()
     fork_point.get(root, "feature")
     assert.is_true(await_heard(root, 1))
 
-    assert.equal(7, heard_in(root)[1].point.pr)
+    assert.equal(7, present(heard_in(root)[1]).point.pr)
   end)
 
   it("keeps the PR into the default branch when the parent has no commits of its own", function()
@@ -236,7 +237,7 @@ describe("fork_point", function()
     fork_point.get(root, "feature")
     assert.is_true(await_heard(root, 1))
 
-    assert.equal(7, heard_in(root)[1].point.pr)
+    assert.equal(7, present(heard_in(root)[1]).point.pr)
   end)
 
   it("moves a branch created from the default branch to its PR's target", function()
@@ -245,7 +246,7 @@ describe("fork_point", function()
 
     fork_point.get(root, "feature")
     assert.is_true(await_heard(root, 1))
-    local point = heard_in(root)[1].point
+    local point = present(heard_in(root)[1]).point
 
     assert.equal("parent", point.against)
     assert.equal(7, point.pr)
@@ -256,12 +257,12 @@ describe("fork_point", function()
     local root, default_base, parent_base = repo()
 
     local first, asking = fork_point.get(root, "feature")
-    assert(first)
-    assert.equal(default_base, first.base)
+    assert.is_truthy(first)
+    assert.equal(default_base, present(first).base)
     assert.is_true(asking)
 
     assert.is_true(await_heard(root, 1))
-    local point = heard_in(root)[1].point
+    local point = present(heard_in(root)[1]).point
     assert.equal(parent_base, point.base)
     assert.equal("parent", point.against)
     assert.equal(7, point.pr)
@@ -281,8 +282,8 @@ describe("fork_point", function()
     fork_point.recheck(root, "feature")
 
     assert.is_true(await_heard(root, 2))
-    assert.equal(default_base, heard_in(root)[2].point.base)
-    assert.equal("main", heard_in(root)[2].point.against)
+    assert.equal(default_base, present(heard_in(root)[2]).point.base)
+    assert.equal("main", present(heard_in(root)[2]).point.against)
   end)
 
   it("asks gh once while a recheck is in flight", function()
@@ -383,7 +384,7 @@ describe("fork_point", function()
       held[#held + 1] = { argv, opts, on_exit }
       return {}
     end
-    local point
+    local point ---@type changeset.ForkPoint?
     fork_point.get_async(root, "feature", function(measured)
       point = measured
     end)
@@ -397,8 +398,8 @@ describe("fork_point", function()
     assert.is_true(vim.wait(5000, function()
       return point ~= nil
     end, 10))
-    assert.equal(parent_base, point.base)
-    assert.equal(7, point.pr)
+    assert.equal(parent_base, present(point).base)
+    assert.equal(7, present(point).pr)
   end)
 
   it("stays on the default base when the PR's target shares no fork point", function()
@@ -407,7 +408,7 @@ describe("fork_point", function()
 
     fork_point.get(root, "feature")
     assert.is_true(await_heard(root, 1))
-    local point = heard_in(root)[1].point
+    local point = present(heard_in(root)[1]).point
     local again = fork_point.get(root, "feature")
 
     for _, p in ipairs({ point, again }) do
@@ -423,8 +424,8 @@ describe("fork_point", function()
     fork_point.get(root, "feature")
     assert.is_true(await_heard(root, 1))
 
-    assert.equal(default_base, heard_in(root)[1].point.base)
-    assert.is_nil(heard_in(root)[1].point.pr)
+    assert.equal(default_base, present(heard_in(root)[1]).point.base)
+    assert.is_nil(present(heard_in(root)[1]).point.pr)
   end)
 
   it("answers the default base when gh is not installed", function()
@@ -433,7 +434,7 @@ describe("fork_point", function()
     gh.without(fork_point.get, root, "feature")
 
     assert.is_true(await_heard(root, 1))
-    assert.equal(default_base, heard_in(root)[1].point.base)
+    assert.equal(default_base, present(heard_in(root)[1]).point.base)
   end)
 
   it("asks gh once while an answer is in flight, and again after an answer of no PR", function()
@@ -458,11 +459,11 @@ describe("fork_point", function()
     local plain, default_base = repo()
 
     local point, asking = fork_point.get(plain, "feature")
-    assert(point)
+    assert.is_truthy(point)
 
-    assert.equal(default_base, point.base)
+    assert.equal(default_base, present(point).base)
     assert.is_true(asking)
-    assert.equal(parent_base, fork_point.get(stacked, "feature").base)
+    assert.equal(parent_base, present((fork_point.get(stacked, "feature"))).base)
   end)
 
   it("returns nil outside a repository and asks gh nothing", function()
@@ -470,7 +471,7 @@ describe("fork_point", function()
     vim.fn.mkdir(dir, "p")
     table.insert(roots, dir)
 
-    assert.is_nil(fork_point.get(dir, "feature"))
+    assert.is_nil((fork_point.get(dir, "feature")))
     assert.equal(0, asks)
   end)
 
@@ -479,7 +480,7 @@ describe("fork_point", function()
       local root, default_base = repo("parent")
       fork_point.pin(root, "feature", "main")
 
-      local point = assert(fork_point.get(root, "feature"))
+      local point = present((fork_point.get(root, "feature")))
 
       assert.same({ default_base, "main", "main" }, { point.base, point.against, point.ref })
     end)
@@ -489,7 +490,7 @@ describe("fork_point", function()
       fork_point.pin(root, "feature", "main")
       fork_point.pin(root, "feature", nil)
 
-      local point = assert(fork_point.get(root, "feature"))
+      local point = present((fork_point.get(root, "feature")))
 
       assert.same({ parent_base, "parent" }, { point.base, point.against })
     end)
@@ -498,7 +499,7 @@ describe("fork_point", function()
       local root, _, parent_base = repo("parent")
       fork_point.pin(root, "feature", "deleted")
 
-      assert.equal(parent_base, assert(fork_point.get(root, "feature")).base)
+      assert.equal(parent_base, present((fork_point.get(root, "feature"))).base)
     end)
 
     it("keeps it to its own branch", function()
@@ -508,7 +509,7 @@ describe("fork_point", function()
       fixture.git({ "checkout", "-q", "-b", "child" }, root)
       commit_file(root, "child.txt")
 
-      local point = assert(fork_point.get(root, "child"))
+      local point = present((fork_point.get(root, "child")))
 
       assert.same({ feature_tip, "feature" }, { point.base, point.against })
     end)
@@ -520,7 +521,7 @@ describe("fork_point", function()
 
       for _, ref in ipairs({ "v1", default_base:sub(1, 12), "main", false }) do
         fork_point.pin(root, "feature", ref or nil)
-        kinds[#kinds + 1] = assert(fork_point.get(root, "feature")).kind
+        kinds[#kinds + 1] = present((fork_point.get(root, "feature"))).kind
       end
 
       assert.same({ "tag", "commit", "branch", "branch" }, kinds)
@@ -532,7 +533,7 @@ describe("fork_point", function()
       fork_point.pin(root, "feature", "main")
       assert.is_true(await_heard(root, 1))
 
-      assert.equal(default_base, heard_in(root)[1].point.base)
+      assert.equal(default_base, present(heard_in(root)[1]).point.base)
     end)
 
     it("names the PR whose target it is", function()
@@ -544,7 +545,7 @@ describe("fork_point", function()
       fork_point.pin(root, "feature", "main")
       assert.is_true(await_heard(root, 2))
 
-      assert.equal(7, heard_in(root)[2].point.pr)
+      assert.equal(7, present(heard_in(root)[2]).point.pr)
     end)
   end)
 end)

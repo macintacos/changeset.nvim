@@ -23,7 +23,9 @@ describe("changeset.health", function()
   ---Level of the first finding, in report order, whose message contains `text`.
   ---@return string?
   local function level(overrides, text)
-    for _, section in ipairs(health._report(vim.tbl_extend("force", HEALTHY, overrides))) do
+    local facts = vim.tbl_extend("force", HEALTHY, overrides)
+    ---@cast facts changeset.health.Facts
+    for _, section in ipairs(health._report(facts)) do
       for _, finding in ipairs(section.findings) do
         if finding.msg:find(text, 1, true) then
           return finding.level
@@ -33,6 +35,7 @@ describe("changeset.health", function()
   end
 
   ---Runs `check()` with `vim.health` recorded; returns the `{ fn, msg }` calls.
+  ---@return table
   local function checked()
     local calls, originals = {}, {}
     for _, fn in ipairs({ "start", "ok", "warn", "error", "info" }) do
@@ -50,6 +53,7 @@ describe("changeset.health", function()
   end
 
   ---Level of the first `check()` call whose message contains `text`.
+  ---@return string?
   local function checked_level(text)
     for _, call in ipairs(checked()) do
       if call[1] ~= "start" and call[2]:find(text, 1, true) then
@@ -166,6 +170,7 @@ describe("changeset.health", function()
     local ok, calls = pcall(checked)
     config.setup()
     assert.is_true(ok, tostring(calls))
+    ---@cast calls table
 
     local warned = vim.iter(calls):find(function(call)
       return call[1] == "warn" and call[2]:find("keymaps.next", 1, true) ~= nil
@@ -191,6 +196,12 @@ describe("changeset.health", function()
   end)
 
   it("probes optional plugins by loading them", function()
+    ---@param value table?
+    local function set_mini_pick(value)
+      -- The probe reads MiniPick as a global, so the spec swaps that global itself.
+      -- selene: allow(global_usage)
+      rawset(_G, "MiniPick", value)
+    end
     local original_mini_pick = MiniPick
     local ok, err = pcall(function()
       with_modules({ ["which-key"] = "installed", gitsigns = "absent", ["mini.pick"] = "absent" }, function()
@@ -199,13 +210,13 @@ describe("changeset.health", function()
         assert.equal("info", checked_level("`mini.pick` not found"))
       end)
       with_modules({ ["mini.pick"] = "installed" }, function()
-        MiniPick = nil
+        set_mini_pick(nil)
         assert.equal("info", checked_level("`mini.pick` is installed but not set up"))
-        MiniPick = {}
+        set_mini_pick({})
         assert.equal("ok", checked_level("`mini.pick` found and set up"))
       end)
     end)
-    MiniPick = original_mini_pick
+    set_mini_pick(original_mini_pick)
     assert.is_true(ok, tostring(err))
   end)
 
@@ -220,6 +231,7 @@ describe("changeset.health", function()
     local ok, calls = pcall(checked)
     vim.lsp.get_clients = original_get_clients
     assert.is_true(ok, tostring(calls))
+    ---@cast calls table
     local symbols_call = vim.iter(calls):find(function(call)
       return call[2]:find("textDocument/documentSymbol", 1, true) ~= nil
     end)

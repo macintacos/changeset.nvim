@@ -1,6 +1,7 @@
 local Dialog = require("support.dialog")
 local Fixture = require("support.git")
 local comment_store = require("changeset.comment_store")
+local present = require("support.present")
 local review_comment_window = require("changeset.review_comment_window")
 
 ---@return integer?
@@ -24,7 +25,11 @@ vim.keymap.set("i", "<C-g>s", function()
 end)
 
 describe(":Changeset from the review comment window", function()
-  local dir, source, echo, notify, notes
+  local dir ---@type string
+  local source ---@type integer
+  local echo, notify
+  ---@type { msg: string, level: integer?, window_open: boolean }[]
+  local notes
 
   before_each(function()
     if not vim.g.loaded_changeset then
@@ -34,14 +39,16 @@ describe(":Changeset from the review comment window", function()
     end
     os.remove(comment_store.path())
     echo = vim.api.nvim_echo
-    vim.api.nvim_echo = function() end
+    vim.api.nvim_echo = function()
+      return -1
+    end
     notify, notes = vim.notify, {}
     vim.notify = function(msg, level)
       table.insert(notes, { msg = msg, level = level, window_open = float() ~= nil })
     end
     dir = vim.fn.tempname()
     vim.fn.mkdir(dir, "p")
-    dir = vim.fs.normalize(assert(vim.uv.fs_realpath(dir)))
+    dir = vim.fs.normalize(present(vim.uv.fs_realpath(dir)))
     Fixture.init_repo("main", dir)
     vim.fn.writefile(vim.split(("x"):rep(20, "\n"), "\n"), dir .. "/a.lua")
     vim.cmd.edit(dir .. "/a.lua")
@@ -149,7 +156,7 @@ describe(":Changeset from the review comment window", function()
     write(4, "note edited")
 
     vim.cmd("Changeset comment del")
-    assert.truthy(table.concat(Dialog.lines(), "\n"):find("note edited", 1, true))
+    assert.truthy((table.concat(Dialog.lines(), "\n"):find("note edited", 1, true)))
     Dialog.press("D")
 
     assert.is_true(closed())
@@ -160,7 +167,7 @@ describe(":Changeset from the review comment window", function()
     write(4, "unsaved")
     local win = vim.api.nvim_get_current_win()
     vim.api.nvim_feedkeys(vim.keycode("A<Cmd>Changeset comment del<CR>"), "x!", false)
-    assert(Dialog.win(), "no dialog open")
+    assert.is_truthy(Dialog.win(), "no dialog open")
     local back
     -- "x!" holds the resumed insert mode open, unlike Dialog.press, until this ends it.
     vim.defer_fn(function()
@@ -284,7 +291,7 @@ describe(":Changeset from the review comment window", function()
     local deleted = vim.iter(notes):find(function(note)
       return note.msg:find("deleted", 1, true)
     end)
-    assert.is_false(assert(deleted).window_open)
+    assert.is_false(present(deleted).window_open)
   end)
 
   it("notifies that it kept a draft before running the subcommand", function()
@@ -348,7 +355,7 @@ describe(":Changeset from the review comment window", function()
       vim.cmd("Changeset comment last")
 
       assert.equal(win, vim.api.nvim_get_current_win())
-      assert.equal("last", comment_store.list(dir)[2].body)
+      assert.equal("last", present(comment_store.list(dir)[2]).body)
     end)
 
     it("closes the window on another comment, keeping a draft, and opens the comment saved last", function()
@@ -361,7 +368,7 @@ describe(":Changeset from the review comment window", function()
         local current = review_comment_window.current()
         return current ~= nil and current.comment.line == 9
       end, 10)
-      assert.equal(9, assert(review_comment_window.current()).comment.line)
+      assert.equal(9, present(review_comment_window.current()).comment.line)
       assert.equal(9, vim.api.nvim_win_get_cursor(source)[1])
       assert.truthy(vim.iter(comment_store.list(dir)):find(function(comment)
         return comment.line == 4 and comment.draft
@@ -390,7 +397,7 @@ describe(":Changeset from the review comment window", function()
       return vim.keycode(each.lhs) == vim.keycode("<C-g>s")
     end)
 
-    assert.equal("Keep a draft, then: Submit the review to an agent", assert(keymap).desc)
+    assert.equal("Keep a draft, then: Submit the review to an agent", present(keymap).desc)
   end)
 
   it("saves on a save key that is also a default <C-g> key", function()
@@ -428,6 +435,7 @@ describe(":Changeset from the review comment window", function()
     local said = {}
     vim.api.nvim_echo = function()
       table.insert(said, "echo")
+      return -1
     end
     vim.notify = function(msg)
       table.insert(said, msg:find("draft", 1, true) and "draft" or "other")

@@ -1,4 +1,5 @@
 local Notify = require("support.notify")
+local present = require("support.present")
 
 ---The changeset augroups that hold an autocmd.
 ---@return table<string, true>
@@ -30,7 +31,7 @@ end
 ---@param wait_ms integer? How long the main loop runs, typed keys and all, before the probe.
 ---@return string
 local function after_startup(args, probe, wait_ms)
-  local root = vim.fn.fnamemodify(vim.api.nvim_get_runtime_file("plugin/changeset.lua", false)[1], ":h:h")
+  local root = vim.fn.fnamemodify(present(vim.api.nvim_get_runtime_file("plugin/changeset.lua", false)[1]), ":h:h")
   local cmd = { vim.v.progpath, "--headless", "-u", "NONE", "--cmd", "set rtp^=" .. root }
   vim.list_extend(cmd, { "--cmd", "runtime plugin/changeset.lua" })
   vim.list_extend(cmd, args)
@@ -38,13 +39,14 @@ local function after_startup(args, probe, wait_ms)
     "--cmd",
     ("autocmd VimEnter * ++once lua vim.defer_fn(function() %s; vim.cmd('qa!') end, %d)"):format(probe, wait_ms or 0),
   })
-  return vim.system(cmd):wait(10000).stdout
+  return present(vim.system(cmd):wait(10000).stdout)
 end
 
 -- The cases run in order: the first real `require("changeset")` is the last case's,
 -- since its autocmds outlive it and the first case asserts there are none.
 describe("plugin/changeset.lua", function()
-  local notes, restore
+  local notes ---@type support.notify.Note[]
+  local restore ---@type fun()
 
   before_each(function()
     notes, restore = Notify.capture()
@@ -55,7 +57,9 @@ describe("plugin/changeset.lua", function()
   end)
 
   it("loads no changeset module at startup", function()
-    MiniPick = { registry = {} }
+    -- The plugin reads mini.pick as a global, so the spec swaps that global itself.
+    -- selene: allow(global_usage)
+    rawset(_G, "MiniPick", { registry = {} })
     vim.cmd("runtime plugin/changeset.lua")
     vim.api.nvim_exec_autocmds("VimEnter", {})
     vim.api.nvim_exec_autocmds("SessionLoadPost", {})
@@ -70,15 +74,15 @@ describe("plugin/changeset.lua", function()
     local calls = {}
     package.loaded["changeset.pick"] = { pick = counter(calls, "pick") }
 
-    assert.is_function(MiniPick.registry.changeset)
-    MiniPick.registry.changeset()
+    assert.is_function(present(MiniPick).registry.changeset)
+    present(MiniPick).registry.changeset()
 
     package.loaded["changeset.pick"] = nil
     assert.equal(1, calls.pick)
   end)
 
   it("registers the mini.pick source when loaded after startup", function()
-    local root = vim.fn.fnamemodify(vim.api.nvim_get_runtime_file("plugin/changeset.lua", false)[1], ":h:h")
+    local root = vim.fn.fnamemodify(present(vim.api.nvim_get_runtime_file("plugin/changeset.lua", false)[1]), ":h:h")
     local probe = "autocmd VimEnter * ++once lua vim.schedule(function() vim.cmd('runtime plugin/changeset.lua');"
       .. " io.write(type(MiniPick.registry.changeset)); vim.cmd('qa!') end)"
     local result = vim
@@ -206,7 +210,7 @@ describe("plugin/changeset.lua", function()
 
     package.loaded["changeset.base"] = nil
     assert.same({}, refs)
-    assert.same({ vim.log.levels.ERROR }, { notes[1].level })
+    assert.same({ vim.log.levels.ERROR }, { present(notes[1]).level })
   end)
 
   it("runs the command after a | once the subcommand ran", function()
@@ -224,7 +228,7 @@ describe("plugin/changeset.lua", function()
     vim.cmd("Changeset bogus")
 
     assert.equal(1, #notes)
-    assert.equal(vim.log.levels.ERROR, notes[1].level)
+    assert.equal(vim.log.levels.ERROR, present(notes[1]).level)
   end)
 
   it("names the verbs a subcommand takes when its verb is missing or unknown", function()
@@ -232,15 +236,15 @@ describe("plugin/changeset.lua", function()
     vim.cmd("Changeset review bogus")
 
     assert.equal(2, #notes)
-    assert.equal(vim.log.levels.ERROR, notes[1].level)
+    assert.equal(vim.log.levels.ERROR, present(notes[1]).level)
     assert.equal(
       "Changeset: :Changeset comment takes a verb: del, draft, last, list, new, next, prev, toggle",
-      notes[1].msg
+      present(notes[1]).msg
     )
-    assert.equal(vim.log.levels.ERROR, notes[2].level)
+    assert.equal(vim.log.levels.ERROR, present(notes[2]).level)
     assert.equal(
       "Changeset: :Changeset review has no verb bogus; its verbs: abandon, restore, submit, yank",
-      notes[2].msg
+      present(notes[2]).msg
     )
   end)
 
@@ -366,7 +370,8 @@ describe("plugin/changeset.lua", function()
   end)
 
   describe("the stepping maps", function()
-    local steps, buf
+    local steps
+    local buf ---@type integer
 
     ---Stubs the stepping functions to record `{ name, count }` and switch to a fresh buffer, as a jump does.
     before_each(function()

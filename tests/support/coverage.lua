@@ -1,7 +1,9 @@
 ---luacov's settings for `mise run coverage`, shared by the spec processes that
 ---record line hits (through minimal_init) and `nvim -l tests/support/coverage.lua`,
 ---which writes the report.
-local this = debug.getinfo(1, "S").source:sub(2)
+local info = debug.getinfo(1, "S")
+---@cast info -?
+local this = info.source:sub(2)
 local root = vim.fn.fnamemodify(this, ":p:h:h:h")
 
 local M = {}

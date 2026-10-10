@@ -3,7 +3,9 @@
 ---depend on what the machine happens to have installed.
 ---`nvim -l tests/support/deps.lua` installs them; `require("support.deps")` only
 ---locates them.
-local this = debug.getinfo(1, "S").source:sub(2)
+local info = debug.getinfo(1, "S")
+---@cast info -?
+local this = info.source:sub(2)
 local root = vim.fn.fnamemodify(this, ":p:h:h:h")
 
 local M = {}

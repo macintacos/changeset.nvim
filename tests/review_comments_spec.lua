@@ -1,5 +1,6 @@
 local Fixture = require("support.git")
 local Notify = require("support.notify")
+local present = require("support.present")
 local comment_store = require("changeset.comment_store")
 local review_comments = require("changeset.review_comments")
 local config = require("changeset.config")
@@ -32,7 +33,7 @@ end
 ---@return integer[][]
 local function rows(buf)
   return vim.tbl_map(function(mark)
-    return { mark[2], mark[4].end_row }
+    return { mark[2], present(mark[4]).end_row }
   end, marks(buf))
 end
 
@@ -42,7 +43,8 @@ end
 local function signs(buf)
   local ns = vim.api.nvim_create_namespace("changeset.review_comment_signs")
   return vim.tbl_map(function(mark)
-    return { mark[2], mark[4].sign_text, mark[4].sign_hl_group }
+    local details = present(mark[4])
+    return { mark[2], details.sign_text, details.sign_hl_group }
   end, vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true }))
 end
 
@@ -69,7 +71,10 @@ local function lines(count, name)
 end
 
 describe("review_comments", function()
-  local dir, other, alpha, beta
+  local dir ---@type string
+  local other ---@type string?
+  local alpha ---@type integer
+  local beta ---@type integer
 
   ---Replaces the repository's review comments with `comments`.
   ---@param comments changeset.ReviewComment[]
@@ -83,7 +88,7 @@ describe("review_comments", function()
   before_each(function()
     dir = vim.fn.tempname()
     vim.fn.mkdir(dir, "p")
-    dir = vim.fs.normalize(assert(vim.uv.fs_realpath(dir)))
+    dir = vim.fs.normalize(present(vim.uv.fs_realpath(dir)))
     Fixture.init_repo("main", dir)
     os.remove(comment_store.path())
     vim.fn.writefile(lines(40, "alpha"), dir .. "/alpha.txt")
@@ -156,19 +161,21 @@ describe("review_comments", function()
 
   it("colours the range's numbers and ends the line with the body", function()
     set(all())
-    local details = assert(marks(beta)[1][4])
+    local mark = present(marks(beta)[1])
+    local details = present(mark[4])
     assert.are.equal(highlights.REVIEW_COMMENT_HL, details.number_hl_group)
     assert.are.same(
       { { "● ", highlights.REVIEW_COMMENT_HL }, { "b", highlights.REVIEW_COMMENT_BODY_HL } },
-      details.virt_text
+      present(details.virt_text)
     )
   end)
 
   it("marks a draft with its own circle, sign and group", function()
     set({ { path = "beta.txt", line = 15, body = "b", draft = true } })
-    local details = assert(marks(beta)[1][4])
+    local mark = present(marks(beta)[1])
+    local details = present(mark[4])
     assert.are.equal(highlights.REVIEW_COMMENT_DRAFT_HL, details.number_hl_group)
-    assert.are.same({ "◌ ", highlights.REVIEW_COMMENT_DRAFT_HL }, details.virt_text[1])
+    assert.are.same({ "◌ ", highlights.REVIEW_COMMENT_DRAFT_HL }, present(details.virt_text)[1])
     assert.are.same({ { 14, "󰍪 ", highlights.REVIEW_COMMENT_DRAFT_HL } }, signs(beta))
     assert.are.same({ "󰍪", highlights.REVIEW_COMMENT_DRAFT_HL }, { review_comments.bubble(beta, 15) })
   end)
@@ -239,13 +246,15 @@ describe("review_comments", function()
 
   it("ends the line with only the first line of a CRLF body", function()
     set({ { path = "beta.txt", line = 16, body = "first\r\nsecond" } })
-    assert.are.equal("first", marks(beta)[1][4].virt_text[2][1])
+    local mark = present(marks(beta)[1])
+    local virt_text = present(present(mark[4]).virt_text)
+    assert.are.equal("first", present(virt_text[2])[1])
   end)
 
   it("marks a file the sidebar loads from a CursorMoved callback", function()
     set(all())
     vim.cmd("%bwipeout!")
-    local buf
+    local buf ---@type integer?
     vim.api.nvim_create_autocmd("CursorMoved", {
       once = true,
       callback = function()
@@ -253,7 +262,7 @@ describe("review_comments", function()
       end,
     })
     vim.api.nvim_exec_autocmds("CursorMoved", {})
-    assert.are.same({ { 15, 15 } }, rows(assert(buf)))
+    assert.are.same({ { 15, 15 } }, rows(present(buf)))
   end)
 
   ---@param buf integer
@@ -283,8 +292,8 @@ describe("review_comments", function()
       vim.fn.writefile({ "{" }, path)
     end,
     unwritable = function(path)
-      vim.uv.fs_chmod(path, tonumber("444", 8))
-      vim.uv.fs_chmod(vim.fs.dirname(path), tonumber("555", 8))
+      vim.uv.fs_chmod(path, present(tonumber("444", 8)))
+      vim.uv.fs_chmod(vim.fs.dirname(path), present(tonumber("555", 8)))
     end,
   }) do
     it(("moves a comment by the edits of a write its %s record refused, on the next write"):format(name), function()
@@ -296,8 +305,8 @@ describe("review_comments", function()
 
       write(beta)
 
-      vim.uv.fs_chmod(vim.fs.dirname(path), tonumber("755", 8))
-      vim.uv.fs_chmod(path, tonumber("644", 8))
+      vim.uv.fs_chmod(vim.fs.dirname(path), present(tonumber("755", 8)))
+      vim.uv.fs_chmod(path, present(tonumber("644", 8)))
       vim.fn.writefile(saved, path)
       vim.api.nvim_buf_set_lines(beta, 0, 0, false, { "new 0" })
       write(beta)
@@ -330,14 +339,14 @@ describe("review_comments", function()
 
     write(beta)
 
-    assert.are.same({ comment("beta.txt", 18) }, assert(comment_store.submitted(dir))[1].comments)
+    assert.are.same({ comment("beta.txt", 18) }, present(present(comment_store.submitted(dir))[1]).comments)
   end)
 
   ---An LSP edit replacing rows `first` to `last`, end exclusive, with `new`.
   ---@param first integer
   ---@param last integer
   ---@param new string[]
-  ---@return table
+  ---@return lsp.TextEdit
   local function text_edit(first, last, new)
     local text = #new > 0 and table.concat(new, "\n") .. "\n" or ""
     return {
@@ -432,11 +441,11 @@ describe("review_comments", function()
     local ok, err = pcall(write, alpha)
 
     restore()
-    assert(ok, err)
+    assert.is_true(ok, tostring(err))
     local warnings = Notify.messages(notes, vim.log.levels.WARN)
     assert.are.equal(1, #warnings)
-    assert.truthy(warnings[1]:find("line 13 of alpha.txt", 1, true))
-    assert.truthy(warnings[1]:find("draft", 1, true))
+    assert.truthy((present(warnings[1]):find("line 13 of alpha.txt", 1, true)))
+    assert.truthy((present(warnings[1]):find("draft", 1, true)))
   end)
 
   it("keeps a modified buffer's marks where its edits moved them when another file's comment is kept", function()

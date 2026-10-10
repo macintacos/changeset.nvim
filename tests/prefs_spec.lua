@@ -1,4 +1,5 @@
 local prefs = require("changeset.prefs")
+local present = require("support.present")
 
 local ROOT = "/src/app"
 local BRANCH = "feat/login"
@@ -83,9 +84,9 @@ describe("changeset.prefs", function()
 
       local out = prefs.apply(data, "branch", ROOT, BRANCH, { Property = true })
 
-      assert.same({ "Property" }, out.repos[ROOT].branches[BRANCH])
+      assert.same({ "Property" }, present(present(out.repos)[ROOT].branches)[BRANCH])
       assert.same({ "Variable" }, out.global)
-      assert.same({ "Field" }, out.repos[ROOT].kinds)
+      assert.same({ "Field" }, present(out.repos)[ROOT].kinds)
     end)
 
     it("clears the branch set that would shadow a repo save", function()
@@ -112,7 +113,7 @@ describe("changeset.prefs", function()
 
       local out = prefs.apply(data, "global", ROOT, BRANCH, { Variable = true })
 
-      assert.same({ "Field" }, out.repos["/src/other"].kinds)
+      assert.same({ "Field" }, present(out.repos)["/src/other"].kinds)
     end)
 
     it("leaves the set it was given unchanged", function()

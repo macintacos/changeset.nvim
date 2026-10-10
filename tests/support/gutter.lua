@@ -27,7 +27,12 @@ M.moves_to = {}
 
 local in_flight = 0
 local Obj = require("gitsigns.git").Obj
+---@cast Obj table
 local change_revision = Obj.change_revision
+---@async
+---@param self Gitsigns.GitObj
+---@param revision string?
+---@return string? err
 Obj.change_revision = function(self, revision)
   in_flight, M.moves = in_flight + 1, M.moves + 1
   if revision then
@@ -51,14 +56,16 @@ end
 ---@param timeout integer
 ---@return boolean
 function M.await_all(bufs, pred, timeout)
-  return vim.wait(timeout, function()
-    for _, buf in ipairs(bufs) do
-      if not pred(buf) then
-        return false
+  return (
+    vim.wait(timeout, function()
+      for _, buf in ipairs(bufs) do
+        if not pred(buf) then
+          return false
+        end
       end
-    end
-    return true
-  end, 20)
+      return true
+    end, 20)
+  )
 end
 
 ---@param bufs integer[]
@@ -83,14 +90,16 @@ end
 ---@return boolean
 function M.settle()
   local quiet_since
-  return vim.wait(10000, function()
-    if in_flight > 0 then
-      quiet_since = nil
-      return false
-    end
-    quiet_since = quiet_since or vim.uv.hrtime()
-    return vim.uv.hrtime() - quiet_since >= 200e6
-  end, 20)
+  return (
+    vim.wait(10000, function()
+      if in_flight > 0 then
+        quiet_since = nil
+        return false
+      end
+      quiet_since = quiet_since or vim.uv.hrtime()
+      return vim.uv.hrtime() - quiet_since >= 200e6
+    end, 20)
+  )
 end
 
 ---@param files string[]
@@ -151,7 +160,7 @@ end
 ---@param cwd string Where the case started.
 function M.teardown(dir, cwd)
   -- Let every base change in flight land before its repo is deleted under it.
-  assert(M.settle(), "a base change never landed")
+  assert.is_true(M.settle(), "a base change never landed")
   vim.cmd("silent! %bwipeout!")
   vim.fn.chdir(cwd)
   vim.fn.delete(dir, "rf")

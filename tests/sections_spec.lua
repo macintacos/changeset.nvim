@@ -1,4 +1,5 @@
 local sections = require("changeset.sections")
+local present = require("support.present")
 
 ---@type table<changeset.SectionKey, string[]>
 local cases = {
@@ -172,12 +173,12 @@ describe("sections", function()
         local rejects = vim.list_extend(vim.list_extend({}, modules_out), rule.rejects)
         for _, sym in ipairs(accepts) do
           it(("accepts %s %s"):format(sym.kind, sym.name), function()
-            assert.is_true(sections.test_rule(path)(sym))
+            assert.is_true(present(sections.test_rule(path))(sym))
           end)
         end
         for _, sym in ipairs(rejects) do
           it(("rejects %s %s"):format(sym.kind, sym.name), function()
-            assert.is_false(sections.test_rule(path)(sym))
+            assert.is_false(present(sections.test_rule(path))(sym))
           end)
         end
       end)
@@ -185,7 +186,7 @@ describe("sections", function()
 
     for _, ext in ipairs({ "tsx", "mts", "cts" }) do
       it(("gives .%s the TypeScript rule"):format(ext), function()
-        assert.is_true(sections.test_rule("src/session." .. ext)(cb("describe('refresh') callback")))
+        assert.is_true(present(sections.test_rule("src/session." .. ext))(cb("describe('refresh') callback")))
       end)
     end
 
@@ -193,13 +194,13 @@ describe("sections", function()
       for _, path in ipairs({ "src/session.rs", "src/session.ts" }) do
         describe(path, function()
           it("accepts it whatever its name", function()
-            local rule = assert(sections.test_rule(path))
+            local rule = present(sections.test_rule(path))
             assert.is_true(rule({ name = "refreshes_token", kind = "Function", test = true }))
             assert.is_true(rule({ name = "integration", kind = "Module", test = true }))
           end)
 
           it("rejects the same symbol unmarked", function()
-            assert.is_false(sections.test_rule(path)({ name = "refreshes_token", kind = "Function" }))
+            assert.is_false(present(sections.test_rule(path))({ name = "refreshes_token", kind = "Function" }))
           end)
         end)
       end

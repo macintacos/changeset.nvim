@@ -1,7 +1,9 @@
 ---The treesitter parsers the specs parse with, installed by nvim-treesitter under
 ---`.tests/data`: the data dir `tests/minimal_init.lua` gives the suite, so no spec
 ---reads the editor's own parsers. `nvim -l tests/support/parsers.lua` installs them.
-local this = debug.getinfo(1, "S").source:sub(2)
+local info = debug.getinfo(1, "S")
+---@cast info -?
+local this = info.source:sub(2)
 local root = vim.fn.fnamemodify(this, ":p:h:h:h")
 
 local M = {}

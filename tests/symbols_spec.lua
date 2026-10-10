@@ -1,4 +1,5 @@
 local symbols = require("changeset.symbols")
+local present = require("support.present")
 
 local KIND = vim.lsp.protocol.SymbolKind
 
@@ -49,14 +50,14 @@ describe("changeset.symbols", function()
 
       local items = symbols.flatten({ fn })
 
-      assert.equal(5, items[1].range_lnum)
-      assert.equal(21, items[1].range_end_lnum)
+      assert.equal(5, present(items[1]).range_lnum)
+      assert.equal(21, present(items[1]).range_end_lnum)
     end)
 
     it("resolves numeric LSP kinds to their names", function()
       local items = symbols.flatten({ sym("f", KIND.Function, 0) })
 
-      assert.equal("Function", items[1].kind)
+      assert.equal("Function", present(items[1]).kind)
     end)
 
     it("orders siblings by position, not by response order", function()
@@ -177,8 +178,8 @@ describe("changeset.symbols", function()
 
       assert.same({ "method" }, field(items, "name"))
       assert.same({ 0 }, field(items, "depth"))
-      assert.equal(5, items[1].lnum)
-      assert.equal(5, items[1].range_lnum)
+      assert.equal(5, present(items[1]).lnum)
+      assert.equal(5, present(items[1]).range_lnum)
     end)
     it("nests a flat SymbolInformation response by the ranges that hold each symbol", function()
       local function info(name, kind, first, last)

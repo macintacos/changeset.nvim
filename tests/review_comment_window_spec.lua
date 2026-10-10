@@ -1,4 +1,5 @@
 local review_comment_window = require("changeset.review_comment_window")
+local present = require("support.present")
 
 local SAVE_KEYS = { "<C-CR>", "<C-s>" }
 
@@ -17,7 +18,7 @@ local function buffer_map(buf, mode, lhs)
 end
 
 local function press(buf, mode, lhs)
-  local mapping = assert(buffer_map(buf, mode, lhs), lhs .. " is not mapped in " .. mode)
+  local mapping = present(buffer_map(buf, mode, lhs), lhs .. " is not mapped in " .. mode)
   if mapping.callback then
     return mapping.callback()
   end
@@ -25,7 +26,11 @@ local function press(buf, mode, lhs)
 end
 
 describe("review_comment_window", function()
-  local source, saves, answer, kept
+  local source ---@type integer
+  local saves ---@type string[]
+  ---@type fun(err: string?)?
+  local answer
+  local kept ---@type string[]
 
   ---@param overrides table?
   ---@return integer win
@@ -45,7 +50,7 @@ describe("review_comment_window", function()
         kept[#kept + 1] = body
       end,
       comment = { path = "a.lua", line = 5, body = "" },
-    }, overrides or {}))
+    }, overrides or {}) --[[@as changeset.ReviewCommentWindowOpts]])
     return win, vim.api.nvim_win_get_buf(win)
   end
 
@@ -107,7 +112,7 @@ describe("review_comment_window", function()
       assert.equal(case.want, vim.api.nvim_buf_get_name(buf))
       assert.is_false(written)
       -- E382: refused for its 'buftype', whatever the name.
-      assert.truthy(tostring(err):find("E382", 1, true))
+      assert.truthy((tostring(err):find("E382", 1, true)))
     end)
   end
 
@@ -128,7 +133,8 @@ describe("review_comment_window", function()
 
     assert.equal("markdown", vim.bo[buf].filetype)
     assert.is_true(vim.bo[buf].modifiable)
-    assert.equal(" lines 4-5 ", config.title[1][1])
+    local title = present(config.title)
+    assert.equal(" lines 4-5 ", present(title[1])[1])
   end)
 
   it("leads its title with its icon, over the title's background", function()
@@ -138,26 +144,30 @@ describe("review_comment_window", function()
 
     local win = open({ title = "whole file", icon = { "X", "ReviewCommentWindowSpecIcon" } })
 
-    local title = vim.api.nvim_win_get_config(win).title
-    ---@cast title [string, string][]
-    local icon = vim.api.nvim_get_hl(0, { name = title[1][2], link = false })
+    local title = present(vim.api.nvim_win_get_config(win).title)
+    local icon = vim.api.nvim_get_hl(0, { name = present(present(title[1])[2]), link = false })
     vim.api.nvim_set_hl(0, "FloatTitle", float_title --[[@as vim.api.keyset.highlight]])
-    assert.equal(" X", title[1][1])
-    assert.equal(" whole file ", title[2][1])
+    assert.equal(" X", present(title[1])[1])
+    assert.equal(" whole file ", present(title[2])[1])
     assert.same({ 0x112233, 0x445566 }, { icon.fg, icon.bg })
   end)
+
+  ---The footer's chunks, present only while the footer is drawn.
+  local function footer_chunks(win)
+    return present(vim.api.nvim_win_get_config(win).footer)
+  end
 
   ---The footer's text, its chunks joined.
   local function footer(win)
     return table.concat(vim.tbl_map(function(chunk)
       return chunk[1]
-    end, vim.api.nvim_win_get_config(win).footer))
+    end, footer_chunks(win)))
   end
 
   ---The keys the footer draws as keycaps, in order.
   local function keycaps(win)
     return vim
-      .iter(vim.api.nvim_win_get_config(win).footer)
+      .iter(footer_chunks(win))
       :filter(function(chunk)
         return chunk[2] == require("changeset.highlights").KEYCAP_HL
       end)
@@ -209,7 +219,7 @@ describe("review_comment_window", function()
         local before = #saves
         press(buf, mode, lhs)
         assert.equal(before + 1, #saves)
-        answer("refused")
+        present(answer)("refused")
       end
     end
   end)
@@ -233,7 +243,7 @@ describe("review_comment_window", function()
     local win, buf = open()
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "text" })
     press(buf, "i", "<C-s>")
-    answer(nil)
+    present(answer)(nil)
 
     assert.is_false(vim.api.nvim_win_is_valid(win))
     assert.is_false(vim.api.nvim_buf_is_valid(buf))
@@ -311,7 +321,7 @@ describe("review_comment_window", function()
     local win, buf = open()
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "keep me" })
     press(buf, "i", "<C-s>")
-    answer("boom")
+    present(answer)("boom")
 
     assert.is_true(vim.api.nvim_win_is_valid(win))
     assert.same({ "keep me" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
@@ -324,7 +334,7 @@ describe("review_comment_window", function()
     press(buf, "n", "<C-CR>")
     assert.equal(1, #saves)
 
-    answer("boom")
+    present(answer)("boom")
     press(buf, "i", "<C-s>")
     assert.equal(2, #saves)
   end)
@@ -342,7 +352,7 @@ describe("review_comment_window", function()
     press(buf, "i", "<C-s>")
     press(buf, "n", "q")
     assert.no_errors(function()
-      answer(nil)
+      present(answer)(nil)
     end)
   end)
 
@@ -406,7 +416,7 @@ describe("review_comment_window", function()
 
   it("stays open while focus is in a window it holds for, closing once focus leaves it again", function()
     local win = open()
-    review_comment_window.current().hold(function() end)
+    present(review_comment_window.current()).hold(function() end)
     vim.api.nvim_set_current_win(source)
     vim.wait(50)
     assert.is_true(vim.api.nvim_win_is_valid(win))
@@ -422,7 +432,7 @@ describe("review_comment_window", function()
     local comment = { path = "a.lua", line = 5, body = "" }
     local _, buf = open({ comment = comment })
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "one", "two" })
-    local current = assert(review_comment_window.current())
+    local current = present(review_comment_window.current())
     assert.equal(source, current.source)
     assert.equal(comment, current.comment)
     assert.equal("one\ntwo", current.text())
@@ -434,7 +444,7 @@ describe("review_comment_window", function()
     local win = open()
     vim.api.nvim_feedkeys("a", "x", false)
     local after
-    review_comment_window.current().close(function()
+    present(review_comment_window.current()).close(function()
       after = { valid = vim.api.nvim_win_is_valid(win), mode = vim.api.nvim_get_mode().mode }
     end)
     vim.wait(500, function()
@@ -447,7 +457,7 @@ describe("review_comment_window", function()
   it("keeps nothing when discarded", function()
     local win, buf = open()
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "text" })
-    review_comment_window.current().discard()
+    present(review_comment_window.current()).discard()
     vim.wait(100, function()
       return not vim.api.nvim_win_is_valid(win)
     end)
@@ -498,7 +508,7 @@ describe("review_comment_window", function()
     local _, buf = open()
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "text" })
     press(buf, "i", "<C-s>")
-    answer(nil)
+    present(answer)(nil)
     assert.same({}, kept)
   end)
 
@@ -506,7 +516,7 @@ describe("review_comment_window", function()
     local _, buf = open()
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "text" })
     press(buf, "i", "<C-s>")
-    answer("boom")
+    present(answer)("boom")
     assert.same({}, kept)
   end)
 
@@ -517,7 +527,7 @@ describe("review_comment_window", function()
     press(buf, "n", "q")
     assert.same({ "text" }, kept)
     assert.no_errors(function()
-      answer(nil)
+      present(answer)(nil)
     end)
   end)
 
@@ -533,7 +543,7 @@ describe("review_comment_window", function()
   end)
 
   describe("?", function()
-    local group
+    local group ---@type integer
 
     before_each(function()
       group = vim.api.nvim_create_augroup("review_comment_window_spec_markdown", {})
@@ -553,7 +563,7 @@ describe("review_comment_window", function()
     end)
 
     it("hands which-key its own keys, not a markdown plugin's, and gives the buffer those back after", function()
-      local listed
+      local listed ---@type string[]
       -- which-key lists the current buffer's maps once its popup is up, whatever buffer it is handed.
       package.loaded["which-key"] = {
         show = function()
@@ -576,13 +586,13 @@ describe("review_comment_window", function()
 
       press(buf, "n", "?")
 
-      local shown = assert(vim.iter(vim.api.nvim_list_wins()):find(function(each)
+      local shown = present(vim.iter(vim.api.nvim_list_wins()):find(function(each)
         return each ~= win and vim.api.nvim_win_get_config(each).relative ~= ""
       end))
       local text = table.concat(vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(shown), 0, -1, false), "\n")
       vim.api.nvim_win_close(shown, true)
-      assert.truthy(text:find("Show these keymaps", 1, true))
-      assert.is_nil(text:find(",ac", 1, true))
+      assert.truthy((text:find("Show these keymaps", 1, true)))
+      assert.is_nil((text:find(",ac", 1, true)))
     end)
   end)
 
@@ -606,7 +616,7 @@ describe("review_comment_window", function()
     ---The source buffer's extmarks that draw virtual lines.
     local function padding()
       return vim.tbl_filter(function(mark)
-        return mark[4].virt_lines ~= nil
+        return present(mark[4]).virt_lines ~= nil
       end, vim.api.nvim_buf_get_extmarks(vim.api.nvim_win_get_buf(source), -1, 0, -1, { details = true }))
     end
 
@@ -676,7 +686,7 @@ describe("review_comment_window", function()
 
     it("hides while held and its line is scrolled out of the source, and comes back with it", function()
       local win = open({ line = 5 })
-      review_comment_window.current().hold(function() end)
+      present(review_comment_window.current()).hold(function() end)
       scroll_to(6)
       assert.is_true(vim.api.nvim_win_get_config(win).hide)
       scroll_to(1)
@@ -685,7 +695,7 @@ describe("review_comment_window", function()
 
     it("hides while only the blank row above it fits under its line", function()
       local win = open({ line = 30 })
-      review_comment_window.current().hold(function() end)
+      present(review_comment_window.current()).hold(function() end)
       local last = vim.fn.win_screenpos(source)[1] + vim.api.nvim_win_get_height(source) - 1
       scroll_to(30 - vim.api.nvim_win_get_height(source) + 2)
       assert.equal(last - 1, row_of(30))
@@ -710,9 +720,9 @@ describe("review_comment_window", function()
       local source_buf = vim.api.nvim_win_get_buf(source)
       vim.api.nvim_buf_set_lines(source_buf, 0, -1, false, vim.api.nvim_buf_get_lines(source_buf, 0, -1, false))
       vim.wait(100, function()
-        return padding()[1][2] == 4
+        return present(padding()[1])[2] == 4
       end)
-      assert.equal(4, padding()[1][2])
+      assert.equal(4, present(padding()[1])[2])
     end)
 
     it("re-fits its width to a resized source", function()
@@ -741,7 +751,7 @@ describe("review_comment_window", function()
       ["a taken save"] = function(buf)
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "text" })
         press(buf, "n", "<C-s>")
-        answer(nil)
+        present(answer)(nil)
       end,
     }) do
       it(("takes its padding with it when %s closes it"):format(name), function()

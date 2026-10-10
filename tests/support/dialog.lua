@@ -1,4 +1,6 @@
 ---Drives the dialog changeset has open, as the keys a user presses.
+local present = require("support.present")
+
 local M = {}
 
 ---The open dialog's window: the current window once it floats over a read-only buffer, which tells it from the
@@ -21,7 +23,7 @@ end
 ---The open dialog's lines, trailing blanks dropped.
 ---@return string[]
 function M.lines()
-  local win = assert(M.win(), "no dialog open")
+  local win = present(M.win(), "no dialog open")
   return vim.tbl_map(function(line)
     return (line:gsub("%s+$", ""))
   end, vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false))
@@ -30,8 +32,7 @@ end
 ---The open dialog's title.
 ---@return string
 function M.title()
-  local title = vim.api.nvim_win_get_config((assert(M.win(), "no dialog open"))).title
-  ---@cast title [string, string][]
+  local title = present(vim.api.nvim_win_get_config(present(M.win(), "no dialog open")).title)
   return vim.trim(table.concat(vim.tbl_map(function(chunk)
     return chunk[1]
   end, title)))
@@ -40,7 +41,7 @@ end
 ---Presses `keys` in the open dialog.
 ---@param keys string In `vim.keycode` notation.
 function M.press(keys)
-  assert(M.win(), "no dialog open")
+  assert.not_nil(M.win(), "no dialog open")
   vim.api.nvim_feedkeys(vim.keycode(keys), "x", false)
 end
 
@@ -48,7 +49,7 @@ end
 ---`getmousepos` says, answering as a terminal would for a click there.
 ---@param text string
 function M.click(text)
-  local win = assert(M.win(), "no dialog open")
+  local win = present(M.win(), "no dialog open")
   for lnum, line in ipairs(vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false)) do
     local col = line:find(text, 1, true)
     if col then
@@ -58,7 +59,8 @@ function M.click(text)
       end
       local ok, err = pcall(M.press, "<LeftRelease>")
       vim.fn.getmousepos = getmousepos
-      assert(ok, err)
+      ---@cast err string?
+      assert.is_true(ok, err)
       return
     end
   end

@@ -1,5 +1,6 @@
 -- The vimdoc, not README.md: it is what :help shows, and the one that names everything.
-local root = vim.fn.fnamemodify(vim.api.nvim_get_runtime_file("plugin/changeset.lua", false)[1], ":h:h")
+local present = require("support.present")
+local root = vim.fn.fnamemodify(present(vim.api.nvim_get_runtime_file("plugin/changeset.lua", false)[1]), ":h:h")
 local doc = table.concat(vim.fn.readfile(root .. "/doc/changeset.nvim.txt"), "\n")
 
 ---Whether the vimdoc defines help tag `tag`.
@@ -64,6 +65,7 @@ describe("doc/changeset.nvim.txt", function()
     end, vim.tbl_values(require("changeset.highlights")))
     assert.is_true(#groups > 0)
     for _, name in ipairs(groups) do
+      ---@cast name string
       assert.is_true(tagged(name), name)
     end
   end)
@@ -87,9 +89,9 @@ describe("doc/changeset.nvim.txt", function()
     local plugs, defaults = 0, 0
     for _, mode in ipairs({ "n", "x" }) do
       for _, map in ipairs(vim.api.nvim_get_keymap(mode)) do
-        if vim.startswith(map.lhs, "<Plug>(changeset") then
+        if vim.startswith(present(map.lhs), "<Plug>(changeset") then
           plugs = plugs + 1
-          assert.is_true(tagged(map.lhs), map.lhs)
+          assert.is_true(tagged(present(map.lhs)), map.lhs)
         elseif vim.startswith(map.rhs or "", "<Plug>(changeset") then
           defaults = defaults + 1
           assert.is_true(keys[map.lhs], mode .. " " .. map.lhs)
@@ -108,6 +110,6 @@ describe("doc/changeset.nvim.txt", function()
     local tags = ok and "\n" .. table.concat(vim.fn.readfile(dir .. "/tags"), "\n") or ""
     vim.fn.delete(dir, "rf")
     assert.is_true(ok, err)
-    assert.truthy(tags:find("\nchangeset%.nvim%-options\t"))
+    assert.truthy((tags:find("\nchangeset%.nvim%-options\t")))
   end)
 end)

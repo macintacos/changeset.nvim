@@ -1,4 +1,5 @@
 local deps = require("support.deps")
+local present = require("support.present")
 
 local PATH = "lua/changeset/init.lua"
 local BLANK = { " ", "Normal" }
@@ -40,13 +41,17 @@ describe("changeset.icons", function()
   end)
 
   it("draws a provider's glyph in Normal when it gives no highlight", function()
-    MiniIcons = {
+    -- The provider reads mini.icons as a global, so the spec swaps that global itself.
+    -- selene: allow(global_usage)
+    rawset(_G, "MiniIcons", {
       get = function()
         return "x"
       end,
-    }
+    })
     assert.are.same({ "x", "Normal" }, { fresh().get("file", PATH) })
-    MiniIcons = nil
+    -- The provider reads mini.icons as a global, so the spec swaps that global itself.
+    -- selene: allow(global_usage)
+    rawset(_G, "MiniIcons", nil)
   end)
 
   it("prefers mini.icons over nvim-web-devicons once it is set up", function()
@@ -54,22 +59,24 @@ describe("changeset.icons", function()
     require("mini.icons").setup()
     local icons = fresh()
     for _, case in ipairs({ { "file", PATH }, { "directory", "src" }, { "lsp", "Function" } }) do
-      local glyph, hl = MiniIcons.get(case[1], case[2])
+      local glyph, hl = present(MiniIcons).get(case[1], case[2])
       assert.are.same({ glyph, hl }, { icons.get(case[1], case[2]) })
     end
     assert.equal("mini.icons", icons.source())
   end)
 
   it("sees a mini.icons that the devicons probe sets up", function()
-    MiniIcons = nil
+    -- The provider reads mini.icons as a global, so the spec swaps that global itself.
+    -- selene: allow(global_usage)
+    rawset(_G, "MiniIcons", nil)
     package.loaded["nvim-web-devicons"] = nil
     package.preload["nvim-web-devicons"] = function()
       require("mini.icons").setup()
-      MiniIcons.mock_nvim_web_devicons()
+      present(MiniIcons).mock_nvim_web_devicons()
       return package.loaded["nvim-web-devicons"]
     end
     local got = { fresh().get("directory", "src") }
-    local glyph, hl = MiniIcons.get("directory", "src")
+    local glyph, hl = present(MiniIcons).get("directory", "src")
     assert.are.same({ glyph, hl }, got)
   end)
 end)

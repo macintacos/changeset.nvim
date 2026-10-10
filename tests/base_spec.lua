@@ -3,6 +3,7 @@ local Notify = require("support.notify")
 local Paths = require("changeset.paths")
 local base = require("changeset.base")
 local fixture = require("support.git")
+local present = require("support.present")
 local fork_point = require("changeset.fork_point")
 
 ---Commit a file named `name` at `date`, which orders the branches whose tip it is.
@@ -30,11 +31,15 @@ end
 ---What the current branch is compared against now.
 ---@return string
 local function against()
-  return assert(fork_point.get(Paths.root(0), "feature")).against
+  return present((fork_point.get(Paths.root(0), "feature"))).against
 end
 
 describe(":Changeset base", function()
-  local root, previous, notes, restore, real_select
+  local root ---@type string
+  local previous ---@type string
+  local notes ---@type support.notify.Note[]
+  local restore ---@type fun()
+  local real_select
   ---@type { items: changeset.BaseItem[], choose: fun(item: changeset.BaseItem?), format: fun(item: changeset.BaseItem): string }?
   local offered
   ---Each commit's short hash, by the file it added.
@@ -64,7 +69,7 @@ describe(":Changeset base", function()
     notes, restore = Notify.capture()
     real_select, offered = vim.ui.select, nil
     vim.ui.select = function(items, opts, on_choice)
-      offered = { items = items, choose = on_choice, format = opts.format_item }
+      offered = { items = items, choose = on_choice, format = present(opts.format_item) }
     end
   end)
 
@@ -108,13 +113,13 @@ describe(":Changeset base", function()
   it("offers the other branches, local and remote, the one committed to last first", function()
     base.pick("branch")
 
-    assert.same({ "parent", "main", "origin/main" }, refs(assert(offered).items))
+    assert.same({ "parent", "main", "origin/main" }, refs(present(offered).items))
   end)
 
   it("offers the tags, the newest first", function()
     base.pick("tag")
 
-    assert.same({ "v2", "v1" }, refs(assert(offered).items))
+    assert.same({ "v2", "v1" }, refs(present(offered).items))
   end)
 
   it("says there are no tags rather than offering none", function()
@@ -131,20 +136,20 @@ describe(":Changeset base", function()
 
     assert.same(
       { short["feature.txt"], short["parent.txt"], short["main.txt"], short.root },
-      refs(assert(offered).items)
+      refs(present(offered).items)
     )
   end)
 
   it("names a commit by its hash and subject", function()
     base.pick("commit")
-    local picker = assert(offered)
+    local picker = present(offered)
 
-    assert.equal(short["feature.txt"] .. " feature.txt", picker.format(picker.items[1]))
+    assert.equal(short["feature.txt"] .. " feature.txt", picker.format(present(picker.items[1])))
   end)
 
   it("compares against the branch picked", function()
     base.pick("branch")
-    local picker = assert(offered)
+    local picker = present(offered)
     picker.choose(picker.items[2])
 
     assert.equal("main", against())
@@ -152,7 +157,7 @@ describe(":Changeset base", function()
 
   it("compares against the tag picked", function()
     base.pick("tag")
-    local picker = assert(offered)
+    local picker = present(offered)
     picker.choose(picker.items[2])
 
     assert.equal("v1", against())
@@ -160,7 +165,7 @@ describe(":Changeset base", function()
 
   it("compares against the commit picked", function()
     base.pick("commit")
-    local picker = assert(offered)
+    local picker = present(offered)
     picker.choose(picker.items[3])
 
     assert.equal(short["main.txt"], against())
@@ -170,7 +175,7 @@ describe(":Changeset base", function()
     base.set("main")
 
     base.pick("branch")
-    assert(offered).choose(nil)
+    present(offered).choose(nil)
 
     assert.equal("main", against())
   end)

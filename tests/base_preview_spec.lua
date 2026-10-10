@@ -1,5 +1,6 @@
 local Fixture = require("support.git")
 local base_preview = require("changeset.base_preview")
+local present = require("support.present")
 local render = require("changeset.render")
 
 ---Each line of `buf` as it reads on screen, right-aligned text included, glyphs dropped and runs of spaces squeezed.
@@ -10,7 +11,7 @@ local function screen(buf)
   for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
     local right = {}
     for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, -1, { i - 1, 0 }, { i - 1, -1 }, { details = true })) do
-      for _, chunk in ipairs(mark[4].virt_text or {}) do
+      for _, chunk in ipairs(present(mark[4]).virt_text or {}) do
         right[#right + 1] = chunk[1]
       end
     end
@@ -21,7 +22,9 @@ local function screen(buf)
 end
 
 describe("changeset.base_preview", function()
-  local root, buf, win
+  local root ---@type string
+  local buf ---@type integer
+  local win ---@type integer
 
   -- `trunk` holding `mod.lua`, then `feature` changing it and adding `new.lua` in one commit, checked out.
   before_each(function()
@@ -77,11 +80,11 @@ describe("changeset.base_preview", function()
     local lines = shown("trunk")
 
     assert.same({ "c6", "c5", "c4", "c3", "c2", "2 more" }, {
-      lines[4]:match("%S+$"),
-      lines[5]:match("%S+$"),
-      lines[6]:match("%S+$"),
-      lines[7]:match("%S+$"),
-      lines[8]:match("%S+$"),
+      present(present(lines[4]):match("%S+$")),
+      present(present(lines[5]):match("%S+$")),
+      present(present(lines[6]):match("%S+$")),
+      present(present(lines[7]):match("%S+$")),
+      present(present(lines[8]):match("%S+$")),
       lines[9],
     })
     assert.equal("mod.lua +1 -1", lines[11])
@@ -98,7 +101,7 @@ describe("changeset.base_preview", function()
 
     base_preview.show(buf, root, sha, "commit")
 
-    local first = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
+    local first = present(vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1])
     assert.truthy(vim.startswith(vim.trim(first), render.REF_ICONS.commit), first)
   end)
 
@@ -120,7 +123,7 @@ describe("changeset.base_preview", function()
     local lines = shown("nowhere")
 
     assert.equal("nowhere", lines[1])
-    assert.truthy(lines[3]:find("no history", 1, true), lines[3])
+    assert.truthy(present(lines[3]):find("no history", 1, true), lines[3])
   end)
 
   it("leaves a preview the picker has moved past alone", function()

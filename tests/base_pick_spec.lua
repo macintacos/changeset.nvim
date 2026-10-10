@@ -5,12 +5,14 @@ require("mini.icons").setup()
 require("support.gh")
 
 local Fixture = require("support.git")
+local present = require("support.present")
 local Paths = require("changeset.paths")
 local base = require("changeset.base")
 local fork_point = require("changeset.fork_point")
 
 describe("the base pickers with mini.pick", function()
-  local root, previous
+  local root ---@type string
+  local previous ---@type string
 
   -- `trunk`, then `feature` off it, checked out, and `other` off trunk, committed to last.
   before_each(function()
@@ -28,7 +30,7 @@ describe("the base pickers with mini.pick", function()
 
   it("compares against the item chosen once the list has loaded", function()
     local function step()
-      if not (MiniPick.is_picker_active() and #(MiniPick.get_picker_items() or {}) == 2) then
+      if not (present(MiniPick).is_picker_active() and #(present(MiniPick).get_picker_items() or {}) == 2) then
         return vim.defer_fn(step, 20)
       end
       vim.api.nvim_feedkeys("other" .. vim.keycode("<CR>"), "t", false)
@@ -37,7 +39,7 @@ describe("the base pickers with mini.pick", function()
 
     base.pick("branch")
 
-    assert.equal("other", assert(fork_point.get(Paths.root(0), "feature")).against)
+    assert.equal("other", present((fork_point.get(Paths.root(0), "feature"))).against)
   end)
 
   it("draws each item under its glyph, with when it was last committed to at the right edge", function()
@@ -45,13 +47,13 @@ describe("the base pickers with mini.pick", function()
 
     base._show(buf, { { text = "origin/main", ref = "origin/main", date = "5 hours ago", kind = "branch" } }, {})
 
-    local line = vim.api.nvim_buf_get_lines(buf, 0, -1, false)[1]
+    local line = present(vim.api.nvim_buf_get_lines(buf, 0, -1, false)[1])
     local marks = vim.api.nvim_buf_get_extmarks(buf, -1, 0, -1, { details = true })
     local right = vim.iter(marks):find(function(mark)
       return mark[4].virt_text_pos == "right_align"
     end)
     assert.truthy(vim.endswith(line, " origin/main"), line)
-    assert.equal("5 hours ago", vim.trim(assert(right)[4].virt_text[1][1]))
+    assert.equal("5 hours ago", vim.trim(present(right)[4].virt_text[1][1]))
     vim.api.nvim_buf_delete(buf, { force = true })
   end)
 

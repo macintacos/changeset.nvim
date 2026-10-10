@@ -11,7 +11,9 @@ local Changes = require("support.changes")
 local Fixture = require("support.git")
 local Sidebar = require("support.sidebar")
 local Symbols = require("support.symbols")
+local present = require("support.present")
 
+---@type string[]
 local FILES = { "a.lua", "b.lua", "c.lua", "d.lua", "e.lua" }
 
 ---Every extmark on `buf`, in every namespace, without the ids that tell two draws apart.
@@ -19,8 +21,9 @@ local FILES = { "a.lua", "b.lua", "c.lua", "d.lua", "e.lua" }
 ---@return string[] Sorted.
 local function marks(buf)
   local out = vim.tbl_map(function(mark)
-    mark[4].id = nil
-    return vim.inspect({ mark[2], mark[3], mark[4] })
+    local details = present(mark[4]) --[[@as table]]
+    details.id = nil
+    return vim.inspect({ mark[2], mark[3], details })
   end, vim.api.nvim_buf_get_extmarks(buf, -1, 0, -1, { details = true }))
   table.sort(out)
   return out
@@ -31,8 +34,8 @@ end
 ---The sidebar's text, marks and scroll as they stand.
 ---@return changeset.spec.Drawn
 local function drawn()
-  local buf = assert(window.buf())
-  local view = vim.api.nvim_win_call(assert(window.win()), vim.fn.winsaveview)
+  local buf = present(window.buf())
+  local view = vim.api.nvim_win_call(present(window.win()), vim.fn.winsaveview)
   return {
     text = vim.api.nvim_buf_get_lines(buf, 0, -1, false),
     marks = marks(buf),
@@ -52,7 +55,7 @@ end
 ---@param fn fun()
 ---@return { [1]: integer, [2]: integer }[]
 local function set_ranges(fn)
-  local buf, real, ranges = assert(window.buf()), vim.api.nvim_buf_set_lines, {}
+  local buf, real, ranges = present(window.buf()), vim.api.nvim_buf_set_lines, {}
   vim.api.nvim_buf_set_lines = function(b, first, last, strict, lines)
     if b == buf then
       ranges[#ranges + 1] = { first, last == -1 and vim.api.nvim_buf_line_count(b) or last }
@@ -61,7 +64,7 @@ local function set_ranges(fn)
   end
   local ok, err = pcall(fn)
   vim.api.nvim_buf_set_lines = real
-  assert(ok, err)
+  assert.is_true(ok, tostring(err))
   return ranges
 end
 
@@ -69,8 +72,8 @@ end
 ---@param path string
 ---@return integer first, integer last Exclusive.
 local function block_of(path)
-  local first
-  for i, row in ipairs(sidebar_state.current().view:visible()) do
+  local first ---@type integer?
+  for i, row in ipairs(present(sidebar_state.current()).view:visible()) do
     if first and row.depth <= 1 then
       return first, i - 1
     end
@@ -78,11 +81,13 @@ local function block_of(path)
       first = i - 1
     end
   end
-  return assert(first), #sidebar_state.current().view:visible()
+  return present(first), #present(sidebar_state.current()).view:visible()
 end
 
 describe("changeset draw", function()
-  local tmp, previous_dir, source
+  local tmp ---@type string
+  local previous_dir ---@type string
+  local source ---@type support.symbols.Source
 
   before_each(function()
     tmp, previous_dir = Fixture.enter_tempdir()
@@ -143,7 +148,7 @@ describe("changeset draw", function()
     local first, last = block_of("b.lua")
 
     local ranges = set_ranges(function()
-      sidebar_state.current().view:step_out(first + 1)
+      present(sidebar_state.current()).view:step_out(first + 1)
       draw.draw()
     end)
 
@@ -179,7 +184,7 @@ describe("changeset draw", function()
 
   it("draws every line again once something else changed the sidebar's buffer", function()
     draw.draw()
-    local buf = assert(window.buf())
+    local buf = present(window.buf())
     local count = vim.api.nvim_buf_line_count(buf)
     vim.bo[buf].modifiable = true
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(("x"):rep(count, "\n"), "\n"))
@@ -192,7 +197,7 @@ describe("changeset draw", function()
   end)
 
   it("leaves the sidebar as a draw from nothing would, whatever happened since", function()
-    local win = assert(window.win())
+    local win = present(window.win())
     local queries = { "", "", "one", "de", "b.lua", "zzz" }
     local kinds = { {}, {}, { Variable = true }, { Function = true }, { Method = true, Variable = true } }
     local unanswered = vim.deepcopy(FILES)
@@ -214,7 +219,7 @@ describe("changeset draw", function()
         view:step_out(pick(#view:visible()))
       end,
       function(view)
-        view:fold_files(sidebar_state.current().rows)
+        view:fold_files(present(sidebar_state.current()).rows)
       end,
       function(view)
         view:unfold_files()
@@ -234,16 +239,18 @@ describe("changeset draw", function()
         end
       end,
       function(_, pick)
-        local buf = assert(window.buf())
+        local buf = present(window.buf())
         vim.api.nvim_win_set_cursor(win, { pick(vim.api.nvim_buf_line_count(buf)), 0 })
       end,
+      ---@param pick fun(n: integer): integer
       function(_, pick)
         vim.api.nvim_win_call(win, function()
           vim.fn.winrestview({ topline = pick(vim.api.nvim_buf_line_count(0)), topfill = pick(3) - 1 })
         end)
       end,
+      ---@param pick fun(n: integer): integer
       function(_, pick)
-        local comment = { path = FILES[pick(#FILES)], line = pick(12), body = "a review comment" }
+        local comment = { path = present(FILES[pick(#FILES)]), line = pick(12), body = "a review comment" }
         comment_store.keep(root, comment)
         comments[#comments + 1] = comment
       end,
@@ -252,8 +259,9 @@ describe("changeset draw", function()
           comment_store.drop(root, table.remove(comments, pick(#comments)))
         end
       end,
+      ---@param pick fun(n: integer): integer
       function(_, pick)
-        local path = FILES[pick(#FILES)]
+        local path = present(FILES[pick(#FILES)])
         vim.fn.writefile(Fixture.numbered(12, { [2] = true, [9] = true, [pick(12)] = true }, "rewritten"), path)
         local before = diffs
         build.refresh()
@@ -269,7 +277,7 @@ describe("changeset draw", function()
     for seed = 1, 12 do
       math.randomseed(seed)
       for _ = 1, 15 do
-        steps[math.random(#steps)](sidebar_state.current().view, math.random)
+        present(steps[math.random(#steps)])(present(sidebar_state.current()).view, math.random)
         draw.draw()
         Sidebar.flush()
       end
@@ -281,7 +289,9 @@ describe("changeset draw", function()
 end)
 
 describe("changeset draw in a short sidebar", function()
-  local tmp, previous_dir, source
+  local tmp ---@type string
+  local previous_dir ---@type string
+  local source ---@type support.symbols.Source
 
   before_each(function()
     tmp, previous_dir = Fixture.enter_tempdir()
@@ -311,7 +321,7 @@ describe("changeset draw in a short sidebar", function()
     -- A drawer, or a sidebar sharing its column.
     vim.cmd("botright 12new")
     vim.cmd.wincmd("p")
-    vim.api.nvim_win_set_height(assert(window.win()), 10)
+    vim.api.nvim_win_set_height(present(window.win()), 10)
   end)
 
   after_each(function()
@@ -324,11 +334,11 @@ describe("changeset draw in a short sidebar", function()
   end)
 
   it("keeps its view when a redraw rewrites its top line and the cursor sits on its last screen row", function()
-    local win = assert(window.win())
+    local win = present(window.win())
     vim.wo[win].scrolloff = 0
-    local view = sidebar_state.current().view
+    local view = present(sidebar_state.current()).view
     view:step_out(1) -- the Comments section, folded to its header
-    view:fold_files(sidebar_state.current().rows)
+    view:fold_files(present(sidebar_state.current()).rows)
     draw.draw()
     Sidebar.flush()
     vim.api.nvim_win_set_cursor(win, { 1, 0 })
@@ -341,7 +351,7 @@ describe("changeset draw in a short sidebar", function()
     Sidebar.flush()
     local before = drawn().view
 
-    comment_store.keep(build.current().root, { path = "lua/b.lua", line = 9, body = "second" })
+    comment_store.keep(present(build.current()).root, { path = "lua/b.lua", line = 9, body = "second" })
     draw.draw()
     Sidebar.flush()
 

@@ -1,7 +1,8 @@
 local buffers = require("changeset.buffers")
+local present = require("support.present")
 
 describe("changeset.buffers", function()
-  local tmp
+  local tmp ---@type string
 
   before_each(function()
     tmp = vim.fn.tempname()
@@ -22,7 +23,7 @@ describe("changeset.buffers", function()
       for _, name in ipairs({ "a1.lua", "a[1].lua" }) do
         local path = vim.fs.normalize(tmp .. "/" .. name)
         vim.fn.writefile({ "x" }, path)
-        loaded[name] = assert(buffers.load(path))
+        loaded[name] = present(buffers.load(path))
       end
 
       assert.equal(loaded["a[1].lua"], buffers.loaded(vim.api.nvim_buf_get_name(loaded["a[1].lua"])))
@@ -31,7 +32,7 @@ describe("changeset.buffers", function()
     it("finds nothing for a file with no loaded buffer, though another's name starts with it", function()
       local path = vim.fs.normalize(tmp .. "/a.lua")
       vim.fn.writefile({ "x" }, path .. ".orig")
-      assert(buffers.load(path .. ".orig"))
+      assert.is_truthy(buffers.load(path .. ".orig"))
 
       assert.is_nil(buffers.loaded(path))
     end)
@@ -45,7 +46,7 @@ describe("changeset.buffers", function()
     it("finds the buffer loaded finds", function()
       local path = vim.fs.normalize(tmp .. "/a.lua")
       vim.fn.writefile({ "x" }, path)
-      local buf = assert(buffers.load(path))
+      local buf = present(buffers.load(path))
       local name = vim.api.nvim_buf_get_name(buf)
 
       assert.equal(buf, buffers.loaded(name))
@@ -55,7 +56,7 @@ describe("changeset.buffers", function()
     it("finds nothing for a file with no loaded buffer", function()
       local path = vim.fs.normalize(tmp .. "/a.lua")
       vim.fn.writefile({ "x" }, path .. ".orig")
-      assert(buffers.load(path .. ".orig"))
+      assert.is_truthy(buffers.load(path .. ".orig"))
 
       assert.is_nil(buffers.index()[path])
     end)
@@ -66,7 +67,7 @@ describe("changeset.buffers", function()
       local name = vim.fn.resolve(path)
       local first = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_name(first, vim.fs.dirname(name) .. "/./a.lua")
-      assert(buffers.load(path))
+      assert.is_truthy(buffers.load(path))
 
       assert.equal(first, buffers.loaded(name))
       assert.equal(first, buffers.index()[name])
@@ -74,7 +75,7 @@ describe("changeset.buffers", function()
   end)
 
   describe("lines", function()
-    local path
+    local path ---@type string
 
     before_each(function()
       path = vim.fs.normalize(tmp .. "/a.lua")
@@ -88,7 +89,7 @@ describe("changeset.buffers", function()
     end)
 
     it("reads a loaded buffer's unwritten edits over the file on disk", function()
-      local buf = assert(buffers.load(path))
+      local buf = present(buffers.load(path))
       vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "edited" })
 
       assert.same({ "edited", "three" }, buffers.lines(path, 2, 3))
@@ -111,7 +112,7 @@ describe("changeset.buffers", function()
     end)
 
     it("finds the buffer in an index taken before", function()
-      local buf = assert(buffers.load(path))
+      local buf = present(buffers.load(path))
       local index = buffers.index()
       vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "edited" })
 
@@ -124,7 +125,7 @@ describe("changeset.buffers", function()
       local path = tmp .. "/a.lua"
       vim.fn.writefile({ "local x = 1", "return x" }, path)
 
-      local buf = assert(buffers.load(path))
+      local buf = present(buffers.load(path))
 
       assert.not_nil(buf)
       assert.is_true(vim.api.nvim_buf_is_loaded(buf))
@@ -148,7 +149,7 @@ describe("changeset.buffers", function()
     it("detects the filetype even when called from inside an autocommand", function()
       local path = tmp .. "/a.lua"
       vim.fn.writefile({ "local x = 1" }, path)
-      local buf
+      local buf ---@type integer?
 
       vim.api.nvim_create_autocmd("User", {
         pattern = "ChangesetBuffersSpec",
@@ -159,13 +160,15 @@ describe("changeset.buffers", function()
       })
       vim.api.nvim_exec_autocmds("User", { pattern = "ChangesetBuffersSpec" })
 
-      assert.equal("lua", vim.bo[buf].filetype)
+      assert.equal("lua", vim.bo[present(buf)].filetype)
     end)
 
     describe("with a review comment kept on the file", function()
       local comment_store = require("changeset.comment_store")
       local Fixture = require("support.git")
-      local repo, previous_dir, path
+      local repo ---@type string
+      local previous_dir ---@type string
+      local path ---@type string
 
       before_each(function()
         require("changeset.review_comments")
@@ -201,13 +204,14 @@ describe("changeset.buffers", function()
         local ok, buf = pcall(buffers.load, path)
         comment_store.comments = real
 
-        assert(ok, buf)
+        assert.is_true(ok, tostring(buf))
+        ---@cast buf integer?
         assert.are.equal(1, reads)
-        assert.are.equal(1, marks(assert(buf)))
+        assert.are.equal(1, marks(present(buf)))
       end)
 
       it("draws the file's review comment marks when loaded from inside an autocommand", function()
-        local buf
+        local buf ---@type integer?
         vim.api.nvim_create_autocmd("User", {
           pattern = "ChangesetSpecLoad",
           once = true,
@@ -218,7 +222,7 @@ describe("changeset.buffers", function()
 
         vim.api.nvim_exec_autocmds("User", { pattern = "ChangesetSpecLoad" })
 
-        assert.are.equal(1, marks(assert(buf)))
+        assert.are.equal(1, marks(present(buf)))
       end)
     end)
 
@@ -234,7 +238,7 @@ describe("changeset.buffers", function()
       assert.is_nil(buffers.load(tmp))
     end)
     describe("with swap files on, as they are by default", function()
-      local swapdir
+      local swapdir ---@type string
 
       before_each(function()
         swapdir = tmp .. "/swap"
@@ -273,7 +277,7 @@ describe("changeset.buffers", function()
       end)
 
       it("gives the buffer its swap file once the user enters it", function()
-        local buf = assert(buffers.load(tmp .. "/mod.lua"))
+        local buf = present(buffers.load(tmp .. "/mod.lua"))
 
         vim.cmd.buffer(buf)
 
@@ -292,7 +296,7 @@ describe("changeset.buffers", function()
             vim.opt_local.swapfile = false
           end,
         })
-        local buf = assert(buffers.load(tmp .. "/notes.gpg"))
+        local buf = present(buffers.load(tmp .. "/notes.gpg"))
 
         vim.cmd.buffer(buf)
         vim.api.nvim_del_augroup_by_id(group)

@@ -8,6 +8,7 @@ local config = require("changeset.config")
 local window = require("changeset.window")
 local Fixture = require("support.git")
 local Sidebar = require("support.sidebar")
+local present = require("support.present")
 
 -- One session, told case by case: each case starts where the one before left it. plenary runs each case as it is
 -- declared, so the repository is made before the first and removed after the last.
@@ -31,9 +32,9 @@ describe("the unified diff over a session", function()
   ---@param win integer
   ---@return boolean
   local function shows(win)
-    return vim.wait(5000, function()
+    return (vim.wait(5000, function()
       return view(win) ~= nil
-    end, 20)
+    end, 20))
   end
 
   ---Whether `win` still shows no unified diff half a second on.
@@ -62,7 +63,7 @@ describe("the unified diff over a session", function()
   ---@return string
   local function sign(win)
     vim.cmd.redraw()
-    return vim.fn.screenstring(vim.fn.screenpos(win, 1, 1).row, vim.fn.getwininfo(win)[1].wincol)
+    return vim.fn.screenstring(vim.fn.screenpos(win, 1, 1).row, present(vim.fn.getwininfo(win)[1]).wincol)
   end
 
   it("opens nothing before the sidebar opens, though the tree is built", function()
@@ -71,7 +72,7 @@ describe("the unified diff over a session", function()
     changeset.refresh()
 
     assert.is_true(vim.wait(5000, function()
-      return assert(build.current()).collected
+      return present(build.current()).collected
     end, 20))
     assert.is_true(bare(file_window("mod.lua")))
   end)

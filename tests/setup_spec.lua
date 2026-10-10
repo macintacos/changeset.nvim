@@ -4,6 +4,7 @@ require("mini.icons").setup()
 local changeset = require("changeset")
 local window = require("changeset.window")
 local Fixture = require("support.git")
+local present = require("support.present")
 
 ---@param buf integer
 ---@return string[]
@@ -15,23 +16,23 @@ end
 local function open_sidebar()
   vim.cmd.edit("mod.lua")
   changeset.open()
-  local buf
+  local buf ---@type integer?
   vim.wait(10000, function()
     buf = window.buf()
     return buf ~= nil and #lines_of(buf) > 1
   end, 25)
-  assert(buf, "the sidebar never opened a buffer")
+  local shown = present(buf, "the sidebar never opened a buffer")
 
   local settled = vim.wait(10000, function()
-    return not table.concat(lines_of(buf), "\n"):find("reading symbols", 1, true)
+    return not table.concat(lines_of(shown), "\n"):find("reading symbols", 1, true)
   end, 25)
-  assert(settled, "symbols never finished resolving")
-  return buf
+  assert.is_truthy(settled, "symbols never finished resolving")
+  return shown
 end
 
 ---@param key string
 local function press(key)
-  local win = assert(window.win())
+  local win = present(window.win())
   vim.api.nvim_set_current_win(win)
   vim.cmd.normal(key)
 end
@@ -45,7 +46,7 @@ end
 
 ---The text of the float `?` opened, closing it.
 local function help_text()
-  local float = assert(vim.iter(vim.api.nvim_list_wins()):find(function(win)
+  local float = present(vim.iter(vim.api.nvim_list_wins()):find(function(win)
     return vim.api.nvim_win_get_config(win).relative ~= ""
   end))
   local text = table.concat(vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(float), 0, -1, false), "\n")
@@ -58,13 +59,14 @@ end
 local function help_keys()
   local keys = {}
   for line in help_text():gmatch("[^\n]+") do
-    table.insert(keys, (assert(line:match("^(%S+)%s%s"), line)))
+    table.insert(keys, (present(line:match("^(%S+)%s%s"), line)))
   end
   return keys
 end
 
 describe("changeset setup", function()
-  local tmp, previous_dir
+  local tmp ---@type string
+  local previous_dir ---@type string
 
   before_each(function()
     tmp, previous_dir = Fixture.enter_tempdir()
@@ -136,7 +138,7 @@ describe("changeset setup", function()
     local buf = open_sidebar()
     local lnum = vim.fn.match(lines_of(buf), [[other\.lua]]) + 1
     -- Entering the sidebar moves its cursor to the file being edited, so enter it before placing the cursor.
-    vim.api.nvim_set_current_win((assert(window.win())))
+    vim.api.nvim_set_current_win((present(window.win())))
     vim.api.nvim_win_set_cursor(0, { lnum, 0 })
 
     vim.cmd.normal(vim.keycode("<S-CR>"))
@@ -153,7 +155,7 @@ describe("changeset setup", function()
     local buf = open_sidebar()
     local origin = vim.fn.bufwinid("mod.lua")
     local lnum = vim.fn.match(lines_of(buf), [[other\.lua]]) + 1
-    vim.api.nvim_set_current_win((assert(window.win())))
+    vim.api.nvim_set_current_win((present(window.win())))
     vim.api.nvim_win_set_cursor(0, { lnum, 0 })
 
     vim.api.nvim_feedkeys(vim.keycode(key), "x", false)
@@ -178,23 +180,24 @@ describe("changeset setup", function()
 
   it("searches the tree on /", function()
     local buf = open_sidebar()
-    local win = assert(window.win())
+    local win = present(window.win())
     vim.api.nvim_set_current_win(win)
 
     vim.api.nvim_feedkeys(vim.keycode([[/other\.lua<CR>]]), "xt", false)
 
     assert.equal(win, vim.api.nvim_get_current_win())
-    assert.truthy(lines_of(buf)[vim.api.nvim_win_get_cursor(win)[1]]:find("other.lua", 1, true))
+    local row = vim.api.nvim_win_get_cursor(win)[1]
+    assert.truthy((present(lines_of(buf)[row]):find("other.lua", 1, true)))
   end)
 
   it("names the bound jump key in the footer", function()
     changeset.setup({ keymaps = { jump = "o" } })
     open_sidebar()
 
-    local win = assert(window.win())
-    local footer = vim.api.nvim_eval_statusline(vim.wo[win].statusline, { winid = win, maxwidth = 200 }).str
-    assert.truthy(footer:find("o open", 1, true))
-    assert.falsy(footer:find("<CR>", 1, true))
+    local win = present(window.win())
+    local footer = present(vim.api.nvim_eval_statusline(vim.wo[win].statusline, { winid = win, maxwidth = 200 }).str)
+    assert.truthy((footer:find("o open", 1, true)))
+    assert.falsy((footer:find("<CR>", 1, true)))
   end)
 
   it("lets a FileType changeset handler set the sidebar window's options", function()
@@ -207,7 +210,7 @@ describe("changeset setup", function()
     open_sidebar()
     vim.api.nvim_del_autocmd(id)
 
-    assert.equal("1", vim.wo[assert(window.win())].colorcolumn)
+    assert.equal("1", vim.wo[present(window.win())].colorcolumn)
   end)
 
   it("applies a second setup() at the next open, not to the open sidebar", function()

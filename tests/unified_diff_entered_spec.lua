@@ -8,6 +8,7 @@ local pick = require("changeset.pick")
 local window = require("changeset.window")
 local Fixture = require("support.git")
 local Sidebar = require("support.sidebar")
+local present = require("support.present")
 
 -- A file stays entered for the rest of the session, so each case enters, or only looks at, a file of its own.
 local FILES = {
@@ -51,16 +52,16 @@ describe("the unified diff once the sidebar closes under keep = entered", functi
   ---@param win integer
   ---@return boolean
   local function shows(win)
-    return vim.wait(5000, function()
+    return (vim.wait(5000, function()
       return view(win) ~= nil
-    end, 20)
+    end, 20))
   end
 
   ---The window showing `name`.lua, in any tabpage.
   ---@param name string
   ---@return integer
   local function window_of(name)
-    return assert(vim.fn.win_findbuf(vim.fn.bufnr(name .. ".lua"))[1], name .. ".lua is in no window")
+    return present(vim.fn.win_findbuf(vim.fn.bufnr(name .. ".lua"))[1], name .. ".lua is in no window")
   end
 
   ---Close the sidebar, then whether the window showing `name`.lua keeps its unified diff.
@@ -104,7 +105,7 @@ describe("the unified diff once the sidebar closes under keep = entered", functi
   ---Pick `name`.lua from the picker, as `vim.ui.select` answers.
   ---@param name string
   local function pick_file(name)
-    local choose
+    local choose ---@type fun()?
     vim.ui.select = function(items, _, on_choice)
       choose = function()
         on_choice(vim.iter(items):find(function(item)
@@ -114,7 +115,7 @@ describe("the unified diff once the sidebar closes under keep = entered", functi
     end
     pick.pick()
     vim.ui.select = real_select
-    assert(choose, "the picker offered nothing")()
+    present(choose, "the picker offered nothing")()
   end
 
   before_each(function()
@@ -156,7 +157,7 @@ describe("the unified diff once the sidebar closes under keep = entered", functi
   end)
 
   it("keeps it on the file a walk opens", function()
-    vim.api.nvim_win_set_cursor(assert(window.win()), { line_of("vsplit.lua"), 0 })
+    vim.api.nvim_win_set_cursor(present(window.win()), { line_of("vsplit.lua"), 0 })
 
     changeset.step(1, "file")
 
@@ -184,7 +185,7 @@ describe("the unified diff once the sidebar closes under keep = entered", functi
   end)
 
   it("closes it on a file ]g previewed in the window it was pressed in", function()
-    vim.api.nvim_win_set_cursor(assert(window.win()), { line_of("step.lua") - 1, 0 })
+    vim.api.nvim_win_set_cursor(present(window.win()), { line_of("step.lua") - 1, 0 })
 
     changeset.preview_step(1)
     Sidebar.flush()

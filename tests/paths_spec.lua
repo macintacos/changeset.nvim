@@ -1,9 +1,12 @@
 local Paths = require("changeset.paths")
 local Notify = require("support.notify")
+local present = require("support.present")
 
 describe("changeset.paths", function()
   describe("copy", function()
-    local has, restore_notify, notes
+    local has
+    local restore_notify ---@type fun()
+    local notes ---@type support.notify.Note[]
 
     before_each(function()
       has = vim.fn.has
@@ -24,7 +27,7 @@ describe("changeset.paths", function()
       Paths.copy("a.lua:4", "relative path:line")
 
       assert.equal("a.lua:4", vim.fn.getreg('"'))
-      assert.truthy(notes[1].msg:find('"', 1, true))
+      assert.truthy((present(notes[1]).msg:find('"', 1, true)))
     end)
   end)
 

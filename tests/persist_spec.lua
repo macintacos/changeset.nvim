@@ -8,6 +8,7 @@ local Notify = require("support.notify")
 local Cursor = require("support.cursor")
 local Sidebar = require("support.sidebar")
 local Symbols = require("support.symbols")
+local present = require("support.present")
 
 local function focus_terminal()
   vim.cmd("new")
@@ -36,7 +37,8 @@ local function restore_session(position, focused)
 end
 
 describe("changeset position in a session", function()
-  local tmp, previous_dir
+  local tmp ---@type string
+  local previous_dir ---@type string
 
   -- The tree resolves its repo from the current buffer, which falls back to the
   -- process cwd, and the cases edit relative paths, so it has to be entered.
@@ -114,8 +116,8 @@ describe("changeset position in a session", function()
     Sidebar.settle()
     Sidebar.flush()
 
-    assert.truthy(Sidebar.line_with(highlights.HERE_HL):find("Other changes", 1, true))
-    assert.truthy(Sidebar.cursor_line():find("other.lua", 1, true))
+    assert.truthy((present(Sidebar.line_with(highlights.HERE_HL)):find("Other changes", 1, true)))
+    assert.truthy((Sidebar.cursor_line():find("other.lua", 1, true)))
   end)
 
   it("brings the sidebar back scrolled as it was", function()
@@ -123,7 +125,7 @@ describe("changeset position in a session", function()
     changeset.open()
     Sidebar.settle()
     Sidebar.cursor_to("L8")
-    local win = assert(window.win())
+    local win = present(window.win())
     local lnum = vim.api.nvim_win_get_cursor(win)[1]
     vim.api.nvim_win_call(win, function()
       vim.fn.winrestview({ topline = lnum - 1 })
@@ -139,7 +141,7 @@ describe("changeset position in a session", function()
     Sidebar.settle()
     Sidebar.flush()
 
-    assert.truthy(Sidebar.cursor_line():find("L8", 1, true))
+    assert.truthy((Sidebar.cursor_line():find("L8", 1, true)))
     assert.equal(lnum - 1, vim.fn.line("w0", window.win()))
   end)
 
@@ -152,7 +154,7 @@ describe("changeset position in a session", function()
     local before = options()
     changeset.open()
     Sidebar.settle()
-    local sidebar = assert(window.win())
+    local sidebar = present(window.win())
     vim.api.nvim_set_current_win(sidebar)
 
     -- How a session file starts: it closes every window but the focused one and opens its first file there.
@@ -199,7 +201,7 @@ describe("changeset position in a session", function()
     focus_terminal()
     Sidebar.flush()
     local recorded = vim.g.ChangesetPosition
-    assert(recorded:find("\\u0000", 1, true), "the recorded row id should hold a NUL")
+    assert.is_truthy(recorded:find("\\u0000", 1, true), "the recorded row id should hold a NUL")
     vim.cmd("mksession! " .. vim.fn.fnameescape(tmp .. "/Session.vim"))
     vim.o.sessionoptions = sessionoptions
     vim.g.ChangesetPosition = nil
@@ -227,7 +229,7 @@ describe("changeset position in a session", function()
     Sidebar.settle()
     Sidebar.flush()
 
-    assert.truthy(Sidebar.cursor_line():find("plain.lua", 1, true))
+    assert.truthy((Sidebar.cursor_line():find("plain.lua", 1, true)))
     vim.api.nvim_set_current_win(file_win)
     Sidebar.flush()
     assert.same({ path = "mod.lua", lnum = 2 }, vim.json.decode(vim.g.ChangesetPosition).here)
@@ -254,7 +256,7 @@ describe("changeset position in a session", function()
     restore_notify()
     vim.fn.chdir(tmp)
     vim.fn.delete(outside, "rf")
-    assert(ok, err)
+    assert.is_true(ok, tostring(err))
     assert.equal(before, #vim.api.nvim_tabpage_list_wins(0))
   end)
 
@@ -272,7 +274,7 @@ describe("changeset position in a session", function()
     vim.fn.chdir(tmp)
     vim.fn.delete(outside, "rf")
 
-    assert(ok, err)
+    assert.is_true(ok, tostring(err))
     assert.is_false(vim.api.nvim_buf_is_valid(stale))
   end)
 
@@ -298,7 +300,7 @@ describe("changeset position in a session", function()
     vim.fn.chdir(tmp)
     vim.fn.delete(outside, "rf")
 
-    assert(ok, err)
+    assert.is_true(ok, tostring(err))
     assert.is_false(vim.api.nvim_buf_is_valid(stale))
   end)
 
@@ -339,7 +341,7 @@ describe("changeset position in a session", function()
   end)
 
   describe("while symbols are still being read", function()
-    local source
+    local source ---@type support.symbols.Source
     ---@type fun(path: string, items: table[]?)
     local answer
 
@@ -360,7 +362,7 @@ describe("changeset position in a session", function()
       Sidebar.await_diff()
       Sidebar.flush()
 
-      assert.truthy(Sidebar.cursor_line():find("mod.lua", 1, true))
+      assert.truthy((Sidebar.cursor_line():find("mod.lua", 1, true)))
     end)
 
     it("scrolls the recorded row back into place once its file's symbols resolve", function()
@@ -372,7 +374,7 @@ describe("changeset position in a session", function()
       answer("mod.lua", { Changes.sym("step", "Function", 0, 7, 9) })
       Sidebar.flush()
 
-      local win = assert(window.win())
+      local win = present(window.win())
       assert.equal(vim.api.nvim_win_get_cursor(win)[1], vim.fn.line("w0", win))
     end)
 
@@ -388,8 +390,8 @@ describe("changeset position in a session", function()
       answer("mod.lua", { Changes.sym("step", "Function", 0, 7, 9) })
       Sidebar.flush()
 
-      assert.truthy(Sidebar.line_with(highlights.HERE_HL):find("step", 1, true))
-      assert.truthy(Sidebar.cursor_line():find("step", 1, true))
+      assert.truthy((present(Sidebar.line_with(highlights.HERE_HL)):find("step", 1, true)))
+      assert.truthy((Sidebar.cursor_line():find("step", 1, true)))
     end)
   end)
 end)

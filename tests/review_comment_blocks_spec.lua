@@ -5,9 +5,11 @@ local cursor = require("support.cursor")
 local dialog = require("support.dialog")
 local Fixture = require("support.git")
 local Paths = require("changeset.paths")
+local present = require("support.present")
 
 describe("review comment blocks", function()
-  local tmp, previous_dir
+  local tmp ---@type string
+  local previous_dir ---@type string
   local columns = vim.o.columns
 
   before_each(function()
@@ -48,7 +50,7 @@ describe("review comment blocks", function()
     local out = {}
     for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf or 0, ns, 0, -1, { details = true })) do
       local text = {}
-      for i, chunks in ipairs(mark[4].virt_lines or {}) do
+      for i, chunks in ipairs(present(mark[4]).virt_lines or {}) do
         text[i] = table.concat(vim.tbl_map(function(chunk)
           return chunk[1]
         end, chunks))
@@ -90,10 +92,10 @@ describe("review comment blocks", function()
       for i, row in ipairs(mark.text) do
         if row:find("<CR> edit", 1, true) then
           local top = i
-          while not vim.startswith(mark.text[top], "╭") do
+          while not vim.startswith(present(mark.text[top]), "╭") do
             top = top - 1
           end
-          return mark.line, mark.text[top + 1]:match("^%S+ (%a+)")
+          return mark.line, present(mark.text[top + 1]):match("^%S+ (%a+)")
         end
       end
     end
@@ -109,54 +111,54 @@ describe("review comment blocks", function()
   it("draws a one-line comment as a box three lines tall under its last line, titled with its lines", function()
     keep({ path = "alpha.txt", line = 3, body = "short" })
 
-    local block = drawn()[1]
+    local block = present(drawn()[1])
     assert.are.equal(3, block.line)
     assert.are.equal(3, #block.text)
-    assert.truthy(block.text[1]:find("^╭ Review comment · line 3 ─"))
-    assert.truthy(block.text[2]:find("^│ short  *│$"))
-    assert.truthy(vim.startswith(block.text[3], "╰─") and vim.endswith(block.text[3], "─╯"))
+    assert.truthy((present(block.text[1]):find("^╭ Review comment · line 3 ─")))
+    assert.truthy((present(block.text[2]):find("^│ short  *│$")))
+    assert.truthy(vim.startswith(present(block.text[3]), "╰─") and vim.endswith(present(block.text[3]), "─╯"))
   end)
 
   it("fits the box to its title when the text is shorter", function()
     keep({ path = "alpha.txt", line = 5, start_line = 4, body = "ok" })
 
-    local text = drawn()[1].text
-    assert.are.equal(vim.fn.strdisplaywidth(text[1]), vim.fn.strdisplaywidth(text[2]))
-    assert.truthy(text[1]:find("^╭ Review comment · lines 4%-5 ─╮$"))
+    local text = present(drawn()[1]).text
+    assert.are.equal(vim.fn.strdisplaywidth(present(text[1])), vim.fn.strdisplaywidth(present(text[2])))
+    assert.truthy((present(text[1]):find("^╭ Review comment · lines 4%-5 ─╮$")))
   end)
 
   it("draws every row of a tab-indented snippet as wide as its border", function()
     keep({ path = "alpha.txt", line = 3, body = "try:\n\tif x then\n\t\ty()\n\tend" })
 
-    local text = drawn()[1].text
+    local text = present(drawn()[1]).text
     for i = 2, #text do
-      assert.are.equal(vim.fn.strdisplaywidth(text[1]), vim.fn.strdisplaywidth(text[i]), text[i])
+      assert.are.equal(vim.fn.strdisplaywidth(present(text[1])), vim.fn.strdisplaywidth(present(text[i])), text[i])
     end
   end)
 
   it("keeps the first line's indentation, as it keeps the lines after it", function()
     keep({ path = "alpha.txt", line = 3, body = "    foo()\n    bar()" })
 
-    local text = drawn()[1].text
-    assert.truthy(text[2]:find("^│     foo%(%)"), text[2])
-    assert.truthy(text[3]:find("^│     bar%(%)"), text[3])
+    local text = present(drawn()[1]).text
+    assert.truthy((present(text[2]):find("^│     foo%(%)")), text[2])
+    assert.truthy((present(text[3]):find("^│     bar%(%)")), text[3])
   end)
 
   it("wraps a long line at word boundaries within the review comment window's measure", function()
     keep({ path = "alpha.txt", line = 3, body = ("word "):rep(40) })
 
-    local text = drawn()[1].text
-    assert.truthy(vim.fn.strdisplaywidth(text[1]) <= 72 + 2)
+    local text = present(drawn()[1]).text
+    assert.truthy(vim.fn.strdisplaywidth(present(text[1])) <= 72 + 2)
     assert.truthy(#text > 3)
     for i = 2, #text - 1 do
-      assert.truthy(text[i]:find("^│ word"))
+      assert.truthy((present(text[i]):find("^│ word")))
     end
   end)
 
   it("draws a long comment's box as wide as the review comment window that edits it", function()
     vim.o.columns = 200
     keep({ path = "alpha.txt", line = 3, body = ("x"):rep(300) })
-    local box = vim.fn.strdisplaywidth(drawn()[1].text[1])
+    local box = vim.fn.strdisplaywidth(present(present(drawn()[1]).text[1]))
 
     local win = require("changeset.review_comment_window").open({
       line = 10,
@@ -182,11 +184,11 @@ describe("review comment blocks", function()
     vim.api.nvim_win_set_width(0, 24)
     keep({ path = "alpha.txt", line = 3, body = ("word "):rep(40) })
 
-    local room = 24 - vim.fn.getwininfo(vim.api.nvim_get_current_win())[1].textoff
-    local text = drawn()[1].text
-    assert.are.equal(room, vim.fn.strdisplaywidth(text[1]))
-    assert.are.equal(room, vim.fn.strdisplaywidth(text[2]))
-    assert.truthy(text[1]:find("…", 1, true))
+    local room = 24 - present(vim.fn.getwininfo(vim.api.nvim_get_current_win())[1]).textoff
+    local text = present(drawn()[1]).text
+    assert.are.equal(room, vim.fn.strdisplaywidth(present(text[1])))
+    assert.are.equal(room, vim.fn.strdisplaywidth(present(text[2])))
+    assert.truthy((present(text[1]):find("…", 1, true)))
   end)
 
   it("narrows as a window showing the buffer is resized narrower", function()
@@ -197,8 +199,8 @@ describe("review comment blocks", function()
     -- Neovim fires WinResized only as it redraws, which a spec never does.
     vim.api.nvim_exec_autocmds("WinResized", {})
 
-    local room = 24 - vim.fn.getwininfo(vim.api.nvim_get_current_win())[1].textoff
-    assert.are.equal(room, vim.fn.strdisplaywidth(drawn()[1].text[1]))
+    local room = 24 - present(vim.fn.getwininfo(vim.api.nvim_get_current_win())[1]).textoff
+    assert.are.equal(room, vim.fn.strdisplaywidth(present(present(drawn()[1]).text[1])))
   end)
 
   it("narrows to the text area as the gutter widens", function()
@@ -211,15 +213,16 @@ describe("review comment blocks", function()
     vim.api.nvim_exec_autocmds("OptionSet", { pattern = "number" })
 
     local win = vim.api.nvim_get_current_win()
-    local room = vim.api.nvim_win_get_width(win) - vim.fn.getwininfo(win)[1].textoff
-    assert.is_true(vim.fn.strdisplaywidth(drawn()[1].text[1]) <= room)
+    local room = vim.api.nvim_win_get_width(win) - present(vim.fn.getwininfo(win)[1]).textoff
+    assert.is_true(vim.fn.strdisplaywidth(present(present(drawn()[1]).text[1])) <= room)
   end)
 
   it("drops the end-of-line text of a comment drawn as a block, keeping its lit numbers", function()
     keep({ path = "alpha.txt", line = 3, body = "short" })
 
     local ns = vim.api.nvim_get_namespaces()["changeset.review_comments"]
-    local mark = assert(vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, { details = true })[1][4])
+    local extmark = present(vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, { details = true })[1])
+    local mark = present(extmark[4])
     assert.is_nil(mark.virt_text)
     assert.are.equal("ChangesetReviewComment", mark.number_hl_group)
   end)
@@ -227,13 +230,14 @@ describe("review comment blocks", function()
   it("draws a draft with a dashed border in the draft colour, titled as a draft", function()
     keep({ path = "alpha.txt", line = 3, body = "short", draft = true })
 
-    local text = drawn()[1].text
-    assert.truthy(text[1]:find("^╭ Draft review comment · line 3 ┄"))
-    assert.truthy(text[2]:find("^┆ short  *┆$"))
-    assert.truthy(text[3]:find("┄"))
+    local text = present(drawn()[1]).text
+    assert.truthy((present(text[1]):find("^╭ Draft review comment · line 3 ┄")))
+    assert.truthy((present(text[2]):find("^┆ short  *┆$")))
+    assert.truthy((present(text[3]):find("┄")))
     local ns = vim.api.nvim_get_namespaces()["changeset.review_comment_blocks"]
-    local top = vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, { details = true })[1][4].virt_lines[1]
-    assert.are.same({ "ChangesetBlockDraft", "ChangesetBlockDraft" }, { top[1][2], top[2][2] })
+    local extmark = present(vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, { details = true })[1])
+    local top = present(present(present(extmark[4]).virt_lines)[1])
+    assert.are.same({ "ChangesetBlockDraft", "ChangesetBlockDraft" }, { present(top[1])[2], present(top[2])[2] })
   end)
 
   it("stacks two blocks on one line in the order the store lists them", function()
@@ -242,7 +246,7 @@ describe("review comment blocks", function()
 
     local marks = drawn()
     assert.are.equal(1, #marks)
-    assert.are.same({ "first", "second" }, bodies(marks[1].text))
+    assert.are.same({ "first", "second" }, bodies(present(marks[1]).text))
   end)
 
   it("toggles between blocks and marks", function()
@@ -730,7 +734,7 @@ describe("review comment blocks", function()
 
       vim.api.nvim_open_win(0, false, { split = "left", width = 30 })
       assert.are.equal(3, parked())
-      assert.truthy(vim.fn.strdisplaywidth(drawn()[1].text[1]) <= 30)
+      assert.truthy(vim.fn.strdisplaywidth(present(present(drawn()[1]).text[1])) <= 30)
     end)
 
     it("hides cursorline only in its own window", function()

@@ -5,6 +5,7 @@ require("support.gh")
 local changeset = require("changeset")
 local Fixture = require("support.git")
 local Notify = require("support.notify")
+local present = require("support.present")
 
 -- One session, told case by case, each starting where the one before left it: the first has no tree to work with.
 describe(":Changeset diff", function()
@@ -27,8 +28,8 @@ describe(":Changeset diff", function()
 
     vim.fn.chdir(dir)
     assert.equal(1, #notes)
-    assert.equal(vim.log.levels.WARN, notes[1].level)
-    assert.truthy(notes[1].msg:find("no merge base", 1, true), notes[1].msg)
+    assert.equal(vim.log.levels.WARN, present(notes[1]).level)
+    assert.truthy(present(notes[1]).msg:find("no merge base", 1, true), present(notes[1]).msg)
   end)
 
   it("builds the current buffer's tree when none is built, then turns on, saying so", function()

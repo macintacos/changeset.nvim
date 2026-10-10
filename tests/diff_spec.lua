@@ -1,5 +1,6 @@
 local diff = require("changeset.diff")
 local Fixture = require("support.git")
+local present = require("support.present")
 
 -- Real `git diff --numstat -M -z <base>` output. A rename's two paths follow an empty path field;
 -- binary files report `-` for both counts.
@@ -25,7 +26,7 @@ local NAME_STATUS = table.concat({
 })
 
 describe("changeset.diff._parse_numstat", function()
-  local stats
+  local stats ---@type table<string, changeset.diff.Stat>
 
   before_each(function()
     stats = diff._parse_numstat(NUMSTAT)
@@ -52,7 +53,7 @@ describe("changeset.diff._parse_numstat", function()
 end)
 
 describe("changeset.diff._parse_name_status", function()
-  local statuses
+  local statuses ---@type table<string, changeset.diff.Entry>
 
   before_each(function()
     statuses = diff._parse_name_status(NAME_STATUS)
@@ -160,7 +161,7 @@ local HUNKS_SPACED_PATH = {
 }
 
 describe("changeset.diff._parse_hunks", function()
-  local hunks
+  local hunks ---@type table<string, changeset.Hunk[]>
 
   before_each(function()
     hunks = diff._parse_hunks(HUNKS)
@@ -194,7 +195,7 @@ describe("changeset.diff._parse_hunks", function()
     local parsed =
       diff._parse_hunks({ "diff --git a/a.lua b/a.lua", "--- a/a.lua", "+++ b/a.lua", "@@ -12,3 +12,2 @@" })
 
-    assert.equal(12, parsed["a.lua"][1].old_lnum)
+    assert.equal(12, present(parsed["a.lua"][1]).old_lnum)
   end)
 
   it("attributes a renamed file's hunks to its new path", function()
@@ -263,11 +264,14 @@ describe("changeset.diff._parse_hunks", function()
 end)
 
 describe("changeset.diff._assemble", function()
+  ---@type changeset.diff.Parts
   local NO_PARTS = { numstat = {}, statuses = {}, hunks = {}, untracked = {} }
 
   ---@param overrides table
   local function assemble(overrides)
-    return diff._assemble(vim.tbl_extend("force", NO_PARTS, overrides))
+    local parts = vim.tbl_extend("force", NO_PARTS, overrides)
+    ---@cast parts changeset.diff.Parts
+    return diff._assemble(parts)
   end
 
   it("joins a tracked path's status, counts and hunks into one file", function()
@@ -300,7 +304,7 @@ describe("changeset.diff._assemble", function()
   it("gives an empty untracked file no hunk", function()
     local files = assemble({ untracked = { ["empty.txt"] = 0 } })
 
-    assert.same({}, files[1].hunks)
+    assert.same({}, present(files[1]).hunks)
   end)
 
   it("orders tracked and untracked files together", function()
@@ -388,6 +392,7 @@ describe("changeset.diff._generated_header", function()
   end)
 end)
 
+---@type string[]
 local TWELVE_LINES =
   { "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve" }
 
@@ -403,7 +408,7 @@ local function await_collect(base, cwd)
     files, err, commits = ...
     done = true
   end)
-  assert(
+  assert.is_true(
     vim.wait(10000, function()
       return done
     end, 10),
@@ -418,7 +423,7 @@ end
 ---@return changeset.File[]
 local function collect(base, cwd)
   local files, err = await_collect(base, cwd)
-  return assert(files, err)
+  return present(files, err)
 end
 
 ---The sorted paths `diff.collect` marks generated.
@@ -437,7 +442,7 @@ local function generated(base, cwd)
 end
 
 describe("changeset.diff.collect", function()
-  local tmp
+  local tmp ---@type string
 
   -- Deliberately never entered: Neovim stays in the real repository, so a
   -- `collect` that ignored its `cwd` argument would measure this checkout and
@@ -492,7 +497,7 @@ describe("changeset.diff.collect", function()
     assert.same({
       { lnum = 4, count = 1, added = 1, removed = 1, old_lnum = 4 },
       { lnum = 8, count = 1, added = 1, removed = 1, old_lnum = 8 },
-    }, collect(base, tmp)[1].hunks)
+    }, present(collect(base, tmp)[1]).hunks)
   end)
 
   ---Seed a one-file repo and edit it, returning the base commit.
@@ -516,7 +521,7 @@ describe("changeset.diff.collect", function()
     Fixture.git({ "config", "diff.mnemonicPrefix", "true" }, tmp)
     Fixture.git({ "config", "color.diff", "always" }, tmp)
 
-    assert.same({ { lnum = 4, count = 1, added = 1, removed = 1, old_lnum = 4 } }, collect(base, tmp)[1].hunks)
+    assert.same({ { lnum = 4, count = 1, added = 1, removed = 1, old_lnum = 4 } }, present(collect(base, tmp)[1]).hunks)
   end)
 
   it("reads hunks when the user config installs an external diff driver", function()
@@ -525,7 +530,7 @@ describe("changeset.diff.collect", function()
     -- parser sees no hunk headers at all.
     Fixture.git({ "config", "diff.external", "true" }, tmp)
 
-    assert.same({ { lnum = 4, count = 1, added = 1, removed = 1, old_lnum = 4 } }, collect(base, tmp)[1].hunks)
+    assert.same({ { lnum = 4, count = 1, added = 1, removed = 1, old_lnum = 4 } }, present(collect(base, tmp)[1]).hunks)
   end)
 
   it("reads every file whose path git would quote or split at ' b/'", function()
@@ -565,7 +570,7 @@ describe("changeset.diff.collect", function()
     local base = Fixture.init_repo("trunk", tmp)
     write("é.txt", { "a", "b" })
 
-    assert.equal("é.txt", collect(base, tmp)[1].path)
+    assert.equal("é.txt", present(collect(base, tmp)[1]).path)
   end)
 
   it("reports git's stderr when the base is not a commit", function()
@@ -574,7 +579,7 @@ describe("changeset.diff.collect", function()
     diff.collect("no-such-ref", tmp, function(result, message)
       files, err, done = result, message, true
     end)
-    assert(
+    assert.is_true(
       vim.wait(10000, function()
         return done
       end, 10),
@@ -595,7 +600,7 @@ describe("changeset.diff.collect", function()
     diff.collect(base, tmp, function(_, _, count)
       commits, done = count, true
     end)
-    assert(
+    assert.is_true(
       vim.wait(10000, function()
         return done
       end, 10),
@@ -654,7 +659,7 @@ describe("changeset.diff.collect", function()
     -- dangling symlink as a path nothing can read.
     Fixture.git({ "init", "-q", "nested" }, tmp)
     write("nested/file.txt", { "inner" })
-    assert(vim.uv.fs_symlink("missing", vim.fs.joinpath(tmp, "dangling")))
+    assert.is_truthy(vim.uv.fs_symlink("missing", vim.fs.joinpath(tmp, "dangling")))
 
     local files = collect(base, tmp)
 
@@ -664,7 +669,7 @@ describe("changeset.diff.collect", function()
         return file.path
       end, files)
     )
-    assert.equal(3, files[1].added)
+    assert.equal(3, present(files[1]).added)
   end)
 
   it("marks the files a linguist-generated attribute covers, deleted ones included", function()
@@ -718,25 +723,28 @@ describe("changeset.diff.collect", function()
       end
       return system(argv, ...)
     end
-    local files, err
+    local files ---@type changeset.File[]?
+    local err
     local ok, raised = pcall(function()
       files, err = await_collect(base, tmp)
     end)
     vim.system = system
-    assert(ok, raised)
+    ---@cast raised string?
+    assert.is_true(ok, raised)
     assert.is_true(check_attr_ran)
     assert.is_nil(err)
-    assert.equal("notes.txt", files[1].path)
-    assert.equal(require("changeset.sections").classify("notes.txt"), files[1].section)
+    local first = present(present(files)[1])
+    assert.equal("notes.txt", first.path)
+    assert.equal(require("changeset.sections").classify("notes.txt"), first.section)
   end)
 
   it("reports a missing repository as an error", function()
-    assert.matches("ENOENT", select(2, await_collect("HEAD", tmp .. "/gone")))
+    assert.matches("ENOENT", present((select(2, await_collect("HEAD", tmp .. "/gone")))))
   end)
 end)
 
 describe("changeset.diff.blob", function()
-  local tmp
+  local tmp ---@type string
 
   before_each(function()
     tmp = vim.fn.tempname()
@@ -757,7 +765,7 @@ describe("changeset.diff.blob", function()
     diff.blob(object, tmp, function(result)
       text, done = result, true
     end)
-    assert(
+    assert.is_true(
       vim.wait(10000, function()
         return done
       end, 10),

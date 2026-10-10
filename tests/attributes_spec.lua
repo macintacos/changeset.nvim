@@ -37,7 +37,7 @@ local VITEST = {
 describe("attributes", function()
   -- `mark` marks nothing without a parser, so every case below would fail as `{}` instead of naming the cause.
   for _, lang in ipairs(attributes.languages()) do
-    assert(vim.treesitter.language.add(lang), lang .. " parser missing: run `mise run parsers` once")
+    assert.is_truthy(vim.treesitter.language.add(lang), lang .. " parser missing: run `mise run parsers` once")
   end
 
   describe("rust", function()
@@ -127,7 +127,7 @@ describe("attributes", function()
   describe("with no parser", function()
     local parse = vim.treesitter.query.parse
     local lines = vim.list_extend(vim.deepcopy(RUST_TEST), { "mod tests {", "    fn works() {}", "}" })
-    local items
+    local items ---@type table[]
 
     before_each(function()
       vim.treesitter.query.parse = function()

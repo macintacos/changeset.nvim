@@ -14,6 +14,7 @@ local window = require("changeset.window")
 local Fixture = require("support.git")
 local Sidebar = require("support.sidebar")
 local sym = require("support.changes").sym
+local present = require("support.present")
 
 ---Open the sidebar from `mod.lua`, leaving the cursor in the file window.
 ---@return integer file The window the sidebar was opened from, where previews go.
@@ -54,7 +55,8 @@ local function assert_unbanded_here()
 end
 
 describe("changeset preview band", function()
-  local tmp, previous_dir
+  local tmp ---@type string
+  local previous_dir ---@type string
 
   before_each(function()
     tmp, previous_dir = Fixture.enter_tempdir()
@@ -109,7 +111,7 @@ describe("changeset preview band", function()
     it("still bands the window once the cursor goes to the sidebar and steps", function()
       local file = open_sidebar()
       step(1)
-      local win = assert(window.win())
+      local win = present(window.win())
       vim.api.nvim_set_current_win(win)
 
       step(2)
@@ -122,7 +124,7 @@ describe("changeset preview band", function()
     ---@return integer file
     local function previewed(steps)
       local file = open_sidebar()
-      local win = assert(window.win())
+      local win = present(window.win())
       vim.api.nvim_set_current_win(win)
       step(steps)
       assert.is_true(banded(file), "the preview never landed")
@@ -226,15 +228,15 @@ describe("changeset preview band", function()
 
     it("comes off its preview when the cursor moves into it", function()
       local file = open_sidebar()
-      local win = assert(window.win())
+      local win = present(window.win())
       vim.api.nvim_set_current_win(win)
-      local lnum
-      for i, line in ipairs(vim.api.nvim_buf_get_lines(assert(window.buf()), 0, -1, false)) do
+      local lnum ---@type integer?
+      for i, line in ipairs(vim.api.nvim_buf_get_lines(present(window.buf()), 0, -1, false)) do
         if line:find("other.lua", 1, true) then
           lnum = i
         end
       end
-      vim.api.nvim_win_set_cursor(0, { assert(lnum), 0 })
+      vim.api.nvim_win_set_cursor(0, { present(lnum), 0 })
       vim.api.nvim_exec_autocmds("CursorMoved", { buffer = window.buf() })
       assert.is_true(
         vim.wait(2000, function()
@@ -278,8 +280,8 @@ describe("changeset preview band's band_for", function()
   it("offers <CR> to open on an orphan hunk, whose text is no place to land", function()
     local text = band_text({ kind = "orphan", name = "L4 return 2", path = "mod.lua", lnum = 4 })
 
-    assert.truthy(text:find("<CR>", 1, true))
-    assert.is_nil(text:find("return 2", 1, true))
+    assert.truthy((text:find("<CR>", 1, true)))
+    assert.is_nil((text:find("return 2", 1, true)))
   end)
 
   it("names the symbol <CR> lands on", function()
@@ -330,8 +332,10 @@ describe("changeset preview band's band_for", function()
         sym("mid", "Method", 1, 3, 15),
         sym("leaf", "Function", 2, 5, 9),
       }
+      ---@type table[]
       local hunks =
         { { lnum = 5, count = 2, added = 2, removed = 1 }, { lnum = 40, count = 1, added = 1, removed = 0 } }
+      ---@type changeset.File
       local file = {
         path = "mod.lua",
         status = "modified",
@@ -341,7 +345,9 @@ describe("changeset preview band's band_for", function()
         hunks = hunks,
       }
       local folded = Rows.compress(Rows.build({ file }, { ["mod.lua"] = chain })) --[[@as changeset.Row[] ]]
-      local row = folded[1].children[1].children[1]
+      local top = present(folded[1])
+      local mid = present(top.children[1])
+      local row = present(mid.children[1])
       assert.is_true(row.chain)
 
       local glyph, hl = icons.get("lsp", "Function")

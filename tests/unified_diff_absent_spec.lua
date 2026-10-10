@@ -4,7 +4,7 @@ local Fixture = require("support.git")
 local Notify = require("support.notify")
 
 describe(":Changeset diff without gitsigns", function()
-  assert(not pcall(require, "gitsigns"), "gitsigns must not be installed")
+  assert.is_falsy(pcall(require, "gitsigns"), "gitsigns must not be installed")
 
   it("warns that the unified diff needs gitsigns, staying off", function()
     local dir, previous = Fixture.enter_tempdir()

@@ -1,4 +1,5 @@
 local Fixture = require("support.git")
+local present = require("support.present")
 local comment_store = require("changeset.comment_store")
 require("changeset.review_comments")
 
@@ -23,15 +24,16 @@ end
 ---@param lnum integer
 ---@return string?
 local function hover(buf, lnum)
-  local client = assert(clients(buf)[1])
+  local client = present(clients(buf)[1])
   local params = { textDocument = { uri = vim.uri_from_bufnr(buf) }, position = { line = lnum - 1, character = 0 } }
-  local results = assert(vim.lsp.buf_request_sync(buf, "textDocument/hover", params, 1000))
-  local result = assert(results[client.id]).result
+  local results = present(vim.lsp.buf_request_sync(buf, "textDocument/hover", params, 1000))
+  local result = present(results[client.id]).result
   return result and result.contents.value
 end
 
 describe("hover", function()
-  local dir, alpha
+  local dir ---@type string
+  local alpha ---@type integer
 
   ---Replaces the repository's review comments with `comments`.
   ---@param comments changeset.ReviewComment[]
@@ -49,7 +51,7 @@ describe("hover", function()
   before_each(function()
     dir = vim.fn.tempname()
     vim.fn.mkdir(dir, "p")
-    dir = vim.fs.normalize(assert(vim.uv.fs_realpath(dir)))
+    dir = vim.fs.normalize(present(vim.uv.fs_realpath(dir)))
     Fixture.init_repo("main", dir)
     os.remove(comment_store.path())
     vim.fn.writefile(lines(40, "alpha"), dir .. "/alpha.txt")
@@ -80,14 +82,14 @@ describe("hover", function()
     vim.fn.bufload(buf)
     set({ { path = "a[1].txt", line = 2, body = "bracketed" } })
 
-    assert.truthy((hover(buf, 2) or ""):find("bracketed", 1, true))
+    assert.truthy((present(hover(buf, 2)):find("bracketed", 1, true)))
   end)
 
   it("answers in a modified buffer on the lines its edits moved a comment to", function()
     set({ SINGLE })
     vim.api.nvim_buf_set_lines(alpha, 0, 0, false, { "new", "new" })
 
-    assert.truthy((hover(alpha, 22) or ""):find("saved body", 1, true))
+    assert.truthy((present(hover(alpha, 22)):find("saved body", 1, true)))
     assert.is_nil(hover(alpha, 20))
   end)
 
@@ -95,7 +97,7 @@ describe("hover", function()
     vim.cmd.edit(dir .. "/beta.txt")
     local beta = vim.api.nvim_get_current_buf()
     set({ RANGE, SINGLE, BETA })
-    assert.are.equal(assert(clients(alpha)[1]).id, assert(clients(beta)[1]).id)
+    assert.are.equal(present(clients(alpha)[1]).id, present(clients(beta)[1]).id)
   end)
 
   it("answers hover with a review comment's lines and body on every line of its range", function()
@@ -134,7 +136,7 @@ describe("hover", function()
   end)
 
   it("drops the carriage returns of a CRLF body", function()
-    set({ vim.tbl_extend("force", SINGLE, { body = "first\r\nsecond" }) })
+    set({ { path = SINGLE.path, line = SINGLE.line, body = "first\r\nsecond" } })
     assert.are.equal("**Review comment · line 20**\n\nfirst\nsecond", hover(alpha, 20))
   end)
 
@@ -206,7 +208,7 @@ describe("hover", function()
   for _, force in ipairs({ false, true }) do
     it(("leaves no client behind once stopped%s"):format(force and " by force" or ""), function()
       set({ RANGE, SINGLE, BETA })
-      local client = assert(clients(alpha)[1])
+      local client = present(clients(alpha)[1])
       client:stop(force)
       assert.is_true(vim.wait(1000, function()
         return vim.lsp.get_client_by_id(client.id) == nil

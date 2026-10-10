@@ -1,7 +1,7 @@
 local jsonfile = require("changeset.jsonfile")
 
 describe("changeset.jsonfile", function()
-  local dir
+  local dir ---@type string
 
   before_each(function()
     dir = vim.fn.tempname()

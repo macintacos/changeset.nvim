@@ -1,11 +1,15 @@
 local comment_store = require("changeset.comment_store")
 local jsonfile = require("changeset.jsonfile")
+local present = require("support.present")
 
 local ROOT = "/repo"
 
 ---@param fields table?
+---@return changeset.ReviewComment
 local function comment(fields)
-  return vim.tbl_extend("force", { path = "lua/a.lua", line = 7, start_line = 5, body = "hi" }, fields or {})
+  local merged = vim.tbl_extend("force", { path = "lua/a.lua", line = 7, start_line = 5, body = "hi" }, fields or {})
+  ---@cast merged changeset.ReviewComment
+  return merged
 end
 
 ---Takes `comments` as a batch submitted to claude at `at`, 0 when nil.
@@ -32,14 +36,15 @@ describe("changeset.comment_store", function()
     comment_store.keep(ROOT, comment({ body = "one" }))
     comment_store.list(ROOT)
     -- As on a filesystem whose timestamps are coarser than two quick writes, and which reuses the freed inode.
-    local real, stat = vim.uv.fs_stat, vim.uv.fs_stat(comment_store.path())
+    local real = vim.uv.fs_stat
+    local stat = real(comment_store.path())
     vim.uv.fs_stat = function(path)
       return path == comment_store.path() and stat or real(path)
     end
     local ok, err = pcall(comment_store.keep, ROOT, comment({ line = 9, start_line = 8, body = "two" }))
     local listed = comment_store.list(ROOT)
     vim.uv.fs_stat = real
-    assert(ok, err)
+    assert.is_true(ok, tostring(err))
 
     assert.same(
       { "one", "two" },
@@ -154,7 +159,7 @@ describe("changeset.comment_store", function()
       assert.same({}, comment_store.list(ROOT))
       assert.is_false(comment_store.keep(ROOT, comment()))
       assert.is_false(comment_store.drop_all(ROOT))
-      assert.is_nil(restore(ROOT, 1))
+      assert.is_nil((restore(ROOT, 1)))
       assert.same({ junk }, vim.fn.readfile(comment_store.path()))
     end)
   end
@@ -249,7 +254,8 @@ describe("changeset.comment_store", function()
       end
       local ok, err = pcall(fn)
       vim.json.decode = real
-      assert(ok, err)
+      ---@cast err string?
+      assert.is_true(ok, err)
       return count
     end
 
@@ -270,7 +276,7 @@ describe("changeset.comment_store", function()
     it("reads a record written behind its back", function()
       comment_store.keep(ROOT, comment())
       comment_store.list(ROOT)
-      local data = assert(jsonfile.read_object(comment_store.path()))
+      local data = present(jsonfile.read_object(comment_store.path()))
       data[ROOT][1].body = "changed"
 
       jsonfile.write(comment_store.path(), data)
@@ -280,12 +286,12 @@ describe("changeset.comment_store", function()
 
     it("hands out comments whose changes the next read does not see", function()
       take(ROOT, { comment() })
-      local batch = assert(comment_store.submitted(ROOT))[1]
+      local batch = present(present(comment_store.submitted(ROOT))[1])
 
-      batch.comments[1].body = "changed"
+      present(batch.comments[1]).body = "changed"
 
-      assert.same({ comment() }, assert(comment_store.submitted(ROOT))[1].comments)
-      assert.same({ comment() }, select(2, comment_store.comments(ROOT))[1].comments)
+      assert.same({ comment() }, present(present(comment_store.submitted(ROOT))[1]).comments)
+      assert.same({ comment() }, present(select(2, comment_store.comments(ROOT))[1]).comments)
     end)
   end)
 
@@ -311,10 +317,10 @@ describe("changeset.comment_store", function()
         take(ROOT, { each }, at)
       end
 
-      local batches = assert(comment_store.submitted(ROOT))
+      local batches = present(comment_store.submitted(ROOT))
 
       assert.equal(10, #batches)
-      assert.same({ 11, 2 }, { batches[1].at, batches[10].at })
+      assert.same({ 11, 2 }, { present(batches[1]).at, present(batches[10]).at })
     end)
 
     it("lists the one batch a store kept before it kept several, with no time or agent, and keeps it", function()
@@ -372,7 +378,7 @@ describe("changeset.comment_store", function()
     it("brings back the batch it is given though another was submitted since it was listed", function()
       comment_store.keep(ROOT, one)
       take(ROOT, { one }, 10)
-      local listed = assert(comment_store.submitted(ROOT))[1]
+      local listed = present(present(comment_store.submitted(ROOT))[1])
       comment_store.keep(ROOT, two)
       take(ROOT, { two }, 20)
 
@@ -383,8 +389,9 @@ describe("changeset.comment_store", function()
     it("brings back the batch it is given though a write moved its comments since it was listed", function()
       comment_store.keep(ROOT, one)
       take(ROOT, { one }, 10)
-      local listed = assert(comment_store.submitted(ROOT))[1]
+      local listed = present(present(comment_store.submitted(ROOT))[1])
       local moved = vim.tbl_extend("force", one, { line = 4 })
+      ---@cast moved changeset.ReviewComment
       comment_store.move(ROOT, { { from = one, to = moved } })
 
       assert.same({ 1, 0 }, { comment_store.restore(ROOT, listed) })
@@ -394,7 +401,7 @@ describe("changeset.comment_store", function()
     it("brings back nothing for a batch no longer submitted", function()
       comment_store.keep(ROOT, one)
       take(ROOT, { one }, 10)
-      local listed = assert(comment_store.submitted(ROOT))[1]
+      local listed = present(present(comment_store.submitted(ROOT))[1])
       restore(ROOT, 1)
       comment_store.drop(ROOT, one)
 
@@ -516,7 +523,8 @@ end)
 
 describe("changeset.comment_store across branches", function()
   local Fixture = require("support.git")
-  local root, worktree
+  local root ---@type string
+  local worktree ---@type string?
 
   ---@param ... string
   local function git(...)
@@ -532,7 +540,7 @@ describe("changeset.comment_store across branches", function()
     os.remove(comment_store.path())
     root = vim.fn.tempname()
     vim.fn.mkdir(root, "p")
-    root = vim.fs.normalize(assert(vim.uv.fs_realpath(root)))
+    root = vim.fs.normalize(present(vim.uv.fs_realpath(root)))
     Fixture.init_repo("main", root)
   end)
 
@@ -613,7 +621,7 @@ describe("changeset.comment_store across branches", function()
   it("lists a worktree's comments by the branch checked out there", function()
     worktree = vim.fn.tempname()
     git("worktree", "add", "-q", worktree, "-b", "feature")
-    worktree = vim.fs.normalize(assert(vim.uv.fs_realpath(worktree)))
+    worktree = vim.fs.normalize(present(vim.uv.fs_realpath(worktree)))
     comment_store.keep(worktree, comment())
 
     Fixture.git({ "switch", "-q", "-c", "other" }, worktree)
@@ -660,14 +668,20 @@ describe("changeset.comment_store relocating", function()
 
   ---@param line integer
   ---@param fields table?
+  ---@return changeset.StoredReviewComment
   local function at(line, fields)
-    return vim.tbl_extend("force", { path = "a.lua", line = line, body = "b" .. line }, fields or {})
+    local entry = vim.tbl_extend("force", { path = "a.lua", line = line, body = "b" .. line }, fields or {})
+    ---@cast entry changeset.StoredReviewComment
+    return entry
   end
 
-  ---@param from table
+  ---@param from changeset.StoredReviewComment
   ---@param line integer
+  ---@return changeset.ReviewCommentMove
   local function move(from, line)
-    return { from = from, to = vim.tbl_extend("force", from, { line = line }) }
+    local to = vim.tbl_extend("force", from, { line = line })
+    ---@cast to changeset.ReviewComment
+    return { from = from, to = to }
   end
 
   it("puts an entry equal to a move's from on its to's lines, filing one without a branch under the branch", function()

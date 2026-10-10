@@ -8,6 +8,7 @@ local highlights = require("changeset.highlights")
 local window = require("changeset.window")
 local Fixture = require("support.git")
 local Sidebar = require("support.sidebar")
+local present = require("support.present")
 
 local function open_sidebar()
   changeset.open()
@@ -15,7 +16,8 @@ local function open_sidebar()
 end
 
 describe("changeset row highlights", function()
-  local tmp, previous_dir
+  local tmp ---@type string
+  local previous_dir ---@type string
 
   -- The tree resolves its repo from the current buffer, which falls back to the
   -- process cwd, and the cases edit relative paths, so it has to be entered.
@@ -36,7 +38,7 @@ describe("changeset row highlights", function()
     vim.api.nvim_win_set_cursor(0, { 8, 0 })
     open_sidebar()
 
-    assert.truthy(Sidebar.line_with(highlights.HERE_HL):find("Other changes", 1, true))
+    assert.truthy((present(Sidebar.line_with(highlights.HERE_HL)):find("Other changes", 1, true)))
   end)
 
   it("marks the file for where you are on a line in no hunk", function()
@@ -48,7 +50,7 @@ describe("changeset row highlights", function()
     vim.api.nvim_win_set_cursor(0, { 5, 0 })
     vim.api.nvim_exec_autocmds("CursorMoved", {})
 
-    assert.truthy(Sidebar.line_with(highlights.HERE_HL):find("mod.lua", 1, true))
+    assert.truthy((present(Sidebar.line_with(highlights.HERE_HL)):find("mod.lua", 1, true)))
   end)
 
   it("marks a folded section's header for where you are", function()
@@ -61,7 +63,7 @@ describe("changeset row highlights", function()
 
     vim.cmd.wincmd("p")
 
-    assert.truthy(Sidebar.line_with(highlights.HERE_HL):find("Implementation", 1, true))
+    assert.truthy((present(Sidebar.line_with(highlights.HERE_HL)):find("Implementation", 1, true)))
   end)
 
   it("selects the row under the sidebar's cursor while the sidebar has focus", function()
@@ -70,7 +72,7 @@ describe("changeset row highlights", function()
 
     Sidebar.cursor_to("other.lua")
 
-    assert.truthy(Sidebar.line_with(highlights.SELECTED_HL):find("other.lua", 1, true))
+    assert.truthy((present(Sidebar.line_with(highlights.SELECTED_HL)):find("other.lua", 1, true)))
   end)
 
   it("drops the selected row once focus leaves the sidebar", function()
@@ -90,7 +92,7 @@ describe("changeset row highlights", function()
 
     changeset.toggle()
 
-    assert.truthy(Sidebar.line_with(highlights.SELECTED_HL):find("Other changes", 1, true))
+    assert.truthy((present(Sidebar.line_with(highlights.SELECTED_HL)):find("Other changes", 1, true)))
     assert.is_nil(Sidebar.line_with(highlights.HERE_HL))
   end)
 
@@ -101,7 +103,7 @@ describe("changeset row highlights", function()
 
     vim.cmd.normal(vim.keycode("<CR>"))
 
-    assert.truthy(Sidebar.line_with(highlights.PICKED_HL):find("L8", 1, true))
+    assert.truthy((present(Sidebar.line_with(highlights.PICKED_HL)):find("L8", 1, true)))
   end)
 
   it("keeps the row opened with <CR> marked through a jump to another changed file", function()
@@ -112,7 +114,7 @@ describe("changeset row highlights", function()
 
     vim.cmd.edit("other.lua")
 
-    assert.truthy(Sidebar.line_with(highlights.PICKED_HL):find("L8", 1, true))
+    assert.truthy((present(Sidebar.line_with(highlights.PICKED_HL)):find("L8", 1, true)))
   end)
 
   it("marks the row a preview showed once the cursor moves into it", function()
@@ -122,7 +124,7 @@ describe("changeset row highlights", function()
 
     vim.cmd.wincmd("p")
 
-    assert.truthy(Sidebar.line_with(highlights.PICKED_HL):find("L8", 1, true))
+    assert.truthy((present(Sidebar.line_with(highlights.PICKED_HL)):find("L8", 1, true)))
   end)
 
   it("marks only where you are on the row you last opened", function()
@@ -132,7 +134,7 @@ describe("changeset row highlights", function()
 
     vim.cmd.normal(vim.keycode("<CR>"))
 
-    assert.truthy(Sidebar.line_with(highlights.HERE_HL):find("Other changes", 1, true))
+    assert.truthy((present(Sidebar.line_with(highlights.HERE_HL)):find("Other changes", 1, true)))
     assert.is_nil(Sidebar.line_with(highlights.PICKED_HL))
   end)
 
@@ -144,7 +146,7 @@ describe("changeset row highlights", function()
 
     Sidebar.cursor_to("L8")
 
-    assert.truthy(Sidebar.line_with(highlights.SELECTED_HL):find("L8", 1, true))
+    assert.truthy((present(Sidebar.line_with(highlights.SELECTED_HL)):find("L8", 1, true)))
     assert.is_nil(Sidebar.line_with(highlights.PICKED_HL))
   end)
 
@@ -162,7 +164,7 @@ describe("changeset row highlights", function()
       return not Sidebar.text():find("L8", 1, true)
     end, 25)
 
-    assert.truthy(Sidebar.line_with(highlights.PICKED_HL):find("mod.lua", 1, true))
+    assert.truthy((present(Sidebar.line_with(highlights.PICKED_HL)):find("mod.lua", 1, true)))
   end)
 
   it("clears where you are in a file outside the changeset", function()
@@ -180,7 +182,7 @@ describe("changeset row highlights", function()
     vim.cmd.edit("mod.lua")
     vim.api.nvim_win_set_cursor(0, { 5, 0 })
     open_sidebar()
-    local win = assert(window.win())
+    local win = present(window.win())
     vim.api.nvim_set_current_win(win)
 
     for _ = 1, 4 do
@@ -189,8 +191,8 @@ describe("changeset row highlights", function()
     -- The main loop's, which `:normal` does not fire.
     vim.api.nvim_exec_autocmds("CursorMoved", { buffer = window.buf() })
 
-    assert.truthy(vim.api.nvim_get_current_line():find("other.lua", 1, true))
-    assert.truthy(Sidebar.line_with(highlights.HERE_HL):find("mod.lua", 1, true))
+    assert.truthy((vim.api.nvim_get_current_line():find("other.lua", 1, true)))
+    assert.truthy((present(Sidebar.line_with(highlights.HERE_HL)):find("mod.lua", 1, true)))
   end)
 
   it("keeps tracking where you are while the sidebar is closed", function()
@@ -218,7 +220,7 @@ describe("changeset row highlights", function()
     open_sidebar()
     Sidebar.cursor_to("other.lua")
     local target = vim.fn.win_getid(vim.fn.winnr("#"))
-    assert(
+    assert.is_true(
       vim.wait(2000, function()
         return vim.bo[vim.api.nvim_win_get_buf(target)].buftype == "nofile"
       end, 10),

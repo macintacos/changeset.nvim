@@ -2,6 +2,7 @@
 vim.api.nvim_set_hl(0, "ChangesetHeaderRef", { fg = 0x0a0b0c })
 
 local highlights = require("changeset.highlights")
+local present = require("support.present")
 require("changeset") -- registers the ColorScheme autocmd
 
 local runtime_dir = vim.fn.tempname()
@@ -103,7 +104,7 @@ describe("define_highlights", function()
     "Added",
     "Removed",
   }
-  local saved
+  local saved ---@type table<string, table>
 
   before_each(function()
     saved = {}
@@ -251,7 +252,7 @@ describe("define_highlights", function()
 
     highlights.define_highlights()
 
-    local r, g, b = unpack(channels(group(highlights.SELECTED_HL).bg))
+    local r, g, b = unpack(channels(present(group(highlights.SELECTED_HL).bg)))
     assert.is_true(r > 0x10 and r < 0xf0)
     assert.same({ 0x10, 0x10 }, { g, b })
   end)
@@ -262,7 +263,8 @@ describe("define_highlights", function()
 
     highlights.define_highlights()
 
-    local here, selected = channels(group(highlights.HERE_HL).bg), channels(group(highlights.SELECTED_HL).bg)
+    local here, selected =
+      channels(present(group(highlights.HERE_HL).bg)), channels(present(group(highlights.SELECTED_HL).bg))
     assert.is_true(here[1] > 0x10 and here[1] < selected[1])
     assert.same({ 0x10, 0x10 }, { here[2], here[3] })
   end)
@@ -273,7 +275,8 @@ describe("define_highlights", function()
 
     highlights.define_highlights()
 
-    local picked, here = channels(group(highlights.PICKED_HL).bg), channels(group(highlights.HERE_HL).bg)
+    local picked, here =
+      channels(present(group(highlights.PICKED_HL).bg)), channels(present(group(highlights.HERE_HL).bg))
     assert.is_true(picked[1] > 0x10 and picked[1] < here[1])
     assert.same({ 0x10, 0x10 }, { picked[2], picked[3] })
   end)
@@ -297,7 +300,7 @@ describe("define_highlights", function()
 
     highlights.define_highlights()
 
-    local r, g, b = unpack(channels(group(highlights.SELECTED_HL).bg))
+    local r, g, b = unpack(channels(present(group(highlights.SELECTED_HL).bg)))
     assert.is_true(r > 0x10 and r < 0xf0)
     assert.same({ 0x10, 0x10 }, { g, b })
   end)
@@ -311,7 +314,7 @@ describe("define_highlights", function()
     highlights.define_highlights()
 
     local line, word = group(highlights.DIFF_ADD_HL), group(highlights.DIFF_ADD_TEXT_HL)
-    local l, w = channels(line.bg), channels(word.bg)
+    local l, w = channels(present(line.bg)), channels(present(word.bg))
     assert.is_true(l[2] > 0x10 and l[2] < w[2] and w[2] < 0xf0)
     assert.same({ 0x10, 0x10, 0x10, 0x10 }, { l[1], l[3], w[1], w[3] })
     assert.same({}, { line.fg, word.fg })
@@ -324,7 +327,7 @@ describe("define_highlights", function()
     highlights.define_highlights()
 
     local line, word = group(highlights.DIFF_DELETE_HL), group(highlights.DIFF_DELETE_TEXT_HL)
-    local l, w = channels(line.bg), channels(word.bg)
+    local l, w = channels(present(line.bg)), channels(present(word.bg))
     assert.is_true(l[1] > 0x10 and l[1] < w[1] and w[1] < 0xf0)
     assert.same({ 0x10, 0x10, 0x10, 0x10 }, { l[2], l[3], w[2], w[3] })
     assert.same({}, { line.fg, word.fg })
@@ -339,7 +342,8 @@ describe("define_highlights", function()
 
     highlights.define_highlights()
 
-    local added, deleted = channels(group(highlights.DIFF_ADD_HL).bg), channels(group(highlights.DIFF_DELETE_HL).bg)
+    local added, deleted =
+      channels(present(group(highlights.DIFF_ADD_HL).bg)), channels(present(group(highlights.DIFF_DELETE_HL).bg))
     assert.is_true(added[2] > 0x10 and deleted[1] > 0x10)
     assert.same({ 0x10, 0x10, 0x10, 0x10 }, { added[1], added[3], deleted[2], deleted[3] })
   end)
@@ -362,7 +366,7 @@ describe("define_highlights", function()
 
     highlights.define_highlights()
 
-    local r, g, b = unpack(channels(group(highlights.DIALOG_SELECTED_HL).bg))
+    local r, g, b = unpack(channels(present(group(highlights.DIALOG_SELECTED_HL).bg)))
     assert.is_true(r > 0x10 and r < 0xf0)
     assert.same({ 0x10, 0x10 }, { g, b })
   end)
@@ -383,7 +387,7 @@ describe("define_highlights", function()
 
     highlights.define_highlights()
 
-    local r, g, b = unpack(channels(group(highlights.BUTTON_HL).bg))
+    local r, g, b = unpack(channels(present(group(highlights.BUTTON_HL).bg)))
     assert.is_true(r > 0 and r < 0x80)
     assert.same({ r, r }, { g, b })
     assert.equal(0xffffff, group(highlights.BUTTON_HL).fg)

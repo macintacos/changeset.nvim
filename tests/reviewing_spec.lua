@@ -3,13 +3,24 @@ local Fixture = require("support.git")
 local Notify = require("support.notify")
 local Paths = require("changeset.paths")
 local comment_store = require("changeset.comment_store")
+local present = require("support.present")
 
 describe("changeset.reviewing", function()
-  local reviewing, restore_notify, notes, windows, dir, tree, focused, echoes, echo
+  ---@module "changeset.reviewing"
+  local reviewing
+  local restore_notify ---@type fun()
+  local notes ---@type support.notify.Note[]
+  local windows ---@type changeset.ReviewCommentWindowOpts[]
+  local dir ---@type string
+  local tree ---@type { root: string }?
+  local focused ---@type boolean
+  local echoes ---@type string[]
+  local echo ---@type function
 
   ---The options of the window opened last.
+  ---@return changeset.ReviewCommentWindowOpts
   local function window()
-    return assert(windows[#windows], "no review comment window opened")
+    return present(windows[#windows], "no review comment window opened")
   end
 
   before_each(function()
@@ -17,7 +28,8 @@ describe("changeset.reviewing", function()
     windows, focused, tree = {}, false, nil
     echoes, echo = {}, vim.api.nvim_echo
     vim.api.nvim_echo = function(chunks)
-      table.insert(echoes, chunks[1][1])
+      table.insert(echoes, present(chunks[1])[1])
+      return -1
     end
     notes, restore_notify = Notify.capture()
     package.loaded["changeset.review_comment_window"] = {
@@ -54,7 +66,7 @@ describe("changeset.reviewing", function()
   local function edit_file()
     dir = vim.fn.tempname()
     vim.fn.mkdir(dir, "p")
-    dir = vim.fs.normalize(assert(vim.uv.fs_realpath(dir)))
+    dir = vim.fs.normalize(present(vim.uv.fs_realpath(dir)))
     Fixture.init_repo("main", dir)
     vim.fn.writefile(vim.split(("x"):rep(10, "\n"), "\n"), dir .. "/a.lua")
     vim.cmd.edit(dir .. "/a.lua")
@@ -77,8 +89,10 @@ describe("changeset.reviewing", function()
   end
 
   ---@param fields table?
+  ---@return changeset.ReviewComment
   local function comment(fields)
-    return vim.tbl_extend("force", { path = "a.lua", line = 4, body = "hi" }, fields or {})
+    local merged = vim.tbl_extend("force", { path = "a.lua", line = 4, body = "hi" }, fields or {})
+    return merged --[[@as changeset.ReviewComment]]
   end
 
   describe("comment", function()
@@ -88,7 +102,7 @@ describe("changeset.reviewing", function()
       reviewing.comment(4, 4)
       window().save("\n \n  the point\nmore", function() end)
 
-      assert.equal("  the point\nmore", comment_store.list(dir)[1].body)
+      assert.equal("  the point\nmore", present(comment_store.list(dir)[1]).body)
     end)
 
     it("leaves a selection of the first line a comment on that line", function()
@@ -123,7 +137,7 @@ describe("changeset.reviewing", function()
       vim.wait(100, function()
         return #notes > 0
       end, 10)
-      assert.equal(vim.log.levels.INFO, notes[1].level)
+      assert.equal(vim.log.levels.INFO, present(notes[1]).level)
     end)
 
     it("keeps nothing of a window closed blank", function()
@@ -173,7 +187,7 @@ describe("changeset.reviewing", function()
       reviewing.comment(4, 4)
 
       assert.same({}, windows)
-      assert.equal(vim.log.levels.WARN, notes[1].level)
+      assert.equal(vim.log.levels.WARN, present(notes[1]).level)
     end)
 
     it("keeps the window open when the comment can't be stored", function()
@@ -182,7 +196,7 @@ describe("changeset.reviewing", function()
       vim.fn.writefile({ "[1,2]" }, comment_store.path())
 
       reviewing.comment(4, 4)
-      local err
+      local err ---@type string?
       window().save("lost?", function(e)
         err = e
       end)
@@ -192,7 +206,7 @@ describe("changeset.reviewing", function()
         return #notes > 0
       end, 10)
       assert.truthy(err)
-      assert.equal(vim.log.levels.ERROR, notes[1].level)
+      assert.equal(vim.log.levels.ERROR, present(notes[1]).level)
     end)
 
     it("keeps a comment saved on the range meanwhile when closed blank", function()
@@ -214,8 +228,8 @@ describe("changeset.reviewing", function()
       reviewing.comment(1, 1)
 
       assert.same({}, windows)
-      assert.equal(vim.log.levels.WARN, notes[1].level)
-      assert.truthy(notes[1].msg:find("Changeset: ", 1, true))
+      assert.equal(vim.log.levels.WARN, present(notes[1]).level)
+      assert.truthy((present(notes[1]).msg:find("Changeset: ", 1, true)))
     end)
   end)
 
@@ -301,7 +315,7 @@ describe("changeset.reviewing", function()
       reviewing.open(comment())
       vim.fn.writefile({ "[1,2]" }, comment_store.path())
 
-      local err
+      local err ---@type string?
       window().save("new", function(e)
         err = e
       end)
@@ -324,7 +338,7 @@ describe("changeset.reviewing", function()
       vim.wait(100, function()
         return #notes > 0
       end, 10)
-      assert.equal(vim.log.levels.INFO, notes[1].level)
+      assert.equal(vim.log.levels.INFO, present(notes[1]).level)
     end)
 
     it("leaves a saved comment closed unchanged saved", function()
@@ -364,7 +378,7 @@ describe("changeset.reviewing", function()
 
       reviewing.comment(4, 4)
 
-      assert.equal(require("changeset.highlights").REVIEW_COMMENT_DRAFT_HL, window().icon[2])
+      assert.equal(require("changeset.highlights").REVIEW_COMMENT_DRAFT_HL, present(window().icon)[2])
     end)
   end)
 
@@ -408,7 +422,7 @@ describe("changeset.reviewing", function()
 
       reviewing.delete()
 
-      assert.equal(vim.log.levels.INFO, notes[1].level)
+      assert.equal(vim.log.levels.INFO, present(notes[1]).level)
     end)
 
     it("refuses in a modified buffer", function()
@@ -419,7 +433,7 @@ describe("changeset.reviewing", function()
 
       reviewing.delete()
 
-      assert.equal(vim.log.levels.WARN, notes[1].level)
+      assert.equal(vim.log.levels.WARN, present(notes[1]).level)
       assert.same({ comment() }, comment_store.list(dir))
     end)
   end)
@@ -482,7 +496,7 @@ describe("changeset.reviewing", function()
 
       reviewing.draft()
 
-      assert.equal(vim.log.levels.WARN, notes[1].level)
+      assert.equal(vim.log.levels.WARN, present(notes[1]).level)
       assert.same({ comment() }, comment_store.list(dir))
     end)
   end)
@@ -495,8 +509,8 @@ describe("changeset.reviewing", function()
       reviewing.ask_delete(comment({ start_line = 3, body = "first\nsecond" }))
 
       local lines = table.concat(Dialog.lines(), "\n")
-      assert.truthy(lines:find("a.lua:3-4", 1, true))
-      assert.truthy(lines:find("▎ first\n%s*▎ second"))
+      assert.truthy((lines:find("a.lua:3-4", 1, true)))
+      assert.truthy((lines:find("▎ first\n%s*▎ second")))
     end)
 
     it("deletes the comment once confirmed", function()
@@ -516,13 +530,13 @@ describe("changeset.reviewing", function()
       local first = dir
       comment_store.keep(first, comment())
       reviewing.open(comment())
-      local other = vim.fs.normalize(assert(vim.uv.fs_realpath(vim.fn.tempname()) or vim.fn.tempname()))
+      local other = vim.fs.normalize(present(vim.uv.fs_realpath(vim.fn.tempname()) or vim.fn.tempname()))
       vim.fn.mkdir(other, "p")
       Fixture.init_repo("main", other)
       vim.fn.writefile({ "y" }, other .. "/b.lua")
       vim.cmd.edit(other .. "/b.lua")
 
-      window().keep("", false)
+      window().keep("")
       vim.wait(1000, function()
         return asking()
       end, 10)
@@ -542,7 +556,7 @@ describe("changeset.reviewing", function()
         return #notes > 0
       end)
 
-      assert.is_nil(notes[1].msg:find("deleted", 1, true))
+      assert.is_nil((present(notes[1]).msg:find("deleted", 1, true)))
     end)
 
     it("keeps the comment when declined", function()
@@ -562,7 +576,7 @@ describe("changeset.reviewing", function()
     ---A review comment window on `comment()` whose source window has closed.
     local function orphaned()
       local calls = {}
-      return {
+      local open = {
         source = -1,
         comment = comment(),
         text = function()
@@ -577,8 +591,10 @@ describe("changeset.reviewing", function()
         resume = function()
           table.insert(calls, "resume")
         end,
-      },
-        calls
+      }
+      -- Only the members an orphaned window's close path reads; the rest of the class is never touched.
+      local orphan = open --[[@as changeset.ReviewCommentWindow]]
+      return orphan, calls
     end
 
     it("deletes from the current repository once the source window has closed", function()
@@ -636,7 +652,7 @@ describe("changeset.reviewing", function()
       assert.same({ "a.lua", 2 }, { where() })
       reviewing.prev_comment(1)
       assert.same({ "b.lua", 3 }, { where() })
-      assert.matches("review comment 3 of 3.*wrapped", echoes[2])
+      assert.matches("review comment 3 of 3.*wrapped", present(echoes[2]))
     end)
 
     it("skips a comment whose file is gone", function()
@@ -703,8 +719,8 @@ describe("changeset.reviewing", function()
 
       vim.wo.winfixbuf = false
       vim.api.nvim_buf_delete(scratch, { force = true })
-      assert(ok, err)
-      assert.equal(vim.log.levels.WARN, notes[1].level)
+      assert.is_truthy(ok, tostring(err))
+      assert.equal(vim.log.levels.WARN, present(notes[1]).level)
     end)
 
     it("passes over a comment on a whole file", function()
@@ -739,7 +755,7 @@ describe("changeset.reviewing", function()
       reviewing.next_comment(1)
 
       assert.equal(scratch_win, vim.api.nvim_get_current_win())
-      assert.equal(vim.log.levels.WARN, notes[1].level)
+      assert.equal(vim.log.levels.WARN, present(notes[1]).level)
       vim.api.nvim_buf_delete(0, { force = true })
     end)
 
@@ -751,7 +767,7 @@ describe("changeset.reviewing", function()
       reviewing.next_comment(1)
 
       assert.same({ "a.lua", 1 }, { where() })
-      assert.equal(vim.log.levels.WARN, notes[1].level)
+      assert.equal(vim.log.levels.WARN, present(notes[1]).level)
     end)
 
     it("refuses when the comment's file has unsaved edits", function()
@@ -764,7 +780,7 @@ describe("changeset.reviewing", function()
       reviewing.next_comment(1)
 
       assert.same({ "a.lua", 9 }, { where() })
-      assert.equal(vim.log.levels.WARN, notes[1].level)
+      assert.equal(vim.log.levels.WARN, present(notes[1]).level)
     end)
 
     it("says when there are no comments", function()
@@ -810,8 +826,8 @@ describe("changeset.reviewing", function()
       reviewing.last_comment()
 
       assert.same({}, windows)
-      assert.equal(vim.log.levels.WARN, notes[1].level)
-      assert.truthy(notes[1].msg:find("gone.lua", 1, true))
+      assert.equal(vim.log.levels.WARN, present(notes[1]).level)
+      assert.truthy((present(notes[1]).msg:find("gone.lua", 1, true)))
     end)
 
     it("says when no review comment is saved", function()
@@ -821,7 +837,7 @@ describe("changeset.reviewing", function()
       reviewing.last_comment()
 
       assert.same({}, windows)
-      assert.equal(vim.log.levels.INFO, notes[1].level)
+      assert.equal(vim.log.levels.INFO, present(notes[1]).level)
     end)
 
     it("refuses in a modified buffer", function()
@@ -832,7 +848,7 @@ describe("changeset.reviewing", function()
       reviewing.last_comment()
 
       assert.same({}, windows)
-      assert.equal(vim.log.levels.WARN, notes[1].level)
+      assert.equal(vim.log.levels.WARN, present(notes[1]).level)
     end)
   end)
 end)

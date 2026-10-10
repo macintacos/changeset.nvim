@@ -8,7 +8,7 @@ local M = {}
 ---@return string
 function M.git(args, cwd)
   local out = vim.fn.system(vim.list_extend({ "git", "-C", cwd }, args))
-  assert(vim.v.shell_error == 0, out)
+  assert.equal(0, vim.v.shell_error, out)
   return vim.trim(out)
 end
 
@@ -21,7 +21,7 @@ function M.init_repo(branch, cwd)
   -- A stray GIT_* var outranks `-C`, so without this the commits and config
   -- below would land in whatever repo it points at.
   local root = vim.fn.resolve(M.git({ "rev-parse", "--show-toplevel" }, cwd))
-  assert(root == vim.fn.resolve(cwd), "fixture git repo escaped to " .. root)
+  assert.equal(vim.fn.resolve(cwd), root, "fixture git repo escaped to " .. root)
 
   M.git({ "config", "user.email", "test@example.com" }, cwd)
   M.git({ "config", "user.name", "Test" }, cwd)
@@ -48,7 +48,7 @@ function M.enter_tempdir()
   local dir = vim.fn.tempname()
   vim.fn.mkdir(dir, "p")
   local previous = vim.fn.chdir(dir)
-  assert(previous ~= "", "could not enter the fixture directory")
+  assert.not_equal("", previous, "could not enter the fixture directory")
   return dir, previous
 end
 

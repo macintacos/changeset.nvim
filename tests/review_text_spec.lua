@@ -33,7 +33,7 @@ describe("changeset.review_text", function()
       { path = "a.lua", line = 4, start_line = 2, body = "range" },
     }, UNFRAMED)
 
-    assert.truthy(text:find("^`/repo/a.lua:L2%-L4`"))
+    assert.truthy((text:find("^`/repo/a.lua:L2%-L4`")))
   end)
 
   it("writes a whole file's comment as its bare absolute path, ahead of its lines' comments", function()

@@ -6,6 +6,7 @@ local Changes = require("support.changes")
 local Fixture = require("support.git")
 local Sidebar = require("support.sidebar")
 local Symbols = require("support.symbols")
+local present = require("support.present")
 
 describe("the sidebar's redraw after a rebuild", function()
   describe("due", function()
@@ -27,7 +28,11 @@ describe("the sidebar's redraw after a rebuild", function()
   end)
 
   describe("over a tree that draws slowly", function()
-    local tmp, previous_dir, source, real_draw, draws
+    local tmp ---@type string
+    local previous_dir ---@type string
+    local source ---@type support.symbols.Source
+    local real_draw ---@type function
+    local draws ---@type integer
 
     before_each(function()
       tmp, previous_dir = Fixture.enter_tempdir()
@@ -44,9 +49,9 @@ describe("the sidebar's redraw after a rebuild", function()
       vim.cmd.edit("a.lua")
       local opening = vim.uv.hrtime()
       changeset.open()
-      assert.is_true(vim.wait(10000, function()
+      assert.is_true((vim.wait(10000, function()
         return #source.asks == 1 and window.buf() ~= nil and Sidebar.text():find("c.lua", 1, true) ~= nil
-      end, 10))
+      end, 10)))
       -- On a slow machine the opening draw costs over a frame, which would hold back the first
       -- answer's: it cost at most this long, and twice its cost is the longest it holds one back.
       vim.wait(math.ceil(2 * (vim.uv.hrtime() - opening) / 1e6))
@@ -79,26 +84,26 @@ describe("the sidebar's redraw after a rebuild", function()
       answer("c.lua")
 
       assert.equal(1, draws)
-      assert.is_nil(Sidebar.text():find("f_b", 1, true))
-      assert.is_true(vim.wait(2000, function()
+      assert.is_nil((Sidebar.text():find("f_b", 1, true)))
+      assert.is_true((vim.wait(2000, function()
         return Sidebar.text():find("f_c", 1, true) ~= nil
-      end, 10))
+      end, 10)))
       assert.equal(2, draws)
-      assert.truthy(Sidebar.text():find("f_b", 1, true))
+      assert.truthy((Sidebar.text():find("f_b", 1, true)))
     end)
 
     it("draws at once when a new diff lands while it waits", function()
       answer("a.lua")
       answer("b.lua")
-      local before = build.current().files
+      local before = present(build.current()).files
 
       build.refresh()
       assert.is_true(vim.wait(2000, function()
-        return build.current().files ~= before
+        return present(build.current()).files ~= before
       end, 1))
 
       assert.equal(2, draws)
-      assert.truthy(Sidebar.text():find("f_b", 1, true))
+      assert.truthy((Sidebar.text():find("f_b", 1, true)))
       vim.wait(400)
       assert.equal(2, draws)
     end)
@@ -110,7 +115,7 @@ describe("the sidebar's redraw after a rebuild", function()
       vim.api.nvim_exec_autocmds("VimResized", {})
 
       assert.equal(2, draws)
-      assert.truthy(Sidebar.text():find("f_b", 1, true))
+      assert.truthy((Sidebar.text():find("f_b", 1, true)))
       vim.wait(400)
       assert.equal(2, draws)
     end)
@@ -118,7 +123,7 @@ describe("the sidebar's redraw after a rebuild", function()
     it("still settles once the wait is over after a sidebar key drew the tree meanwhile", function()
       answer("a.lua")
       answer("b.lua")
-      vim.api.nvim_set_current_win((assert(window.win())))
+      vim.api.nvim_set_current_win((present(window.win())))
 
       vim.cmd.normal("L")
 
@@ -145,7 +150,7 @@ describe("the sidebar's redraw after a rebuild", function()
       vim.cmd.tabnew("c.lua")
       answer("c.lua")
       vim.cmd.tabprevious()
-      assert.truthy(Sidebar.cursor_line():find("f_c", 1, true))
+      assert.truthy((Sidebar.cursor_line():find("f_c", 1, true)))
 
       local asked = #source.asks
       local buf = vim.fn.bufnr("c.lua")
@@ -161,18 +166,18 @@ describe("the sidebar's redraw after a rebuild", function()
         Changes.sym("m1", "Method", 1, 1, 1),
         Changes.sym("m2", "Method", 1, 2, 3),
       })
-      assert.is_true(vim.wait(2000, function()
+      assert.is_true((vim.wait(2000, function()
         return Sidebar.text():find("m2", 1, true) ~= nil
-      end, 10))
+      end, 10)))
 
-      assert.truthy(Sidebar.cursor_line():find("m1", 1, true))
+      assert.truthy((Sidebar.cursor_line():find("m1", 1, true)))
     end)
 
     it("lists the rows of every answer while their draw waits", function()
       answer("a.lua")
       answer("b.lua")
 
-      local tree = assert(changeset.rows())
+      local tree = present(changeset.rows())
 
       local names = vim.tbl_map(function(row)
         return (row.children[1] or {}).name

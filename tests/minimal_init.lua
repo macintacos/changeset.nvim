@@ -30,7 +30,9 @@ end
 vim.env.GIT_CONFIG_GLOBAL = "/dev/null"
 vim.env.GIT_CONFIG_SYSTEM = "/dev/null"
 -- The repo root is two levels up from this file, wherever nvim was started.
-local root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
+local info = debug.getinfo(1, "S")
+---@cast info -?
+local root = vim.fn.fnamemodify(info.source:sub(2), ":p:h:h")
 vim.opt.rtp:prepend(root)
 -- `rtp` reaches `lua/` only, so fixture modules under `tests/support/` need their own path.
 package.path = root .. "/tests/?.lua;" .. package.path

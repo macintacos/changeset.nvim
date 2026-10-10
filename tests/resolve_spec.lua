@@ -1,6 +1,7 @@
 local comments = require("changeset.comments")
 local Fixture = require("support.git")
 local resolve = require("changeset.resolve")
+local present = require("support.present")
 
 ---A step that parks each call so the spec decides when it answers.
 ---@return fun(path: string, done: fun(items: changeset.Symbol[]?, comments: changeset.Comments?)) run
@@ -44,7 +45,7 @@ describe("changeset.resolve", function()
       local lanes = #pending
       assert.is_true(lanes > 0 and lanes < #queue)
 
-      pending[1].done({})
+      present(pending[1]).done({})
       assert.equal(lanes + 1, #pending)
     end)
 
@@ -56,7 +57,7 @@ describe("changeset.resolve", function()
         seen[#seen + 1] = path
       end)
       cancel()
-      pending[1].done({})
+      present(pending[1]).done({})
 
       assert.same({ "api.ts" }, seen)
     end)
@@ -67,7 +68,7 @@ describe("changeset.resolve", function()
       local cancel = resolve._walk(ten_files(), run, function() end)
       local lanes = #pending
       cancel()
-      pending[1].done({})
+      present(pending[1]).done({})
 
       assert.equal(lanes, #pending)
     end)
@@ -80,7 +81,7 @@ describe("changeset.resolve", function()
         seen[#seen + 1] = { path = path, items = items }
       end)
       local lanes = #pending
-      pending[1].done(nil)
+      present(pending[1]).done(nil)
 
       assert.equal(1, #seen)
       assert.equal("1.ts", seen[1].path)
@@ -110,7 +111,7 @@ describe("changeset.resolve", function()
         answers[path] = items
       end)
       local items = {}
-      pending[1].done(items)
+      present(pending[1]).done(items)
 
       assert.equal(items, answers["api.ts"])
     end)
@@ -123,7 +124,7 @@ describe("changeset.resolve", function()
         answers[path] = found
       end)
       local found = { new = { comment = {}, directive = {}, blank = {} } }
-      pending[1].done(nil, found)
+      present(pending[1]).done(nil, found)
 
       assert.equal(found, answers["api.ts"])
     end)
@@ -143,7 +144,8 @@ describe("changeset.resolve", function()
   end)
 
   describe("start", function()
-    local root, enabled
+    local root ---@type string
+    local enabled ---@type string?
 
     before_each(function()
       root = vim.fn.tempname()
@@ -165,7 +167,8 @@ describe("changeset.resolve", function()
     ---@return string[]
     local function reported_at_once()
       local seen = {}
-      local file = { path = "mod.lua", status = "added", added = 1, removed = 0, hunks = {} }
+      local file =
+        { path = "mod.lua", status = "added", section = "implementation", added = 1, removed = 0, hunks = {} }
       local cancel = resolve.start({ root = root, base = "HEAD" }, { file }, function(path)
         seen[#seen + 1] = path
       end)
@@ -183,7 +186,13 @@ describe("changeset.resolve", function()
     }) do
       it("waits on a server enabled for " .. case.covers, function()
         -- A root_dir that never answers keeps the server enabled but never started.
-        vim.lsp.config(case.name, { cmd = function() end, filetypes = case.filetypes, root_dir = function() end })
+        vim.lsp.config(case.name, {
+          cmd = function()
+            error("never started")
+          end,
+          filetypes = case.filetypes,
+          root_dir = function() end,
+        })
         vim.lsp.enable(case.name)
         enabled = case.name
 
@@ -192,11 +201,18 @@ describe("changeset.resolve", function()
     end
 
     it("reports a file as unanswered once an enabled server fails to attach in time", function()
-      vim.lsp.config("stub_lua", { cmd = function() end, filetypes = { "lua" }, root_dir = function() end })
+      vim.lsp.config("stub_lua", {
+        cmd = function()
+          error("never started")
+        end,
+        filetypes = { "lua" },
+        root_dir = function() end,
+      })
       vim.lsp.enable("stub_lua")
       enabled = "stub_lua"
-      local report
-      local file = { path = "mod.lua", status = "added", added = 1, removed = 0, hunks = {} }
+      local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
+      local file =
+        { path = "mod.lua", status = "added", section = "implementation", added = 1, removed = 0, hunks = {} }
 
       resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items)
         report = { items = items }
@@ -205,11 +221,17 @@ describe("changeset.resolve", function()
       assert.is_true(vim.wait(5000, function()
         return report ~= nil
       end, 25))
-      assert.is_nil(report.items)
+      assert.is_nil(present(report).items)
     end)
 
     it("waits past a client that lists no symbols for one that does", function()
-      vim.lsp.config("stub_lua", { cmd = function() end, filetypes = { "lua" }, root_dir = function() end })
+      vim.lsp.config("stub_lua", {
+        cmd = function()
+          error("never started")
+        end,
+        filetypes = { "lua" },
+        root_dir = function() end,
+      })
       vim.lsp.enable("stub_lua")
       enabled = "stub_lua"
       ---Attach `buf` to an in-process server named `name` that answers each method from `answers`.
@@ -242,8 +264,9 @@ describe("changeset.resolve", function()
           end,
         }, { bufnr = buf })
       end
-      local report
-      local file = { path = "mod.lua", status = "added", added = 1, removed = 0, hunks = {} }
+      local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
+      local file =
+        { path = "mod.lua", status = "added", section = "implementation", added = 1, removed = 0, hunks = {} }
       resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items)
         report = { items = items }
       end)
@@ -261,7 +284,7 @@ describe("changeset.resolve", function()
       assert.is_true(vim.wait(1000, function()
         return report ~= nil
       end, 25))
-      assert.are.equal("one", assert(report.items)[1].name)
+      assert.are.equal("one", present(present(present(report).items)[1]).name)
       for _, client in ipairs(vim.lsp.get_clients({ bufnr = buf })) do
         client:stop()
       end
@@ -341,8 +364,9 @@ describe("changeset.resolve", function()
       Fixture.init_repo("trunk", root)
       Fixture.commit("base", root)
       vim.fn.writefile({ "return { 1 }" }, root .. "/mod.lua")
-      local report
-      local file = { path = "mod.lua", status = "modified", added = 1, removed = 1, hunks = {} }
+      local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
+      local file =
+        { path = "mod.lua", status = "modified", section = "implementation", added = 1, removed = 1, hunks = {} }
 
       resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items)
         report = { items = items }
@@ -352,7 +376,7 @@ describe("changeset.resolve", function()
       assert.is_true(vim.wait(5000, function()
         return report ~= nil
       end, 25))
-      assert.is_nil(report.items)
+      assert.is_nil(present(report).items)
     end)
 
     it("reads a file's comment lines at its base and now when no server covers it", function()
@@ -360,8 +384,8 @@ describe("changeset.resolve", function()
       vim.fn.writefile({ "x = 1", "# old note" }, root .. "/conf.toml")
       Fixture.commit("base", root)
       vim.fn.writefile({ "# new note", "x = 1" }, root .. "/conf.toml")
-      local report
-      local file = { path = "conf.toml", status = "modified", added = 1, removed = 1, hunks = {} }
+      local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
+      local file = { path = "conf.toml", status = "modified", section = "config", added = 1, removed = 1, hunks = {} }
 
       resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items, found)
         report = { items = items, comments = found }
@@ -370,10 +394,10 @@ describe("changeset.resolve", function()
       assert.is_true(vim.wait(5000, function()
         return report ~= nil
       end, 25))
-      assert.is_nil(report.items)
-      local found = assert(report.comments)
+      assert.is_nil(present(report).items)
+      local found = present(present(report).comments)
       assert.same({ "comment", "code" }, { comments.kind(found.new, 1), comments.kind(found.new, 2) })
-      assert.same({ "code", "comment" }, { comments.kind(assert(found.old), 1), comments.kind(found.old, 2) })
+      assert.same({ "code", "comment" }, { comments.kind(present(found.old), 1), comments.kind(present(found.old), 2) })
     end)
 
     it("reads no comment lines for a Docs file, whose rows never split out comments", function()
@@ -381,7 +405,7 @@ describe("changeset.resolve", function()
       vim.fn.writefile({ "# Title" }, root .. "/README.md")
       Fixture.commit("base", root)
       vim.fn.writefile({ "# Title", "<!-- note -->" }, root .. "/README.md")
-      local report
+      local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
       local file = { path = "README.md", status = "modified", section = "docs", added = 1, removed = 0, hunks = {} }
 
       resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items, found)
@@ -391,7 +415,7 @@ describe("changeset.resolve", function()
       assert.is_true(vim.wait(5000, function()
         return report ~= nil
       end, 25))
-      assert.is_nil(report.comments)
+      assert.is_nil(present(report).comments)
     end)
 
     it("marks a test its attribute names in a file no one opened", function()
@@ -399,7 +423,7 @@ describe("changeset.resolve", function()
       vim.fn.mkdir(root .. "/src", "p")
       vim.fn.writefile({ "#[test]", "fn refreshes_token() {}", "fn load() {}" }, root .. "/src/session.rs")
 
-      local items = assert(resolved("src/session.rs"))
+      local items = present(resolved("src/session.rs"))
 
       assert.is_true(items.refreshes_token.test)
       assert.is_nil(items.load.test)
@@ -436,7 +460,7 @@ describe("changeset.resolve", function()
       vim.bo[buf].filetype = "rust"
       vim.api.nvim_buf_set_lines(buf, 0, 0, false, { "#[test]" })
 
-      local items = assert(resolved("src/session.rs"))
+      local items = present(resolved("src/session.rs"))
 
       assert.is_true(items.refreshes_token.test)
     end)
@@ -450,7 +474,8 @@ describe("changeset.resolve", function()
       selectionRange = { start = { line = 0, character = 0 }, ["end"] = { line = 0, character = 3 } },
     }
 
-    local root, enabled
+    local root ---@type string
+    local enabled ---@type string?
 
     before_each(function()
       root = vim.fn.tempname()
@@ -522,14 +547,14 @@ describe("changeset.resolve", function()
           end)
         end)
       )
-      local report
+      local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
       start(function(_, items)
         report = { items = items }
       end)
       assert.is_true(vim.wait(3000, function()
         return report ~= nil
       end, 20))
-      assert.is_nil(report.items)
+      assert.is_nil(present(report).items)
     end)
 
     ---Answers `initialize`, then hands each symbol request to `on_symbols(callback)`.
@@ -550,7 +575,7 @@ describe("changeset.resolve", function()
       vim.defer_fn = function(fn, ms)
         return real_defer(fn, ms == 10000 and 50 or ms)
       end
-      local report
+      local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
       start(function(_, items, _, timed_out)
         report = { items = items, timed_out = timed_out }
       end)
@@ -560,8 +585,8 @@ describe("changeset.resolve", function()
       vim.defer_fn = real_defer
 
       assert.is_true(landed)
-      assert.is_nil(report.items)
-      assert.is_true(report.timed_out)
+      assert.is_nil(present(report).items)
+      assert.is_true(present(report).timed_out)
     end)
 
     it("reports no answer when the client refuses to send the request", function()
@@ -576,15 +601,15 @@ describe("changeset.resolve", function()
           end)
         end)
       )
-      local report
+      local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
       start(function(_, items, _, timed_out)
         report = { items = items, timed_out = timed_out }
       end)
       assert.is_true(vim.wait(3000, function()
         return report ~= nil
       end, 20))
-      assert.is_nil(report.items)
-      assert.is_falsy(report.timed_out)
+      assert.is_nil(present(report).items)
+      assert.is_falsy(present(report).timed_out)
     end)
 
     it("reports no answer when no client is left to ask", function()
@@ -604,7 +629,7 @@ describe("changeset.resolve", function()
       vim.lsp.get_clients = function(filter)
         return requesting and {} or real_get_clients(filter)
       end
-      local report
+      local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
       start(function(_, items)
         report = { items = items }
       end)
@@ -615,7 +640,7 @@ describe("changeset.resolve", function()
 
       assert.is_true(requesting)
       assert.is_true(landed)
-      assert.is_nil(report.items)
+      assert.is_nil(present(report).items)
     end)
 
     it("reports the file when its server exits before answering", function()
@@ -636,7 +661,7 @@ describe("changeset.resolve", function()
           end
         end)
       )
-      local report
+      local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
       start(function(_, items)
         report = { items = items }
       end)
@@ -667,7 +692,8 @@ describe("changeset.resolve", function()
           end, delay)
         end)
       )
-      local first, second
+      local first ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
+      local second ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
       local cancel = start(function(_, items)
         first = { items = items }
       end)
@@ -678,12 +704,12 @@ describe("changeset.resolve", function()
       assert.is_true(vim.wait(4000, function()
         return first ~= nil and second ~= nil
       end, 20))
-      assert.truthy(second.items)
-      assert.truthy(first.items, "the first walk timed out although the server attached in time")
+      assert.truthy(present(second).items)
+      assert.truthy(present(first).items, "the first walk timed out although the server attached in time")
     end)
 
     it("answers when a second symbol server attaches while the first is still answering", function()
-      local respond
+      local respond ---@type fun()?
       enable(
         "first_server",
         server(function(method, callback)
@@ -698,7 +724,7 @@ describe("changeset.resolve", function()
           end)
         end)
       )
-      local report
+      local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
       start(function(_, items)
         report = { items = items }
       end)
@@ -718,7 +744,7 @@ describe("changeset.resolve", function()
       assert.is_true(vim.wait(2000, function()
         return #vim.lsp.get_clients({ bufnr = buf, method = "textDocument/documentSymbol" }) == 2
       end, 20))
-      respond()
+      present(respond)()
       assert.is_true(
         vim.wait(3000, function()
           return report ~= nil
@@ -750,7 +776,7 @@ describe("changeset.resolve", function()
       assert.is_true(vim.wait(2000, function()
         return #vim.lsp.get_clients({ bufnr = buf, method = "textDocument/documentSymbol" }) == 2
       end, 20))
-      local report
+      local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
       start(function(_, items)
         report = { items = items }
       end)
@@ -761,7 +787,7 @@ describe("changeset.resolve", function()
         { "one" },
         vim.tbl_map(function(item)
           return item.name
-        end, assert(report.items))
+        end, present(present(report).items))
       )
     end)
 
@@ -785,23 +811,27 @@ describe("changeset.resolve", function()
       assert.is_true(vim.wait(2000, function()
         return #vim.lsp.get_clients({ bufnr = buf, method = "textDocument/documentSymbol" }) == 2
       end, 20))
-      local report
+      local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
       start(function(_, items)
         report = { items = items }
       end)
       assert.is_true(vim.wait(3000, function()
         return report ~= nil
       end, 20))
-      assert.equal(1, #assert(report.items))
+      assert.equal(1, #present(present(report).items))
     end)
   end)
 
   describe("start, on a file edited while its text parses", function()
-    local tmp, previous_dir, real_parser
+    local tmp ---@type string
+    local previous_dir ---@type string
+    local real_parser ---@type function
 
     ---documentSymbol from the buffer as it stands when asked: a Function per `local function`.
     local function symbols_for(buf)
-      local out, open = {}, nil
+      local out = {}
+      ---@type { name: string, start: integer }?
+      local open
       for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
         local name = line:match("^local function ([%w_]+)")
         if name then
@@ -894,7 +924,8 @@ describe("changeset.resolve", function()
         end
         return real_parser(text, ...)
       end
-      local file = { path = "big.lua", status = "modified", added = 1, removed = 0, hunks = {}, section = "src" }
+      local file =
+        { path = "big.lua", status = "modified", added = 1, removed = 0, hunks = {}, section = "implementation" }
       local got
       resolve.start(
         { root = tmp, base = Fixture.git({ "merge-base", "HEAD", "trunk" }, tmp) },
@@ -910,12 +941,12 @@ describe("changeset.resolve", function()
     end
 
     it("hands back symbols and comment lines read from the same text", function()
-      local got = assert(resolve_while(function(buf)
+      local got = present(resolve_while(function(buf)
         vim.api.nvim_buf_set_lines(buf, 0, 0, false, { "local p1", "local p2", "local p3", "local p4", "local p5" })
       end))
 
-      local items = assert(got.items, "no symbols")
-      local kinds = assert(got.comment_lines, "no comment lines").new
+      local items = present(got.items, "no symbols")
+      local kinds = present(got.comment_lines, "no comment lines").new
       local documented = #vim.tbl_filter(function(item)
         return comments.kind(kinds, item.range_lnum - 1) == "comment"
       end, items)
@@ -923,7 +954,7 @@ describe("changeset.resolve", function()
     end)
 
     it("reports no answer when the buffer is wiped while its text parses", function()
-      local got = assert(resolve_while(function(buf)
+      local got = present(resolve_while(function(buf)
         vim.api.nvim_buf_delete(buf, { force = true })
       end))
 

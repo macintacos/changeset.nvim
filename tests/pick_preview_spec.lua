@@ -2,12 +2,13 @@ vim.opt.rtp:prepend(require("support.deps").path("mini.pick"))
 require("mini.pick").setup()
 
 local preview = require("changeset.pick_preview")
+local present = require("support.present")
 preview.setup()
 
 ---Every float except the picker's own window.
 ---@return integer[]
 local function side_floats()
-  local state = MiniPick.get_picker_state()
+  local state = present(MiniPick).get_picker_state()
   local main = state and state.windows.main
   return vim.tbl_filter(function(win)
     return win ~= main and vim.api.nvim_win_get_config(win).relative ~= ""
@@ -31,12 +32,12 @@ local function drive(opts, steps)
   local function poll()
     local step = steps[i]
     if not step or failure then
-      MiniPick.stop()
+      present(MiniPick).stop()
       return
     end
     deadline = deadline or vim.uv.now() + 5000
     local ok, ready = pcall(function()
-      return MiniPick.is_picker_active() and (not step.ready or step.ready())
+      return present(MiniPick).is_picker_active() and (not step.ready or step.ready())
     end)
     if (ok and ready) or vim.uv.now() > deadline then
       local ran, err = pcall(step.run)
@@ -46,8 +47,8 @@ local function drive(opts, steps)
     vim.defer_fn(poll, 10)
   end
   vim.defer_fn(poll, 50)
-  MiniPick.start(opts)
-  assert(not failure, failure)
+  present(MiniPick).start(opts)
+  assert.is_true(not failure, failure)
 end
 
 ---The first line the one preview float shows.
@@ -86,7 +87,7 @@ describe("changeset.pick_preview", function()
     it("splits a wide editor so both floats and their borders fill it", function()
       local layout = preview._layout(200)
       assert.is_true(layout.list < layout.preview)
-      assert.equal(200, layout.list + layout.preview + 4)
+      assert.equal(200, layout.list + present(layout.preview) + 4)
     end)
   end)
 
@@ -103,7 +104,8 @@ describe("changeset.pick_preview", function()
   end)
 
   describe("in a running picker", function()
-    local dir, columns
+    local dir ---@type string
+    local columns
 
     before_each(function()
       dir = vim.fn.tempname()
@@ -126,7 +128,7 @@ describe("changeset.pick_preview", function()
           run = function()
             local floats = side_floats()
             seen.count = #floats
-            seen.first = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(floats[1]), 0, 1, false)[1]
+            seen.first = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(present(floats[1])), 0, 1, false)[1]
             vim.api.nvim_input("<C-n>")
           end,
         },
@@ -136,7 +138,7 @@ describe("changeset.pick_preview", function()
           end,
           run = function()
             local floats = side_floats()
-            seen.second = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(floats[1]), 0, 1, false)[1]
+            seen.second = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(present(floats[1])), 0, 1, false)[1]
           end,
         },
       })
@@ -168,7 +170,7 @@ describe("changeset.pick_preview", function()
         {
           ready = preview_open,
           run = function()
-            line = vim.api.nvim_win_get_cursor(side_floats()[1])[1]
+            line = vim.api.nvim_win_get_cursor(present(side_floats()[1]))[1]
           end,
         },
       })

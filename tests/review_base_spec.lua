@@ -1,10 +1,14 @@
 local support = require("support.git")
 local gutter = require("support.gutter")
+local present = require("support.present")
 
 local await, await_cached, edit, revision = gutter.await, gutter.await_cached, gutter.edit, gutter.revision
 
 describe("the gutter's base", function()
-  local dir, cwd, outside, other
+  local dir ---@type string
+  local cwd ---@type string
+  local outside ---@type string?
+  local other ---@type string?
 
   before_each(function()
     cwd = vim.fn.getcwd()
@@ -13,8 +17,11 @@ describe("the gutter's base", function()
 
   after_each(function()
     gutter.teardown(dir, cwd)
-    for _, extra in ipairs({ outside, other }) do
-      vim.fn.delete(extra, "rf")
+    if outside then
+      vim.fn.delete(outside, "rf")
+    end
+    if other then
+      vim.fn.delete(other, "rf")
     end
     outside, other = nil, nil
   end)
@@ -46,15 +53,15 @@ describe("the gutter's base", function()
 
     local bufs = edit({ "a.txt", "b.txt" })
     assert.is_true(await_cached(bufs))
-    vim.api.nvim_buf_call(bufs[1], function()
+    vim.api.nvim_buf_call(present(bufs[1]), function()
       require("gitsigns").change_base(parent)
     end)
     assert.is_true(await({ bufs[1] }, parent, 5000))
 
-    vim.api.nvim_buf_set_lines(bufs[2], 0, -1, false, { "edited" })
+    vim.api.nvim_buf_set_lines(present(bufs[2]), 0, -1, false, { "edited" })
 
     assert.is_false(vim.wait(1500, function()
-      return revision(bufs[1]) ~= parent
+      return revision(present(bufs[1])) ~= parent
     end, 20))
   end)
 
@@ -100,13 +107,13 @@ describe("the gutter's base", function()
     assert.is_true(gutter.settle())
     local moves = gutter.moves_to[base]
 
-    vim.api.nvim_set_current_buf(theirs[1])
-    vim.api.nvim_buf_set_lines(theirs[1], 0, -1, false, { "edited" })
+    vim.api.nvim_set_current_buf(present(theirs[1]))
+    vim.api.nvim_buf_set_lines(present(theirs[1]), 0, -1, false, { "edited" })
 
     assert.is_false(vim.wait(1500, function()
       return gutter.moves_to[base] ~= moves
     end, 20))
-    assert.is_nil(revision(theirs[1]))
+    assert.is_nil(revision(present(theirs[1])))
   end)
 
   it("diffs a buffer opened from a second repository against that repository's merge base", function()

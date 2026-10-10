@@ -7,6 +7,7 @@ local highlights = require("changeset.highlights")
 local review_comment_window = require("changeset.review_comment_window")
 local unified_diff = require("changeset.unified_diff")
 local window = require("changeset.window")
+local present = require("support.present")
 
 vim.opt.rtp:prepend(require("support.deps").path("gitsigns.nvim"))
 require("gitsigns").setup()
@@ -28,7 +29,9 @@ local function screen_rows()
 end
 
 describe("changeset.unified_diff", function()
-  local dir, previous, base
+  local dir ---@type string
+  local previous ---@type string
+  local base ---@type string
 
   before_each(function()
     dir, previous = Fixture.enter_tempdir()
@@ -40,7 +43,7 @@ describe("changeset.unified_diff", function()
     vim.fn.writefile({ "line 1", "line 3", "line 4", "changed 5", "line 6" }, "a.txt")
     build.build()
     assert.is_true(vim.wait(5000, function()
-      return assert(build.current()).collected
+      return present(build.current()).collected
     end, 20))
   end)
 
@@ -62,9 +65,9 @@ describe("changeset.unified_diff", function()
   ---@param win integer
   ---@return boolean
   local function shows(win)
-    return vim.wait(5000, function()
+    return (vim.wait(5000, function()
       return view(win) ~= nil
-    end, 20)
+    end, 20))
   end
 
   ---Have the tree read the diff again, until it lists `name`.
@@ -72,7 +75,7 @@ describe("changeset.unified_diff", function()
   local function listed(name)
     build.refresh()
     assert.is_true(vim.wait(5000, function()
-      return vim.iter(assert(build.current()).files):any(function(file)
+      return vim.iter(present(build.current()).files):any(function(file)
         return file.path == name
       end)
     end, 20))
@@ -81,10 +84,12 @@ describe("changeset.unified_diff", function()
   ---@param buf integer
   ---@return boolean
   local function attached(buf)
-    return vim.wait(5000, function()
-      local bcache = require("gitsigns.cache").cache[buf]
-      return bcache ~= nil and bcache.compare_text ~= nil
-    end, 20)
+    return (
+      vim.wait(5000, function()
+        local bcache = require("gitsigns.cache").cache[buf]
+        return bcache ~= nil and bcache.compare_text ~= nil
+      end, 20)
+    )
   end
 
   it("opens the unified diff in a file opened after it starts", function()
@@ -106,7 +111,7 @@ describe("changeset.unified_diff", function()
       { { start = 1, count = 2 } },
       vim.tbl_map(function(hunk)
         return { start = hunk.added.start, count = hunk.added.count }
-      end, view(vim.api.nvim_get_current_win()).hunks)
+      end, present(present(view(vim.api.nvim_get_current_win())).hunks))
     )
   end)
 
@@ -172,10 +177,10 @@ describe("changeset.unified_diff", function()
 
     require("gitsigns").change_base(base)
 
-    assert.is_true(vim.wait(5000, function()
+    assert.is_true((vim.wait(5000, function()
       local open = view(win)
       return open ~= nil and vim.api.nvim_buf_get_name(open.base):find(base, 1, true) ~= nil
-    end, 20))
+    end, 20)))
   end)
 
   it("closes the view of a file the tree stops listing, once the tree's diff says so", function()
@@ -204,7 +209,7 @@ describe("changeset.unified_diff", function()
     build.build()
 
     assert.is_true(vim.wait(5000, function()
-      local tree = assert(build.current())
+      local tree = present(build.current())
       return tree.root == other and tree.collected and view(win) == nil
     end, 20))
     assert.is_true(shows(vim.api.nvim_get_current_win()))
@@ -234,9 +239,9 @@ describe("changeset.unified_diff", function()
     assert.is_true(attached(vim.api.nvim_get_current_buf()))
 
     require("gitsigns").show("HEAD~1")
-    assert.is_true(vim.wait(5000, function()
+    assert.is_true((vim.wait(5000, function()
       return vim.api.nvim_buf_get_name(0):find("gitsigns://", 1, true) ~= nil
-    end, 20))
+    end, 20)))
 
     assert.is_false(shows(vim.api.nvim_get_current_win()))
   end)
@@ -261,14 +266,14 @@ describe("changeset.unified_diff", function()
     ---@param text string
     ---@return integer
     local function row_showing(text)
-      local found
-      assert.is_true(vim.wait(5000, function()
+      local found ---@type integer?
+      assert.is_true((vim.wait(5000, function()
         found = screen_rows():enumerate():find(function(_, row)
           return row:find(text, 1, true) ~= nil
         end)
         return found ~= nil
-      end, 20))
-      return found
+      end, 20)))
+      return present(found)
     end
 
     ---The colours drawn at the last character of the first screen row showing `text`.
@@ -276,8 +281,8 @@ describe("changeset.unified_diff", function()
     ---@return { foreground: integer?, background: integer? }
     local function last_cell(text)
       local found = row_showing(text)
-      local row = screen_rows():totable()[found]
-      local col = vim.fn.strchars(row:sub(1, row:find(text, 1, true) + #text - 2))
+      local row = present(screen_rows():totable()[found]) --[[@as string]]
+      local col = vim.fn.strchars(row:sub(1, present((row:find(text, 1, true))) + #text - 2))
       return vim.api.nvim__inspect_cell(1, found - 1, col)[2]
     end
 
@@ -288,7 +293,7 @@ describe("changeset.unified_diff", function()
     local function gutter(row)
       local cells = vim.tbl_map(function(col)
         return vim.api.nvim__inspect_cell(1, row - 1, col)
-      end, vim.fn.range(0, vim.fn.getwininfo(vim.api.nvim_get_current_win())[1].textoff - 1))
+      end, vim.fn.range(0, present(vim.fn.getwininfo(vim.api.nvim_get_current_win())[1]).textoff - 1))
       return table.concat(vim.tbl_map(function(cell)
         return cell[1]
       end, cells)),
@@ -408,17 +413,17 @@ describe("changeset.unified_diff", function()
 
   -- Line 2 is gone from a.txt, so gitsigns draws it as a virtual line under line 1.
   describe("beside review comments", function()
-    local win
+    local win ---@type integer?
 
     before_each(function()
       os.remove(comment_store.path())
       vim.cmd.edit("a.txt")
       win = vim.api.nvim_get_current_win()
-      assert.is_true(vim.wait(5000, function()
+      assert.is_true((vim.wait(5000, function()
         return screen_rows():any(function(row)
           return row:find("line 2", 1, true) ~= nil
         end)
-      end, 20))
+      end, 20)))
     end)
 
     after_each(function()
@@ -442,7 +447,7 @@ describe("changeset.unified_diff", function()
 
       local top = vim.api.nvim_win_get_position(float)[1] + 1
       local bottom = top + vim.api.nvim_win_get_height(float) + 1
-      assert.equal(vim.fn.screenpos(win, 1, 1).row, top - 2)
+      assert.equal(vim.fn.screenpos(present(win), 1, 1).row, top - 2)
       assert.matches("line 2", screen_rows():totable()[bottom + 2])
       vim.api.nvim_win_close(float, true)
     end)
@@ -453,7 +458,7 @@ describe("changeset.unified_diff", function()
       vim.cmd.redraw()
 
       local rows = screen_rows():totable()
-      local line = vim.fn.screenpos(win, 1, 1).row
+      local line = vim.fn.screenpos(present(win), 1, 1).row
       assert.matches("╭ Review comment · line 1", rows[line + 1])
       assert.matches("╰", rows[line + 3])
       assert.matches("line 2", rows[line + 4])
@@ -492,7 +497,7 @@ describe("changeset.unified_diff", function()
       vim.api.nvim_set_current_win(sidebar)
       local span = { first = 1, last = 5, icon = "󰊕", icon_hl = "MiniIconsBlue" }
 
-      window.preview(dir .. "/a.txt", 1, vim.tbl_extend("force", BAND, { span = span }))
+      window.preview(dir .. "/a.txt", 1, vim.tbl_extend("force", BAND, { span = span }) --[[@as changeset.Band]])
 
       local previewed = vim.fn.bufwinid(dir .. "/a.txt")
       assert.is_true(vim.wait(5000, function()
@@ -515,7 +520,7 @@ describe("changeset.unified_diff", function()
           highlights.PREVIEW_BAR_HL,
         },
         vim.tbl_map(function(mark)
-          return mark[4].sign_hl_group
+          return present(mark[4]).sign_hl_group
         end, marks)
       )
     end)
