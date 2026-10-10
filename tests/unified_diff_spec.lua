@@ -1,5 +1,6 @@
 local Fixture = require("support.git")
 local Paths = require("changeset.paths")
+local build = require("changeset.build")
 local review_comments = require("changeset.review_comments")
 local comment_store = require("changeset.comment_store")
 local highlights = require("changeset.highlights")
@@ -9,7 +10,8 @@ local window = require("changeset.window")
 
 vim.opt.rtp:prepend(require("support.deps").path("gitsigns.nvim"))
 require("gitsigns").setup()
-unified_diff.activate()
+require("support.gh")
+unified_diff.turn_on()
 
 ---@type changeset.Band
 local BAND = { icon = "󰢱", icon_hl = "MiniIconsAzure", path = "a.txt" }
@@ -34,7 +36,12 @@ describe("changeset.unified_diff", function()
     Fixture.init_repo("trunk", dir)
     vim.fn.writefile(Fixture.numbered(6), "a.txt")
     base = Fixture.commit("base", dir)
+    Fixture.git({ "switch", "-q", "-c", "feature" }, dir)
     vim.fn.writefile({ "line 1", "line 3", "line 4", "changed 5", "line 6" }, "a.txt")
+    build.build()
+    assert.is_true(vim.wait(5000, function()
+      return assert(build.current()).collected
+    end, 20))
   end)
 
   after_each(function()
@@ -60,6 +67,17 @@ describe("changeset.unified_diff", function()
     end, 20)
   end
 
+  ---Have the tree read the diff again, until it lists `name`.
+  ---@param name string
+  local function listed(name)
+    build.refresh()
+    assert.is_true(vim.wait(5000, function()
+      return vim.iter(assert(build.current()).files):any(function(file)
+        return file.path == name
+      end)
+    end, 20))
+  end
+
   ---@param buf integer
   ---@return boolean
   local function attached(buf)
@@ -77,6 +95,7 @@ describe("changeset.unified_diff", function()
 
   it("opens it in an untracked file, every line added", function()
     vim.fn.writefile({ "first", "second" }, "new.txt")
+    listed("new.txt")
 
     vim.cmd.edit("new.txt")
 
@@ -164,7 +183,7 @@ describe("changeset.unified_diff", function()
     Fixture.git({ "checkout", "-q", "-b", "other", "HEAD~1" }, dir)
     vim.fn.writefile({ "line 1", "line 2", "line 3", "line 4", "other 5", "line 6" }, "a.txt")
     Fixture.commit("other change", dir)
-    vim.fn.system({ "git", "-C", dir, "merge", "-q", "trunk" })
+    vim.fn.system({ "git", "-C", dir, "merge", "-q", "feature" })
     vim.cmd.edit("a.txt")
     local buf = vim.api.nvim_get_current_buf()
     assert.is_true(vim.wait(5000, function()
@@ -324,7 +343,15 @@ describe("changeset.unified_diff", function()
     it("draws every line of a file new since its base added, a blank one among them", function()
       vim.fn.writefile({ "first", "", "last" }, "new.txt")
       Fixture.commit("new", dir)
-      require("gitsigns").change_base(base, true)
+      local done = false
+      require("gitsigns").change_base(base, true, function()
+        done = true
+      end)
+      assert.is_true(vim.wait(5000, function()
+        return done
+      end, 20))
+      -- After the base moved: the tree's read loads the file, which gitsigns would attach on the old base meanwhile.
+      listed("new.txt")
       vim.wo.number = true
 
       vim.cmd.edit("new.txt")

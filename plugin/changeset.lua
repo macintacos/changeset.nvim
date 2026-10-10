@@ -18,6 +18,9 @@ local subcommands = {
   pick = function()
     require("changeset.pick").pick()
   end,
+  diff = function()
+    require("changeset").diff()
+  end,
   next = function()
     require("changeset").step(1)
   end,
@@ -149,7 +152,7 @@ end, {
   nargs = "*",
   range = true,
   bar = true,
-  desc = "Toggle the changeset sidebar, rebuild it, pick a change from a list, step through its changes, symbols or files, open or preview them, submit, restore, copy or abandon the review, or write, delete, draft, walk, reopen, list or show review comments",
+  desc = "Toggle the changeset sidebar, rebuild it, pick a change from a list, turn the unified diff on or off, step through its changes, symbols or files, open or preview them, submit, restore, copy or abandon the review, or write, delete, draft, walk, reopen, list or show review comments",
   complete = function(lead, line)
     -- The words between `Changeset`, with any range before it, and `lead`.
     local typed = vim.trim(line:match("^%S+%s+(.-)%S*$") or "")
@@ -300,6 +303,12 @@ local keys = {
     lhs = "<C-g>j",
     name = "pick",
     desc = "Pick a change to open from a list",
+    icon = { cat = "filetype", name = "diff" },
+  },
+  {
+    lhs = "<C-g>d",
+    name = "diff",
+    desc = "Turn the unified diff on or off",
     icon = { cat = "filetype", name = "diff" },
   },
 }

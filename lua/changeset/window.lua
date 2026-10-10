@@ -607,6 +607,14 @@ function M.commit(path, lnum, how, win)
   return true
 end
 
+---Whether `win` shows the preview the sidebar put there while the cursor stood in it, which is only looked at.
+---@param win integer
+---@return boolean
+function M.previewing(win)
+  local snapshot = sidebar.borrowed[win]
+  return snapshot ~= nil and snapshot.standing_buf == vim.api.nvim_win_get_buf(win)
+end
+
 ---Commit the focused window if the sidebar previewed into it from elsewhere:
 ---arriving at a preview by any route counts as choosing it, but one made where
 ---the cursor already stood was never arrived at.

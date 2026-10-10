@@ -46,6 +46,9 @@ describe("changeset.config", function()
       { { review = false }, "review" },
       { { review = { header = 1 } }, "review.header" },
       { { review = { footer = true } }, "review.footer" },
+      { { unified_diff = false }, "unified_diff" },
+      { { unified_diff = { keep = "some" } }, "unified_diff.keep" },
+      { { unified_diff = { keep = false } }, "unified_diff.keep" },
     }) do
       local ok, err = pcall(config.setup, case[1])
       assert.is_false(ok)

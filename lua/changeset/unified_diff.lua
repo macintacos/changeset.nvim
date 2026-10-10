@@ -1,8 +1,11 @@
----Opens gitsigns' unified diff in every file window once the sidebar has opened, until the user closes one.
----It draws the lines gone since gitsigns' base inline, as `:Gitsigns diffthis unified=true` does. Closing one in any
----window turns it off everywhere until Neovim exits.
+---Opens and closes gitsigns' unified diff in the windows showing a file the tree lists, as far as the diff reaches.
+---It draws the lines gone since gitsigns' base inline, as `:Gitsigns diffthis unified=true` does. `changeset.diff_reach`
+---decides which files it reaches.
 
+local build = require("changeset.build")
+local diff_reach = require("changeset.diff_reach")
 local highlights = require("changeset.highlights")
+local Paths = require("changeset.paths")
 
 local M = {}
 
@@ -21,11 +24,14 @@ local DIFF_HL = {
   GitSignsVirtLnum = highlights.DIFF_DELETE_HL,
 }
 
----@type "waiting"|"on"|"off"
-local state = "waiting"
+local reach = diff_reach.new()
 
----Each window's view this module opened: its buffer, the buffer holding its base, and the base's text gitsigns held.
----@type table<integer, { buf: integer, base: integer, text: string[] }>
+---Whether the autocommands and decoration provider are set up, which they stay for the session.
+local started = false
+
+---Each window's view this module opened: its buffer and file, the buffer holding its base, and the base's text
+---gitsigns held.
+---@type table<integer, { buf: integer, path: string, base: integer, text: string[] }>
 local opened = {}
 
 ---Each window with a view on its way, and the buffer it is for.
@@ -36,8 +42,9 @@ local opening = {}
 ---@type table<integer, integer>
 local covered = {}
 
----gitsigns' `attach_to_untracked` as it was before `activate` turned it on.
-local untracked_was = false
+---gitsigns' `attach_to_untracked` as it was before the diff turned on, while the diff holds it on.
+---@type boolean?
+local untracked_was
 
 -- Reaches into gitsigns internals: its buffer cache, its unified views, and the base buffer `diffthis` makes for them.
 
@@ -47,19 +54,36 @@ local function showing(win)
   return require("gitsigns.unified").get_view(win) ~= nil
 end
 
+---The absolute path of `name` when the tree lists that file, else nil.
+---@param name string A buffer's name, or a path.
+---@return string?
+local function tree_file(name)
+  local tree = build.current()
+  if not tree then
+    return nil
+  end
+  local path = Paths.relative(tree.root, name)
+  if path and vim.iter(tree.files):any(function(file)
+    return file.path == path
+  end) then
+    return tree.root .. "/" .. path
+  end
+end
+
+---Whether the diff reaches the file `buf` holds.
+---@param buf integer
+---@return boolean
+local function allowed(buf)
+  local path = tree_file(vim.api.nvim_buf_get_name(buf))
+  return path ~= nil and reach:allows(path)
+end
+
 ---Whether the view this module opened in `win` went while `win` still shows its buffer, which only the user does.
 ---@param win integer
 ---@return boolean
 local function closed_by_user(win)
   local mine = opened[win]
   return mine ~= nil and mine.buf == vim.api.nvim_win_get_buf(win) and not showing(win)
-end
-
-local function turn_off()
-  state = "off"
-  opened = {}
-  require("gitsigns.config").config.attach_to_untracked = untracked_was
-  vim.api.nvim_clear_autocmds({ group = GROUP })
 end
 
 ---Have gitsigns attach to untracked files, those loaded now included: the sidebar counts one as added, but gitsigns
@@ -104,7 +128,7 @@ end
 local function covering(win, buf)
   local mine = opened[win]
   -- A view open that this module didn't open is the user's own; one of ours gone, the user closed.
-  return state == "on" and vim.bo[buf].buftype == "" and showing(win) == (mine ~= nil and mine.buf == buf)
+  return vim.bo[buf].buftype == "" and showing(win) == (mine ~= nil and mine.buf == buf) and allowed(buf)
 end
 
 ---Lay a blank sign over each of gitsigns' in rows `top` to `bot` of `buf`, and draw the sign and number of each line
@@ -156,9 +180,10 @@ end
 ---buffer is made, which can wait on git, by when the sidebar may be current.
 ---@param win integer
 ---@param buf integer
+---@param path string The file `buf` holds.
 ---@param git_obj Gitsigns.GitObj
 ---@param text string[] The base's text gitsigns holds.
-local function open(win, buf, git_obj, text)
+local function open(win, buf, path, git_obj, text)
   opening[win] = buf
   ---@async
   local function run()
@@ -168,13 +193,13 @@ local function open(win, buf, git_obj, text)
     if not base then
       return
     end
-    if state == "on" and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
+    if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf and reach:allows(path) then
       if table.concat(text, "\n") == "" then
         -- gitsigns writes a base without the file as one blank line, which the view reads back with its newline.
         vim.bo[base].endofline = false
       end
       -- Before `show`, which registers the view at once but then waits on its diff.
-      opened[win] = { buf = buf, base = base, text = text }
+      opened[win] = { buf = buf, path = path, base = base, text = text }
       paint(win)
       require("gitsigns.unified").show(win, base, created, loaded)
     elseif created then
@@ -184,15 +209,20 @@ local function open(win, buf, git_obj, text)
   require("gitsigns.async").run(run):raise_on_error()
 end
 
----Open the unified diff in `win`, unless it is open there, or again once the base it compares against has moved.
+---Open the unified diff in `win` when it reaches the file there, unless it is open there, or again once the base it
+---compares against has moved.
 ---@param win integer
 function M.sync(win)
-  if state ~= "on" then
+  if not started then
     return
   end
   local buf = vim.api.nvim_win_get_buf(win)
   if opened[win] and opened[win].buf ~= buf then
     opened[win] = nil
+  end
+  local path = tree_file(vim.api.nvim_buf_get_name(buf))
+  if not (path and reach:allows(path)) then
+    return
   end
   -- gitsigns drops a buffer's status before the last update it publishes as it lets go, mid-unload, of the buffer.
   local tracked = vim.bo[buf].buftype == "" and vim.b[buf].gitsigns_status_dict ~= nil
@@ -205,21 +235,32 @@ function M.sync(win)
     -- One of ours gone while its buffer stays was closed by the user, which leaving the window acts on, or is going
     -- with a buffer being deleted, which publishes a last update first.
     if not mine then
-      open(win, buf, bcache.git_obj, bcache.compare_text)
+      open(win, buf, path, bcache.git_obj, bcache.compare_text)
     end
   -- A view this module didn't open is the user's own.
   elseif mine and mine.text ~= bcache.compare_text then
-    open(win, buf, bcache.git_obj, bcache.compare_text)
+    open(win, buf, path, bcache.git_obj, bcache.compare_text)
   end
 end
 
----Open the unified diff in every file window from now on, those open now included. Does nothing without a gitsigns
----that has it, while already on, or once the user has closed it.
-function M.activate()
-  if state ~= "waiting" or not pcall(require, "gitsigns.unified") then
+local function sync_all()
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    M.sync(win)
+  end
+end
+
+---Set up what opens, closes and covers the views, once for the session: each answers the reach as it fires.
+local function start()
+  if started then
     return
   end
-  state = "on"
+  started = true
+  -- Fires: the tree reading its diff, which says which files it lists, the first time a little after the sidebar opens.
+  build.subscribe(function(event)
+    if event == "diff" then
+      sync_all()
+    end
+  end)
   local group = vim.api.nvim_create_augroup(GROUP, { clear = true })
   -- Fires: a window taking a buffer, a buffer or window entered, a split among them. Previews swap buffers where
   -- autocommands don't nest, so `window.preview` syncs its window itself.
@@ -248,10 +289,12 @@ function M.activate()
   -- gone by then was closed by the user.
   vim.api.nvim_create_autocmd({ "BufLeave", "WinLeave" }, {
     group = group,
-    desc = "changeset: stop opening gitsigns' unified diff once the user closes one",
+    desc = "changeset: stop opening gitsigns' unified diff on a file once the user closes its view",
     callback = function()
-      if closed_by_user(vim.api.nvim_get_current_win()) then
-        turn_off()
+      local win = vim.api.nvim_get_current_win()
+      if closed_by_user(win) then
+        reach:hand_close(opened[win].path)
+        opened[win] = nil
       end
     end,
   })
@@ -302,10 +345,56 @@ function M.activate()
       return false
     end,
   })
-  attach_untracked()
-  for _, win in ipairs(vim.api.nvim_list_wins()) do
-    M.sync(win)
+end
+
+---Reach every file the tree lists, those closed by hand included, opening their views in every window now and from
+---now on. Without a gitsigns that has unified views, nothing opens.
+function M.turn_on()
+  local was_on = reach:on()
+  reach:turn_on()
+  if not pcall(require, "gitsigns.unified") then
+    return
   end
+  start()
+  if not was_on then
+    attach_untracked()
+  end
+  sync_all()
+end
+
+---Reach no further than `keep` says, never further than now, closing at once, in every window, each view this module
+---opened that the diff no longer reaches.
+---@param keep changeset.DiffReach.Keep
+function M.limit(keep)
+  reach:limit(keep)
+  for win, mine in pairs(opened) do
+    if not reach:allows(mine.path) then
+      opened[win] = nil
+      if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == mine.buf then
+        require("gitsigns.unified").close(win)
+      end
+    end
+  end
+  if untracked_was ~= nil and not reach:on() then
+    require("gitsigns.config").config.attach_to_untracked = untracked_was
+    untracked_was = nil
+  end
+end
+
+---Note that the user entered the file at `path`, for the rest of the session, opening its views where the diff now
+---reaches it. A file the tree doesn't list isn't entered.
+---@param path string A buffer's name, or a path.
+function M.enter(path)
+  local file = tree_file(path)
+  if file and reach:enter(file) then
+    sync_all()
+  end
+end
+
+---Whether the diff reaches any file.
+---@return boolean
+function M.on()
+  return reach:on()
 end
 
 return M

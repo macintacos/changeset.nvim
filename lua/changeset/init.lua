@@ -18,6 +18,7 @@ local Paths = require("changeset.paths")
 local render = require("changeset.render")
 local Rows = require("changeset.rows")
 local sidebar_state = require("changeset.sidebar_state")
+local unified_diff = require("changeset.unified_diff")
 local view = require("changeset.view")
 local window = require("changeset.window")
 
@@ -167,8 +168,8 @@ end
 
 local PASSING_BUFTYPES = { terminal = true, help = true }
 
----Note the file and line the cursor is in. The sidebar, floats, terminals and help
----are not somewhere the user is, so they leave the last place standing.
+---Note the file and line the cursor is in, and while the sidebar is open, that the user entered the file. The sidebar,
+---floats, terminals and help are not somewhere the user is, so they leave the last place standing.
 local function track()
   local state = sidebar_state.current()
   local win = vim.api.nvim_get_current_win()
@@ -184,6 +185,10 @@ local function track()
   local name = vim.api.nvim_buf_get_name(buf)
   local path = Paths.relative(state.tree.root, name)
   state.position:track(path and { path = path, lnum = vim.api.nvim_win_get_cursor(win)[1] } or nil)
+  -- A preview made where the cursor stood was only looked at.
+  if window.buf() and not window.previewing(win) then
+    unified_diff.enter(name)
+  end
   draw.paint()
 end
 
@@ -221,12 +226,13 @@ local function apply(lnum, offset)
   draw.paint()
 end
 
----Make `row` the one last opened.
+---Make `row` the one last opened, its file entered.
 ---@param row changeset.Row
 local function pick(row)
   local state = sidebar_state.current()
   assert(state, "changeset: no tree built yet")
   state.position:pick(row)
+  unified_diff.enter(state.tree.root .. "/" .. row.path)
   draw.paint()
 end
 
@@ -734,7 +740,7 @@ function M.open()
       draw.paint()
     end,
   })
-  require("changeset.unified_diff").activate()
+  unified_diff.turn_on()
 
   redraw()
   -- A kept tree misses what nothing announced, such as a file edited outside Neovim while it kept focus. It refreshes
@@ -749,10 +755,26 @@ function M.open()
   end
 end
 
----Dismiss the sidebar. The tree stays, and keeps refreshing.
+---Dismiss the sidebar, the unified diff kept on only as far as `unified_diff.keep` says. The tree stays, and keeps
+---refreshing.
 function M.close()
   release()
   window.close()
+  unified_diff.limit(config.get().unified_diff.keep)
+end
+
+---Turn the unified diff off everywhere, or on for every file of the tree as the sidebar opening does, building the
+---current buffer's repository's tree when there is none, and say which.
+function M.diff()
+  if unified_diff.on() then
+    unified_diff.limit("none")
+    return vim.notify("Changeset: unified diff off")
+  end
+  if not (build.current() or built()) then
+    return
+  end
+  unified_diff.turn_on()
+  vim.notify("Changeset: unified diff on")
 end
 
 ---Fill `placeholder`, in the current tabpage, with the tree, or let go of it when there is no tree to fill it with.

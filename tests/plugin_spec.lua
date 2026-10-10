@@ -101,7 +101,7 @@ describe("plugin/changeset.lua", function()
 
   it("completes the subcommands that match the argument", function()
     assert.same(
-      { "comment", "next", "pick", "prev", "preview", "refresh", "review", "toggle" },
+      { "comment", "diff", "next", "pick", "prev", "preview", "refresh", "review", "toggle" },
       vim.fn.getcompletion("Changeset ", "cmdline")
     )
     assert.same({ "refresh", "review" }, vim.fn.getcompletion("Changeset re", "cmdline"))
@@ -139,6 +139,17 @@ describe("plugin/changeset.lua", function()
 
     package.loaded.changeset = nil
     assert.equal(1, calls.toggle)
+  end)
+
+  it("routes diff and its <Plug> map to the unified diff's switch", function()
+    local calls = {}
+    package.loaded.changeset = { diff = counter(calls, "diff") }
+
+    vim.cmd("Changeset diff")
+    vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-diff)"), "x", false)
+
+    package.loaded.changeset = nil
+    assert.equal(2, calls.diff)
   end)
 
   it("routes pick and its <Plug> map to the picker", function()
@@ -409,7 +420,7 @@ describe("plugin/changeset.lua", function()
       .. " io.write(vim.fn.maparg('<C-g>cc', 'x'), ' ', vim.fn.maparg(']g', 'n'), ' ', vim.fn.maparg('[g', 'n'))"
 
     assert.equal(
-      "<Plug>(changeset-comment-new) <Plug>(changeset-comment-del) <Plug>(changeset-comment-list)   "
+      "<Plug>(changeset-comment-new) <Plug>(changeset-comment-del) <Plug>(changeset-comment-list) <Plug>(changeset-diff)  "
         .. "<Plug>(changeset-review-submit)  <Plug>(changeset-next) <Plug>(changeset-prev) "
         .. "<Plug>(changeset-next-symbol) <Plug>(changeset-prev-symbol) <Plug>(changeset-next-file) "
         .. "<Plug>(changeset-prev-file) <Plug>(changeset-toggle) <Plug>(changeset-pick)  "

@@ -10,6 +10,7 @@ local icons = require("changeset.icons")
 local pick_preview = require("changeset.pick_preview")
 local render = require("changeset.render")
 local symbols = require("changeset.symbols")
+local unified_diff = require("changeset.unified_diff")
 local window = require("changeset.window")
 
 local M = {}
@@ -137,6 +138,18 @@ local function show(buf_id, list, query)
   end
 end
 
+---Open `item`'s file at its line in `win`, as a file entered.
+---@param item changeset.PickItem
+---@param win integer?
+---@return boolean opened false when the file could not be opened.
+local function open(item, win)
+  if not window.commit(item.path, item.lnum, "reuse", win) then
+    return false
+  end
+  unified_diff.enter(item.path)
+  return true
+end
+
 -- Exposed for tests: which rows become items, and how their trails are drawn.
 M._items = items
 M._show = show
@@ -166,7 +179,7 @@ function M.pick()
       end,
     }, function(item)
       if item then
-        window.commit(item.path, item.lnum, "reuse", from)
+        open(item, from)
       end
     end)
     return nil
@@ -181,7 +194,7 @@ function M.pick()
       name = title,
       show = show,
       choose = function(item)
-        if window.commit(item.path, item.lnum, "reuse", from) then
+        if open(item, from) then
           -- mini.pick refocuses the window the picker started in, which is the sidebar when it started there.
           MiniPick.set_picker_target_window(vim.api.nvim_get_current_win())
         end

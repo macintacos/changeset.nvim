@@ -7,6 +7,7 @@ local M = {}
 ---@field layout? changeset.Config.Layout
 ---@field review? changeset.Config.Review
 ---@field review_comment? changeset.Config.ReviewComment
+---@field unified_diff? changeset.Config.UnifiedDiff
 
 ---@class changeset.Config.Keymaps
 ---@field jump? string|false Go to this change. Default `<CR>`.
@@ -40,12 +41,16 @@ local M = {}
 ---@field sign? boolean Put a comment bubble in the sign column on each review comment's first line; `false` leaves it to a statuscolumn that draws `require("changeset").bubble()`. Default true.
 ---@field blocks? boolean Start the session showing each review comment's whole text in a box under its last line, rather than its first line at the end of the line; `:Changeset comment toggle` switches. Default false.
 
+---@class changeset.Config.UnifiedDiff
+---@field keep? changeset.DiffReach.Keep Which files keep the unified diff once the sidebar closes: none, those entered, or all. Default "none".
+
 ---The options in force: every top-level field set.
 ---@class changeset.Options : changeset.Config
 ---@field keymaps changeset.Config.Keymaps
 ---@field layout changeset.Config.Layout
 ---@field review changeset.Config.Review
 ---@field review_comment changeset.Config.ReviewComment
+---@field unified_diff changeset.Config.UnifiedDiff
 
 ---@type changeset.Options
 local DEFAULTS = {
@@ -72,6 +77,7 @@ local DEFAULTS = {
   layout = { min_file_width = 80 },
   review = { header = "", footer = "" },
   review_comment = { save = { "<C-CR>", "<C-s>" }, sign = true, blocks = false },
+  unified_diff = { keep = "none" },
 }
 
 local current = vim.deepcopy(DEFAULTS)
@@ -84,6 +90,7 @@ local function validate(options)
   vim.validate("layout", options.layout, "table")
   vim.validate("review", options.review, "table")
   vim.validate("review_comment", options.review_comment, "table")
+  vim.validate("unified_diff", options.unified_diff, "table")
   for action, lhs in pairs(options.keymaps) do
     vim.validate("keymaps." .. action, lhs, function(v)
       return v == false or (type(v) == "string" and v ~= "")
@@ -102,6 +109,9 @@ local function validate(options)
   end, "non-empty list of non-empty strings")
   vim.validate("review_comment.sign", options.review_comment.sign, "boolean")
   vim.validate("review_comment.blocks", options.review_comment.blocks, "boolean")
+  vim.validate("unified_diff.keep", options.unified_diff.keep, function(v)
+    return v == "none" or v == "entered" or v == "all"
+  end, '"none", "entered" or "all"')
 end
 
 ---Splits `opts` into the options `defaults` has and the dotted paths of those it doesn't. A list is one option.
