@@ -111,7 +111,7 @@ local function show(buf, items, query)
       return glyphs[i] .. item.text
     end)
     :totable()
-  MiniPick.default_show(buf, lines, query)
+  require("mini.pick").default_show(buf, lines, query)
   local win = vim.fn.bufwinid(buf)
   local width = win ~= -1 and vim.api.nvim_win_get_width(win) or 80
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
@@ -180,7 +180,8 @@ function M.pick(kind)
   end
   -- `require` first so a lazy-loading manager can load and set mini.pick up; then `MiniPick`, which only `setup()`
   -- creates.
-  if not (pcall(require, "mini.pick") and MiniPick) then
+  local ready = pcall(require, "mini.pick") and MiniPick
+  if not ready then
     return vim.ui.select(listed or items(Git.lines(source.command, root)), {
       prompt = title,
       format_item = function(item)
@@ -190,10 +191,13 @@ function M.pick(kind)
   end
   highlights.define_highlights()
   pick_preview.setup()
-  MiniPick.start({
+  require("mini.pick").start({
     source = {
       items = listed or function()
-        MiniPick.set_picker_items_from_cli(source.command, { postprocess = items, spawn_opts = { cwd = root } })
+        require("mini.pick").set_picker_items_from_cli(
+          source.command,
+          { postprocess = items, spawn_opts = { cwd = root } }
+        )
       end,
       name = title,
       show = show,

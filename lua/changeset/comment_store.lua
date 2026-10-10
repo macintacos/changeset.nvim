@@ -30,7 +30,7 @@ local KEPT_BATCHES = 10
 ---Where the record lives. Under `state`, because a comment can't be derived again.
 ---@return string
 function M.path()
-  return vim.fs.joinpath(vim.fn.stdpath("state"), "changeset", "comments.json")
+  return vim.fs.joinpath(vim.fn.stdpath("state") --[[@as string]], "changeset", "comments.json")
 end
 
 ---A hand edit can leave any JSON value where a comment should be.

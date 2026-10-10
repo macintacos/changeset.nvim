@@ -212,7 +212,7 @@ function M.fit(trail, width, sep)
   if keep < 1 then
     return cells.ELLIPSIS
   end
-  return cells.ELLIPSIS .. cells.tail(parts[1], keep)
+  return cells.ELLIPSIS .. cells.tail(assert(parts[1], "changeset: vim.split returned no parts"), keep)
 end
 
 return M

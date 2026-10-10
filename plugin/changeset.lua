@@ -104,6 +104,7 @@ local subcommands = {
 }
 
 ---Subcommands that take one word after them, unless it is one of their verbs.
+---@type table<string, true?>
 local TAKES_REF = { base = true }
 
 ---The review comment window, when it is current. Never loads its module: no window is open until it is loaded.
@@ -496,8 +497,9 @@ vim.api.nvim_create_autocmd("SessionLoadPost", {
 })
 
 local function register_picker()
-  if MiniPick then
-    MiniPick.registry.changeset = function()
+  local pick = MiniPick
+  if pick then
+    pick.registry.changeset = function()
       return require("changeset.pick").pick()
     end
   end

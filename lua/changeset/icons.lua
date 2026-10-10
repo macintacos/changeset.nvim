@@ -20,9 +20,9 @@ end
 
 ---@return changeset.IconProvider
 local function detect()
-  local source = M.source()
-  if source == "mini.icons" then
-    return MiniIcons.get
+  local source, mini = M.source(), MiniIcons
+  if source == "mini.icons" and mini then
+    return mini.get
   end
   if not source then
     return function() end

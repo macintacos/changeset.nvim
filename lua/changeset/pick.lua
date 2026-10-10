@@ -94,9 +94,10 @@ local function show(buf_id, list, query)
     display[i] = glyphs[i] .. " " .. row.name
   end
 
-  MiniPick.default_show(buf_id, display, query)
+  local pick = require("mini.pick")
+  pick.default_show(buf_id, display, query)
 
-  local state = MiniPick.get_picker_state()
+  local state = pick.get_picker_state()
   local width = state and vim.api.nvim_win_get_width(state.windows.main) or 80
 
   vim.api.nvim_buf_clear_namespace(buf_id, ns, 0, -1)
@@ -170,8 +171,9 @@ function M.pick()
   local title = "Changeset (vs " .. tree.ref .. ")"
 
   -- `require` first so a lazy-loading manager can load and set mini.pick up; then
-  -- `MiniPick`, which only `setup()` creates and `MiniPick.start` needs.
-  if not (pcall(require, "mini.pick") and MiniPick) then
+  -- `MiniPick`, which only `setup()` creates.
+  local ready = pcall(require, "mini.pick") and MiniPick
+  if not ready then
     vim.ui.select(list, {
       prompt = title,
       format_item = function(item)
@@ -188,7 +190,7 @@ function M.pick()
   -- and nothing may touch MiniPick before the guard.
   highlights.define_highlights()
   pick_preview.setup()
-  return MiniPick.start({
+  return require("mini.pick").start({
     source = {
       items = list,
       name = title,
@@ -196,7 +198,7 @@ function M.pick()
       choose = function(item)
         if open(item, from) then
           -- mini.pick refocuses the window the picker started in, which is the sidebar when it started there.
-          MiniPick.set_picker_target_window(vim.api.nvim_get_current_win())
+          require("mini.pick").set_picker_target_window(vim.api.nvim_get_current_win())
         end
       end,
     },

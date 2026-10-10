@@ -63,8 +63,9 @@ end
 ---@return changeset.health.Facts
 local function probe()
   local mini_pick = loads("mini.pick") and (MiniPick and "set up" or "installed")
+  local version = tostring((vim.version --[[@as fun(): vim.Version]])())
   return {
-    version = (tostring(vim.version()):gsub("%+.*", "")),
+    version = (version:gsub("%+.*", "")),
     nvim_012 = vim.fn.has("nvim-0.12") == 1,
     git = vim.fn.executable("git") == 1,
     gh = vim.fn.executable("gh") == 1,

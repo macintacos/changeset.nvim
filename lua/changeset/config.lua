@@ -44,13 +44,48 @@ local M = {}
 ---@class changeset.Config.UnifiedDiff
 ---@field keep? changeset.DiffReach.Keep Which files keep the unified diff once the sidebar closes: none, those entered, or all. Default "none".
 
----The options in force: every top-level field set.
+---The options in force: every field set.
 ---@class changeset.Options : changeset.Config
----@field keymaps changeset.Config.Keymaps
----@field layout changeset.Config.Layout
----@field review changeset.Config.Review
----@field review_comment changeset.Config.ReviewComment
----@field unified_diff changeset.Config.UnifiedDiff
+---@field keymaps changeset.Options.Keymaps
+---@field layout changeset.Options.Layout
+---@field review changeset.Options.Review
+---@field review_comment changeset.Options.ReviewComment
+---@field unified_diff changeset.Options.UnifiedDiff
+
+---@class changeset.Options.Keymaps : changeset.Config.Keymaps
+---@field jump string|false
+---@field jump_close string|false
+---@field jump_vsplit string|false
+---@field jump_split string|false
+---@field jump_tab string|false
+---@field close string|false
+---@field expand string|false
+---@field collapse string|false
+---@field collapse_all string|false
+---@field expand_all string|false
+---@field next_section string|false
+---@field prev_section string|false
+---@field refresh string|false
+---@field yank string|false
+---@field delete_comment string|false
+---@field help string|false
+---@field filter_kinds string|false
+---@field filter string|false
+
+---@class changeset.Options.Layout : changeset.Config.Layout
+---@field min_file_width number
+
+---@class changeset.Options.Review : changeset.Config.Review
+---@field header string
+---@field footer string
+
+---@class changeset.Options.ReviewComment : changeset.Config.ReviewComment
+---@field save string[]
+---@field sign boolean
+---@field blocks boolean
+
+---@class changeset.Options.UnifiedDiff : changeset.Config.UnifiedDiff
+---@field keep changeset.DiffReach.Keep
 
 ---@type changeset.Options
 local DEFAULTS = {

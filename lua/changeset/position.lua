@@ -125,8 +125,10 @@ function Position:settle(view, decided, lnum)
       self.landing = nil
     end
   end
-  if self.restoring then
-    self.restoring.at = id_at(view.visible, lnum or view.cursor)
+  -- Read again: a `release` above can have let go of it.
+  local restoring = self.restoring
+  if restoring then
+    restoring.at = id_at(view.visible, lnum or view.cursor)
   end
   return lnum, offset
 end
@@ -190,7 +192,7 @@ local function recorded(value)
       and type(row.path) == "string"
       and { id = row.id, path = row.path, offset = type(row.offset) == "number" and row.offset or nil }
     or nil
-  return (here or row) and { here = here, row = row } or nil
+  return (here or row) and { here = here, row = row } --[[@as changeset.position.Restoring]] or nil
 end
 
 ---Take up the position a saved session recorded, applying each half once the tree has decided its file.

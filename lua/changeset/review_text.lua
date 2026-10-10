@@ -21,7 +21,7 @@ end
 ---footer, a blank line apart; a blank header or footer adds nothing.
 ---@param repository string
 ---@param comments changeset.ReviewComment[]
----@param framing changeset.Config.Review
+---@param framing changeset.Options.Review
 ---@return string
 function M.text(repository, comments, framing)
   local sorted = vim.list_slice(comments)

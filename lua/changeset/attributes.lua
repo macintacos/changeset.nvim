@@ -48,7 +48,10 @@ end
 ---@return { [1]: integer, [2]: integer }[]
 local function test_regions(source, lang, tree)
   local query = vim.treesitter.query.parse(lang, QUERIES[lang])
-  tree = tree or vim.treesitter.get_string_parser(source, lang, { injections = { [lang] = "" } }):parse()[1]
+  if not tree then
+    local trees = vim.treesitter.get_string_parser(source, lang, { injections = { [lang] = "" } }):parse()
+    tree = assert(trees, "changeset: a parse without a callback returned no trees")[1]
+  end
   local root = tree:root()
   local test_capture = assert(vim.iter(pairs(query.captures)):find(function(_, name)
     return name == "test"

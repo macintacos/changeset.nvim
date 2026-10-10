@@ -98,7 +98,7 @@ local async_threads = setmetatable({}, { __mode = "k" })
 local function await(args)
   local co = coroutine.running()
   if co and async_threads[co] then
-    return coroutine.yield(args)
+    return (coroutine.yield --[[@as fun(args: string[]): vim.SystemCompleted]])(args)
   end
 end
 
@@ -137,7 +137,7 @@ function M.lines(args, cwd)
     if result.code ~= 0 then
       return {}
     end
-    local out = vim.split(result.stdout, "\n", { plain = true })
+    local out = vim.split(result.stdout or "", "\n", { plain = true })
     if out[#out] == "" then
       out[#out] = nil
     end
@@ -208,7 +208,7 @@ end
 function M.parent(cwd, branch)
   local log = M.lines({ "git", "reflog", "show", "--format=%H %gs", "refs/heads/" .. branch }, cwd)
   local commit, source = (log[#log] or ""):match("^(%x+) branch: Created from (.+)$")
-  if source == "HEAD" then
+  if source == "HEAD" and commit then
     source = moved_from(cwd, branch, commit)
   end
   if not source then

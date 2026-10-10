@@ -182,7 +182,12 @@ end, IN_WINDOW)
 ---@param comment changeset.ReviewComment
 ---@param opts { line: integer, title: string, body: string?, keep: fun(body: string, draft: true?), blank: fun(open: changeset.ReviewCommentWindow)? }
 local function open_window(repository, comment, opts)
-  review_comment_window.open(vim.tbl_extend("error", opts, {
+  review_comment_window.open({
+    line = opts.line,
+    title = opts.title,
+    body = opts.body,
+    keep = opts.keep,
+    blank = opts.blank,
     icon = icon_of(comment),
     save_desc = "Save the review comment",
     close_desc = "Close, keeping the text as a draft, and select its block",
@@ -195,7 +200,7 @@ local function open_window(repository, comment, opts)
     back = function()
       review_comment_blocks.select(comment)
     end,
-  }))
+  })
 end
 
 ---Opens the window under `comment`'s lines of the current buffer, or under the cursor's line for a whole file's or
@@ -214,9 +219,10 @@ function M.open(comment)
     keep = function(body, draft)
       if not body:find("%S") then
         -- Scheduled: the question opens a window, and this one is still closing.
-        return vim.schedule(function()
+        vim.schedule(function()
           M.ask_delete(comment, repository)
         end)
+        return
       end
       if
         (body ~= comment.body or draft and not comment.draft) and not keep(repository, with_body(comment, body, true))
@@ -447,7 +453,7 @@ end
 ---@param name string
 ---@param run fun()
 function M.from_window(open, name, run)
-  local route = IN_WINDOW[name]
+  local route = IN_WINDOW[name] ---@type { desc: string, run: fun(open: changeset.ReviewCommentWindow) }?
   if route then
     return route.run(open)
   end
@@ -679,7 +685,7 @@ local function jump(count)
   local cursor = vim.api.nvim_win_get_cursor(win)[1]
   local i, wrapped =
     review_comment.step(comments, { path = path, lnum = cursor, lines = vim.api.nvim_buf_line_count(buf) }, count)
-  if not land(win, from_sidebar, repository, comments[i]) then
+  if not land(win, from_sidebar, repository, assert(comments[i], "changeset: stepped past the review comments")) then
     return
   end
   -- Echoed like a search count, not notified, so notifier plugins don't toast every jump.

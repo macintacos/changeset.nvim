@@ -53,13 +53,16 @@ local function await_client(bufnr, on_client)
 
   -- Each wait owns its autocmd: a second walk waiting on the same file must not
   -- silence the first's.
-  local done, autocmd = false, nil
+  local done = false
+  local autocmd ---@type integer?
   local function finish(ok)
     if done then
       return
     end
     done = true
-    pcall(vim.api.nvim_del_autocmd, autocmd)
+    if autocmd then
+      pcall(vim.api.nvim_del_autocmd, autocmd)
+    end
     on_client(ok)
   end
 
@@ -91,14 +94,17 @@ local function request(bufnr, on_done)
   local keep = kinds.for_filetype(vim.bo[bufnr].filetype)
   local params = { textDocument = vim.lsp.util.make_text_document_params(bufnr) }
   local clients = vim.lsp.get_clients({ bufnr = bufnr, method = method })
-  local waiting, answers, pending, done, autocmd = {}, {}, 0, false, nil
+  local waiting, answers, pending, done = {}, {}, 0, false
+  local autocmd ---@type integer?
 
   local function finish(timed_out)
     if done then
       return
     end
     done = true
-    pcall(vim.api.nvim_del_autocmd, autocmd)
+    if autocmd then
+      pcall(vim.api.nvim_del_autocmd, autocmd)
+    end
     -- A server with nothing for this file answers []; another may still list its symbols.
     local answered = vim
       .iter(clients)
@@ -255,10 +261,10 @@ function M._walk(queue, run, on_file)
   local next_index, cancelled = 1, false
 
   local function pump()
-    if cancelled or next_index > #queue then
+    local path = queue[next_index]
+    if cancelled or not path then
       return
     end
-    local path = queue[next_index]
     next_index = next_index + 1
     -- The pcall below also catches a raise arriving after `run` has answered, and
     -- pumping twice for one lane would put more than CONCURRENCY in flight.

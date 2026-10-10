@@ -29,7 +29,7 @@ end
 ---A buffer collects mappings from whoever wants one — a blanket `FileType`
 ---autocmd is all it takes — and another plugin's keys are not this sidebar's
 ---interface. Compared as keycodes, since `<C-v>` and `<C-V>` are one key.
----@param keymaps { lhs: string }[] As returned by `nvim_buf_get_keymap`.
+---@param keymaps vim.api.keyset.get_keymap[] As returned by `nvim_buf_get_keymap`.
 ---@param own string[] The `lhs` of every mapping the sidebar set.
 ---@return table[] mine
 ---@return table[] others
@@ -40,7 +40,8 @@ function M._own(keymaps, own)
   end
   local mine, others = {}, {}
   for _, keymap in ipairs(keymaps) do
-    table.insert(wanted[vim.keycode(keymap.lhs)] and mine or others, keymap)
+    local lhs = assert(keymap.lhs, "changeset: a mapping without an lhs")
+    table.insert(wanted[vim.keycode(lhs)] and mine or others, keymap)
   end
   return mine, others
 end

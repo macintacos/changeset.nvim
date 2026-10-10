@@ -72,7 +72,7 @@ local function test_module(sym)
 end
 
 ---@type changeset.SymbolRule
-local function ts_test(sym)
+local ts_test = function(sym)
   -- tsserver names a callback after the call it is passed to: `describe('refresh') callback`; a call counts by
   -- its head, so `it.only(…)` and `describe.skip(…)` are the blocks they wrap.
   local callee = sym.name:match("^([%w_$.]+)%(.*%) callback$")

@@ -21,7 +21,7 @@ local symbols = require("changeset.symbols")
 ---@class changeset.Line
 ---@field text string
 ---@field marks changeset.Mark[]
----@field row changeset.Row The row this line draws; a placeholder's stands in for its file.
+---@field row changeset.Row? The row this line draws, absent on a line that draws none; a placeholder's stands in for its file.
 ---@field kind? string
 
 ---@class changeset.RenderOpts
@@ -44,7 +44,7 @@ local symbols = require("changeset.symbols")
 ---@field file integer?  Which of the files shown the cursor is in; absent when it is in none.
 ---@field files integer  Files shown.
 ---@field query string   Filter in force; empty for none.
----@field keys changeset.Config.Keymaps The keys the sidebar bound.
+---@field keys changeset.Options.Keymaps The keys the sidebar bound.
 ---@field branch string Branch checked out; "HEAD" when detached.
 ---@field ref string Ref the tree is compared against, e.g. "origin/trunk".
 
@@ -157,8 +157,10 @@ local RAIL_HL = {
   untracked = "GitSignsUntracked",
 }
 
+---@type table<string, string?>
 local STATUS_MARKER = { deleted = " deleted", renamed = " renamed" }
 
+---@type table<string, true?>
 local META_KINDS = { orphans = true, orphan = true }
 
 ---Joins highlighted chunks into a line, recording each chunk's byte range as a mark.
@@ -343,6 +345,7 @@ end
 local function placeholder_line(file)
   -- A row of its own, one level down. Two lines under one id would make the file read as
   -- childless to `h` and to the cursor anchor, both of which go by the next line's depth.
+  ---@type changeset.Row
   local row = vim.tbl_extend("force", file, {
     id = file.id .. "\0#pending",
     depth = file.depth + 1,
@@ -393,7 +396,7 @@ local function comment_line(row, opts, width)
   room = room - vim.fn.strdisplaywidth(where)
   -- The body needs its two-cell gap and a cell to show anything.
   if room >= 3 then
-    local text = cells.clip(comment.body:match("^[^\r\n]*"), room - 2)
+    local text = cells.clip((comment.body:gsub("[\r\n].*", "")), room - 2)
     local pad = (" "):rep(room - vim.fn.strdisplaywidth(text))
     vim.list_extend(chunks, { { pad }, { text, highlights.REVIEW_COMMENT_BODY_HL } })
   end
@@ -436,7 +439,7 @@ local function matches(text, query)
   local found, from = {}, 1
   while true do
     local first, last = haystack:find(needle, from, true)
-    if not first then
+    if not (first and last) then
       return found
     end
     found[#found + 1] = { first - 1, last }
@@ -462,7 +465,7 @@ end
 local function mark_matches(lines, query)
   for _, line in ipairs(lines) do
     -- A section header never matches the filter: lighting its label would claim a match.
-    if line.row.kind ~= "section" then
+    if assert(line.row, "changeset: a tree line without a row").kind ~= "section" then
       for _, run in ipairs(matches(line.text, query)) do
         line.marks[#line.marks + 1] =
           { col = run[1], end_col = run[2], hl = highlights.MATCH_HL, priority = MATCH_PRIORITY }
@@ -666,7 +669,8 @@ function M.header_totals(summary, width)
     right = {}
   else
     left = counted(FILES_ICON, summary.files, "file")
-    right = (summary.commits or 0) > 0 and counted(COMMIT_ICON, summary.commits, "commit") or {}
+    local commits = summary.commits or 0
+    right = commits > 0 and counted(COMMIT_ICON, commits, "commit") or {}
   end
   if #right > 0 then
     right[#right + 1] = { "  ", strip }

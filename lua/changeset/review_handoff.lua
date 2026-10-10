@@ -96,6 +96,14 @@ local SUBMIT_TIMEOUT = 20000
 ---@type table?
 local submitting
 
+---Ends the submit `this` started, unless a later one already took its place.
+---@param this table
+local function release(this)
+  if submitting == this then
+    submitting = nil
+  end
+end
+
 ---The repository's saved review comments, how many drafts it holds, and the text they are pasted as; nothing after
 ---saying why when none is saved to `verb`.
 ---@param repository string
@@ -132,14 +140,10 @@ function M.submit()
   local this = {}
   submitting = this
   vim.defer_fn(function()
-    if submitting == this then
-      submitting = nil
-    end
+    release(this)
   end, SUBMIT_TIMEOUT)
   require("changeset.herdr").send(text, { title = "Submit " .. count, root = repository }, function(err, agent)
-    if submitting == this then
-      submitting = nil
-    end
+    release(this)
     if err then
       return say(vim.log.levels.WARN, "can't submit the review: %s", err)
     end
@@ -229,7 +233,7 @@ function M.restore()
     action = "restore",
   }, function(index)
     if index then
-      restore_batch(repository, batches[index])
+      restore_batch(repository, assert(batches[index], "changeset: a choice past the batches"))
     end
   end)
 end

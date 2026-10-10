@@ -21,7 +21,7 @@ local applied
 local applied_head
 
 ---gitsigns' repository objects whose gitdir watcher this hears.
----@type table<Gitsigns.Repo, true>
+---@type table<Gitsigns.Repo, true?>
 local watched = setmetatable({}, { __mode = "k" })
 
 ---@type string? Base every buffer should diff against; nil is the index.

@@ -9,7 +9,7 @@ local jsonfile = require("changeset.jsonfile")
 
 local M = {}
 
----@class changeset.CachedSymbol Only what `changeset.rows` reads from a symbol.
+---@class changeset.CachedSymbol : changeset.Symbol Only what `changeset.rows` reads from a symbol.
 ---@field name string
 ---@field kind string
 ---@field depth integer
@@ -35,7 +35,11 @@ local FORMAT = 5
 ---@param root string Absolute path to the repo root.
 ---@return string
 function M.path(root)
-  return vim.fs.joinpath(vim.fn.stdpath("cache"), "changeset", ("%s.v%d.json"):format((root:gsub("/", "%%")), FORMAT))
+  return vim.fs.joinpath(
+    vim.fn.stdpath("cache") --[[@as string]],
+    "changeset",
+    ("%s.v%d.json"):format((root:gsub("/", "%%")), FORMAT)
+  )
 end
 
 ---A file's identity against `base`: any change to the file, or a moved base, changes this.

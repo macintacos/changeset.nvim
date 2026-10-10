@@ -18,7 +18,7 @@ local KEPT = { none = "off", entered = "entered", all = "all" }
 ---@class changeset.DiffReach
 ---@field private level changeset.DiffReach.Level
 ---@field private entered_files table<string, true> Every file entered this session, by absolute path.
----@field private hand_closed table<string, true> Files whose view the user closed since the diff last turned on.
+---@field private hand_closed table<string, true?> Files whose view the user closed since the diff last turned on.
 local DiffReach = {}
 DiffReach.__index = DiffReach
 

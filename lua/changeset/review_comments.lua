@@ -48,7 +48,7 @@ local snapshots = {}
 local snapshot_ticks = {}
 
 ---Buffers written while the store refused their moves: their snapshots hold until a move is stored.
----@type table<integer, true>
+---@type table<integer, true?>
 local stale = {}
 
 ---The branch each buffer's marks were last drawn for.
@@ -63,11 +63,13 @@ local has_marks = {}
 ---@param buf integer
 ---@param comment changeset.ReviewComment
 local function mark(buf, comment)
-  local row = review_comment.first(comment) - 1
+  local first, last = review_comment.first(comment), comment.line
+  assert(first and last, "changeset: marking a whole file's review comment")
+  local row = first - 1
   local bubble, hl = M.glyph(comment)
   local circle = comment.draft and highlights.REVIEW_COMMENT_DRAFT_CIRCLE or highlights.REVIEW_COMMENT_CIRCLE
   vim.api.nvim_buf_set_extmark(buf, ns, row, 0, {
-    end_row = comment.line - 1,
+    end_row = last - 1,
     -- A line added right above the last moves the end down with the last, rather than onto the new line.
     end_right_gravity = true,
     number_hl_group = hl,
@@ -78,8 +80,9 @@ local function mark(buf, comment)
     } or nil,
   })
   local existing = vim.api.nvim_buf_get_extmarks(buf, sign_ns, { row, 0 }, { row, 0 }, { limit = 1, details = true })[1]
+  local existing_hl = existing and assert(existing[4], "changeset: an extmark without its details").sign_hl_group
   -- One bubble a line, and a draft's wins it: unfinished work is what should stand out.
-  if not existing or (comment.draft and existing[4].sign_hl_group ~= highlights.REVIEW_COMMENT_DRAFT_HL) then
+  if not existing or (comment.draft and existing_hl ~= highlights.REVIEW_COMMENT_DRAFT_HL) then
     -- The default priority, 4096, draws it over gitsigns' and diagnostics' signs. Without
     -- `sign_text` the mark takes no cell but keeps its group, which `M.bubble` answers from.
     vim.api.nvim_buf_set_extmark(buf, sign_ns, row, 0, {
@@ -106,15 +109,10 @@ end
 ---@return string? glyph
 ---@return string? hl
 function M.bubble(buf, lnum)
-  local found = vim.api.nvim_buf_get_extmarks(
-    buf,
-    sign_ns,
-    { lnum - 1, 0 },
-    { lnum - 1, -1 },
-    { limit = 1, details = true }
-  )
-  if found[1] then
-    local hl = found[1][4].sign_hl_group
+  local found =
+    vim.api.nvim_buf_get_extmarks(buf, sign_ns, { lnum - 1, 0 }, { lnum - 1, -1 }, { limit = 1, details = true })[1]
+  if found then
+    local hl = assert(found[4], "changeset: an extmark without its details").sign_hl_group
     return hl == highlights.REVIEW_COMMENT_DRAFT_HL and highlights.REVIEW_COMMENT_DRAFT_BUBBLE
       or highlights.REVIEW_COMMENT_BUBBLE,
       hl

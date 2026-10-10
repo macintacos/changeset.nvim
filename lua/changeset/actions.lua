@@ -142,7 +142,7 @@ local function start_row(rows, at, path, line, delta)
       above = (each.lnum or 1) < line and i or above
     end
   end
-  if not first then
+  if not (first and last) then
     return at
   end
   if delta > 0 then
@@ -224,7 +224,7 @@ function M.open_step(count, unit, hooks)
     return vim.api.nvim_echo({ { ("no %s %s"):format(count > 0 and "next" or "previous", unit) } }, false, {})
   end
   local focus = vim.api.nvim_get_current_win()
-  if state.view:reveal(rows[to].id) then
+  if state.view:reveal(assert(rows[to], "changeset: stepped past the rows").id) then
     hooks.redraw()
   end
   move(index_of(state.view:visible(), rows[to]))
@@ -291,11 +291,13 @@ local function prompt_filter(state, redraw)
     end,
   })
 
-  local ok, typed = pcall(vim.fn.input, {
-    prompt = "Filter changes: ",
-    default = previous_query,
-    cancelreturn = CANCELLED,
-  })
+  local ok, typed = pcall(function()
+    return vim.fn.input({
+      prompt = "Filter changes: ",
+      default = previous_query,
+      cancelreturn = CANCELLED,
+    })
+  end)
   vim.api.nvim_del_augroup_by_id(group)
 
   state.view:narrow((ok and typed ~= CANCELLED) and typed or previous_query)
@@ -304,7 +306,7 @@ end
 
 ---Bind `keys` on the sidebar's buffer. `?` lists exactly these.
 ---@param buf integer
----@param keys changeset.Config.Keymaps
+---@param keys changeset.Options.Keymaps
 ---@param hooks changeset.ActionHooks
 function M.set_keymaps(buf, keys, hooks)
   local set, own = help.mapper(buf)

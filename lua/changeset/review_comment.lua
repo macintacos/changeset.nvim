@@ -55,6 +55,7 @@ function M.at(comments, path, lnum)
     local first, last = M.first(comment), comment.line
     if
       comment.path == path
+      and first
       and last
       and first <= lnum
       and lnum <= last
@@ -110,7 +111,7 @@ end
 ---Where line `lnum` stands after the changes `hunks`, `vim.text.diff` indices, made: as a range's first line and as
 ---its last. They differ only for a deleted line, the first going to the line after the deletion, the last to the one
 ---before it. A line in a rewritten block keeps its place in the block, as far as the new block reaches.
----@param hunks integer[][]
+---@param hunks [integer, integer, integer, integer][]
 ---@param lnum integer
 ---@return integer first
 ---@return integer last
@@ -126,7 +127,7 @@ local function map_line(hunks, lnum)
       if new_count == 0 then
         return new_start + 1, new_start
       end
-      local line = new_start + math.min(lnum - old_start, new_count - 1)
+      local line = new_start + math.min(lnum - old_start, new_count - 1) --[[@as integer]]
       return line, line
     end
     shift = shift + new_count - old_count
@@ -137,7 +138,7 @@ end
 ---`comment`, a line comment, on the lines `hunks` moved its own to, within `line_count`; nil when they stayed. A
 ---comment whose lines were all deleted goes to the line after them.
 ---@param comment changeset.ReviewComment
----@param hunks integer[][]
+---@param hunks [integer, integer, integer, integer][]
 ---@param line_count integer
 ---@return changeset.ReviewComment?
 local function moved(comment, hunks, line_count)
@@ -169,7 +170,7 @@ end
 ---@return changeset.ReviewCommentMove[]
 function M.moves(before, after, comments)
   local hunks = vim.text.diff(text(before), text(after), { result_type = "indices", algorithm = "histogram" })
-  ---@cast hunks integer[][]
+  ---@cast hunks [integer, integer, integer, integer][]
   local found = {}
   for _, comment in ipairs(comments) do
     local to = moved(comment, hunks, #after)
@@ -212,7 +213,7 @@ local function neighbour(comments, path, lnum, count, step)
     return from, false
   end
   for i = from, to, step do
-    if side(comments[i], path, lnum, count) == step then
+    if side(assert(comments[i], "changeset: stepped past the review comments"), path, lnum, count) == step then
       return i, false
     end
   end

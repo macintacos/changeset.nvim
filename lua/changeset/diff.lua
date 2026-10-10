@@ -12,13 +12,15 @@ local M = {}
 ---@field removed integer
 ---@field old_lnum integer First old line; with no removed lines, the one the addition followed, 0 at the top.
 
----@class changeset.File A changed file and the hunks inside it.
+---@class changeset.diff.Unfiled A changed file and the hunks inside it, before `collect` files it under a section.
 ---@field path string      Repo-relative, the new path for a rename.
 ---@field oldpath string?  Previous path, renames only.
 ---@field status "added"|"modified"|"deleted"|"renamed"|"untracked"
 ---@field added integer
 ---@field removed integer
 ---@field hunks changeset.Hunk[] Ascending by line, as git emits them; empty for a binary or pure rename.
+
+---@class changeset.File : changeset.diff.Unfiled A changed file and the hunks inside it.
 ---@field section changeset.SectionKey The section `sections.classify` files it under, decided once when the diff is read.
 
 ---@class changeset.diff.Stat
@@ -59,7 +61,7 @@ function M._parse_numstat(stdout)
   local fields = vim.split(stdout, "\0", { plain = true })
   local i = 1
   while i <= #fields do
-    local added, removed, path = fields[i]:match("^(%S+)\t(%S+)\t(.*)$")
+    local added, removed, path = assert(fields[i], "changeset: read past the numstat"):match("^(%S+)\t(%S+)\t(.*)$")
     i = i + 1
     if added then
       if path == "" then
@@ -80,7 +82,7 @@ function M._parse_name_status(stdout)
   local fields = vim.split(stdout, "\0", { plain = true })
   local i = 1
   while i <= #fields do
-    local code = fields[i]:match("^(%u)%d*$")
+    local code = assert(fields[i], "changeset: read past the name-status"):match("^(%u)%d*$")
     if code == "R" then
       statuses[fields[i + 2]] = { status = "renamed", oldpath = fields[i + 1] }
       i = i + 3
@@ -105,11 +107,17 @@ end
 ---@return changeset.Hunk?
 local function parse_hunk_header(line)
   local old_start, old_count, new_start, new_count = line:match("^@@ %-(%d+),?(%d*) %+(%d+),?(%d*) @@")
-  if not new_start then
+  if not (old_start and old_count and new_start and new_count) then
     return nil
   end
   local removed, added = line_count(old_count), line_count(new_count)
-  return { lnum = tonumber(new_start), count = added, added = added, removed = removed, old_lnum = tonumber(old_start) }
+  return {
+    lnum = tonumber(new_start) --[[@as integer]],
+    count = added,
+    added = added,
+    removed = removed,
+    old_lnum = tonumber(old_start) --[[@as integer]],
+  }
 end
 
 ---The path on a `--- a/<path>` or `+++ b/<path>` line, or nil for `/dev/null`. git quotes a
@@ -128,7 +136,8 @@ end
 ---@param lines string[]
 ---@return table<string, changeset.Hunk[]> hunks By new path; a file with no text hunks is absent.
 function M._parse_hunks(lines)
-  local hunks, current, old, in_header = {}, nil, nil, false
+  local hunks, old, in_header = {}, nil, false
+  local current ---@type changeset.Hunk[]?
   for _, line in ipairs(lines) do
     if vim.startswith(line, "diff --git ") then
       current, old, in_header = nil, nil, true
@@ -158,7 +167,7 @@ end
 ---@param path string
 ---@param entry changeset.diff.Entry
 ---@param parts changeset.diff.Parts
----@return changeset.File
+---@return changeset.diff.Unfiled
 local function tracked_file(path, entry, parts)
   local stat = parts.numstat[path] or { added = 0, removed = 0 }
   return {
@@ -173,7 +182,7 @@ end
 
 ---@param path string
 ---@param lines integer
----@return changeset.File
+---@return changeset.diff.Unfiled
 local function untracked_file(path, lines)
   local whole_file = { lnum = 1, count = lines, added = lines, removed = 0, old_lnum = 0 }
   return {
@@ -226,7 +235,7 @@ end
 
 ---Join the parsed git output and untracked counts into files ordered by directory, then name.
 ---@param parts changeset.diff.Parts
----@return changeset.File[]
+---@return changeset.diff.Unfiled[]
 function M._assemble(parts)
   local files = {}
   for path, entry in pairs(parts.statuses) do
@@ -290,7 +299,7 @@ end
 local function first_failure(results)
   for _, result in pairs(results) do
     if result.code ~= 0 then
-      return vim.trim(result.stderr)
+      return vim.trim(result.stderr or "")
     end
   end
 end
@@ -298,7 +307,7 @@ end
 ---@param result vim.SystemCompleted
 ---@return string[]
 local function stdout_lines(result)
-  return vim.split(result.stdout, "\n", { trimempty = true })
+  return vim.split(result.stdout or "", "\n", { trimempty = true })
 end
 
 ---Line count per readable file; directories (untracked nested repos) and dangling symlinks are skipped.
@@ -334,7 +343,7 @@ local function go_file_generated(abs)
 end
 
 ---Paths among `files` that their Go header or `.gitattributes` marks generated; calls back on the main loop.
----@param files changeset.File[]
+---@param files changeset.diff.Unfiled[]
 ---@param cwd string
 ---@param on_done fun(marked: table<string, true>)
 local function generated_paths(files, cwd, on_done)
@@ -346,7 +355,7 @@ local function generated_paths(files, cwd, on_done)
     { cwd = cwd, text = true, stdin = table.concat(paths, "\0") },
     function(result)
       -- A failed read only costs files their Generated section.
-      local marked = result.code == 0 and M._parse_check_attr(result.stdout) or {}
+      local marked = result.code == 0 and M._parse_check_attr(result.stdout or "") or {}
       for _, file in ipairs(files) do
         if
           file.status ~= "deleted"
@@ -374,16 +383,17 @@ function M.collect(base, cwd, callback)
       return callback(nil, err)
     end
     local files = M._assemble({
-      numstat = M._parse_numstat(results.numstat.stdout),
-      statuses = M._parse_name_status(results.name_status.stdout),
+      numstat = M._parse_numstat(results.numstat.stdout or ""),
+      statuses = M._parse_name_status(results.name_status.stdout or ""),
       hunks = M._parse_hunks(stdout_lines(results.hunks)),
-      untracked = count_lines(vim.split(results.untracked.stdout, "\0", { trimempty = true }), cwd),
+      untracked = count_lines(vim.split(results.untracked.stdout or "", "\0", { trimempty = true }), cwd),
     })
     generated_paths(files, cwd, function(marked)
+      ---@cast files changeset.File[]
       for _, file in ipairs(files) do
         file.section = sections.classify(file.path, marked[file.path])
       end
-      callback(files, nil, tonumber(stdout_lines(results.commits)[1]))
+      callback(files, nil, tonumber(stdout_lines(results.commits)[1]) --[[@as integer?]])
     end)
   end)
 end

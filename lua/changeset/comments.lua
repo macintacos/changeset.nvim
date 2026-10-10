@@ -82,7 +82,7 @@ local function comment_spans(source, lang, root)
   if lang == "python" then
     for _, match in vim.treesitter.query.parse(lang, PYTHON_BODIES):iter_matches(root, source) do
       for _, nodes in pairs(match) do
-        spans[#spans + 1] = docstring(nodes[1])
+        spans[#spans + 1] = docstring(assert(nodes[1], "changeset: a capture without a node"))
       end
     end
   end
@@ -115,13 +115,13 @@ end
 ---0-based rows one of `spans` covers from first to last non-blank byte.
 ---@param lines string[]
 ---@param spans TSNode[]
----@return table<integer, true>
+---@return table<integer, true?>
 local function covered_rows(lines, spans)
   local covered = {}
   for _, node in ipairs(spans) do
     local sr, _, er = node:range()
     for row = sr, er do
-      if spans_line(lines[row + 1], row, node) then
+      if spans_line(assert(lines[row + 1], "changeset: a node past the source's last line"), row, node) then
         covered[row] = true
       end
     end
@@ -130,7 +130,7 @@ local function covered_rows(lines, spans)
 end
 
 ---@param lines string[]
----@param covered table<integer, true>
+---@param covered table<integer, true?>
 ---@return changeset.LineKinds
 local function classify(lines, covered)
   local kinds = { comment = {}, directive = {}, blank = {} }
@@ -166,7 +166,8 @@ local function parse(source, lang, on_tree)
   if not ok then
     return on_tree(nil)
   end
-  local answered, timer = false, nil
+  local answered = false
+  local timer ---@type uv.uv_timer_t?
   local function answer(tree)
     if answered then
       return
@@ -191,7 +192,8 @@ local function parse(source, lang, on_tree)
   end
   -- Only the parse is guarded: `on_tree` raising must reach the caller, not answer twice. So an answer the first
   -- slice gives waits for the pcall to return.
-  local returned, early = false, nil
+  local returned = false
+  local early ---@type { err: string?, trees: table<integer, TSTree>? }?
   local started = pcall(parser.parse, parser, nil, function(err, trees)
     if returned then
       return finish(err, trees)
@@ -247,7 +249,7 @@ local function within(runs, lnum)
   local lo, hi = 1, #runs
   while lo <= hi do
     local mid = math.floor((lo + hi) / 2)
-    local run = runs[mid]
+    local run = assert(runs[mid], "changeset: searched past the runs")
     if lnum < run[1] then
       hi = mid - 1
     elseif lnum > run[2] then

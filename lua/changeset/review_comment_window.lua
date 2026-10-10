@@ -78,7 +78,7 @@ end
 
 ---Where insert mode left the cursor in each window as an insert-mode key of its own was typed there, until the key's
 ---command has run.
----@type table<integer, integer[]>
+---@type table<integer, [integer, integer]>
 local typed_at = {}
 
 ---Notes where insert mode is in the current window, for the insert-mode key of its own being typed there. The window's insert-mode keys reach this from a `<Cmd>` string.
@@ -225,9 +225,10 @@ function M.open(opts)
   if opts.body then
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(opts.body, "\n"))
   end
+  local save_key = assert(opts.keys[1], "changeset: no key saves")
   local hint = {
     { " " },
-    { " " .. vim.fn.keytrans(vim.keycode(opts.keys[1])) .. " ", highlights.KEYCAP_HL },
+    { " " .. vim.fn.keytrans(vim.keycode(save_key)) .. " ", highlights.KEYCAP_HL },
     { " save  " },
     { " q ", highlights.KEYCAP_HL },
     { " draft " },
@@ -246,7 +247,8 @@ function M.open(opts)
   local function placement()
     -- bufpos anchors at the first text column, so the gutter, the gap and the border all come
     -- out of the window's width.
-    local room = vim.api.nvim_win_get_width(source) - vim.fn.getwininfo(source)[1].textoff - GAP - 2
+    local info = assert(vim.fn.getwininfo(source)[1], "changeset: the source window is gone")
+    local room = vim.api.nvim_win_get_width(source) - info.textoff - GAP - 2
     local width = math.max(math.min(M.MEASURE, room), MIN_WIDTH)
     return {
       relative = "win",
@@ -356,7 +358,7 @@ function M.open(opts)
   -- first window that changed.
   vim.api.nvim_create_autocmd("WinScrolled", { group = group, callback = place })
   ---Picks writing back up at `cursor`, where insert mode left off.
-  ---@param cursor integer[]
+  ---@param cursor [integer, integer]
   local function restart_insert(cursor)
     vim.api.nvim_win_set_cursor(win, cursor)
     local row = vim.api.nvim_buf_get_lines(buf, cursor[1] - 1, cursor[1], false)[1] or ""
@@ -371,7 +373,7 @@ function M.open(opts)
   end
 
   ---Where to pick writing back up on return from a window it held for, if it was writing.
-  ---@type integer[]?
+  ---@type [integer, integer]?
   local resume
   -- Fires: focus coming back from a window it held for, and a new window entered while it shows this buffer.
   vim.api.nvim_create_autocmd("WinEnter", {
@@ -416,7 +418,7 @@ function M.open(opts)
   ---Takes back the room made under its line.
   local function unpad()
     gone = true
-    local report = open_windows[win]
+    local report = open_windows[win] ---@type changeset.ReviewCommentWindow?
     open_windows[win] = nil
     if report then
       tell(report, false)

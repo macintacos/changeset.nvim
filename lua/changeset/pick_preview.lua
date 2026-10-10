@@ -39,11 +39,13 @@ end
 ---@param width integer
 ---@return vim.api.keyset.win_config
 function M._float_config(list, width)
+  local col, list_width = list.col, list.width
+  assert(col and list_width, "changeset: the picker's list window isn't floating")
   return {
     relative = "editor",
     anchor = list.anchor,
     row = list.row,
-    col = list.col + list.width + 2,
+    col = col + list_width + 2,
     width = width,
     height = list.height,
     border = list.border,
@@ -77,10 +79,12 @@ end
 local function attach(preview, main)
   local ns = vim.api.nvim_create_namespace("changeset.pick_preview")
   local group = vim.api.nvim_create_augroup("changeset.pick_preview_session", { clear = true })
-  local win, shown
+  local win ---@type integer?
+  local shown
 
   local function render()
-    local matches = MiniPick.is_picker_active() and MiniPick.get_picker_matches()
+    local pick = require("mini.pick")
+    local matches = pick.is_picker_active() and pick.get_picker_matches()
     local item = matches and matches.current
     if not (win and vim.api.nvim_win_is_valid(win)) or item == shown then
       return
@@ -100,17 +104,17 @@ local function attach(preview, main)
   -- Opens, moves, or closes the float to fit the current editor width.
   local function place()
     local width = M._layout(vim.o.columns).preview
-    local open = win and vim.api.nvim_win_is_valid(win)
+    local open = win and vim.api.nvim_win_is_valid(win) and win
     if not (width and vim.api.nvim_win_is_valid(main)) then
       if open then
-        vim.api.nvim_win_close(win, true)
+        vim.api.nvim_win_close(open, true)
       end
       win = nil
       return
     end
     local config = M._float_config(vim.api.nvim_win_get_config(main), width)
     if open then
-      vim.api.nvim_win_set_config(win, config)
+      vim.api.nvim_win_set_config(open, config)
     else
       win = vim.api.nvim_open_win(scratch(), false, vim.tbl_extend("force", config, { noautocmd = true }))
       shown = nil
@@ -152,7 +156,8 @@ function M.setup()
     group = vim.api.nvim_create_augroup("changeset.pick_preview", { clear = true }),
     pattern = "MiniPickStart",
     callback = function()
-      local opts, state = MiniPick.get_picker_opts(), MiniPick.get_picker_state()
+      local pick = require("mini.pick")
+      local opts, state = pick.get_picker_opts(), pick.get_picker_state()
       if opts and state and opts.window.config == window_config then
         attach(opts.source.preview, state.windows.main)
       end

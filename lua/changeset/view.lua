@@ -5,7 +5,7 @@ local render = require("changeset.render")
 local Rows = require("changeset.rows")
 
 ---@class changeset.view.Folds
----@field collapsed table<string, true> Rows whose children are hidden.
+---@field collapsed table<string, true?> Rows whose children are hidden.
 ---@field chains table<string, true> Compressed chains the user opened out.
 
 ---@class changeset.view.Layout
@@ -158,7 +158,7 @@ end
 ---A set carried in from another branch can name kinds nothing here uses, and
 ---reporting those as hidden would send a reader looking for symbols that were
 ---never there.
----@param counts table<string, integer> From `kind_counts`.
+---@param counts table<string, integer?> From `kind_counts`.
 ---@param hidden table<string, true>
 ---@return string[] Sorted.
 function M.hiding(counts, hidden)
@@ -281,17 +281,18 @@ end
 ---@param is_open fun(id: string): boolean
 ---@return changeset.view.Drawn
 local function draw_child(section, child, folds, opts, hidden, is_open)
-  local was = drawn[child]
-  if was and was.width == opts.width and was.query == opts.query and was.hidden == hidden and was.folds == folds then
+  local was, query = drawn[child], opts.query or ""
+  if was and was.width == opts.width and was.query == query and was.hidden == hidden and was.folds == folds then
     return was
   end
-  local kept = M.filter(M.by_kind({ child }, hidden), opts.query)[1]
-  local laid = kept and Rows.compress({ with(section, { children = { kept } }) }, is_open)[1].children[1]
+  local kept = M.filter(M.by_kind({ child }, hidden), query)[1]
+  local compressed = kept and Rows.compress({ with(section, { children = { kept } }) }, is_open)[1]
+  local laid = compressed and compressed.children[1]
   local now = {
     laid = laid,
     block = { lines = laid and render.child(laid, opts) or {} },
     width = opts.width,
-    query = opts.query,
+    query = query,
     hidden = hidden,
     folds = folds,
   }
@@ -347,7 +348,7 @@ function View:show(rows, layout)
   for _, block in ipairs(blocks) do
     for _, line in ipairs(block.lines) do
       lines[#lines + 1] = line
-      shown[#shown + 1] = line.row
+      shown[#shown + 1] = assert(line.row, "changeset: a tree line without a row")
     end
   end
   self.shown = shown
@@ -431,7 +432,7 @@ function View:step_out(lnum)
     return nil, true
   end
   for i = lnum - 1, 1, -1 do
-    if self.shown[i].depth < row.depth then
+    if assert(self.shown[i], "changeset: a line above the cursor without a row").depth < row.depth then
       return i, false
     end
   end

@@ -160,7 +160,7 @@ local function cover(buf, ns, top, bot, added)
   for _, name in ipairs({ "gitsigns_signs_", "gitsigns_signs_staged" }) do
     local signs = vim.api.nvim_create_namespace(name)
     for _, sign in ipairs(vim.api.nvim_buf_get_extmarks(buf, signs, { top, 0 }, { bot, -1 }, { details = true })) do
-      if sign[4].sign_text then
+      if assert(sign[4], "changeset: an extmark without its details").sign_text then
         want[sign[2]] = false
       end
     end
@@ -169,7 +169,7 @@ local function cover(buf, ns, top, bot, added)
     want[row] = highlights.DIFF_ADD_HL
   end
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, { top, 0 }, { bot, -1 }, { details = true })) do
-    if want[mark[2]] == (mark[4].sign_hl_group or false) then
+    if want[mark[2]] == (assert(mark[4], "changeset: an extmark without its details").sign_hl_group or false) then
       want[mark[2]] = nil
     else
       vim.api.nvim_buf_del_extmark(buf, ns, mark[1])
@@ -205,8 +205,12 @@ local function open(view)
   opening[win] = buf
   ---@async
   local function run()
-    local _, base, created, loaded =
-      require("gitsigns.actions.diffthis").create_revision_buf(git_obj.repo, git_obj.revision, git_obj.relpath, buf)
+    local _, base, created, loaded = require("gitsigns.actions.diffthis").create_revision_buf(
+      git_obj.repo,
+      git_obj.revision,
+      assert(git_obj.relpath, "changeset: the file no longer exists"),
+      buf
+    )
     opening[win] = nil
     if not base then
       return

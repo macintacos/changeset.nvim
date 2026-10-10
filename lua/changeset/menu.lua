@@ -147,9 +147,7 @@ local function draw()
     end
   end
 
-  local config = vim.api.nvim_win_get_config(menu.win)
-  config.footer = M._footer(menu.hidden, menu.saved, menu.scope)
-  vim.api.nvim_win_set_config(menu.win, config)
+  vim.api.nvim_win_set_config(menu.win, { footer = M._footer(menu.hidden, menu.saved, menu.scope) })
 end
 
 ---Close the menu, leaving the tree showing whatever the working set is.
@@ -229,6 +227,9 @@ local function set_keymaps(buf)
   end, "Show these keymaps")
 end
 
+---@class changeset.menu.Placement : vim.api.keyset.win_config
+---@field width integer
+
 ---Where the menu docks against `sidebar`, in editor cells.
 ---
 ---Rather than against the sidebar's own corner, because a float's border is drawn outside the size it is given: only
@@ -237,7 +238,7 @@ end
 ---@param rows changeset.KindRow[]
 ---@param footer string
 ---@param sidebar integer
----@return vim.api.keyset.win_config
+---@return changeset.menu.Placement
 local function placement(rows, footer, sidebar)
   local top, left = unpack(vim.api.nvim_win_get_position(sidebar))
   -- A drawer starts at the editor's left edge, so the menu stands on top of it instead.

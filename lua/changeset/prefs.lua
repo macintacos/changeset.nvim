@@ -23,7 +23,7 @@ local M = {}
 ---cache: nothing here can be derived again, so losing the file loses a choice.
 ---@return string
 function M.path()
-  return vim.fs.joinpath(vim.fn.stdpath("state"), "changeset", "filters.json")
+  return vim.fs.joinpath(vim.fn.stdpath("state") --[[@as string]], "changeset", "filters.json")
 end
 
 ---A field read from the file, where a hand edit can leave any JSON value.
@@ -58,14 +58,15 @@ end
 ---@param data changeset.Prefs
 ---@param root string
 local function prune(data, root)
-  local repo = data.repos[root]
+  local repos = assert(data.repos, "changeset: pruning a record with no repositories")
+  local repo = repos[root]
   if vim.tbl_isempty(object(repo.branches)) then
     repo.branches = nil
   end
   if vim.tbl_isempty(repo) then
-    data.repos[root] = nil
+    repos[root] = nil
   end
-  if vim.tbl_isempty(data.repos) then
+  if vim.tbl_isempty(repos) then
     data.repos = nil
   end
 end

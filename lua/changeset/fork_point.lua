@@ -22,15 +22,15 @@ local M = {}
 
 ---Each open PR's target and number, by `root .. "\n" .. branch`, kept for the session.
 ---An answer of no PR is not kept, so a PR opened since is found.
----@type table<string, changeset.fork_point.PrTarget>
+---@type table<string, changeset.fork_point.PrTarget?>
 local targets = {}
 
 ---The point last measured while gh is being asked, by the same key.
----@type table<string, changeset.ForkPoint>
+---@type table<string, changeset.ForkPoint?>
 local asking = {}
 
 ---Keys `recheck` is asking gh about.
----@type table<string, true>
+---@type table<string, true?>
 local rechecking = {}
 
 ---@type table<fun(root: string, branch: string, point: changeset.ForkPoint), true>
@@ -39,7 +39,7 @@ local subscribers = {}
 ---Where the bases set by hand are kept, by root and then by branch. Under `state`: losing it loses a choice.
 ---@return string
 local function pins_path()
-  return vim.fs.joinpath(vim.fn.stdpath("state"), "changeset", "bases.json")
+  return vim.fs.joinpath(vim.fn.stdpath("state") --[[@as string]], "changeset", "bases.json")
 end
 
 ---The ref set by hand for `branch` at `root`, if any.
@@ -85,7 +85,7 @@ local function measure(root, branch, pr)
   local by_hand = pinned(root, branch)
   if by_hand then
     local pinned_base, pinned_ref = Git.merge_base(root, by_hand)
-    if pinned_base then
+    if pinned_base and pinned_ref then
       local number = pr_number(root, pr, by_hand, pinned_base)
       return {
         base = pinned_base,
@@ -108,7 +108,7 @@ local function measure(root, branch, pr)
   local parent = Git.parent(root, branch)
   if parent and parent ~= default_branch then
     local parent_base, parent_ref = Git.merge_base(root, parent)
-    if parent_base and not outgrown(root, parent_base, base) then
+    if parent_base and parent_ref and not outgrown(root, parent_base, base) then
       local number = pr_number(root, pr, parent, parent_base)
       return {
         base = parent_base,
@@ -120,13 +120,13 @@ local function measure(root, branch, pr)
       }
     end
   end
-  if not base then
+  if not (base and ref) then
     return
   end
   local point = { base = base, ref = ref, kind = "branch", against = default_branch, default_branch = default_branch }
   if pr then
     local stacked, stacked_ref = Git.merge_base(root, pr.target)
-    if stacked then
+    if stacked and stacked_ref then
       point.base, point.ref, point.against, point.pr = stacked, stacked_ref, pr.target, pr.number
     else
       point.skipped = pr.target
@@ -191,15 +191,17 @@ local function ask(root, branch, point)
   end
   asking[key] = point
   Git.pr_target(root, function(target, number)
-    local heard = asking[key]
+    local heard = asking[key] ---@type changeset.ForkPoint?
     asking[key] = nil
-    if target then
+    if target and number then
       targets[key] = { target = target, number = number }
       -- HEAD can have moved by the time gh answers; subscribers still need a point.
       heard = settled(root, branch, targets[key]) or heard
     end
-    for fn in pairs(subscribers) do
-      fn(root, branch, heard)
+    if heard then
+      for fn in pairs(subscribers) do
+        fn(root, branch, heard)
+      end
     end
   end)
   return point, true
@@ -279,7 +281,10 @@ function M.recheck(root, branch)
     local kept = targets[key]
     -- The same table for the same answer, so a `get_async` in flight need not measure again.
     if not (kept and kept.target == target and kept.number == number) then
-      targets[key] = target and { target = target, number = number } or nil
+      targets[key] = nil
+      if target and number then
+        targets[key] = { target = target, number = number }
+      end
     end
     local pr = targets[key]
     Git.async(function()

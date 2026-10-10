@@ -77,7 +77,8 @@ local released
 local function measure(buf)
   local room = MAX_WIDTH + 2
   for _, win in ipairs(vim.fn.win_findbuf(buf)) do
-    room = math.min(room, vim.api.nvim_win_get_width(win) - vim.fn.getwininfo(win)[1].textoff)
+    local info = assert(vim.fn.getwininfo(win)[1], "changeset: a window of the buffer is gone")
+    room = math.min(room, vim.api.nvim_win_get_width(win) - info.textoff)
   end
   return math.max(room - 2, 3)
 end
@@ -125,6 +126,7 @@ local function box(buf, comment, widest, is_parked)
   inner = math.min(inner, widest)
   -- At least one cell of border after the title, so a cut one still reads as sitting in the border.
   title = cells.clip(title, inner - 1)
+  ---@type [string, string][][]
   local lines = {
     {
       { "╭", border },
@@ -169,7 +171,8 @@ local function anchor_at(buf, line)
   if not drawn[buf] or line < 1 then
     return
   end
-  if editing[buf] and editing[buf][line] then
+  local hiding = editing[buf] ---@type table<integer, integer>?
+  if hiding and hiding[line] then
     return
   end
   -- Neovim draws no virtual lines under a closed fold.
@@ -231,7 +234,8 @@ local function unpark()
     return
   end
   parked = nil
-  if drawn[state.buf] and drawn[state.buf].anchors[state.id] then
+  local blocks = drawn[state.buf] ---@type changeset.BufferBlocks?
+  if blocks and blocks.anchors[state.id] then
     paint(state.buf, state.id, nil)
   end
   if vim.api.nvim_buf_is_valid(state.buf) then
@@ -239,13 +243,13 @@ local function unpark()
   end
   dialog.show_cursor()
   local just_released = { win = state.win, cursorline = state.cursorline }
-  released = just_released
   -- Only a split made as the block lets go; a later one copies the window's own value.
   vim.schedule(function()
     if released == just_released then
       released = nil
     end
   end)
+  released = just_released
   if vim.api.nvim_win_is_valid(state.win) then
     vim.api.nvim_set_option_value("cursorline", state.cursorline, { scope = "local", win = state.win })
   end
@@ -404,8 +408,9 @@ local function step(state, down)
       vim.api.nvim_win_set_cursor(0, { at, last })
       if state.curswant < vim.v.maxcol then
         vim.cmd.normal({ "g0", bang = true })
-        local width = vim.api.nvim_win_get_width(0) - vim.fn.getwininfo(vim.api.nvim_get_current_win())[1].textoff
-        local wanted = vim.fn.virtcol(".") + state.curswant % width
+        local info = assert(vim.fn.getwininfo(vim.api.nvim_get_current_win())[1], "changeset: the window is gone")
+        local width = vim.api.nvim_win_get_width(0) - info.textoff
+        local wanted = vim.fn.virtcol(".") --[[@as integer]] + state.curswant % width
         vim.api.nvim_win_set_cursor(0, { at, math.max(vim.fn.virtcol2col(0, at, wanted) - 1, 0) })
         -- On the row's own column, as `gk` would leave it, or the next screen move would jump off the line.
         vim.fn.winrestview({ curswant = wanted - 1 })
@@ -438,7 +443,7 @@ end
 ---@field move changeset.BlockMove
 ---@field win integer
 ---@field buf integer
----@field before integer[]
+---@field before [integer, integer]
 ---@field view vim.fn.winsaveview.ret
 ---@field typed string? What `on_key` saw typed for the first key after the map ran: the map's key when typed.
 
@@ -610,8 +615,9 @@ end
 ---Takes the movement maps out of `buf`, giving back what they stood in for.
 ---@param buf integer
 local function unmap_moves(buf)
-  if moves[buf] then
-    restore(buf, moves[buf])
+  local saved = moves[buf] ---@type table<string, table>?
+  if saved then
+    restore(buf, saved)
     moves[buf] = nil
   end
 end
@@ -628,13 +634,15 @@ function M.draw(buf, comments)
   if #comments == 0 then
     return unmap_moves(buf)
   end
-  local by_line, lines = {}, {}
+  local by_line = {}
+  local lines = {} ---@type integer[]
   for _, comment in ipairs(comments) do
-    if not by_line[comment.line] then
-      by_line[comment.line] = {}
-      lines[#lines + 1] = comment.line
+    local line = assert(comment.line, "changeset: a block for a whole file's review comment")
+    if not by_line[line] then
+      by_line[line] = {}
+      lines[#lines + 1] = line
     end
-    table.insert(by_line[comment.line], comment)
+    table.insert(by_line[line], comment)
   end
   -- One extmark a line: Neovim draws separate marks' virtual lines on one line newest first, not in store order.
   drawn[buf] = { anchors = {}, widest = measure(buf) }
@@ -651,15 +659,15 @@ end
 ---Parks the current window's cursor on the block of the comment on `comment`'s lines, when its buffer draws one.
 ---@param comment changeset.ReviewComment
 function M.select(comment)
-  local win, buf = vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf()
-  local id = comment.line and anchor_at(buf, comment.line)
-  if not id then
+  local win, buf, line = vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf(), comment.line
+  local id = line and anchor_at(buf, line)
+  if not (line and id) then
     return
   end
   for index, each in ipairs(drawn[buf].anchors[id]) do
     if each.start_line == comment.start_line then
-      if vim.api.nvim_win_get_cursor(win)[1] ~= comment.line then
-        put(win, comment.line)
+      if vim.api.nvim_win_get_cursor(win)[1] ~= line then
+        put(win, line)
       end
       return park(win, buf, id, index, vim.api.nvim_win_get_cursor(win))
     end

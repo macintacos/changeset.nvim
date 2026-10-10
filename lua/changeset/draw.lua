@@ -38,7 +38,7 @@ local function icon_for(row)
     return render.COMMENTS_ICON, highlights.REVIEW_COMMENT_HL
   end
   if row.kind == "section" then
-    return icons.get("directory", row.icon)
+    return icons.get("directory", assert(row.icon, "changeset: a section row without an icon"))
   end
   if row.kind == "file" or row.kind == "comment" then
     return icons.get("file", row.path)
@@ -326,7 +326,7 @@ end
 local function lines_of(blocks, first, last_index)
   local out = {}
   for i = first, last_index do
-    vim.list_extend(out, blocks[i].lines)
+    vim.list_extend(out, assert(blocks[i], "changeset: a block past the last").lines)
   end
   return out
 end
@@ -366,9 +366,10 @@ end
 ---@param blocks changeset.view.Block[]
 ---@return integer[]
 local function offsets(blocks)
-  local out = { 0 }
+  local out, at = { 0 }, 0
   for i, block in ipairs(blocks) do
-    out[i + 1] = out[i] + #block.lines
+    at = at + #block.lines
+    out[i + 1] = at
   end
   return out
 end
@@ -392,19 +393,17 @@ local function replace_changed(buf, was, blocks)
     end
     return #out > 0 and table.concat(out, "\n") .. "\n" or ""
   end
-  local hunks = vim.text.diff(tokens(was), tokens(blocks), { result_type = "indices" }) --[[@as integer[][] ]]
+  local hunks = vim.text.diff(tokens(was), tokens(blocks), { result_type = "indices" })
+  ---@cast hunks [integer, integer, integer, integer][]
   local was_at = offsets(was)
   -- Last first, so the lines above each run are where the last draw left them.
   for i = #hunks, 1, -1 do
     local old_start, old_count, new_start, new_count = unpack(hunks[i])
     old_start = old_count == 0 and old_start + 1 or old_start
     new_start = new_count == 0 and new_start + 1 or new_start
-    replace_lines(
-      buf,
-      was_at[old_start],
-      was_at[old_start + old_count],
-      lines_of(blocks, new_start, new_start + new_count - 1)
-    )
+    local first, last_line = was_at[old_start], was_at[old_start + old_count]
+    assert(first and last_line, "changeset: a hunk past the last block")
+    replace_lines(buf, first, last_line, lines_of(blocks, new_start, new_start + new_count - 1))
   end
 end
 

@@ -224,10 +224,11 @@ local function attribute(roots, hunk, comment_lines)
     judge(hunk, comment_lines, {
       -- Hits are disjoint and in document order, so a cursor follows the ascending lines.
       at = function(lnum)
-        while cursor < #hits and hits[cursor].sym.range_end_lnum < lnum do
+        while cursor < #hits and assert(hits[cursor], "changeset: a cursor past the hits").sym.range_end_lnum < lnum do
           cursor = cursor + 1
         end
-        return touches(hits[cursor].sym, lnum, lnum) and hits[cursor] or hits[1]
+        local hit = assert(hits[cursor], "changeset: a cursor past the hits")
+        return touches(hit.sym, lnum, lnum) and hit or hits[1]
       end,
       removed = hits[1],
     })
@@ -274,7 +275,8 @@ local function credit(file, roots, comment_lines)
   local out = { roots = roots, orphans = { kept = {}, docs = {} }, test_stat = { added = 0, removed = 0 } }
   for _, hunk in ipairs(file.hunks) do
     local hits = attribute(roots, hunk, comment_lines)
-    if #hits == 0 then
+    local first_hit = hits[1]
+    if not first_hit then
       local flags = {}
       if comment_lines then
         judge(hunk, comment_lines, {
@@ -287,7 +289,7 @@ local function credit(file, roots, comment_lines)
       table.insert(out.orphans[is_docs(flags) and "docs" or "kept"], hunk)
     else
       out.test_stat.added = out.test_stat.added + added_in_tests(roots, hunk)
-      out.test_stat.removed = out.test_stat.removed + (hits[1].test and hunk.removed or 0)
+      out.test_stat.removed = out.test_stat.removed + (first_hit.test and hunk.removed or 0)
     end
   end
   return out
@@ -444,7 +446,7 @@ local function orphans_row(hunks, parent, line_text)
     depth = parent.depth + 1,
     name = "Other changes",
     path = parent.path,
-    lnum = jump_line(hunks[1]),
+    lnum = jump_line(assert(hunks[1], "changeset: Other changes without a hunk")),
     added = 0,
     removed = 0,
     ancestor = false,
@@ -538,6 +540,7 @@ end
 ---@param row changeset.Row
 ---@param stat { added: integer?, removed: integer? } The lines `row` accounts for; a deleted file's row carries none of its own.
 local function append(section, row, stat)
+  assert(section.files and section.added and section.removed, "changeset: appending to a section without its totals")
   section.children[#section.children + 1] = row
   section.files = section.files + 1
   section.added = section.added + (stat.added or 0)
@@ -567,23 +570,29 @@ end
 ---shows takes the rest. A lone copy carries the whole stat.
 ---@param file changeset.File
 ---@param credited changeset.rows.Credited
----@param shown table<changeset.rows.Copy, true>
+---@param shown table<changeset.rows.Copy, true?>
 ---@return table<changeset.rows.Copy, changeset.diff.Stat>
 local function shares(file, credited, shown)
   local copies = vim.tbl_keys(shown)
   if #copies <= 1 then
-    return { [copies[1] or "kept"] = file }
+    return { [copies[1] or "kept"] = { added = file.added, removed = file.removed } }
   end
   local docs, docs_in_tests = docs_stat(credited.roots)
   for _, hunk in ipairs(credited.orphans.docs) do
     docs = plus(docs, hunk)
   end
-  local out, rest = { docs = shown.docs and docs or nil }, minus(file, docs)
+  local out = {} ---@type table<changeset.rows.Copy, changeset.diff.Stat>
+  local rest = minus(file, docs)
+  if shown.docs then
+    out.docs = docs
+  end
   if shown.tests then
     out.tests = shown.kept and minus(credited.test_stat, docs_in_tests) or rest
     rest = minus(rest, out.tests)
   end
-  out.kept = shown.kept and rest or nil
+  if shown.kept then
+    out.kept = rest
+  end
   return out
 end
 
@@ -741,7 +750,8 @@ function M.lines(row)
     return review_comment.first(comment), comment.line
   end
   if row.kind == "orphan" then
-    return row.range[1], row.range[2]
+    local range = assert(row.range, "changeset: an orphan row without its lines")
+    return range[1], range[2]
   end
   if row.kind ~= "file" then
     return row.lnum, row.lnum
@@ -757,7 +767,7 @@ function M.same(a, b)
     return false
   end
   for i, section in ipairs(a) do
-    local other = b[i]
+    local other = assert(b[i], "changeset: sections of the same count, one missing")
     if
       section.id ~= other.id
       or section.files ~= other.files
@@ -834,6 +844,7 @@ local function chain(row)
   return deepest, names
 end
 
+---@type fun(rows: changeset.Row[], depth: integer, is_open: (fun(id: string): boolean)?): changeset.Row[]
 local compress_rows
 
 ---The kinds `compress_row` takes.
@@ -848,7 +859,7 @@ local UNFOLDS = { section = true, file = true, symbol = true }
 ---@return changeset.Row
 local function unfold(row, deepest, depth, is_open)
   local children = row == deepest and compress_rows(row.children, depth + 1, is_open)
-    or { unfold(row.children[1], deepest, depth + 1, is_open) }
+    or { unfold(assert(row.children[1], "changeset: a chain link without its child"), deepest, depth + 1, is_open) }
   return with(row, { depth = depth, children = children })
 end
 

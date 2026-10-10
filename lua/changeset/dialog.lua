@@ -411,7 +411,8 @@ function M.confirm(opts, yes)
   local function move(to)
     focus = to
     paint(state.buf, lines(focus))
-    vim.api.nvim_win_set_cursor(state.win, { buttons_line, #indent[1] + ranges[focus][1] + 2 })
+    local range = assert(ranges[focus], "changeset: focus past the buttons")
+    vim.api.nvim_win_set_cursor(state.win, { buttons_line, #indent[1] + range[1] + 2 })
   end
   ---@param i integer
   local function press(i)
@@ -483,8 +484,8 @@ function M._rows(items)
   local widths = {}
   for _, item in ipairs(items) do
     local row = shown(item)
-    for c = 1, #row - 1 do
-      widths[c] = math.max(widths[c] or 0, cells.width(row[c][1]))
+    for c, cell in ipairs(vim.list_slice(row, 1, #row - 1)) do
+      widths[c] = math.max(widths[c] or 0, cells.width(cell[1]))
     end
   end
   local lines = {}
@@ -586,7 +587,7 @@ function M.choose(opts, cb)
   ---@param by integer 1 for the next row that can be chosen, -1 for the previous.
   local function step(by)
     for i = (focus or by > 0 and 0 or #opts.items + 1) + by, by > 0 and #opts.items or 1, by do
-      if not opts.items[i].unavailable then
+      if not assert(opts.items[i], "changeset: stepped past the items").unavailable then
         return move(i)
       end
     end

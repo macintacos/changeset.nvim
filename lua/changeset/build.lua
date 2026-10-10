@@ -31,7 +31,7 @@ local M = {}
 ---@field files changeset.File[]
 ---@field commits integer? Commits on the branch since `base`, once the diff has been read.
 ---@field collected boolean Whether the diff has been read yet.
----@field symbols table<string, changeset.CachedSymbol[]> Absent key: still reading, or never read (`Rows.read_status`).
+---@field symbols table<string, changeset.Symbol[]> Absent key: still reading, or never read (`Rows.read_status`).
 ---@field comments table<string, changeset.Comments> Absent key means none read or parsed for the file.
 
 ---What happened to the tree: its `diff` read, one file's `symbols` read, only its `pr` number changed, or its
@@ -49,6 +49,13 @@ local tree
 
 ---@type changeset.build.Work
 local work = {}
+
+---Whether answers to `request` are still wanted: no refresh or tree has replaced it.
+---@param request table
+---@return boolean
+local function wanted(request)
+  return work.request == request
+end
 
 ---Symbols read for the repo at `root`, carried between builds and to disk.
 ---@type { root: string, entries: table<string, changeset.CacheEntry> }?
@@ -196,7 +203,7 @@ function M.refresh()
 
   local diff = require("changeset.diff")
   diff.collect(tree.base, tree.root, function(files, err, commits)
-    if not tree or work.request ~= request then
+    if not (tree and wanted(request)) then
       return
     end
     if not files then
@@ -214,10 +221,9 @@ function M.refresh()
     -- symbols are being read then fails this check next time, instead of
     -- leaving behind an answer for content that has already moved on.
     assert(memo, "changeset: symbol cache not loaded")
-    local stamps = {}
+    local built, stamps = tree, {}
     local known, unknown = cache.fresh(memo.entries, readable, function(path)
-      assert(tree, "changeset: no tree built yet")
-      stamps[path] = cache.stamp(tree.root .. "/" .. path, tree.base)
+      stamps[path] = cache.stamp(built.root .. "/" .. path, built.base)
       return stamps[path]
     end)
     tree.symbols = known
@@ -233,7 +239,7 @@ function M.refresh()
     end
     announce("diff")
 
-    local root = tree.root
+    local root = built.root
     work.cancel = resolve.start(
       { root = root, base = tree.base },
       unknown,
@@ -242,12 +248,12 @@ function M.refresh()
         -- the request, so the answer still describes the file it was read from.
         local filed =
           file_answer(root, path, { items = items, comments = comment_lines, timed_out = timed_out }, stamps[path])
-        if tree and work.request == request then
+        if wanted(request) then
           -- A server that answers nothing is "read, with no symbols", which is what
           -- turns every hunk in an unsupported file into an orphan row. Leaving the key
           -- absent would instead read as "still reading", forever.
-          tree.symbols[path] = filed or items or {}
-          tree.comments[path] = comment_lines
+          built.symbols[path] = filed or items or {}
+          built.comments[path] = comment_lines
           announce("symbols")
         end
       end
@@ -265,6 +271,7 @@ local function drop()
   tree = nil
 end
 
+---@type fun(root: string, branch: string, commit: string?, point: changeset.ForkPoint?): boolean
 local place
 
 ---Build the tree for the repository at `root`, unless it is already built there.

@@ -34,6 +34,7 @@ end
 ---@return changeset.Line
 local function commit_line(entry, width)
   local sha, subject = entry:match("^(%S+) ?(.*)$")
+  assert(subject, "changeset: a commit line without a hash")
   local lead = ("%s %s "):format(render.REF_ICONS.commit, sha)
   return line({ { lead, "Comment" }, { cells.clip(subject, width - cells.width(lead) - 1) } })
 end
@@ -47,6 +48,7 @@ local function file_line(file, width)
   -- The stat ends over the two-cell gutter the sidebar's rows keep, and one more cell keeps it off the path.
   local room = width - cells.width(glyph .. " ") - cells.chunks(stat or {}) - 3
   local dir, name = symbols.fit(file.path, room, "/"):match("^(.-)([^/]*)$")
+  assert(dir and name, "changeset: a path the pattern can't split")
   return line({ { glyph .. " ", hl }, { dir, "Comment" }, { name } }, stat)
 end
 
@@ -137,9 +139,9 @@ function M.show(buf, root, ref, kind)
   paint(buf, { head, line({}), meta("⋯ reading the diff") })
   Git.async(function()
     local base = Git.merge_base(root, ref)
-    return { base = base, commits = base and Git.lines({ "git", "log", "--format=%h %s", base .. "..HEAD" }, root) }
+    return base and { base = base, commits = Git.lines({ "git", "log", "--format=%h %s", base .. "..HEAD" }, root) }
   end, function(measured)
-    if not measured.base then
+    if not measured then
       return paint(buf, { head, line({}), meta(("HEAD shares no history with %s"):format(ref)) })
     end
     diff.collect(measured.base, root, function(files, err)
