@@ -116,7 +116,7 @@ describe("plugin/changeset.lua", function()
     assert.same({ "abandon", "restore", "submit", "yank" }, vim.fn.getcompletion("Changeset review ", "cmdline"))
     assert.same({ "file", "symbol" }, vim.fn.getcompletion("Changeset next ", "cmdline"))
     assert.same({ "next", "prev" }, vim.fn.getcompletion("Changeset preview ", "cmdline"))
-    assert.same({ "reset" }, vim.fn.getcompletion("Changeset base ", "cmdline"))
+    assert.same({ "commit", "reset", "tag" }, vim.fn.getcompletion("Changeset base ", "cmdline"))
     assert.same({}, vim.fn.getcompletion("Changeset toggle ", "cmdline"))
   end)
 
@@ -164,26 +164,35 @@ describe("plugin/changeset.lua", function()
     assert.equal(2, calls.pick)
   end)
 
-  it("routes base to the branch picker, base with a ref to setting it, base reset to forgetting it", function()
-    local calls, refs = {}, {}
-    package.loaded["changeset.base"] = {
-      pick = counter(calls, "pick"),
-      reset = counter(calls, "reset"),
-      set = function(ref)
-        table.insert(refs, ref)
-      end,
-    }
+  it(
+    "routes base and its verbs to their pickers, base with a ref to setting it, base reset to forgetting it",
+    function()
+      local calls, picked, refs = {}, {}, {}
+      package.loaded["changeset.base"] = {
+        pick = function(kind)
+          table.insert(picked, kind)
+        end,
+        reset = counter(calls, "reset"),
+        set = function(ref)
+          table.insert(refs, ref)
+        end,
+      }
 
-    vim.cmd("Changeset base")
-    vim.cmd("Changeset base v1.0")
-    vim.cmd("Changeset base reset")
-    vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-base)"), "x", false)
-    vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-base-reset)"), "x", false)
+      vim.cmd("Changeset base")
+      vim.cmd("Changeset base tag")
+      vim.cmd("Changeset base commit")
+      vim.cmd("Changeset base v1.0")
+      vim.cmd("Changeset base reset")
+      for _, name in ipairs({ "base", "base-tag", "base-commit", "base-reset" }) do
+        vim.api.nvim_feedkeys(vim.keycode(("<Plug>(changeset-%s)"):format(name)), "x", false)
+      end
 
-    package.loaded["changeset.base"] = nil
-    assert.same({ pick = 2, reset = 2 }, calls)
-    assert.same({ "v1.0" }, refs)
-  end)
+      package.loaded["changeset.base"] = nil
+      assert.same({ "branch", "tag", "commit", "branch", "tag", "commit" }, picked)
+      assert.same({ reset = 2 }, calls)
+      assert.same({ "v1.0" }, refs)
+    end
+  )
 
   it("reports base given more than one ref as an error", function()
     local refs = {}
@@ -452,7 +461,7 @@ describe("plugin/changeset.lua", function()
   end)
 
   it("maps the default keys once startup is done", function()
-    local probe = "for _, lhs in ipairs({ 'cc', 'cd', 'cq', 'd', 'l', 's', 'n', 'nn', 'np', 'ns', 'nS', 'nf', 'nF', 'g', 'j', 'b', 't' }) do"
+    local probe = "for _, lhs in ipairs({ 'cc', 'cd', 'cq', 'd', 'l', 's', 'n', 'nn', 'np', 'ns', 'nS', 'nf', 'nF', 'g', 'j', 'bb', 'bt', 'bc', 'br', 't' }) do"
       .. " io.write(vim.fn.maparg('<C-g>' .. lhs, 'n'), ' ') end"
       .. " io.write(vim.fn.maparg('<C-g>cc', 'x'), ' ', vim.fn.maparg(']g', 'n'), ' ', vim.fn.maparg('[g', 'n'))"
 
@@ -460,7 +469,8 @@ describe("plugin/changeset.lua", function()
       "<Plug>(changeset-comment-new) <Plug>(changeset-comment-del) <Plug>(changeset-comment-list) <Plug>(changeset-diff)  "
         .. "<Plug>(changeset-review-submit)  <Plug>(changeset-next) <Plug>(changeset-prev) "
         .. "<Plug>(changeset-next-symbol) <Plug>(changeset-prev-symbol) <Plug>(changeset-next-file) "
-        .. "<Plug>(changeset-prev-file) <Plug>(changeset-toggle) <Plug>(changeset-pick) <Plug>(changeset-base)  "
+        .. "<Plug>(changeset-prev-file) <Plug>(changeset-toggle) <Plug>(changeset-pick) <Plug>(changeset-base) "
+        .. "<Plug>(changeset-base-tag) <Plug>(changeset-base-commit) <Plug>(changeset-base-reset)  "
         .. "<Plug>(changeset-comment-new) "
         .. "<Plug>(changeset-preview-next) <Plug>(changeset-preview-prev)",
       after_startup({}, probe)
@@ -544,12 +554,26 @@ describe("plugin/changeset.lua", function()
     )
   end)
 
-  it("names the <C-g>c and <C-g>n groups for which-key, <C-g>c's on its one spec though it is a key too", function()
-    local stub = "lua package.loaded['which-key'] = { add = function(spec) added = spec end }"
-    local probe = "for _, spec in ipairs(added) do if vim.list_contains({ '<C-g>c', '<C-g>n' }, spec[1]) then"
-      .. " io.write(spec.mode, spec[1], ' ', tostring(spec.group), ' ') end end"
+  it(
+    "names the <C-g>c, <C-g>n and <C-g>b groups for which-key, <C-g>c's on its one spec though it is a key too",
+    function()
+      local stub = "lua package.loaded['which-key'] = { add = function(spec) added = spec end }"
+      local probe = "for _, spec in ipairs(added) do if vim.list_contains({ '<C-g>c', '<C-g>n', '<C-g>b' }, spec[1]) then"
+        .. " io.write(spec.mode, spec[1], ' ', tostring(spec.group), ' ') end end"
 
-    assert.equal("n<C-g>c comment x<C-g>c comment n<C-g>n navigation ", after_startup({ "-c", stub }, probe))
+      assert.equal(
+        "n<C-g>c comment x<C-g>c comment n<C-g>n navigation n<C-g>b base ",
+        after_startup({ "-c", stub }, probe)
+      )
+    end
+  )
+
+  it("gives the <C-g>b group an icon of its own, not its first key's", function()
+    local stub = "lua package.loaded['which-key'] = { add = function(spec) added = spec end }"
+    local probe = "local icons = {} for _, spec in ipairs(added) do icons[spec[1]] = spec.icon end"
+      .. " io.write(tostring(icons['<C-g>bb'] ~= nil and not vim.deep_equal(icons['<C-g>b'], icons['<C-g>bb'])))"
+
+    assert.equal("true", after_startup({ "-c", stub }, probe))
   end)
 
   it("maps no default keys when vim.g.changeset_no_default_maps is set", function()

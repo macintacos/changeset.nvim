@@ -18,6 +18,15 @@ local function commit_at(root, name, date)
   return sha
 end
 
+---The ref each item names, in order.
+---@param items changeset.BaseItem[]
+---@return string[]
+local function refs(items)
+  return vim.tbl_map(function(item)
+    return item.ref
+  end, items)
+end
+
 ---What the current branch is compared against now.
 ---@return string
 local function against()
@@ -26,27 +35,36 @@ end
 
 describe(":Changeset base", function()
   local root, previous, notes, restore, real_select
-  ---@type { items: string[], choose: fun(item: string?) }?
+  ---@type { items: changeset.BaseItem[], choose: fun(item: changeset.BaseItem?), format: fun(item: changeset.BaseItem): string }?
   local offered
+  ---Each commit's short hash, by the file it added.
+  ---@type table<string, string>
+  local short
 
   -- `main`, then `parent` off it, then `feature` off that, checked out, each tip a day newer; `origin/main` at the root
-  -- commit, and `origin/HEAD` pointing at it.
+  -- commit, and `origin/HEAD` pointing at it. Tag `v1` is on main's tip, `v2` on parent's.
   before_each(function()
     root, previous = fixture.enter_tempdir()
     vim.env.GIT_COMMITTER_DATE = "2026-01-01T00:00:00"
     local first = fixture.init_repo("main", root)
-    commit_at(root, "main.txt", "2026-01-02T00:00:00")
+    local main = commit_at(root, "main.txt", "2026-01-02T00:00:00")
     fixture.git({ "checkout", "-q", "-b", "parent" }, root)
-    commit_at(root, "parent.txt", "2026-01-03T00:00:00")
+    local parent = commit_at(root, "parent.txt", "2026-01-03T00:00:00")
     fixture.git({ "checkout", "-q", "-b", "feature" }, root)
-    commit_at(root, "feature.txt", "2026-01-04T00:00:00")
+    local feature = commit_at(root, "feature.txt", "2026-01-04T00:00:00")
     fixture.git({ "update-ref", "refs/remotes/origin/main", first }, root)
     fixture.git({ "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main" }, root)
+    fixture.git({ "tag", "v1", main }, root)
+    fixture.git({ "tag", "v2", parent }, root)
+    short = {}
+    for name, sha in pairs({ root = first, ["main.txt"] = main, ["parent.txt"] = parent, ["feature.txt"] = feature }) do
+      short[name] = fixture.git({ "rev-parse", "--short", sha }, root)
+    end
     vim.cmd.edit("feature.txt")
     notes, restore = Notify.capture()
     real_select, offered = vim.ui.select, nil
-    vim.ui.select = function(items, _, on_choice)
-      offered = { items = items, choose = on_choice }
+    vim.ui.select = function(items, opts, on_choice)
+      offered = { items = items, choose = on_choice, format = opts.format_item }
     end
   end)
 
@@ -87,35 +105,64 @@ describe(":Changeset base", function()
     assert.equal("parent", against())
   end)
 
-  it("offers the other branches, local and remote, newest first", function()
-    base.pick()
+  it("offers the other branches, local and remote, the one committed to last first", function()
+    base.pick("branch")
 
-    assert.same({ "parent", "main", "origin/main" }, assert(offered).items)
+    assert.same({ "parent", "main", "origin/main" }, refs(assert(offered).items))
+  end)
+
+  it("offers the tags, the newest first", function()
+    base.pick("tag")
+
+    assert.same({ "v2", "v1" }, refs(assert(offered).items))
+  end)
+
+  it("offers HEAD's commits, the newest first", function()
+    base.pick("commit")
+
+    assert.same(
+      { short["feature.txt"], short["parent.txt"], short["main.txt"], short.root },
+      refs(assert(offered).items)
+    )
+  end)
+
+  it("names a commit by its hash and subject", function()
+    base.pick("commit")
+    local picker = assert(offered)
+
+    assert.equal(short["feature.txt"] .. " feature.txt", picker.format(picker.items[1]))
   end)
 
   it("compares against the branch picked", function()
-    base.pick()
-    assert(offered).choose("main")
+    base.pick("branch")
+    local picker = assert(offered)
+    picker.choose(picker.items[2])
 
     assert.equal("main", against())
+  end)
+
+  it("compares against the tag picked", function()
+    base.pick("tag")
+    local picker = assert(offered)
+    picker.choose(picker.items[2])
+
+    assert.equal("v1", against())
+  end)
+
+  it("compares against the commit picked", function()
+    base.pick("commit")
+    local picker = assert(offered)
+    picker.choose(picker.items[3])
+
+    assert.equal(short["main.txt"], against())
   end)
 
   it("leaves the base as it was when the picker is dismissed", function()
     base.set("main")
 
-    base.pick()
+    base.pick("branch")
     assert(offered).choose(nil)
 
     assert.equal("main", against())
-  end)
-
-  it("offers first to guess again while a base is set, and guesses again when that is picked", function()
-    base.set("main")
-
-    base.pick()
-    local picker = assert(offered)
-    picker.choose(picker.items[1])
-
-    assert.equal("parent", against())
   end)
 end)

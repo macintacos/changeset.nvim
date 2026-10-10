@@ -26,7 +26,13 @@ local subcommands = {
     if opts.fargs[2] then
       return base.set(opts.fargs[2])
     end
-    base.pick()
+    base.pick("branch")
+  end,
+  ["base tag"] = function()
+    require("changeset.base").pick("tag")
+  end,
+  ["base commit"] = function()
+    require("changeset.base").pick("commit")
   end,
   ["base reset"] = function()
     require("changeset.base").reset()
@@ -182,13 +188,17 @@ end, {
   end,
 })
 
+---A which-key icon: a category and name which-key asks mini.icons for, so it is drawn from the user's icon set, or a
+---glyph and colour where mini.icons has none.
+---@alias changeset.KeyIcon { cat: string, name: string }|{ icon: string, color: string }
+
 ---A subcommand's default key.
 ---@class changeset.DefaultKey
 ---@field lhs string
 ---@field name string The subcommand, as typed after `:Changeset`.
 ---@field desc string
 ---@field modes? string[] Default `{ "n" }`.
----@field icon { cat: string, name: string } Its which-key icon: a category and name which-key asks mini.icons for, so it is drawn from the user's icon set.
+---@field icon changeset.KeyIcon
 ---@field operatorfunc? string For a step `.` repeats, its `'operatorfunc'` call, `%d` standing for the count.
 
 ---@type changeset.DefaultKey[]
@@ -324,11 +334,30 @@ local keys = {
     desc = "Pick a change to open from a list",
     icon = { cat = "filetype", name = "diff" },
   },
+  -- mini.icons has no branch, tag or commit; these are the glyphs a git key of the user's config wears.
   {
-    lhs = "<C-g>b",
+    lhs = "<C-g>bb",
     name = "base",
-    desc = "Pick the branch to compare against",
-    icon = { cat = "filetype", name = "git" },
+    desc = "Pick a branch to compare against",
+    icon = { icon = "󰘬", color = "orange" },
+  },
+  {
+    lhs = "<C-g>bt",
+    name = "base tag",
+    desc = "Pick a tag to compare against",
+    icon = { icon = "󰓹", color = "orange" },
+  },
+  {
+    lhs = "<C-g>bc",
+    name = "base commit",
+    desc = "Pick a commit to compare against",
+    icon = { icon = "󰜘", color = "orange" },
+  },
+  {
+    lhs = "<C-g>br",
+    name = "base reset",
+    desc = "Compare against the base changeset guesses",
+    icon = { icon = "󰦛", color = "orange" },
   },
   {
     lhs = "<C-g>d",
@@ -370,19 +399,19 @@ end
 vim.keymap.set("x", plug("comment new"), ":Changeset comment new<CR>", { silent = true, desc = comment_new.desc })
 vim.keymap.set(
   "n",
-  plug("base reset"),
-  "<Cmd>Changeset base reset<CR>",
-  { desc = "Compare against the base changeset guesses again" }
-)
-vim.keymap.set(
-  "n",
   plug("review restore"),
   "<Cmd>Changeset review restore<CR>",
   { desc = "Bring back a batch of submitted review comments" }
 )
 
--- which-key's name for each prefix the default keys share.
-local GROUPS = { ["<C-g>c"] = "comment", ["<C-g>n"] = "navigation" }
+-- which-key's name for each prefix the default keys share, and its icon where its first key's isn't the group's. The
+-- base group's is the glyph the sidebar's footer sets before the base.
+---@type table<string, { name: string, icon: changeset.KeyIcon? }>
+local GROUPS = {
+  ["<C-g>c"] = { name = "comment" },
+  ["<C-g>n"] = { name = "navigation" },
+  ["<C-g>b"] = { name = "base", icon = { icon = "", color = "orange" } },
+}
 
 ---Whether a global map in `mode` has `lhs`, or starts it, or starts with it: either way `lhs` would clash with it.
 ---Buffer-local maps don't count, being only the buffer current at startup's.
@@ -427,7 +456,7 @@ local function map_defaults()
     for prefix, group in pairs(GROUPS) do
       if vim.startswith(lhs, prefix) and not named[mode .. prefix] then
         named[mode .. prefix] = true
-        icon_specs[#icon_specs + 1] = { prefix, mode = mode, group = group, icon = key.icon }
+        icon_specs[#icon_specs + 1] = { prefix, mode = mode, group = group.name, icon = group.icon or key.icon }
       end
     end
   end

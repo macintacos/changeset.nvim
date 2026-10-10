@@ -43,7 +43,7 @@ end
 ---@param root string
 ---@param branch string
 ---@return string?
-function M.pinned(root, branch)
+local function pinned(root, branch)
   local repo = jsonfile.read(pins_path())[root]
   local ref = type(repo) == "table" and repo[branch]
   return type(ref) == "string" and ref or nil
@@ -79,12 +79,12 @@ end
 ---@return changeset.ForkPoint?
 local function measure(root, branch, pr)
   local default_branch = Git.default_base(root)
-  local pinned = M.pinned(root, branch)
-  if pinned then
-    local pinned_base, pinned_ref = Git.merge_base(root, pinned)
+  local by_hand = pinned(root, branch)
+  if by_hand then
+    local pinned_base, pinned_ref = Git.merge_base(root, by_hand)
     if pinned_base then
-      local number = pr_number(root, pr, pinned, pinned_base)
-      return { base = pinned_base, ref = pinned_ref, against = pinned, default_branch = default_branch, pr = number }
+      local number = pr_number(root, pr, by_hand, pinned_base)
+      return { base = pinned_base, ref = pinned_ref, against = by_hand, default_branch = default_branch, pr = number }
     end
   end
   local base, ref

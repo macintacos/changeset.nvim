@@ -170,18 +170,6 @@ function M.default_base(cwd)
   return "main"
 end
 
----The local and remote branches at `cwd`, the one committed to last first, leaving out a remote's `HEAD`.
----@param cwd string
----@return string[]
-function M.branches(cwd)
-  -- A symbolic ref, as `origin/HEAD` is, prints an empty line.
-  local format = "--format=%(if)%(symref)%(then)%(else)%(refname:short)%(end)"
-  local names = M.lines({ "git", "for-each-ref", "--sort=-committerdate", format, "refs/heads", "refs/remotes" }, cwd)
-  return vim.tbl_filter(function(name)
-    return name ~= ""
-  end, names)
-end
-
 ---What HEAD moved from when it moved to `branch` at `commit`, as this worktree's HEAD reflog records it.
 ---@param cwd string?
 ---@param branch string

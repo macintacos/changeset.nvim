@@ -123,6 +123,7 @@ local COMPARE_ICON = ""
 local PR_ICON = ""
 local FILES_ICON = ""
 local COMMIT_ICON = ""
+local TAG_ICON = ""
 local FILTER_ICON = "󰈲"
 
 -- The actions the footer offers, `help` last since it lists the rest.
@@ -181,8 +182,11 @@ function M.compose(row, chunks, stat)
   return { text = text, marks = marks, row = row }
 end
 
----The `+N -N` virtual text for a row.
----@param row changeset.Row
+---The glyph of each kind of ref a branch can be compared against.
+M.REF_ICONS = { branch = BRANCH_ICON, tag = TAG_ICON, commit = COMMIT_ICON }
+
+---The `+N -N` virtual text for a row, or for a file the diff read.
+---@param row { added: integer?, removed: integer?, ancestor: boolean? }
 ---@return table[]? chunks `nil` when the row has no stat of its own.
 function M.stat_chunks(row)
   if row.ancestor or (row.added == nil and row.removed == nil) then
@@ -605,6 +609,24 @@ function M.header(summary, width)
     ("%%#%s#%%="):format(highlights.HEADER_HL),
     pr and ("%%#%s#%s "):format(highlights.HEADER_DIM_HL, pr) or "",
   })
+end
+
+---The header's first row as chunks for a buffer line, where `header` is a winbar's: the ref padded to `width`, so its
+---strip runs the full width.
+---@param ref string
+---@param width integer
+---@return table[] chunks
+function M.header_ref(ref, width)
+  local lead = (" %s "):format(BRANCH_ICON)
+  local clipped = cells.clip(ref, width - cells.width(lead))
+  local remote = clipped:match("^origin/") or ""
+  local chunks = {
+    { lead, highlights.HEADER_ICON_HL },
+    { remote, highlights.HEADER_DIM_HL },
+    { clipped:sub(#remote + 1), highlights.HEADER_REF_HL },
+  }
+  chunks[#chunks + 1] = { (" "):rep(math.max(width - cells.chunks(chunks), 0)), highlights.HEADER_HL }
+  return chunks
 end
 
 ---`N noun`, the glyph and noun dimmed so the number leads.
