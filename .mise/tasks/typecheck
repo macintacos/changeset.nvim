@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
-#MISE description="Type-check the Lua with lua-language-server (config in .luarc.check.json)"
+#MISE description="Type-check the Lua with emmylua_check (config in .emmyrc.json and tests/.emmyrc.json)"
 #MISE depends=["deps"]
 
 set -euo pipefail
 
-# .luarc.check.json resolves `$VIMRUNTIME` from the environment, which only a
+# Both configs resolve `$VIMRUNTIME` from the environment, which only a
 # running nvim sets.
 VIMRUNTIME="$(nvim --clean --headless --cmd 'lua io.write(vim.env.VIMRUNTIME)' --cmd 'qa!')"
 export VIMRUNTIME
 
-lua-language-server --check=. --configpath=.luarc.check.json --checklevel=Warning \
-	--check_format=pretty --logpath=.tests/luals
+# Two workspaces, as `assert` is Lua's built-in in lua/ and plugin/ but luassert
+# in tests/. Without --warnings-as-errors, a run with only warnings exits 0.
+status=0
+emmylua_check . --warnings-as-errors || status=1
+emmylua_check tests --warnings-as-errors || status=1
+exit "$status"

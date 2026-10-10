@@ -15,7 +15,10 @@ tree-sitter = "0.26"
 # Lua toolchain — formatter + linter + type check.
 "aqua:JohnnyMorganz/StyLua" = "latest"
 "aqua:Kampfkarren/selene"   = "latest"
-lua-language-server         = "latest" # type check (config in .luarc.check.json)
+# Type check (config in .emmyrc.json for lua/ and plugin/, tests/.emmyrc.json for tests/).
+# ubi, not github: the release ships many tools' assets and the github backend picks the
+# Windows one.
+"ubi:EmmyLuaLs/emmylua-analyzer-rust" = { version = "latest", matching = "emmylua_check", exe = "emmylua_check" }
 
 # Exact pin: keep in lockstep with hk.pkl's amends/import version.
 hk = "2.3.0"

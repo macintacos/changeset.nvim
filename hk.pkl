@@ -79,11 +79,12 @@ local linters = new Mapping<String, Step> {
   ["Git(LargeFile)    [[builtins.check_added_large_files]]"] = Builtins.check_added_large_files
 }
 
-// lua-language-server checks the whole workspace in one run, whichever files
-// changed. Too slow for every commit, so it runs from `check` and `pre-push` only.
+// emmylua_check checks the whole workspace, so a finding in any file would block every Lua
+// commit, and it first syncs the plugins pinned under .tests/deps, which can fetch. It runs
+// from `check` and `pre-push` only.
 local typecheck = new Mapping<String, Step> {
-  ["Lua(Types)        [[lua-language-server]]"] = new Step {
-    glob = List("**/*.lua", ".luarc.check.json")
+  ["Lua(Types)        [[emmylua_check]]"] = new Step {
+    glob = List("**/*.lua", ".emmyrc.json", "tests/.emmyrc.json")
     check = "mise run typecheck"
   }
 }
@@ -116,7 +117,7 @@ hooks {
       // One mise run, so the `deps` both tasks depend on syncs once: two steps would race it.
       // Output is printed only on failure, minus plenary's passing specs: hk prints a step's
       // stderr even when it passes.
-      ["Lua(Types+Test)   [[lua-language-server, plenary]]"] = new Step {
+      ["Lua(Types+Test)   [[emmylua_check, plenary]]"] = new Step {
         check =
           #"out=$(mise run -q typecheck ::: test 2>&1) || { printf '%s\n' "$out" | grep -v 'Success.*||' >&2; exit 1; }"#
       }

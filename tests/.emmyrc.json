@@ -1,0 +1,29 @@
+{
+  "$schema": "https://raw.githubusercontent.com/EmmyLuaLs/emmylua-analyzer-rust/main/crates/emmylua_code_analysis/resources/schema.json",
+  "runtime": {
+    "version": "LuaJIT"
+  },
+  "workspace": {
+    "library": [
+      "$VIMRUNTIME",
+      "$PWD/lua",
+      "$PWD/types",
+      "$PWD/.tests/deps/gitsigns.nvim",
+      "$PWD/.tests/deps/mini.icons",
+      "$PWD/.tests/deps/mini.pick",
+      "$PWD/.tests/deps/nvim-treesitter",
+      "$PWD/.tests/deps/nvim-web-devicons",
+      "$PWD/.tests/deps/luacov/src"
+    ]
+  },
+  "diagnostics": {
+    "severity": {
+      "unused": "warning",
+      "unreachable-code": "warning",
+      "deprecated": "warning",
+      "redefined-local": "warning",
+      "duplicate-require": "warning",
+      "preferred-local-alias": "warning"
+    }
+  }
+}

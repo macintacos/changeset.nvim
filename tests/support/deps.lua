@@ -68,7 +68,8 @@ end
 
 ---Sync every dependency to its pin, raising if any failed.
 function M.install()
-  -- Keep in sync with .luarc.check.json's workspace.library, which lists every pin but luacov.
+  -- Keep in sync with workspace.library in .emmyrc.json, which lists every pin but plenary.nvim and luacov, and in
+  -- tests/.emmyrc.json, which lists the same plus luacov's src.
   local pins = {
     ["plenary.nvim"] = {
       src = "https://github.com/nvim-lua/plenary.nvim",
