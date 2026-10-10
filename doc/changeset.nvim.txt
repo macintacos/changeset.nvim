@@ -1040,7 +1040,8 @@ line; cancelling opens nothing. Because |vim.ui.select()| may answer later,
 is made.
 
 A pick from the sidebar opens its file where `<CR>` on a row would, never in
-the sidebar.
+the sidebar. With the sidebar closed and no window that can hold a file, the
+file opens in the window the picker was called from.
 
 `:Pick changeset` works too when mini.pick is set up by the end of startup. If
 you set it up later, register the picker yourself: >lua
