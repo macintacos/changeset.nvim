@@ -176,8 +176,10 @@ Both need gitsigns.
 - **The gutter's base** makes gitsigns' gutter mark everything the branch changed, not only
   uncommitted work. It is the sidebar's base on every branch, the default branch included,
   from the start of the session, so `setup()` is not needed. It follows the base as you
-  switch branches, pull, rebase or push. `:Gitsigns change_base <rev>` still sets a buffer's
-  base by hand, and changeset leaves that buffer alone.
+  switch branches, pull or rebase, and after a push or fetch once Neovim regains focus, `HEAD`
+  next moves or the sidebar reopens. An open sidebar moves with it.
+  `:Gitsigns change_base <rev>` still sets a buffer's base by hand, and changeset leaves that
+  buffer alone.
 - **The unified diff** turns on when the sidebar opens: every file the sidebar lists shows
   its removed lines inline, above the lines that replaced them. It compares against the same
   base as the gutter. Closing the sidebar turns it off, or, as `unified_diff.keep` says, keeps

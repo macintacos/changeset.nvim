@@ -57,8 +57,9 @@ registers `:Pick changeset` when mini.pick is set up.
 The first time gitsigns attaches a buffer, that autocommand loads the modules
 that keep gitsigns' base on the branch's (|changeset-gutter-base|). They
 measure the branch's base, running `git`, and `gh` for an open PR's target,
-and measure it again as the branch, `HEAD` or Neovim's focus changes. Without
-gitsigns, none of this runs.
+and measure it again with `git` as the branch, `HEAD` or Neovim's focus
+changes. They ask `gh` again only for a branch switched to, or as `HEAD` moves
+on a branch whose PR `gh` named. Without gitsigns, none of this runs.
 
 The rest loads the first time you call |changeset.setup()|, run `:Changeset`
 or press one of its keys. From then on:
@@ -1025,9 +1026,11 @@ needs gitsigns, and it starts with the session, before the sidebar has opened
 
 The base follows the branch's: when you switch branches, when `HEAD` moves on
 the branch, as a pull, a commit or a rebase moves it, and when Neovim regains
-focus, which catches a push or fetch made outside it. It also takes the base
-the sidebar measures as it opens, and an open PR's new target, which `gh` is
-asked about again as `HEAD` moves.
+focus, which catches a push or fetch. A push or fetch made from inside Neovim
+is followed once Neovim regains focus, `HEAD` next moves or the sidebar
+reopens. It also takes the base the sidebar measures as it opens, and an open
+PR's new target, which `gh` is asked about again as `HEAD` moves. An open
+sidebar moves to each base the gutter measures.
 
 The gutter says nothing on its own. When a branch has no merge base at all,
 it compares against the index, and the sidebar warns when you open it. When

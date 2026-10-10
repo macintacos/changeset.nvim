@@ -1115,10 +1115,15 @@ The gutter follows the base as it moves, not only as the branch changes. gitsign
 leaves every open file's signs alone publishes none, so HEAD's moves are heard from
 gitsigns' gitdir watcher instead. That watcher doesn't see `refs/remotes`, so a push or
 fetch, which moves the remote branch `main` is measured against, is caught when Neovim
-regains focus. Every fork point measured without blocking, the sidebar's own re-measure
-among them, reaches the gutter too, so the two measure once between them where they can.
-While gh is still being asked, its answer carries the newest measure rather than the one
-it was asked with, which HEAD may have moved past.
+regains focus. Those re-measures run git only: asking gh as well would ask GitHub about a
+branch with no PR, `main` among them, on every commit and every focus regain. gh is asked
+for a branch switched to, a sidebar build, and again as HEAD moves once it has named a PR.
+Every fork point measured without blocking reaches both the gutter and the tree, which takes
+it as its own re-measure would, so the two measure once between them where they can and
+never disagree after a push. A measure is taken again when HEAD moves while it runs, so none
+answers for a HEAD left behind, nor lands after a newer one with an older fork point. While
+gh is still being asked, its answer carries the newest measure rather than the one it was
+asked with.
 
 ## Every file shows its diff inline
 
