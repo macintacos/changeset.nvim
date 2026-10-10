@@ -976,6 +976,25 @@ is not on loan. The window the cursor is in never wears it at all: a `]g` presse
 previews without a band, and one that came along with a buffer or a split comes off the
 moment that window takes focus or a buffer.
 
+A row that stands for a span marks the span in the window too. A symbol's body, or a
+single hunk outside every symbol, is drawn as a bar down the sign column from its first
+line to its last, the first line wearing the row's own icon. The band says which file and
+row are on loan; the bar says how far the row reaches, which the band cannot. The
+unified diff's tint takes a changed line's background, so the cursor line gives no sign
+of where a symbol ends, and the bar is what can. The sign column is the one cell beside
+the numbers that the text does not compete for, and the accent is the selection's
+`Statement` rather than a change colour, so the bar cannot read as one more added or
+removed line. Only spans get a bar: a file has no extent to show, a group is scattered,
+and a comment's own marks already light its lines.
+
+The bar sits above gitsigns' signs and the covers the unified diff lays over them, so
+the change bars do not hide it. It sits below a review comment's bubble, which says more
+about the line than where the preview is, and below diagnostics by default, for the same
+reason. Its priority is gitsigns' `sign_priority` plus two, so it stays above the covers
+at any setting, and stays below every diagnostic sign only while that is 7 or less.
+On a tinted line the bar keeps the tint behind it, as the band's glyph keeps the band's
+background.
+
 ### `<C-g>nn` opens where `]g` previews
 
 `]g` / `[g` and `<C-g>nn` / `<C-g>np` step over the same rows, in the sidebar's order,
