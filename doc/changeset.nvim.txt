@@ -48,10 +48,17 @@ sidebar, changeset:
 
 WHAT IT ADDS TO YOUR EDITOR                                *changeset-startup*
 
-At startup the plugin defines |:Changeset|, its `<Plug>` maps, and an
-autocommand that refills the sidebar when a session restores it. It requires
-none of its modules. Once startup is done, it maps the default keys
-(|changeset-keys|) and registers `:Pick changeset` when mini.pick is set up.
+At startup the plugin defines |:Changeset|, its `<Plug>` maps, an autocommand
+that refills the sidebar when a session restores it, and a one-shot
+autocommand on gitsigns' first `GitSignsUpdate`. It requires none of its
+modules. Once startup is done, it maps the default keys (|changeset-keys|) and
+registers `:Pick changeset` when mini.pick is set up.
+
+The first time gitsigns attaches a buffer, that autocommand loads the modules
+that keep gitsigns' base on the branch's (|changeset-gutter-base|). They
+measure the branch's base, running `git`, and `gh` for an open PR's target,
+and measure it again as the branch, `HEAD` or Neovim's focus changes. Without
+gitsigns, none of this runs.
 
 The rest loads the first time you call |changeset.setup()|, run `:Changeset`
 or press one of its keys. From then on:
@@ -132,6 +139,10 @@ the merge base with the first of these that shares history with your branch:
 3. The default branch: the one `origin/HEAD` names, else the first of `main`,
    `master` and `trunk` that exists locally or on `origin`.
 
+On the default branch itself, the base is the merge base with its remote,
+`origin/<branch>`, so the commits you haven't pushed show. Without that
+remote, the base is `HEAD`, and only what you haven't committed shows.
+
 A branch has no parent when it was created from:
 
 - a commit, a detached `HEAD`, or another worktree's `HEAD`;
@@ -210,7 +221,8 @@ UNIFIED DIFF
 	open or closed (|changeset-unified-diff|). It says which, in one line.
 	Before any tree was built, it first builds one for the current
 	buffer's repository, or warns "no merge base with the default branch"
-	and stays off.
+	and stays off. Without gitsigns, or one too old for unified views, it
+	warns that the unified diff needs gitsigns and stays off.
 
 STEPPING
 
@@ -776,7 +788,8 @@ In the window, `:Changeset` and its keys act on the comment you are writing:
 
 With the default keys on, the `<C-g>` keys work in Insert mode in the window
 too, except a key you map in Insert mode yourself, such as nvim-surround's
-`<C-g>s`, and a key that is also a save key.
+`<C-g>s`, a key that is also a save key, and a key that is one of Vim's own
+Insert mode `CTRL-G` commands, such as `<C-g>j` (|i_CTRL-G_j|).
 
 MARKS                                                *changeset-comment-marks*
 
@@ -1006,15 +1019,20 @@ A click presses a button, and leaving the float any other way keeps.
 11. The gutter's base                                  *changeset-gutter-base*
 
 gitsigns' gutter and its inline diff compare against the same base as the
-sidebar (|changeset-base|), on every branch, the default branch included. On
-the default branch that is the merge base with `origin/main` when that exists,
-so commits you haven't pushed show as changes. It needs gitsigns, and it
-starts with the session, before the sidebar has opened: `setup()` is not
-needed.
+sidebar (|changeset-base|), on every branch, the default branch included. It
+needs gitsigns, and it starts with the session, before the sidebar has opened
+(|changeset-startup|): `setup()` is not needed.
 
-When a branch has no merge base at all, the gutter compares against the index,
-and changeset warns, except on the default branch, where the index is the
-quiet fallback. A buffer whose base you set by hand with
+The base follows the branch's: when you switch branches, when `HEAD` moves on
+the branch, as a pull, a commit or a rebase moves it, and when Neovim regains
+focus, which catches a push or fetch made outside it. It also takes the base
+the sidebar measures as it opens, and an open PR's new target, which `gh` is
+asked about again as `HEAD` moves.
+
+The gutter says nothing on its own. When a branch has no merge base at all,
+it compares against the index, and the sidebar warns when you open it. When
+the PR's target shares no history with the branch, it compares against the
+default branch's base. A buffer whose base you set by hand with
 `:Gitsigns change_base <rev>` stays on that base.
 
 ==============================================================================
@@ -1024,7 +1042,9 @@ The unified diff is gitsigns' unified view in the files the sidebar lists, as
 `:Gitsigns diffthis unified=true` draws it: the lines removed since gitsigns'
 base sit inline above the lines that replaced them. It compares against the
 same base as gitsigns' gutter (|changeset-gutter-base|), the sidebar's base,
-and needs gitsigns. changeset opens it in no other file.
+and needs gitsigns. changeset opens it in no other file, and closes it in a
+file the sidebar stops listing, as when you switch branches, once the
+sidebar has read the new diff.
 
 It is off when Neovim starts. Opening the sidebar, by any route, turns it on
 for every file the sidebar lists, in every window, files you open later
@@ -1050,9 +1070,9 @@ sidebar closed, the picker still enters the file it opens, and shows its diff
 unless the diff is off.
 
 Closing one file's view yourself, with `:Gitsigns diffthis unified=true` or
-anything else gitsigns offers, keeps that file's diff closed until the diff
-next turns on, by the sidebar opening or |:Changeset-diff|. Other files keep
-theirs.
+anything else gitsigns offers, closes changeset's views of that file in every
+window as you leave it, and keeps them closed until the diff next turns on, by
+the sidebar opening or |:Changeset-diff|. Other files keep theirs.
 
 A file new since that base, untracked or not, shows every line added. While
 the diff is on, gitsigns attaches to untracked files, as its

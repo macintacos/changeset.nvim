@@ -65,8 +65,9 @@ With lazy.nvim:
 ```
 
 `setup()` is optional. To change an option, call `require("changeset").setup({ … })`, or add
-`opts = { … }` to the lazy.nvim spec. The plugin loads lazily by itself: at startup it only
-defines `:Changeset` and its keys.
+`opts = { … }` to the lazy.nvim spec. The plugin loads lazily by itself: at startup it
+defines `:Changeset` and its keys, and once gitsigns attaches a buffer it measures the
+branch's base, running `git` and `gh`, to point gitsigns' gutter at it.
 
 ## Quick start
 
@@ -164,8 +165,9 @@ Set a key to `false` to leave it unbound. `/` searches the tree.
 ## What it compares against
 
 The tree shows what changed since your branch left the branch you created it from, else
-its open PR's target (found with `gh`), else the default branch. The header names that
-base; `:help changeset-base` has the full rules.
+its open PR's target (found with `gh`), else the default branch. On the default branch it
+shows what you haven't pushed. The header names that base; `:help changeset-base` has the
+full rules.
 
 ## The gutter's base and the unified diff
 
@@ -173,8 +175,9 @@ Both need gitsigns.
 
 - **The gutter's base** makes gitsigns' gutter mark everything the branch changed, not only
   uncommitted work. It is the sidebar's base on every branch, the default branch included,
-  from the start of the session, so `setup()` is not needed. `:Gitsigns change_base <rev>`
-  still sets a buffer's base by hand, and changeset leaves that buffer alone.
+  from the start of the session, so `setup()` is not needed. It follows the base as you
+  switch branches, pull, rebase or push. `:Gitsigns change_base <rev>` still sets a buffer's
+  base by hand, and changeset leaves that buffer alone.
 - **The unified diff** turns on when the sidebar opens: every file the sidebar lists shows
   its removed lines inline, above the lines that replaced them. It compares against the same
   base as the gutter. Closing the sidebar turns it off, or, as `unified_diff.keep` says, keeps

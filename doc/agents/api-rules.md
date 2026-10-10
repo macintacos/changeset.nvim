@@ -12,7 +12,8 @@ Changing or removing any of it is a breaking change.
 modules create their autocmds as they load. Its one autocmd of its own is a `User
 GitSignsUpdate` that fires once, on the session's first gitsigns update, and hands that
 update to `changeset.review`, which starts the watcher keeping buffers on the sidebar's
-base. It is what puts the gutter on the branch's base from startup, with or without
+base: it hears gitsigns' updates, each repository's gitdir watcher for HEAD's moves, and
+`FocusGained`. It is what puts the gutter on the branch's base from startup, with or without
 `setup()` and the sidebar, and it is why a session without gitsigns loads nothing. Its maps run `<Cmd>Changeset …<CR>`, so a map and the command take
 one route through `:Changeset`, with its range. The exceptions are the walking maps,
 `next`, `prev`, `next symbol`, `prev symbol`, `next file`, `prev file`, `comment next` and
@@ -32,7 +33,10 @@ The plugin records the default `<C-g>` keys it mapped globally in normal mode in
 `vim.g.changeset_window_keys`. The window maps each of them again in normal mode on its own
 buffer, unless it equals a `review_comment.save` key. It maps them in insert mode too, but
 only those `mapcheck()` finds no insert-mode map clashing with when the window opens, so a
-map the user makes after startup still counts.
+map the user makes after startup still counts, and never one of Vim's own insert-mode
+`CTRL-G` commands (`:help i_CTRL-G_j` and those beside it), such as `pick`'s `<C-g>j`, which
+`mapcheck()` can't see. A new default `<C-g>` key that is one of them still works in the
+window in normal mode.
 
 Every subcommand has a `<Plug>` map of its words joined by hyphens, such as
 `<Plug>(changeset-comment-new)`. The global keys are defaults under `<C-g>`, plus `]g` and

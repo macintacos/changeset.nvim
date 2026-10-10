@@ -1034,7 +1034,8 @@ maps `<C-g>cc`, it maps `<C-g>c` to comment too.
 
 | Situation | Text |
 | --- | --- |
-| On the default branch | `On trunk — nothing to compare. Switch to a branch to see its changes.` |
+| On the default branch, with nothing unpushed | `trunk matches origin/trunk. Nothing changed yet.` |
+| On a default branch with no remote | `On trunk — nothing to compare. Switch to a branch to see its changes.` |
 | Branch with no diff | `<branch> matches origin/trunk. Nothing changed yet.` |
 | Symbols still resolving | `⋯ reading symbols` under the file row |
 | No LSP for a file | nothing special — the file renders with its orphan-hunk group |
@@ -1104,13 +1105,30 @@ A parent guessed from the refs, such as the branch whose tip is nearest, isn't t
 costs a merge-base per branch on every build, and any branch sharing that history can
 claim it.
 
+The default branch has no parent and is its own default, and its merge base with itself is
+HEAD, which would show only uncommitted work. So it is measured against its own remote
+alone: what reading `main` before a push needs is what hasn't been pushed. Without a remote
+there is nothing else to measure against, and the base is HEAD.
+
+The gutter follows the base as it moves, not only as the branch changes. gitsigns publishes
+`GitSignsUpdate` only when a buffer's signs or branch change, and a pull or rebase that
+leaves every open file's signs alone publishes none, so HEAD's moves are heard from
+gitsigns' gitdir watcher instead. That watcher doesn't see `refs/remotes`, so a push or
+fetch, which moves the remote branch `main` is measured against, is caught when Neovim
+regains focus. Every fork point measured without blocking, the sidebar's own re-measure
+among them, reaches the gutter too, so the two measure once between them where they can.
+While gh is still being asked, its answer carries the newest measure rather than the one
+it was asked with, which HEAD may have moved past.
+
 ## Every file shows its diff inline
 
 While the sidebar is open, every file the tree lists shows gitsigns' unified diff, the view
 `:Gitsigns diffthis unified=true` draws: the base's removed lines as virtual lines above
 what replaced them, the added lines lit. The sidebar maps where the branch changed, and
 this keeps those changes in sight in the file being worked on. A file the tree doesn't list
-has no change of the branch's to show, so it is left as gitsigns left it. The view compares
+has no change of the branch's to show, so it is left as gitsigns left it, and a view on a
+file the tree stops listing, as after a branch switch, closes once the tree's diff is read.
+Not before: a tree built anew lists no file until then. The view compares
 against gitsigns' own base, the sidebar's fork point, so the gutter and the inline lines
 always agree. The tree's first diff arrives a moment after the sidebar opens, and the views
 open as it does.
@@ -1207,9 +1225,10 @@ an hour ago keeps its diff after the next close. It records which files, not whe
 nothing reads a time.
 
 Closing one of changeset's views by hand, with gitsigns' toggle or by switching to its split
-diff, is about that file. Its diff stays closed until the diff next turns on, by the sidebar
-or the toggle, each the user asking for the diff again; nothing writes it down. Turning
-every file off for it would make one stray toggle cost the session's diff.
+diff, is about that file. Its views close in every window showing it, so none is left frozen
+there with gitsigns' signs drawn beside it, and they stay closed until the diff next turns
+on, by the sidebar or the toggle, each the user asking for the diff again; nothing writes it
+down. Turning every file off for it would make one stray toggle cost the session's diff.
 
 ## What it remembers
 
