@@ -5,10 +5,15 @@ vim.cmd("runtime plugin/changeset.lua")
 local PREVIEW_NEXT = vim.keycode("<Plug>(changeset-preview-next)")
 local PREVIEW_PREV = vim.keycode("<Plug>(changeset-preview-prev)")
 local draw = require("changeset.draw")
+local highlights = require("changeset.highlights")
+local icons = require("changeset.icons")
 local render = require("changeset.render")
+local Rows = require("changeset.rows")
+local sections = require("changeset.sections")
 local window = require("changeset.window")
 local Fixture = require("support.git")
 local Sidebar = require("support.sidebar")
+local sym = require("support.changes").sym
 
 ---Open the sidebar from `mod.lua`, leaving the cursor in the file window.
 ---@return integer file The window the sidebar was opened from, where previews go.
@@ -281,5 +286,80 @@ describe("changeset preview band's band_for", function()
     local text = band_text({ kind = "symbol", name = "M.one", path = "mod.lua", lnum = 3 })
 
     assert.truthy(vim.endswith(text, "M.one "))
+  end)
+
+  describe("its span", function()
+    local real_get = icons.get
+
+    before_each(function()
+      -- With no icon plugin set up every lookup answers one blank, so these glyphs and groups name what they were
+      -- asked for, and a span asking for the wrong category or kind gets a different icon.
+      icons.get = function(category, name)
+        return category .. ":" .. name, "Hl" .. category .. name
+      end
+    end)
+
+    after_each(function()
+      icons.get = real_get
+    end)
+
+    ---@param row table
+    ---@return changeset.BarSpan?
+    local function span_of(row)
+      return draw.band_for(row, "<CR>").span
+    end
+
+    it("is the body of a symbol, with the icon its sidebar row wears", function()
+      local glyph, hl = icons.get("lsp", "Function")
+      assert.same(
+        { first = 3, last = 9, icon = glyph, icon_hl = hl },
+        span_of({
+          kind = "symbol",
+          symbol_kind = "Function",
+          name = "M.one",
+          path = "mod.lua",
+          lnum = 3,
+          range = { 3, 9 },
+        })
+      )
+    end)
+
+    it("is the body of a folded chain's deepest symbol", function()
+      local chain = {
+        sym("Outer", "Class", 0, 1, 30),
+        sym("mid", "Method", 1, 3, 15),
+        sym("leaf", "Function", 2, 5, 9),
+      }
+      local hunks =
+        { { lnum = 5, count = 2, added = 2, removed = 1 }, { lnum = 40, count = 1, added = 1, removed = 0 } }
+      local file = {
+        path = "mod.lua",
+        status = "modified",
+        section = sections.classify("mod.lua"),
+        added = 3,
+        removed = 1,
+        hunks = hunks,
+      }
+      local folded = Rows.compress(Rows.build({ file }, { ["mod.lua"] = chain })) --[[@as changeset.Row[] ]]
+      local row = folded[1].children[1].children[1]
+      assert.is_true(row.chain)
+
+      local glyph, hl = icons.get("lsp", "Function")
+      assert.same({ first = 5, last = 9, icon = glyph, icon_hl = hl }, span_of(row))
+    end)
+
+    it("is the lines of an orphan hunk, its icon dimmed as the row is", function()
+      local glyph = icons.get("lsp", "Text")
+      assert.same(
+        { first = 4, last = 4, icon = glyph, icon_hl = highlights.META_HL },
+        span_of({ kind = "orphan", name = "L4 return 2", path = "mod.lua", lnum = 4, range = { 4, 4 } })
+      )
+    end)
+
+    it("is none for a file, the Other changes group or a comment", function()
+      assert.is_nil(span_of({ kind = "file", path = "mod.lua", lnum = 1 }))
+      assert.is_nil(span_of({ kind = "orphans", name = "Other changes", path = "mod.lua", lnum = 4 }))
+      assert.is_nil(span_of({ kind = "comment", path = "mod.lua", lnum = 4 }))
+    end)
   end)
 end)

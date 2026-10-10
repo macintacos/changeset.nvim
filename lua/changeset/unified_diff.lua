@@ -131,6 +131,21 @@ local function covering(win, buf)
   return reach:on() and vim.bo[buf].buftype == "" and showing(win) == (mine ~= nil and mine.buf == buf) and allowed(buf)
 end
 
+---The rows from `top` to `bot` (0-based, inclusive) that `hunks` add: the rows the unified diff tints.
+---@param hunks Gitsigns.Hunk.Hunk[]
+---@param top integer
+---@param bot integer
+---@return table<integer, true>
+local function added_rows(hunks, top, bot)
+  local rows = {}
+  for _, hunk in ipairs(hunks) do
+    for row = math.max(hunk.added.start - 1, top), math.min(hunk.added.start + hunk.added.count - 2, bot) do
+      rows[row] = true
+    end
+  end
+  return rows
+end
+
 ---Lay a blank sign over each of gitsigns' in rows `top` to `bot` of `buf`, and draw the sign and number of each line
 ---`added` names on its tint, keeping the marks in `ns` already right.
 ---@param buf integer
@@ -150,10 +165,8 @@ local function cover(buf, ns, top, bot, added)
       end
     end
   end
-  for _, hunk in ipairs(added) do
-    for row = math.max(hunk.added.start - 1, top), math.min(hunk.added.start + hunk.added.count - 2, bot) do
-      want[row] = highlights.DIFF_ADD_HL
-    end
+  for row in pairs(added_rows(added, top, bot)) do
+    want[row] = highlights.DIFF_ADD_HL
   end
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, { top, 0 }, { bot, -1 }, { details = true })) do
     if want[mark[2]] == (mark[4].sign_hl_group or false) then
@@ -371,6 +384,18 @@ local function start()
       return false
     end,
   })
+end
+
+---The rows from `top` to `bot` (0-based, inclusive) of `buf` in `win` that the unified diff tints as added, the rows
+---`cover` lays its tint on. None unless the diff covers `buf` in `win`.
+---@param win integer
+---@param buf integer
+---@param top integer
+---@param bot integer
+---@return table<integer, true>
+function M.tinted_rows(win, buf, top, bot)
+  local view = covering(win, buf) and require("gitsigns.unified").get_view(win)
+  return view and added_rows(view.hunks or {}, top, bot) or {}
 end
 
 ---Whether gitsigns is there, with unified views.

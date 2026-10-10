@@ -4,6 +4,7 @@
 local buffers = require("changeset.buffers")
 local config = require("changeset.config")
 local highlights = require("changeset.highlights")
+local preview_bar = require("changeset.preview_bar")
 local render = require("changeset.render")
 local unified_diff = require("changeset.unified_diff")
 
@@ -258,6 +259,7 @@ end
 ---@return integer win
 local function borrow(buf, band, pick)
   local win, split = target()
+  preview_bar.clear(win)
   local standing = win == vim.api.nvim_get_current_win()
   remember(win)
   sidebar.borrowed[win].split = sidebar.borrowed[win].split or split
@@ -281,6 +283,7 @@ function M.unband()
   if win == sidebar.win or not render.is_preview_winbar(vim.wo[win].winbar) then
     return
   end
+  preview_bar.clear(win)
   local snapshot = sidebar.borrowed[win]
   vim.wo[win].winbar = snapshot and snapshot.winbar or vim.go.winbar
 end
@@ -478,6 +481,10 @@ function M.preview(path, lnum, band, pick)
     return
   end
   local win = borrow(buf, band, pick)
+  -- Only where the sidebar has the band up: the window the cursor is in never wears either.
+  if band.span and win ~= vim.api.nvim_get_current_win() then
+    preview_bar.show(win, buf, band.span)
+  end
   sign(buf)
   unified_diff.sync(win)
   if lnum then
@@ -559,6 +566,7 @@ end
 ---@param lnum integer?
 ---@param how "reuse"|"vsplit"|"split"|"tab"
 local function promote(win, buf, lnum, how)
+  preview_bar.clear(win)
   -- Listed from here on: the user chose this file, so it is theirs now.
   vim.bo[buf].buflisted = true
 
@@ -645,6 +653,9 @@ function M.close()
   -- Resolved before the sidebar goes, while `winnr("#")` still names the window
   -- the cursor in it came from.
   local focus = M._pick_target(reachable(), usable)
+  for borrowed_win in pairs(sidebar.borrowed) do
+    preview_bar.clear(borrowed_win)
+  end
   local borrowed, win = sidebar.borrowed, sidebar.win
   sidebar.win, sidebar.buf, sidebar.borrowed = nil, nil, {}
 

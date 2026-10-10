@@ -900,5 +900,243 @@ describe("changeset.window", function()
       assert.equal(vim.fn.resolve(one), showing(left))
       assert.equal(vim.fn.resolve(two), showing(right))
     end)
+
+    describe("the body bar", function()
+      local SPAN = { first = 1, last = 3, icon = "󰊕", icon_hl = "MiniIconsBlue" }
+      local SPANNED = vim.tbl_extend("force", BAND, { span = SPAN })
+
+      local unified_diff = require("changeset.unified_diff")
+      local real_tinted_rows = unified_diff.tinted_rows
+      after_each(function()
+        unified_diff.tinted_rows = real_tinted_rows
+      end)
+
+      ---The bar `win` draws in `buf`: the row, glyph and group of each mark.
+      ---@param win integer
+      ---@param buf integer
+      ---@return { row: integer, text: string, group: string }[]
+      local function bar_in(win, buf)
+        vim.cmd("redraw")
+        local namespace = require("changeset.preview_bar")._namespace(win)
+        local marks = vim.api.nvim_buf_get_extmarks(buf, namespace, 0, -1, { details = true })
+        return vim.tbl_map(function(mark)
+          -- Neovim pads a sign's text to its two cells, so the glyph is what is compared.
+          return { row = mark[2], text = vim.trim(mark[4].sign_text), group = mark[4].sign_hl_group }
+        end, marks)
+      end
+
+      it(
+        "marks each line of a symbol's span, the icon on the first and the bar below, in the window it borrows",
+        function()
+          local _, right, one = staged()
+          window.focus()
+
+          window.preview(one, 2, SPANNED)
+
+          assert.same({
+            { row = 0, text = SPAN.icon, group = SPAN.icon_hl },
+            { row = 1, text = "┃", group = highlights.PREVIEW_BAR_HL },
+            { row = 2, text = "┃", group = highlights.PREVIEW_BAR_HL },
+          }, bar_in(right, vim.fn.bufnr(one)))
+          assert.same({ right }, vim.api.nvim__ns_get(require("changeset.preview_bar")._namespace(right)).wins)
+        end
+      )
+
+      it("draws no bar in the window the cursor is in", function()
+        local _, right, one = staged()
+        window.focus()
+        window.preview(one, 2, SPANNED)
+        assert.is_true(#bar_in(right, vim.fn.bufnr(one)) > 0)
+
+        vim.api.nvim_set_current_win(right)
+        window.preview(one, 2, SPANNED)
+
+        assert.same({}, bar_in(right, vim.fn.bufnr(one)))
+      end)
+
+      it("moves the bar to the row it previews next", function()
+        local _, right, one = staged()
+        window.focus()
+        window.preview(one, 2, SPANNED)
+
+        window.preview(
+          one,
+          2,
+          vim.tbl_extend("force", BAND, { span = { first = 2, last = 2, icon = SPAN.icon, icon_hl = SPAN.icon_hl } })
+        )
+
+        assert.same({ { row = 1, text = SPAN.icon, group = SPAN.icon_hl } }, bar_in(right, vim.fn.bufnr(one)))
+      end)
+
+      it("clears the last bar when the row previewed stands for no span", function()
+        local _, right, one = staged()
+        window.focus()
+        window.preview(one, 2, SPANNED)
+        assert.is_true(#bar_in(right, vim.fn.bufnr(one)) > 0)
+
+        window.preview(one, 2, BAND)
+
+        assert.same({}, bar_in(right, vim.fn.bufnr(one)))
+      end)
+
+      it("draws no bar on a notice, though it is given a span", function()
+        local _, right, one = staged()
+        window.focus()
+        window.preview(one, 2, SPANNED)
+        assert.is_true(#bar_in(right, vim.fn.bufnr(one)) > 0)
+
+        window.preview_notice("Nothing to show", SPANNED)
+
+        assert.same({}, bar_in(right, vim.api.nvim_win_get_buf(right)))
+        assert.same({}, bar_in(right, vim.fn.bufnr(one)))
+      end)
+
+      it("clears the bar once a commit takes the file", function()
+        local _, right, one = staged()
+        window.focus()
+        window.preview(one, 2, SPANNED)
+        assert.is_true(#bar_in(right, vim.fn.bufnr(one)) > 0)
+
+        window.commit({ path = one, lnum = 2, how = "reuse" })
+
+        assert.same({}, bar_in(right, vim.fn.bufnr(one)))
+      end)
+
+      it("clears the bar once the cursor enters the previewed window", function()
+        local _, right, one = staged()
+        window.focus()
+        window.preview(one, 2, SPANNED)
+        assert.is_true(#bar_in(right, vim.fn.bufnr(one)) > 0)
+
+        vim.api.nvim_set_current_win(right)
+        window.claim()
+
+        assert.same({}, bar_in(right, vim.fn.bufnr(one)))
+      end)
+
+      it("clears the bar once the band comes off the window the cursor is in", function()
+        local _, right, one = staged()
+        window.focus()
+        window.preview(one, 2, SPANNED)
+        assert.is_true(#bar_in(right, vim.fn.bufnr(one)) > 0)
+
+        vim.api.nvim_set_current_win(right)
+        window.unband()
+
+        assert.same({}, bar_in(right, vim.fn.bufnr(one)))
+      end)
+
+      it("clears the bar when the sidebar closes", function()
+        local _, right, one = staged()
+        window.focus()
+        window.preview(one, 2, SPANNED)
+        assert.is_true(#bar_in(right, vim.fn.bufnr(one)) > 0)
+
+        window.close()
+
+        assert.same({}, bar_in(right, vim.fn.bufnr(one)))
+      end)
+
+      it("draws below a review comment bubble, whose default priority is 4096", function()
+        local _, right, one = staged()
+        window.focus()
+
+        window.preview(one, 2, SPANNED)
+        vim.cmd("redraw")
+
+        local namespace = require("changeset.preview_bar")._namespace(right)
+        local marks = vim.api.nvim_buf_get_extmarks(vim.fn.bufnr(one), namespace, 0, -1, { details = true })
+        assert.is_true(#marks > 0)
+        for _, mark in ipairs(marks) do
+          assert.is_true(mark[4].priority < 4096)
+        end
+      end)
+
+      it("takes up a tint the unified diff lays after the preview, on the next redraw", function()
+        local _, right, one = staged()
+        window.focus()
+        unified_diff.tinted_rows = function()
+          return {}
+        end
+        window.preview(one, 2, SPANNED)
+        -- The first paint, with nothing tinted: the repaint below has to change what it left.
+        assert.equal(SPAN.icon_hl, bar_in(right, vim.fn.bufnr(one))[1].group)
+
+        unified_diff.tinted_rows = function()
+          return { [0] = true }
+        end
+        -- A plain redraw skips a window nothing has changed, so the repaint needs a full one.
+        vim.cmd("redraw!")
+
+        assert.equal(highlights.PREVIEW_BAR_ICON_TINT_HL, bar_in(right, vim.fn.bufnr(one))[1].group)
+      end)
+
+      it("draws under a diagnostic's sign, so a diagnostic on the body still shows", function()
+        local _, right, one = staged()
+        window.focus()
+
+        window.preview(one, 2, SPANNED)
+        vim.cmd.redraw()
+
+        local namespace = require("changeset.preview_bar")._namespace(right)
+        local marks = vim.api.nvim_buf_get_extmarks(vim.fn.bufnr(one), namespace, 0, -1, { details = true })
+        assert.is_true(#marks > 0)
+        -- Diagnostics' default sign priority.
+        for _, mark in ipairs(marks) do
+          assert.is_true(mark[4].priority < 10)
+        end
+      end)
+
+      it("draws the bar on the first line too when the span's icon is blank", function()
+        local _, right, one = staged()
+        window.focus()
+        local blank = vim.tbl_extend("force", BAND, { span = { first = 1, last = 2, icon = " ", icon_hl = "Normal" } })
+
+        window.preview(one, 2, blank)
+        vim.cmd.redraw()
+
+        assert.same({
+          { row = 0, text = "┃", group = highlights.PREVIEW_BAR_HL },
+          { row = 1, text = "┃", group = highlights.PREVIEW_BAR_HL },
+        }, bar_in(right, vim.fn.bufnr(one)))
+      end)
+
+      it("sets no mark again on a redraw that changes none", function()
+        local _, _, one = staged()
+        window.focus()
+        window.preview(one, 2, SPANNED)
+        vim.cmd("redraw!")
+
+        local set, real = 0, vim.api.nvim_buf_set_extmark
+        vim.api.nvim_buf_set_extmark = function(...)
+          set = set + 1
+          return real(...)
+        end
+        vim.cmd("redraw!")
+        vim.api.nvim_buf_set_extmark = real
+
+        assert.equal(0, set)
+      end)
+
+      it("keeps the diff tint behind the bar on a line the unified diff tints", function()
+        local _, right, one = staged()
+        window.focus()
+        -- Rows 0 and 2 are tinted, as the unified diff tints an added line.
+        unified_diff.tinted_rows = function()
+          return { [0] = true, [2] = true }
+        end
+
+        window.preview(one, 2, SPANNED)
+
+        assert.same({
+          { row = 0, text = SPAN.icon, group = highlights.PREVIEW_BAR_ICON_TINT_HL },
+          { row = 1, text = "┃", group = highlights.PREVIEW_BAR_HL },
+          { row = 2, text = "┃", group = highlights.PREVIEW_BAR_TINT_HL },
+        }, bar_in(right, vim.fn.bufnr(one)))
+        local tint = vim.api.nvim_get_hl(0, { name = highlights.PREVIEW_BAR_TINT_HL, link = false })
+        local added = vim.api.nvim_get_hl(0, { name = highlights.DIFF_ADD_HL, link = false })
+        assert.equal(added.bg, tint.bg)
+      end)
+    end)
   end)
 end)

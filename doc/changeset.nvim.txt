@@ -1278,6 +1278,18 @@ ChangesetPreviewIcon                                    *ChangesetPreviewIcon*
 	The file's glyph. Recoloured for each file, so defining it paints
 	every glyph one colour.
 
+ChangesetPreviewBar                                      *ChangesetPreviewBar*
+	The bar down a previewed span's sign column, `Statement`'s colour.
+
+ChangesetPreviewBarTint                              *ChangesetPreviewBarTint*
+	Made from |ChangesetPreviewBar| over |ChangesetDiffAdd|'s background, and
+	remade each time a bar is drawn, so it follows a change to either.
+	Defining it yourself fixes its colours.
+
+ChangesetPreviewBarIconTint                      *ChangesetPreviewBarIconTint*
+	The span's first line, its icon over the tint an added line takes.
+	Recoloured for each bar.
+
 UNIFIED DIFF AND DELETED FILES
 
 ChangesetDiffAdd                                            *ChangesetDiffAdd*

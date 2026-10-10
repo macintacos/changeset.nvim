@@ -53,6 +53,7 @@ local symbols = require("changeset.symbols")
 ---@field path string       Repo-relative path of the previewed file.
 ---@field destination string? What the right edge says: where the jump key lands, or why it opens nothing; absent for a row that names nothing.
 ---@field jump (string|false)? The jump key the sidebar bound; absent or `false` for none.
+---@field span changeset.BarSpan? The rows the preview stands for, which a file preview marks; absent for a row that stands for none.
 
 ---@class changeset.Empty
 ---@field on_default_branch boolean
