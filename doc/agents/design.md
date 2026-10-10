@@ -536,8 +536,9 @@ Two rows on one strip, the strip `TabLine`'s background: what a colorscheme pain
 chrome with, so the header reads as the panel's frame.
 
 The first row states the ref the tree is compared against, because "changed relative to
-what" is the one question the rows themselves cannot answer. It leads with mini.statusline's
-own branch glyph in `Directory`'s colour, and dims `origin/` so the branch name reads first.
+what" is the one question the rows themselves cannot answer. It leads with a glyph in
+`Directory`'s colour for what the ref is: mini.statusline's own branch glyph, or for a tag
+or a commit set by hand, its octicon sibling. It dims `origin/` so the branch name reads first.
 A ref too long for the width loses its tail, never its head: stacked branches are told apart
 by how their names start, which is why the cut is made here rather than by the statusline's
 `%<`, which keeps the tail. The branch's open PR sits at the right edge, one blank cell in,
@@ -1048,9 +1049,10 @@ because they leave nothing for `.` to repeat otherwise. The operator is `g@l` af
 lambda instead. That is a choice: `.` repeats the first count, and a count given to `.`
 itself is lost.
 
-`<C-g>c` is the prefix of every `comment` key, `<C-g>cc` among them. On its own, after
-`'timeoutlen'`, it would fall through to Select mode or a pending `c`. So when changeset
-maps `<C-g>cc`, it maps `<C-g>c` to comment too.
+No prefix of the default keys is a key of its own, so which-key waits on `<C-g>c`, `<C-g>n`
+and `<C-g>b` for the next key, as on any group, rather than running something once
+`'timeoutlen'` passes. Without which-key, a prefix left alone that long falls through to
+Neovim's own `<C-g>`.
 
 ### Empty and failed states direct, never apologise
 
@@ -1152,7 +1154,9 @@ the rest once `diff.collect`, the sidebar's own diff, lands, so the numbers are 
 sidebar would show. Commits stop at five with a count of the rest, since the files are the
 sidebar's content and a base far back would push them out of view. The list leads each item
 with its kind's glyph from the header's family, dims a remote or a hash as the header dims
-`origin/`, and drops a date that would cover the name.
+`origin/`, and drops a date that would cover the name. Branches and tags are read before
+the picker opens, so one with nothing to offer says so instead of opening empty; commits
+stream in as git prints them, since they are HEAD's whole history.
 
 The gutter follows the base as it moves, not only as the branch changes. gitsigns publishes
 `GitSignsUpdate` only when a buffer's signs or branch change, and a pull or rebase that

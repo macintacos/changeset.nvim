@@ -60,7 +60,8 @@ as `next` alone steps, and one word after it other than its verbs `tag`, `commit
 that take such a word, and more words than one after them are an error. Its keys are under
 `<C-g>b`, which which-key names "base": `<C-g>bb` for `base`, as `<C-g>nn` is `next`, then
 `bt`, `bc` and `br`. A group whose first key's icon isn't the group's gives its own in
-`GROUPS`.
+`GROUPS`. A group's prefix is never a key of its own, so which-key waits on it for the next
+key.
 
 `footer()` in `lua/changeset/init.lua` stays public although only the plugin calls it. The
 sidebar's statusline evaluates it from a string, `v:lua.require'changeset'.footer()`,

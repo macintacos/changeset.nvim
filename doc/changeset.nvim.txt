@@ -155,10 +155,11 @@ It also has none once the parent is deleted or its reflog entry expires.
 changeset skips a parent that the default branch has moved past, as when you
 rebased onto the default branch after the parent was squash-merged.
 
-The header names the ref the tree is compared against, preferring
-`origin/<branch>` to the local branch, and the open PR's number when the PR
-targets the same base. When `gh` names a PR after the tree was built, the tree
-is built again against it.
+The header names the ref the tree is compared against, after a glyph for
+what it is: a branch, a tag or a commit. It prefers `origin/<branch>` to the
+local branch, and shows the open PR's number when the PR targets the same
+base. When `gh` names a PR after the tree was built, the tree is built again
+against it.
 
 The tree rebuilds by itself when you write a file, when Neovim notices that a
 file you have open changed outside it (|FileChangedShellPost|), when Neovim
@@ -226,7 +227,8 @@ BASE
 	repository and branch, across sessions, until you reset it. While
 	the ref shares no history with `HEAD`, as once it is deleted, the base
 	is guessed as |changeset-base| says. A {ref} that shares none when you
-	set it is an error, and so is a detached `HEAD`.
+	set it is an error, and so is a detached `HEAD`. With no other branch
+	to pick, it says so rather than opening.
 
 	With mini.pick set up, a preview beside the list shows what the
 	sidebar would hold against the ref under the cursor: its header, with
@@ -239,7 +241,8 @@ BASE
 <Plug>(changeset-base-tag)                        *<Plug>(changeset-base-tag)*
 <C-g>bt                                                    *changeset-<C-g>bt*
 	Pick a tag to compare against, the newest first, as
-	|:Changeset-base| picks a branch.
+	|:Changeset-base| picks a branch. With no tags, it says so rather than
+	opening.
 
 :Changeset base commit                                *:Changeset-base-commit*
 <Plug>(changeset-base-commit)                  *<Plug>(changeset-base-commit)*
@@ -422,7 +425,6 @@ Key       Mode            Runs ~
 ]g        Normal          |:Changeset-preview-next|
 [g        Normal          |:Changeset-preview-prev|
 <C-g>cc   Normal, Visual  |:Changeset-comment-new|
-<C-g>c    Normal, Visual  |:Changeset-comment-new|, after a pause
 <C-g>cd   Normal          |:Changeset-comment-del|
 <C-g>ch   Normal          |:Changeset-comment-draft|
 <C-g>cn   Normal          |:Changeset-comment-next|
@@ -447,11 +449,6 @@ of them. The `<Plug>` maps stay, so you can map your own keys onto them: >lua
     vim.keymap.set({ "n", "x" }, "<leader>c", "<Plug>(changeset-comment-new)")
     vim.keymap.set("n", "]h", "<Plug>(changeset-preview-next)")
 <
-                                                            *changeset-<C-g>c*
-Unless a global map of yours clashes with `<C-g>c` as above, changeset maps
-`<C-g>c` too, so `<C-g>c` followed by a pause writes a review comment as
-`<C-g>cc` does.
-
 With the default keys mapped, Neovim's own `<C-g>` in Normal mode (|CTRL-G|,
 file info) and in Visual mode (|v_CTRL-G|) waits 'timeoutlen' for a second
 key. which-key names the `<C-g>c` group "comment", the `<C-g>n` group
