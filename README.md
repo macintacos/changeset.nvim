@@ -26,7 +26,7 @@ Neovim 0.12 or newer, and `git`. Everything else is optional:
 | [herdr](https://herdr.dev), a terminal multiplexer for coding agents       | `:Changeset review submit`, which pastes your review into an agent's prompt.                          |
 | `gh`                                                                       | The open PR's target as the base, for a branch with no parent.                                        |
 | [mini.icons](https://github.com/nvim-mini/mini.icons) or nvim-web-devicons | Icons.                                                                                                |
-| [mini.pick](https://github.com/nvim-mini/mini.pick)                        | `:Pick changeset`, a picker over the same changes. Without it, `<C-g>j` uses `vim.ui.select`.         |
+| [mini.pick](https://github.com/nvim-mini/mini.pick)                        | `:Pick changeset`, and the base pickers' preview. Without it, the pickers use `vim.ui.select`.        |
 | [which-key.nvim](https://github.com/folke/which-key.nvim)                  | `?` opens its popup; version 3 also names the default keys' groups.                                   |
 
 `:checkhealth changeset` shows which of these it finds.
@@ -110,7 +110,10 @@ has a `<Plug>(changeset-…)` map named after its words, and these default keys:
 | --------------------- | ------------------------------- | ------------------------------------------------------- |
 | `<C-g>g`              | `toggle`                        | Open, focus or close the sidebar                        |
 | `<C-g>j`              | `pick`                          | Pick a change to open from a list                       |
-| `<C-g>b`              | `base [{ref}]`                  | Pick the branch to compare against, or name any ref     |
+| `<C-g>bb`             | `base [{ref}]`                  | Pick a branch to compare against, or name any ref       |
+| `<C-g>bt`             | `base tag`                      | Pick a tag to compare against                           |
+| `<C-g>bc`             | `base commit`                   | Pick a commit to compare against                        |
+| `<C-g>br`             | `base reset`                    | Compare against the base changeset guesses again        |
 | `<C-g>d`              | `diff`                          | Turn the unified diff on or off                         |
 | `<C-g>r`              | `refresh`                       | Rebuild the tree                                        |
 | `<C-g>nn` / `<C-g>np` | `next` / `prev`                 | Open the next / previous change                         |
@@ -128,7 +131,6 @@ has a `<Plug>(changeset-…)` map named after its words, and these default keys:
 | `<C-g>y`              | `review yank`                   | Copy the review as text                                 |
 | `<C-g>a`              | `review abandon`                | Delete this branch's comments                           |
 |                       | `review restore`                | Bring back a batch of submitted comments                |
-|                       | `base reset`                    | Compare against the base changeset guesses again        |
 
 - A default key that clashes with one you've mapped is left alone.
 - Set `vim.g.changeset_no_default_maps = true` to map none of them, then map the `<Plug>`
@@ -171,9 +173,10 @@ its open PR's target (found with `gh`), else the default branch. On the default 
 shows what you haven't pushed. The header names that base; `:help changeset-base` has the
 full rules.
 
-When that guess is wrong, `<C-g>b` picks the branch to compare against instead, and
-`:Changeset base <ref>` takes any branch, tag or commit. changeset remembers it for the branch
-until `:Changeset base reset`.
+When that guess is wrong, pick what to compare against instead: a branch with `<C-g>bb`, a tag
+with `<C-g>bt`, or one of your commits with `<C-g>bc`. With mini.pick, a preview beside the
+list shows the files and commits the sidebar would hold against each one. `:Changeset base
+<ref>` takes any ref. changeset remembers the choice for the branch until `<C-g>br`.
 
 ## The gutter's base and the unified diff
 

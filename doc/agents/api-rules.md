@@ -55,10 +55,12 @@ from a list, such as `pick`, chooses rather than walks, so its key is top level,
 `<C-g>g` and `<C-g>r`. So is the key of a verb that turns something on or off for every file
 of the branch, such as `diff`. `:Changeset comment` and `:Changeset review` alone are
 errors that name their verbs, not defaults. `:Changeset base` alone is the branch picker,
-and one word after it other than its verb `reset` is the ref it takes. `TAKES_REF` in
-`plugin/changeset.lua` names the subcommands that take such a word, and more words than one
-after them are an error. Its key `<C-g>b` is top level, since the base it sets is every
-file's; `base reset` is a recovery verb, with only its `<Plug>` map.
+as `next` alone steps, and one word after it other than its verbs `tag`, `commit` and
+`reset` is the ref it takes. `TAKES_REF` in `plugin/changeset.lua` names the subcommands
+that take such a word, and more words than one after them are an error. Its keys are under
+`<C-g>b`, which which-key names "base": `<C-g>bb` for `base`, as `<C-g>nn` is `next`, then
+`bt`, `bc` and `br`. A group whose first key's icon isn't the group's gives its own in
+`GROUPS`.
 
 `footer()` in `lua/changeset/init.lua` stays public although only the plugin calls it. The
 sidebar's statusline evaluates it from a string, `v:lua.require'changeset'.footer()`,

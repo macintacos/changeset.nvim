@@ -158,6 +158,9 @@ restarts. With mini.icons:
 - The default keys in which-key's popup: a category and name per subcommand, such
   as `filetype`/`qf` for the quickfix list, which which-key asks its own icon provider
   for. Under devicons, which has no `directory` or `lsp` icons, those keys go without.
+  mini.icons has no branch, tag or commit, so the `<C-g>b` keys wear the glyphs the
+  config's own git keys do, in their orange, and the `<C-g>b` group the compare glyph
+  the footer sets before the base.
 
 A future icon-set change propagates everywhere at once. That is the point.
 
@@ -1137,9 +1140,19 @@ and `measure` reads it, so the tree and the gutter take it from where they take 
 and can't disagree. A ref that stops sharing history with HEAD, as a deleted branch does, is
 skipped rather than forgotten, so fetching it back brings it back. A tree is kept only while
 both its fork point and its ref match the point measured, since a ref set by hand can fork
-where the guess does and the header must name the one chosen. The picker is
-`vim.ui.select`, not mini.pick as the change picker is: its items are branch names, which
-need none of that picker's trails or previews.
+where the guess does and the header must name the one chosen.
+
+The base pickers, a branch's, a tag's and a commit's, preview the consequence rather than
+the ref. `git log` or `git show` of the ref under the cursor, as a git picker usually shows,
+answers what the ref is; the question being asked is what the sidebar would hold against it.
+So the preview opens with the sidebar's own header strip, its ref row and its totals row
+in the same groups, then the commits that would count, then the files with their stats:
+picking a base should read as turning the sidebar to it. The ref row is drawn at once and
+the rest once `diff.collect`, the sidebar's own diff, lands, so the numbers are the ones the
+sidebar would show. Commits stop at five with a count of the rest, since the files are the
+sidebar's content and a base far back would push them out of view. The list leads each item
+with its kind's glyph from the header's family, dims a remote or a hash as the header dims
+`origin/`, and drops a date that would cover the name.
 
 The gutter follows the base as it moves, not only as the branch changes. gitsigns publishes
 `GitSignsUpdate` only when a buffer's signs or branch change, and a pull or rebase that

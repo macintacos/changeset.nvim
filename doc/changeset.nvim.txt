@@ -105,8 +105,8 @@ Each optional integration adds one feature:
   file icons only.
 - which-key.nvim: `?` opens its popup instead of a float. Version 3 also names
   the default keys' groups and shows an icon beside each key.
-- mini.pick, set up: the picker (|changeset-picker|). Without it, the picker
-  is |vim.ui.select()|.
+- mini.pick, set up: the picker (|changeset-picker|), and the base pickers'
+  preview (|:Changeset-base|). Without it, each picker is |vim.ui.select()|.
 
 `:checkhealth changeset` reports which of these it finds (|changeset-health|).
 
@@ -180,7 +180,7 @@ leaves none keeps the tree as it was.
 	Without a subcommand, `toggle`. `<Tab>` completes the subcommands.
 	`:Changeset comment`, `:Changeset review` and `:Changeset preview`
 	take a verb, and `next` and `prev` take an optional one. `base`
-	takes a ref or its verb `reset`, or neither. With no verb
+	takes a ref, one of its verbs, or neither. With no verb
 	where one is needed, or a verb a subcommand doesn't have, it reports
 	an error that lists the verbs; words past a full subcommand report
 	that it takes no arguments. Only `comment new` uses a range. From the
@@ -218,20 +218,39 @@ BASE
 
 :Changeset base [{ref}]                                      *:Changeset-base*
 <Plug>(changeset-base)                                *<Plug>(changeset-base)*
-<C-g>b                                                      *changeset-<C-g>b*
+<C-g>bb                                                    *changeset-<C-g>bb*
 	Without {ref}, pick a branch, local or remote, to compare the current
-	branch against, the one committed to last first, with
-	|vim.ui.select()|. While a base is set, the first item, "(guess
-	again)", forgets it. With {ref}, a branch, tag or commit, compare
-	against that. The sidebar, the gutter and the unified diff follow it
-	at once. changeset remembers it per repository and branch, across
-	sessions, until you reset it. While the ref shares no history with
-	`HEAD`, as once it is deleted, the base is guessed as |changeset-base|
-	says. A {ref} that shares none when you set it is an error, and so is
-	a detached `HEAD`.
+	branch against, the one committed to last first. With {ref}, a
+	branch, tag or commit, compare against that. The sidebar, the gutter
+	and the unified diff follow it at once. changeset remembers it per
+	repository and branch, across sessions, until you reset it. While
+	the ref shares no history with `HEAD`, as once it is deleted, the base
+	is guessed as |changeset-base| says. A {ref} that shares none when you
+	set it is an error, and so is a detached `HEAD`.
+
+	With mini.pick set up, a preview beside the list shows what the
+	sidebar would hold against the ref under the cursor: its header, with
+	the files, commits and lines it would count, the five newest of those
+	commits, and the files with their line counts. Without mini.pick, the
+	list is |vim.ui.select()|, with no preview. Each item's date is when
+	it was last committed to; a list too narrow for it leaves it out.
+
+:Changeset base tag                                      *:Changeset-base-tag*
+<Plug>(changeset-base-tag)                        *<Plug>(changeset-base-tag)*
+<C-g>bt                                                    *changeset-<C-g>bt*
+	Pick a tag to compare against, the newest first, as
+	|:Changeset-base| picks a branch.
+
+:Changeset base commit                                *:Changeset-base-commit*
+<Plug>(changeset-base-commit)                  *<Plug>(changeset-base-commit)*
+<C-g>bc                                                    *changeset-<C-g>bc*
+	Pick one of `HEAD`'s commits to compare against, the newest first, as
+	|:Changeset-base| picks a branch: comparing against the fourth shows
+	the newest three.
 
 :Changeset base reset                                  *:Changeset-base-reset*
 <Plug>(changeset-base-reset)                    *<Plug>(changeset-base-reset)*
+<C-g>br                                                    *changeset-<C-g>br*
 	Forget the base set for the current branch, and compare against the
 	one changeset guesses again.
 
@@ -388,7 +407,10 @@ its subcommand:
 Key       Mode            Runs ~
 <C-g>g    Normal          |:Changeset-toggle|
 <C-g>j    Normal          |:Changeset-pick|
-<C-g>b    Normal          |:Changeset-base|
+<C-g>bb   Normal          |:Changeset-base|
+<C-g>bt   Normal          |:Changeset-base-tag|
+<C-g>bc   Normal          |:Changeset-base-commit|
+<C-g>br   Normal          |:Changeset-base-reset|
 <C-g>d    Normal          |:Changeset-diff|
 <C-g>r    Normal          |:Changeset-refresh|
 <C-g>nn   Normal          |:Changeset-next|
@@ -432,8 +454,8 @@ Unless a global map of yours clashes with `<C-g>c` as above, changeset maps
 
 With the default keys mapped, Neovim's own `<C-g>` in Normal mode (|CTRL-G|,
 file info) and in Visual mode (|v_CTRL-G|) waits 'timeoutlen' for a second
-key. which-key names the `<C-g>c` group "comment" and the `<C-g>n` group
-"navigation".
+key. which-key names the `<C-g>c` group "comment", the `<C-g>n` group
+"navigation" and the `<C-g>b` group "base".
 
                                                         *changeset-dot-repeat*
 The `<C-g>n` keys, `<C-g>cn` and `<C-g>cp` take a [count] and repeat with |.|:
