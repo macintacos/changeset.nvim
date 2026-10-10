@@ -178,6 +178,39 @@ describe("changeset.unified_diff", function()
     end, 20))
   end)
 
+  it("closes the view of a file the tree stops listing, once the tree's diff says so", function()
+    vim.cmd.edit("a.txt")
+    local win = vim.api.nvim_get_current_win()
+    assert.is_true(shows(win))
+
+    vim.fn.writefile(Fixture.numbered(6), "a.txt")
+    vim.cmd.checktime()
+    build.refresh()
+
+    assert.is_true(vim.wait(5000, function()
+      return view(win) == nil
+    end, 20))
+  end)
+
+  it("closes the views of a repository once the tree is built for another", function()
+    vim.cmd.edit("a.txt")
+    local win = vim.api.nvim_get_current_win()
+    assert.is_true(shows(win))
+    local other = vim.fn.resolve(vim.fn.tempname())
+    vim.fn.mkdir(other, "p")
+    Fixture.feature_one_file(other)
+
+    vim.cmd.split(other .. "/mod.lua")
+    build.build()
+
+    assert.is_true(vim.wait(5000, function()
+      local tree = assert(build.current())
+      return tree.root == other and tree.collected and view(win) == nil
+    end, 20))
+    assert.is_true(shows(vim.api.nvim_get_current_win()))
+    vim.fn.delete(other, "rf")
+  end)
+
   it("keeps a conflicted file in its one window rather than gitsigns' three-way split", function()
     Fixture.commit("change", dir)
     Fixture.git({ "checkout", "-q", "-b", "other", "HEAD~1" }, dir)

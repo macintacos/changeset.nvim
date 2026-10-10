@@ -128,7 +128,7 @@ end
 local function covering(win, buf)
   local mine = opened[win]
   -- A view open that this module didn't open is the user's own; one of ours gone, the user closed.
-  return vim.bo[buf].buftype == "" and showing(win) == (mine ~= nil and mine.buf == buf) and allowed(buf)
+  return reach:on() and vim.bo[buf].buftype == "" and showing(win) == (mine ~= nil and mine.buf == buf) and allowed(buf)
 end
 
 ---Lay a blank sign over each of gitsigns' in rows `top` to `bot` of `buf`, and draw the sign and number of each line
@@ -174,16 +174,21 @@ local function cover(buf, ns, top, bot, added)
   end
 end
 
----Show `buf`'s unified diff in `win`, replacing any view there, against the base `git_obj` names.
+---A view to open: the window, the buffer and file it shows, and the base gitsigns holds for the buffer.
+---@class changeset.unified_diff.View
+---@field win integer
+---@field buf integer
+---@field path string The file `buf` holds.
+---@field git_obj Gitsigns.GitObj Names the base.
+---@field text string[] The base's text.
+
+---Show `view`'s buffer's unified diff in its window, replacing any view there.
 ---
 ---What `:Gitsigns diffthis unified=true` runs, with the window held: it takes the current window only once the base's
 ---buffer is made, which can wait on git, by when the sidebar may be current.
----@param win integer
----@param buf integer
----@param path string The file `buf` holds.
----@param git_obj Gitsigns.GitObj
----@param text string[] The base's text gitsigns holds.
-local function open(win, buf, path, git_obj, text)
+---@param view changeset.unified_diff.View
+local function open(view)
+  local win, buf, path, git_obj, text = view.win, view.buf, view.path, view.git_obj, view.text
   opening[win] = buf
   ---@async
   local function run()
@@ -231,21 +236,35 @@ function M.sync(win)
     return
   end
   local mine = opened[win]
+  local view = { win = win, buf = buf, path = path, git_obj = bcache.git_obj, text = bcache.compare_text }
   if not showing(win) then
     -- One of ours gone while its buffer stays was closed by the user, which leaving the window acts on, or is going
     -- with a buffer being deleted, which publishes a last update first.
     if not mine then
-      open(win, buf, path, bcache.git_obj, bcache.compare_text)
+      open(view)
     end
   -- A view this module didn't open is the user's own.
-  elseif mine and mine.text ~= bcache.compare_text then
-    open(win, buf, path, bcache.git_obj, bcache.compare_text)
+  elseif mine and mine.text ~= view.text then
+    open(view)
   end
 end
 
 local function sync_all()
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     M.sync(win)
+  end
+end
+
+---Close at once, in every window, each view this module opened on a file `keeps` turns down.
+---@param keeps fun(path: string): boolean
+local function close_unless(keeps)
+  for win, mine in pairs(opened) do
+    if not keeps(mine.path) then
+      opened[win] = nil
+      if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == mine.buf then
+        require("gitsigns.unified").close(win)
+      end
+    end
   end
 end
 
@@ -256,8 +275,12 @@ local function start()
   end
   started = true
   -- Fires: the tree reading its diff, which says which files it lists, the first time a little after the sidebar opens.
+  -- Not before: a tree built anew lists no file until then.
   build.subscribe(function(event)
     if event == "diff" then
+      close_unless(function(path)
+        return tree_file(path) ~= nil
+      end)
       sync_all()
     end
   end)
@@ -293,8 +316,11 @@ local function start()
     callback = function()
       local win = vim.api.nvim_get_current_win()
       if closed_by_user(win) then
-        reach:hand_close(opened[win].path)
-        opened[win] = nil
+        local closed = opened[win].path
+        reach:hand_close(closed)
+        close_unless(function(path)
+          return path ~= closed
+        end)
       end
     end,
   })
@@ -347,14 +373,20 @@ local function start()
   })
 end
 
+---Whether gitsigns is there, with unified views.
+---@return boolean
+function M.available()
+  return (pcall(require, "gitsigns.unified"))
+end
+
 ---Reach every file the tree lists, those closed by hand included, opening their views in every window now and from
----now on. Without a gitsigns that has unified views, nothing opens.
+---now on. Without a gitsigns that has unified views, it stays as it is.
 function M.turn_on()
-  local was_on = reach:on()
-  reach:turn_on()
-  if not pcall(require, "gitsigns.unified") then
+  if not M.available() then
     return
   end
+  local was_on = reach:on()
+  reach:turn_on()
   start()
   if not was_on then
     attach_untracked()
@@ -367,14 +399,9 @@ end
 ---@param keep changeset.DiffReach.Keep
 function M.limit(keep)
   reach:limit(keep)
-  for win, mine in pairs(opened) do
-    if not reach:allows(mine.path) then
-      opened[win] = nil
-      if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == mine.buf then
-        require("gitsigns.unified").close(win)
-      end
-    end
-  end
+  close_unless(function(path)
+    return reach:allows(path)
+  end)
   if untracked_was ~= nil and not reach:on() then
     require("gitsigns.config").config.attach_to_untracked = untracked_was
     untracked_was = nil

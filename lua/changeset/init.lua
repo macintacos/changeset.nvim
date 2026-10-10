@@ -764,11 +764,14 @@ function M.close()
 end
 
 ---Turn the unified diff off everywhere, or on for every file of the tree as the sidebar opening does, building the
----current buffer's repository's tree when there is none, and say which.
+---current buffer's repository's tree when there is none, and say which; warn when gitsigns can't show it.
 function M.diff()
   if unified_diff.on() then
     unified_diff.limit("none")
     return vim.notify("Changeset: unified diff off")
+  end
+  if not unified_diff.available() then
+    return vim.notify("Changeset: the unified diff needs gitsigns", vim.log.levels.WARN)
   end
   if not (build.current() or built()) then
     return
