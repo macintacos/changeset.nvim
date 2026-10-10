@@ -3,8 +3,8 @@ local support = require("support.git")
 local gutter = require("support.gutter")
 local present = require("support.present")
 
-local await, await_all, await_cached, edit, revision, settle =
-  gutter.await, gutter.await_all, gutter.await_cached, gutter.edit, gutter.revision, gutter.settle
+local await, await_cached, edit, revision, settle =
+  gutter.await, gutter.await_cached, gutter.edit, gutter.revision, gutter.settle
 
 local function moves()
   return gutter.moves
@@ -153,13 +153,11 @@ describe("the gutter's base", function()
   it("leaves gitsigns' own blob buffers alone", function()
     gutter.fixture(dir, "blob", { "a.txt" })
     support.git({ "switch", "-q", "main" }, dir)
+    gutter.advance(dir)
     vim.fn.chdir(dir)
     local bufs = edit({ "a.txt" })
-    -- diffthis reuses the source buffer's comparison text, set by its first update.
-    assert.is_true(await_all(bufs, function(buf)
-      local bcache = require("gitsigns.cache").cache[buf]
-      return bcache ~= nil and bcache.compare_text ~= nil
-    end, 5000))
+    local base = gutter.merge_base(dir)
+    assert.is_true(await(bufs, base, 5000))
     require("gitsigns").diffthis()
     local blob ---@type integer?
     assert.is_true(vim.wait(5000, function()
@@ -168,13 +166,13 @@ describe("the gutter's base", function()
       end)
       return blob ~= nil
     end, 20))
-    assert.is_nil(revision(present(blob)))
+    assert.equal(base, revision(present(blob)))
 
     support.git({ "switch", "-q", "blob" }, dir)
     assert.is_true(await(bufs, gutter.merge_base(dir), 10000))
 
     assert.is_true(settle())
-    assert.is_nil(revision(present(blob)))
+    assert.equal(base, revision(present(blob)))
   end)
 
   it("moves each buffer onto a new base once after a switch", function()
