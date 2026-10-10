@@ -1,3 +1,4 @@
+local gh = require("support.gh")
 local support = require("support.git")
 local gutter = require("support.gutter")
 
@@ -14,6 +15,7 @@ describe("the gutter's base", function()
 
   after_each(function()
     gutter.teardown(dir, cwd)
+    vim.env.FAKE_GH_PR, vim.env.FAKE_GH_DELAY = nil, nil
   end)
 
   it("moves attached buffers to the new merge base after an external branch switch", function()
@@ -197,6 +199,94 @@ describe("the gutter's base", function()
     assert.is_true(await(bufs, base, 10000))
     assert.is_true(settle())
     assert.equal(18, gutter.moves - before)
+  end)
+
+  it("follows a pull on the default branch onto its new base", function()
+    vim.fn.writefile({ "one" }, dir .. "/a.txt")
+    local pushed = support.commit("pushed", dir)
+    support.git({ "update-ref", "refs/remotes/origin/main", pushed }, dir)
+    vim.fn.chdir(dir)
+    local bufs = edit({ "a.txt" })
+    assert.is_true(await(bufs, pushed, 5000))
+
+    vim.fn.writefile({ "one", "two" }, dir .. "/a.txt")
+    local pulled = support.commit("pulled", dir)
+    support.git({ "update-ref", "refs/remotes/origin/main", pulled }, dir)
+
+    assert.is_true(await(bufs, pulled, 10000))
+  end)
+
+  it("follows a push on the default branch onto its new base once Neovim regains focus", function()
+    vim.fn.writefile({ "one" }, dir .. "/a.txt")
+    local pushed = support.commit("pushed", dir)
+    support.git({ "update-ref", "refs/remotes/origin/main", pushed }, dir)
+    vim.fn.writefile({ "one", "two" }, dir .. "/a.txt")
+    local unpushed = support.commit("unpushed", dir)
+    vim.fn.chdir(dir)
+    local bufs = edit({ "a.txt" })
+    assert.is_true(await(bufs, pushed, 5000))
+    assert.is_true(settle())
+
+    support.git({ "update-ref", "refs/remotes/origin/main", unpushed }, dir)
+    vim.api.nvim_exec_autocmds("FocusGained", {})
+
+    assert.is_true(await(bufs, unpushed, 10000))
+  end)
+
+  it("follows the base the sidebar measures again as it reopens", function()
+    gutter.fixture(dir, "merged-in-part", { "a.txt" })
+    gutter.advance(dir)
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "main" })
+    vim.fn.chdir(dir)
+    local bufs = edit({ "a.txt" })
+    assert.is_true(await(bufs, gutter.merge_base(dir), 5000))
+    local changeset = require("changeset")
+    changeset.open()
+    changeset.close()
+    assert.is_true(settle())
+
+    -- Its first commit merged into main, which moves the fork point and leaves HEAD where it was.
+    local first = support.git({ "rev-parse", "HEAD~1" }, dir)
+    support.git({ "update-ref", "refs/heads/main", first }, dir)
+    changeset.open()
+
+    assert.is_true(await(bufs, first, 10000))
+    changeset.close()
+  end)
+
+  it("stays on the base HEAD moved it to when a slow gh answer lands after", function()
+    vim.fn.writefile({ "one" }, dir .. "/a.txt")
+    local pushed = support.commit("pushed", dir)
+    support.git({ "update-ref", "refs/remotes/origin/main", pushed }, dir)
+    vim.env.FAKE_GH_DELAY = "2"
+    vim.fn.chdir(dir)
+    local bufs = edit({ "a.txt" })
+    assert.is_true(await(bufs, pushed, 5000))
+
+    vim.fn.writefile({ "one", "two" }, dir .. "/a.txt")
+    local pulled = support.commit("pulled", dir)
+    support.git({ "update-ref", "refs/remotes/origin/main", pulled }, dir)
+    assert.is_true(await(bufs, pulled, 10000))
+
+    assert.is_false(vim.wait(3000, function()
+      return revision(bufs[1]) ~= pulled
+    end, 20))
+  end)
+
+  it("follows a branch rebased onto a newer default branch to its new fork point", function()
+    local files = { "a.txt" }
+    gutter.fixture(dir, "rebased", files)
+    support.git({ "switch", "-q", "main" }, dir)
+    gutter.advance(dir)
+    local main_tip = support.git({ "rev-parse", "HEAD" }, dir)
+    support.git({ "switch", "-q", "rebased" }, dir)
+    vim.fn.chdir(dir)
+    local bufs = edit(files)
+    assert.is_true(await(bufs, gutter.merge_base(dir), 10000))
+
+    support.git({ "rebase", "-q", "main" }, dir)
+
+    assert.is_true(await(bufs, main_tip, 10000))
   end)
 
   it("moves a buffer that lost its base once, across a burst of updates", function()

@@ -70,16 +70,42 @@ describe("the gutter's base", function()
     assert.is_true(await(bufs, gutter.merge_base(dir, "parent"), 5000))
   end)
 
-  it("warns, and diffs against the default branch, when the PR target has no merge base", function()
+  it("diffs against the default branch when the PR target has no merge base", function()
     gutter.fixture(dir, "orphan-target", { "a.txt" })
     vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "gone" })
     vim.fn.chdir(dir)
     local bufs = edit({ "a.txt" })
 
     assert.is_true(await(bufs, gutter.merge_base(dir), 5000))
-    local msg = notice(vim.log.levels.WARN, "gone")
-    assert.not_nil(msg)
-    assert.matches("^Changeset: ", msg)
+  end)
+
+  it("falls back to the index, saying nothing, on a branch that shares no history with the default branch", function()
+    support.git({ "checkout", "-q", "--orphan", "pages" }, dir)
+    vim.fn.writefile({ "one" }, dir .. "/a.txt")
+    support.commit("pages", dir)
+    vim.fn.chdir(dir)
+
+    local bufs = edit({ "a.txt" })
+    assert.is_true(gutter.await_cached(bufs))
+
+    assert.is_false(vim.wait(1000, function()
+      return #notices > 0
+    end, 20))
+    assert.is_nil(revision(bufs[1]))
+  end)
+
+  it("follows a PR retargeted since, once HEAD moves", function()
+    stack("retargeted")
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "main" })
+    vim.fn.chdir(dir)
+    local bufs = edit({ "a.txt" })
+    assert.is_true(await(bufs, gutter.merge_base(dir), 5000))
+    assert.is_true(gutter.settle())
+
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent" })
+    gutter.advance(dir)
+
+    assert.is_true(await(bufs, gutter.merge_base(dir, "parent"), 10000))
   end)
 
   it("reports a base change that fails as an error", function()

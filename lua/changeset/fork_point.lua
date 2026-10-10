@@ -20,7 +20,7 @@ local M = {}
 ---@type table<string, changeset.fork_point.PrTarget>
 local targets = {}
 
----The point measured when gh was asked, by the same key, while it is being asked.
+---The point last measured while gh is being asked, by the same key.
 ---@type table<string, changeset.ForkPoint>
 local asking = {}
 
@@ -93,8 +93,13 @@ local function ask(root, branch, point)
   if not point then
     return nil, false
   end
-  if targets[key] or asking[key] then
-    return point, asking[key] ~= nil
+  if asking[key] then
+    -- gh's answer carries the newest measure, not one HEAD may have moved past since gh was asked.
+    asking[key] = point
+    return point, true
+  end
+  if targets[key] then
+    return point, false
   end
   asking[key] = point
   Git.pr_target(root, function(target, number)
@@ -121,7 +126,8 @@ function M.get(root, branch)
   return ask(root, branch, measure(root, branch, targets[root .. "\n" .. branch]))
 end
 
----`get`, measuring without blocking Neovim, and calling back on the main loop.
+---`get`, measuring without blocking Neovim, and calling back on the main loop. Subscribers hear the point after
+---`on_done` does, so whoever else follows the branch's fork point needs no measure of its own.
 ---@param root string
 ---@param branch string
 ---@param on_done fun(point: changeset.ForkPoint?)
@@ -135,7 +141,13 @@ function M.get_async(root, branch, on_done)
     if targets[key] ~= pr then
       return M.get_async(root, branch, on_done)
     end
-    on_done((ask(root, branch, point)))
+    point = ask(root, branch, point)
+    on_done(point)
+    if point then
+      for fn in pairs(subscribers) do
+        fn(root, branch, point)
+      end
+    end
   end)
 end
 
@@ -173,7 +185,8 @@ function M.recheck(root, branch)
   end)
 end
 
----Hear every gh answer, for any repository and branch. Subscribing `fn` again does nothing.
+---Hear every gh answer, and every fork point `get_async` measures, for any repository and branch. Subscribing `fn`
+---again does nothing.
 ---@param fn fun(root: string, branch: string, point: changeset.ForkPoint) Called with the fork point that answer leaves.
 function M.subscribe(fn)
   subscribers[fn] = true

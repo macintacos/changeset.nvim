@@ -5,8 +5,10 @@
 ---unpushed commits show. It measures in the repository of the buffer gitsigns last
 ---updated. A stacked branch starts on its parent's base; one with no parent, whose PR gh
 ---has not named yet, starts on the default-branch base and moves once the answer lands.
----Requiring it registers nothing; `activate()` starts the watcher that keeps buffers on
----that base as the repository and branch change.
+---The base is measured again as HEAD moves on the branch and as Neovim regains focus, and
+---follows any fork point measured anew for it, the sidebar's included. Without one it is the
+---index, quietly: nobody asked for the gutter's base. Requiring it registers nothing;
+---`activate()` starts the watcher that keeps buffers on that base.
 local Git = require("changeset.git")
 local fork_point = require("changeset.fork_point")
 
@@ -14,6 +16,13 @@ local M = {}
 
 ---@type string? Branch the base was last resolved for.
 local applied
+
+---@type string? HEAD's commit the base was last resolved for.
+local applied_head
+
+---gitsigns' repository objects whose gitdir watcher this hears.
+---@type table<Gitsigns.Repo, true>
+local watched = setmetatable({}, { __mode = "k" })
 
 ---@type string? Base every buffer should diff against; nil is the index.
 local want
@@ -27,18 +36,9 @@ local ours = {}
 ---@type table<integer, string|false> Buffers with a move in flight, by target; false is the index.
 local moving = {}
 
----@type fun(point: changeset.ForkPoint)? Continues `enable` once gh answers; `apply` drops it.
-local waiting
-
----Whether a base is applied (its intent; gitsigns may still be catching up).
----@return boolean
-local function is_on()
-  return want ~= nil
-end
-
--- Reaches into gitsigns internals: its buffer cache, git_obj.revision
--- and repo.toplevel, and non-global change_base reading current_buf() before it
--- yields.
+-- Reaches into gitsigns internals: its buffer cache, git_obj.revision,
+-- repo.toplevel and repo.head_oid, and non-global change_base reading current_buf()
+-- before it yields.
 
 ---Whether this file may move a buffer's base: buffers of another repository,
 ---fugitive/gitsigns blob buffers and bases set by hand are left alone. A
@@ -95,7 +95,6 @@ end
 ---@param base string?
 ---@param done fun(err: string?)? Called once every move has landed, with the first error.
 local function apply(base, done)
-  waiting = nil
   want = base
   if base then
     ours[base] = true
@@ -121,51 +120,64 @@ local function apply(base, done)
   landed()
 end
 
----Diff against the fork point, and follow gh's answer when it is still on its way.
+---Move onto `point`, a fork point measured for `branch` at `root`, while that is still what the base is resolved for;
+---without one, onto the index.
 ---@param root string
 ---@param branch string
-local function enable(root, branch)
-  local function warn_skipped(point)
-    if point.skipped then
-      vim.notify(
-        "Changeset: no merge base with " .. point.skipped .. "; diffing against " .. point.default_branch,
-        vim.log.levels.WARN
-      )
-    end
-  end
-  local point, asking = fork_point.get(root, branch)
-  if not point then
-    -- On the default branch the index is the quiet fallback; elsewhere the missing base is worth a warning.
-    if is_on() then
-      apply(nil)
-    end
-    if branch ~= Git.default_base(root) then
-      vim.notify("Changeset: no merge base with the default branch", vim.log.levels.WARN)
-    end
-    return
-  end
-  apply(point.base, report)
-  if not asking then
-    return warn_skipped(point)
-  end
-  waiting = function(answer)
-    if answer.against ~= answer.default_branch and answer.base ~= want then
-      return apply(answer.base, report)
-    end
-    warn_skipped(answer)
+---@param point changeset.ForkPoint?
+local function follow(root, branch, point)
+  local base = point and point.base
+  if root == toplevel and branch == applied and base ~= want then
+    apply(base, report)
   end
 end
 
----Follow a change of repository or branch. Re-resolves the base on each change, since
----the fork point belongs to the branch left behind.
+---Measure the fork point again without blocking, then follow it.
+---@param root string
+---@param branch string
+local function remeasure(root, branch)
+  fork_point.get_async(root, branch, function(point)
+    follow(root, branch, point)
+  end)
+end
+
+---Follow a change of repository or branch, re-resolving the base, since the fork point belongs to the branch left
+---behind.
 ---@param root string
 ---@param branch string
 local function sync(root, branch)
   if root == toplevel and branch == applied then
     return
   end
-  toplevel, applied = root, branch
-  enable(root, branch)
+  toplevel, applied, applied_head = root, branch, select(2, Git.head(root))
+  follow(root, branch, (fork_point.get(root, branch)))
+end
+
+---Follow HEAD moving to `head` on the branch the base is resolved for, as a pull, a commit or a rebase moves it: the
+---fork point can move with it, and the PR can have been retargeted, so both are asked again.
+---@param head string?
+local function moved(head)
+  if head and head ~= applied_head and toplevel and applied then
+    applied_head = head
+    fork_point.recheck(toplevel, applied)
+    remeasure(toplevel, applied)
+  end
+end
+
+---Hear `repo`'s gitdir watcher, which ticks as HEAD moves. gitsigns publishes no update for a move that leaves every
+---open buffer's signs as they were.
+---@param repo Gitsigns.Repo
+local function watch(repo)
+  if watched[repo] or not repo:has_watcher() then
+    return
+  end
+  watched[repo] = true
+  -- After gitsigns' own callback, which reads HEAD again. A checkout is the branch's update to follow, not a move.
+  repo:on_update(function()
+    if repo.toplevel == toplevel and repo.abbrev_head == applied then
+      moved(repo.head_oid)
+    end
+  end)
 end
 
 ---The repository and branch gitsigns published for `buf`, attached or not.
@@ -184,23 +196,18 @@ local function tracked(buf)
   end
 end
 
----@param root string
----@param branch string
----@param point changeset.ForkPoint
-local function on_answer(root, branch, point)
-  if waiting and root == toplevel and branch == applied then
-    local continue = waiting
-    waiting = nil
-    continue(point)
-  end
-end
-
----Handles one gitsigns update: follows the buffer's branch, then moves any buffer that missed the base.
+---Handles one gitsigns update: follows the buffer's branch, hears its repository's watcher, then moves any buffer that
+---missed the base.
 ---@param args vim.api.keyset.create_autocmd.callback_args
 local function on_update(args)
+  local buf = args.data and args.data.buffer
   local root, branch
-  if args.data then
-    root, branch = tracked(args.data.buffer)
+  if buf then
+    root, branch = tracked(buf)
+    local bcache = require("gitsigns.cache").cache[buf]
+    if bcache then
+      watch(bcache.git_obj.repo)
+    end
   end
   if root and branch then
     sync(root, branch)
@@ -213,17 +220,29 @@ end
 ---autocmd is created during that update, so it need not hear it.
 ---@param event vim.api.keyset.create_autocmd.callback_args?
 function M.activate(event)
-  fork_point.subscribe(on_answer)
+  fork_point.subscribe(follow)
+  local group = vim.api.nvim_create_augroup("changeset.review", { clear = true })
   -- gitsigns republishes a buffer's branch on every sign refresh, including after
   -- a checkout made outside Neovim, so this doubles as a repository- and
   -- branch-change hook, and each event also moves buffers that missed the base.
   -- Its cwd-wide sibling event carries no buffer and is skipped: that watcher
   -- never starts in a worktree, where `.git` is a file rather than a directory.
   vim.api.nvim_create_autocmd("User", {
-    group = vim.api.nvim_create_augroup("changeset.review", { clear = true }),
+    group = group,
     pattern = "GitSignsUpdate",
-    desc = "changeset: keep buffers on the branch's base as the repository or branch changes",
+    desc = "changeset: keep buffers on the branch's base as the repository, branch or HEAD changes",
     callback = on_update,
+  })
+  -- Fires: Neovim regaining focus, as after a push or fetch made outside it. Either moves the remote branch the base
+  -- can be measured against, which gitsigns' watcher doesn't see.
+  vim.api.nvim_create_autocmd("FocusGained", {
+    group = group,
+    desc = "changeset: measure the branch's base again once Neovim regains focus",
+    callback = function()
+      if toplevel and applied then
+        remeasure(toplevel, applied)
+      end
+    end,
   })
   if event then
     on_update(event)

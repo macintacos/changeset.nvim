@@ -399,12 +399,12 @@ function M.update()
   end
 end
 
--- Fires: gh answering a fork_point lookup, for any repository and branch.
+-- Fires: gh answering a fork_point lookup, or a fork point measured without blocking, for any repository and branch.
 fork_point.subscribe(function(root, branch, point)
   if not (tree and tree.root == root and tree.branch == branch) then
     return
   end
-  -- An answer that leaves no PR holds a point no fresher than the tree's, unless the tree's PR is gone.
+  -- A point that leaves no PR is one the tree's own re-measure finds too, unless the tree's PR is gone.
   if not point.pr and not tree.pr then
     return
   end
