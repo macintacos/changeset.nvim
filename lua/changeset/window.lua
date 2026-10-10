@@ -184,6 +184,18 @@ function M.peek_target()
   return M._pick_target(reachable(), usable)
 end
 
+---The window a file the picker chose opens into: where `<CR>` in the sidebar would put it. With the sidebar closed
+---and no window to hold it, `called_from`, the window the picker was called from.
+---@param called_from integer
+---@return integer? win nil when the sidebar must split a window off for the file.
+function M.pick_target(called_from)
+  local win = M.peek_target()
+  if win or M.is_visible() then
+    return win
+  end
+  return called_from
+end
+
 ---@return integer win
 ---@return boolean? split Whether `win` was split off the sidebar for this.
 local function target()

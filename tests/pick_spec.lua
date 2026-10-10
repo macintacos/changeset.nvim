@@ -269,5 +269,19 @@ describe("changeset.pick", function()
       assert.equal(window.buf(), vim.api.nvim_win_get_buf(sidebar))
       assert.truthy(chosen.path:find("mod.lua", 1, true))
     end)
+
+    it("opens the chosen file in the window it was called from when no window can hold a file", function()
+      vim.cmd("only")
+      local help = vim.api.nvim_get_current_win()
+      local special = vim.api.nvim_create_buf(false, true)
+      vim.bo[special].buftype = "help"
+      vim.api.nvim_win_set_buf(help, special)
+
+      local chosen = choose_current()
+
+      assert.equal(help, vim.api.nvim_get_current_win())
+      assert.truthy(vim.endswith(vim.api.nvim_buf_get_name(0), "mod.lua"))
+      assert.truthy(chosen)
+    end)
   end)
 end)

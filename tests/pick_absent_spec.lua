@@ -118,6 +118,34 @@ describe("changeset.pick without mini.pick", function()
     assert.equal(window.buf(), vim.api.nvim_win_get_buf(sidebar))
   end)
 
+  it("opens the chosen file in the window it was called from when no window can hold a file", function()
+    changeset.close()
+    vim.cmd("only")
+    local help = vim.api.nvim_get_current_win()
+    local special = vim.api.nvim_create_buf(false, true)
+    vim.bo[special].buftype = "help"
+    vim.api.nvim_win_set_buf(help, special)
+
+    pick.pick()
+    calls[1].on_choice(calls[1].items[1], 1)
+
+    assert.equal(help, vim.api.nvim_get_current_win())
+    assert.truthy(vim.endswith(name_of(0), "mod.lua"))
+  end)
+
+  it("splits a window off the sidebar for the chosen file when the sidebar is the only window", function()
+    local sidebar = assert(window.win())
+    vim.api.nvim_set_current_win(sidebar)
+    vim.cmd("only")
+
+    pick.pick()
+    calls[1].on_choice(calls[1].items[1], 1)
+
+    assert.equal(2, #vim.api.nvim_tabpage_list_wins(0))
+    assert.truthy(vim.endswith(name_of(0), "mod.lua"))
+    assert.equal(sidebar, window.win())
+  end)
+
   it("warns about the changeset, not about mini.pick, when there is none", function()
     changeset.close()
     Fixture.git({ "checkout", "-q", "--orphan", "unrelated" }, tmp)

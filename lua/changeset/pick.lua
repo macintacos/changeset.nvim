@@ -151,8 +151,8 @@ function M.pick()
   if not tree then
     return vim.notify("Changeset: " .. err, vim.log.levels.WARN)
   end
-  -- Taken before the picker takes focus, so a pick from the sidebar opens where its `<CR>` would.
-  local from = window.peek_target()
+  -- Taken before the picker takes focus: where a sidebar's `<CR>` would open the file, else the picker's own window.
+  local from = window.pick_target(vim.api.nvim_get_current_win())
   local list = items(tree.rows, tree.root)
   local title = "Changeset (vs " .. tree.ref .. ")"
 
