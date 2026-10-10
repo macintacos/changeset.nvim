@@ -194,6 +194,15 @@ M.PREVIEW_ICON_HL = "ChangesetPreviewIcon"
 ---@type string
 M.TITLE_ICON_HL = "ChangesetTitleIcon"
 
+---The sign-column bar a borrowed window draws over its preview's span, in the selection's accent. The two tint groups
+---are the bar's copies over an added line's tint, recoloured as `band_icon` recolours the file's glyph.
+---@type string
+M.PREVIEW_BAR_HL = "ChangesetPreviewBar"
+---@type string
+M.PREVIEW_BAR_TINT_HL = "ChangesetPreviewBarTint"
+---@type string
+M.PREVIEW_BAR_ICON_TINT_HL = "ChangesetPreviewBarIconTint"
+
 -- How far each state's background moves from the window's toward the accent.
 local SELECTED_TINT, HERE_TINT, PICKED_TINT = 0.2, 0.12, 0.06
 
@@ -257,6 +266,15 @@ end
 function M.band_icon(hl)
   band_hl = hl
   return glyph_over(M.PREVIEW_ICON_HL, hl, M.PREVIEW_HL)
+end
+
+---Point `name` at `hl`'s colour over an added line's tint, the background the unified diff gives the sign cell it covers.
+---A glyph drawn over that cover keeps the tint behind it, as `band_icon` keeps the band's behind a glyph.
+---@param name string
+---@param hl string Group the glyph came with.
+---@return string name
+function M.tinted(name, hl)
+  return glyph_over(name, hl, M.DIFF_ADD_HL)
 end
 
 ---The group a review comment window's title glyph last came with, followed as `band_hl` is.
@@ -344,6 +362,7 @@ function M.define_highlights()
   set_default(M.SELECTED_ICON_HL, { fg = accent })
   set_default(M.HERE_ICON_HL, { fg = accent })
   set_default(M.PICKED_ICON_HL, { fg = accent })
+  set_default(M.PREVIEW_BAR_HL, { fg = accent })
   -- Backgrounds alone, as GitHub draws a diff, so syntax keeps colouring the text. Added and Removed stand in until
   -- gitsigns, which derives its groups from them, has run.
   local added = vim.api.nvim_get_hl(0, { name = "GitSignsAdd", link = false }).fg

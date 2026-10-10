@@ -459,4 +459,65 @@ describe("changeset.unified_diff", function()
       assert.matches("line 2", rows[line + 4])
     end)
   end)
+
+  describe("the preview bar's tint", function()
+    local bar = require("changeset.preview_bar")
+
+    it("lists the rows of its range that the view adds, 0-based", function()
+      vim.cmd.edit("a.txt")
+      local win = vim.api.nvim_get_current_win()
+      assert.is_true(vim.wait(5000, function()
+        return #((view(win) or {}).hunks or {}) > 0
+      end, 20))
+      local buf = vim.api.nvim_win_get_buf(win)
+
+      -- 'changed 5' is the fourth line of a.txt.
+      assert.same({ [3] = true }, unified_diff.tinted_rows(win, buf, 0, 4))
+      assert.same({}, unified_diff.tinted_rows(win, buf, 0, 2))
+    end)
+
+    it("lists no rows for a buffer the view does not show", function()
+      vim.cmd.edit("a.txt")
+      local win = vim.api.nvim_get_current_win()
+      assert.is_true(vim.wait(5000, function()
+        return #((view(win) or {}).hunks or {}) > 0
+      end, 20))
+      local scratch = vim.api.nvim_create_buf(false, true)
+
+      assert.same({}, unified_diff.tinted_rows(win, scratch, 0, 4))
+    end)
+
+    it("tints the bar on the rows the view adds, in the window it previews into", function()
+      local sidebar = window.open(vim.api.nvim_create_buf(false, true))
+      vim.api.nvim_set_current_win(sidebar)
+      local span = { first = 1, last = 5, icon = "󰊕", icon_hl = "MiniIconsBlue" }
+
+      window.preview(dir .. "/a.txt", 1, vim.tbl_extend("force", BAND, { span = span }))
+
+      local previewed = vim.fn.bufwinid(dir .. "/a.txt")
+      assert.is_true(vim.wait(5000, function()
+        return #((view(previewed) or {}).hunks or {}) > 0
+      end, 20))
+      vim.cmd("redraw!")
+      local marks = vim.api.nvim_buf_get_extmarks(
+        vim.fn.bufnr(dir .. "/a.txt"),
+        bar._namespace(previewed),
+        0,
+        -1,
+        { details = true }
+      )
+      assert.same(
+        {
+          "MiniIconsBlue",
+          highlights.PREVIEW_BAR_HL,
+          highlights.PREVIEW_BAR_HL,
+          highlights.PREVIEW_BAR_TINT_HL,
+          highlights.PREVIEW_BAR_HL,
+        },
+        vim.tbl_map(function(mark)
+          return mark[4].sign_hl_group
+        end, marks)
+      )
+    end)
+  end)
 end)

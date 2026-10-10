@@ -515,6 +515,13 @@ preview. When no window can take the preview, changeset splits one off beside
 the sidebar. `q` and the toggle close it with the sidebar unless you opened a
 file in it; it stays when it is the last window.
 
+A symbol, or a single hunk outside every symbol, also gets a bar down the sign
+column of its window, over each line it spans: the first line wears the row's
+icon and the rest a `┃`. A diagnostic's sign or a review comment's bubble on
+the same line covers it. The bar goes wherever the band does, so the window
+the cursor is in never shows one, and a file, a group or a comment row, or a
+notice, draws none.
+
 A deleted file previews what it held at the base, every line tinted
 |ChangesetDiffDelete|, and the band says "deleted on this branch". A binary
 file, one over 1.5 MiB, or one git can't read shows a notice instead. So does
@@ -1277,6 +1284,18 @@ ChangesetPreviewHint                                    *ChangesetPreviewHint*
 ChangesetPreviewIcon                                    *ChangesetPreviewIcon*
 	The file's glyph. Recoloured for each file, so defining it paints
 	every glyph one colour.
+
+ChangesetPreviewBar                                      *ChangesetPreviewBar*
+	The bar down a previewed span's sign column, `Statement`'s colour.
+
+ChangesetPreviewBarTint                              *ChangesetPreviewBarTint*
+	Made from |ChangesetPreviewBar| over |ChangesetDiffAdd|'s background, and
+	remade each time a bar is drawn, so it follows a change to either.
+	Defining it yourself fixes its colours.
+
+ChangesetPreviewBarIconTint                      *ChangesetPreviewBarIconTint*
+	The span's first line, its icon over the tint an added line takes.
+	Recoloured for each bar.
 
 UNIFIED DIFF AND DELETED FILES
 

@@ -60,6 +60,23 @@ function M.row_at_cursor()
   return state.view:row(lnum)
 end
 
+---The rows a preview of `row` stands for, which its bar marks: a symbol's body or an orphan hunk's lines.
+---@param row changeset.Row
+---@return changeset.BarSpan?
+local function span_of(row)
+  if not row.range or (row.kind ~= "symbol" and row.kind ~= "orphan") then
+    return nil
+  end
+  local glyph, hl = icon_for(row)
+  -- An orphan row is drawn dimmed, and its icon with it.
+  return {
+    first = row.range[1],
+    last = row.range[2],
+    icon = glyph,
+    icon_hl = row.kind == "orphan" and highlights.META_HL or hl,
+  }
+end
+
 ---The preview band's contents for `row`.
 ---@param row changeset.Row
 ---@param jump (string|false)? The jump key the sidebar bound.
@@ -71,6 +88,7 @@ function M.band_for(row, jump)
     icon = glyph,
     icon_hl = highlights.band_icon(hl),
     path = row.path,
+    span = span_of(row),
     -- Only a symbol row names its destination. An orphan hunk's own text is the
     -- changed line, which is not a place and does not read as one. The jump key opens
     -- nothing on a deleted file, so its band says why instead.

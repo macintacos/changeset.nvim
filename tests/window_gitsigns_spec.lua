@@ -85,4 +85,28 @@ describe("changeset.window gitsigns", function()
 
     assert.is_true(signed(buf))
   end)
+
+  it("draws its bar over the covers the unified diff lays over gitsigns' signs", function()
+    window.open(vim.api.nvim_create_buf(false, true))
+    window.focus()
+    local spanned =
+      vim.tbl_extend("force", BAND, { span = { first = 1, last = 2, icon = "󰊕", icon_hl = "MiniIconsBlue" } })
+
+    window.preview(path, 1, spanned)
+    vim.cmd("redraw")
+
+    local target = vim.fn.win_findbuf(vim.fn.bufnr(path))[1]
+    local marks = vim.api.nvim_buf_get_extmarks(
+      vim.fn.bufnr(path),
+      require("changeset.preview_bar")._namespace(target),
+      0,
+      -1,
+      { details = true }
+    )
+    local covers = require("gitsigns.config").config.sign_priority + 1
+    assert.is_true(#marks > 0)
+    for _, mark in ipairs(marks) do
+      assert.is_true(mark[4].priority > covers)
+    end
+  end)
 end)
