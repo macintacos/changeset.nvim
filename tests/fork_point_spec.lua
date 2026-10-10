@@ -93,6 +93,32 @@ describe("fork_point", function()
     assert.is_nil(point.pr)
   end)
 
+  it("measures again when HEAD moves while it measures, never answering for the HEAD it left", function()
+    local root, default_base = repo()
+    local tree = fixture.git({ "rev-parse", default_base .. "^{tree}" }, root)
+    local newer = fixture.git({ "commit-tree", tree, "-p", default_base, "-m", "newer main" }, root)
+    fixture.git({ "update-ref", "refs/heads/main", newer }, root)
+    local real_merge_base = Git.merge_base
+    -- HEAD moves onto the newer main just after the measure reads its fork point.
+    Git.merge_base = function(...)
+      Git.merge_base = real_merge_base
+      local sha, ref = real_merge_base(...)
+      fixture.git({ "reset", "-q", "--soft", newer }, root)
+      return sha, ref
+    end
+
+    local point
+    fork_point.get_async(root, "feature", function(measured)
+      point = measured
+    end)
+    vim.wait(5000, function()
+      return point ~= nil
+    end)
+    Git.merge_base = real_merge_base
+
+    assert.equal(newer, assert(point).base)
+  end)
+
   it("measures against the branch it was created from without waiting on gh", function()
     local root, _, parent_base = repo("parent")
 

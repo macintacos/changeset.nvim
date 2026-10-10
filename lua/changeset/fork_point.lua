@@ -82,6 +82,23 @@ local function measure(root, branch, pr)
   return point
 end
 
+---`measure`, taken again until HEAD holds still across one, so a point never answers for a HEAD that moved on while it
+---was measured, and none lands after a newer one with an older fork point.
+---@param root string
+---@param branch string
+---@param pr changeset.fork_point.PrTarget?
+---@return changeset.ForkPoint?
+local function settled(root, branch, pr)
+  while true do
+    local _, before = Git.head(root)
+    local point = measure(root, branch, pr)
+    local _, after = Git.head(root)
+    if before == after then
+      return point
+    end
+  end
+end
+
 ---Ask gh about `branch`'s PR unless gh has named a target or is being asked, once `point` is measured.
 ---@param root string
 ---@param branch string
@@ -108,7 +125,7 @@ local function ask(root, branch, point)
     if target then
       targets[key] = { target = target, number = number }
       -- HEAD can have moved by the time gh answers; subscribers still need a point.
-      heard = measure(root, branch, targets[key]) or heard
+      heard = settled(root, branch, targets[key]) or heard
     end
     for fn in pairs(subscribers) do
       fn(root, branch, heard)
@@ -123,7 +140,7 @@ end
 ---@return changeset.ForkPoint? point nil when HEAD shares no fork point with the branch it was created from or the default branch.
 ---@return boolean asking Whether gh is still being asked, so subscribers will hear its answer.
 function M.get(root, branch)
-  return ask(root, branch, measure(root, branch, targets[root .. "\n" .. branch]))
+  return ask(root, branch, settled(root, branch, targets[root .. "\n" .. branch]))
 end
 
 ---`get`, measuring without blocking Neovim, and calling back on the main loop. Subscribers hear the point after
@@ -135,7 +152,7 @@ function M.get_async(root, branch, on_done)
   local key = root .. "\n" .. branch
   local pr = targets[key]
   Git.async(function()
-    return measure(root, branch, pr)
+    return settled(root, branch, pr)
   end, function(point)
     -- gh answered while it measured, so `point` holds a target no longer in force.
     if targets[key] ~= pr then
@@ -173,7 +190,7 @@ function M.recheck(root, branch)
     end
     local pr = targets[key]
     Git.async(function()
-      return measure(root, branch, pr)
+      return settled(root, branch, pr)
     end, function(point)
       if not point then
         return
