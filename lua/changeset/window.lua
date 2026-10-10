@@ -30,7 +30,7 @@ local NO_CURSOR = "n-v:" .. highlights.NO_CURSOR_HL
 
 ---@class changeset.Snapshot What a window held before the sidebar borrowed it.
 ---@field buf integer
----@field cursor integer[]
+---@field cursor [integer, integer]
 ---@field winbar string
 ---@field standing_buf integer? The buffer a preview put here while the cursor stood in the window.
 ---@field pick any What the caller previewed here, handed back when the window is claimed.
@@ -39,7 +39,7 @@ local NO_CURSOR = "n-v:" .. highlights.NO_CURSOR_HL
 ---Beside the files, or below them as a drawer.
 ---@alias changeset.Layout "sidebar"|"drawer"
 
----@type { win: integer?, buf: integer?, layout: changeset.Layout?, borrowed: table<integer, changeset.Snapshot> }
+---@type { win: integer?, buf: integer?, layout: changeset.Layout?, borrowed: table<integer, changeset.Snapshot?>, left: integer? }
 local sidebar = { borrowed = {} }
 
 ---@param columns integer The editor's width.
@@ -84,8 +84,6 @@ local SIDEBAR_OPTIONS = {
   -- For the sentence an empty tree shows, the one line `draw` lets wrap.
   list = false,
   linebreak = true,
-  -- Or a reflexive `<C-o>` there swaps the tree out of its window and wipes it.
-  winfixbuf = true,
 }
 
 ---Keep the size `layout` gave `win` when other windows open and close.
@@ -99,16 +97,15 @@ end
 ---Windows a preview could go to, most recently used first.
 ---
 ---The window with focus is the one being read — except while the cursor is in
----the sidebar, when it is the window it came from. Offering both ahead of the
+---the sidebar, when it is the window it came from. Offering those ahead of the
 ---rest is what makes a preview follow the user instead of staying wherever the
 ---sidebar happened to be opened from.
----@param current integer The focused window.
----@param previous integer The window focused before it, 0 when there is none.
+---@param recent integer[] The focused window, then those focused before it, 0 for one there is none of.
 ---@param all integer[] Every window in the tabpage.
 ---@return integer[]
-function M._candidates(current, previous, all)
+function M._candidates(recent, all)
   local out, seen = {}, {}
-  for _, win in ipairs(vim.list_extend({ current, previous }, all)) do
+  for _, win in ipairs(vim.list_extend(vim.list_slice(recent), all)) do
     -- `winnr("#")` answers 0 once the window it named is closed, and 0 is an
     -- alias for the current window everywhere it would then be passed.
     if win > 0 and not seen[win] then
@@ -172,11 +169,19 @@ end
 
 ---@return integer[]
 local function reachable()
-  return M._candidates(
-    vim.api.nvim_get_current_win(),
-    vim.fn.win_getid(vim.fn.winnr("#")),
-    vim.api.nvim_tabpage_list_wins(0)
-  )
+  local all = vim.api.nvim_tabpage_list_wins(0)
+  -- A picker's prompt closing takes `winnr("#")` with it, so the window left for the sidebar is kept as well. One in
+  -- another tabpage would haul the user out of this one.
+  local left = vim.tbl_contains(all, sidebar.left) and sidebar.left or 0
+  return M._candidates({ vim.api.nvim_get_current_win(), left, vim.fn.win_getid(vim.fn.winnr("#")) }, all)
+end
+
+---Note the window the cursor is leaving, when a file could open in it.
+function M.leave()
+  local win = vim.api.nvim_get_current_win()
+  if usable(win) then
+    sidebar.left = win
+  end
 end
 
 ---The window a commit would open into, without splitting for one; nil when there is none.
@@ -207,12 +212,11 @@ local function target()
   -- Nothing left to preview into: the sidebar is the only window, so give the
   -- file a split of its own rather than borrowing the sidebar. Split from inside
   -- `nvim_win_call`, which hands focus back without a `WinEnter` on the sidebar.
-  local split = vim.api.nvim_win_call(sidebar.win, function()
+  local split = vim.api.nvim_win_call(assert(sidebar.win, "changeset: no window to open the file in"), function()
     vim.cmd(sidebar.layout == "drawer" and "leftabove split" or "leftabove vsplit")
     return vim.api.nvim_get_current_win()
   end)
   -- Copied from the sidebar with the rest of its options. Its header winbar would be put back as the user's.
-  setlocal(split, "winfixbuf", false)
   setlocal(split, "winbar", "")
   return split, true
 end
@@ -241,15 +245,16 @@ end
 
 ---Note what `win` held, the first time the sidebar borrows it.
 ---@param win integer
+---@return changeset.Snapshot
 local function remember(win)
-  if sidebar.borrowed[win] then
-    return
-  end
-  sidebar.borrowed[win] = {
-    buf = vim.api.nvim_win_get_buf(win),
-    cursor = vim.api.nvim_win_get_cursor(win),
-    winbar = vim.wo[win].winbar,
-  }
+  local snapshot = sidebar.borrowed[win]
+    or {
+      buf = vim.api.nvim_win_get_buf(win),
+      cursor = vim.api.nvim_win_get_cursor(win),
+      winbar = vim.wo[win].winbar,
+    }
+  sidebar.borrowed[win] = snapshot
+  return snapshot
 end
 
 ---Put `buf` in the window a preview goes to, remembering what that window held.
@@ -261,10 +266,10 @@ local function borrow(buf, band, pick)
   local win, split = target()
   preview_bar.clear(win)
   local standing = win == vim.api.nvim_get_current_win()
-  remember(win)
-  sidebar.borrowed[win].split = sidebar.borrowed[win].split or split
-  sidebar.borrowed[win].standing_buf = standing and buf or nil
-  sidebar.borrowed[win].pick = pick
+  local snapshot = remember(win)
+  snapshot.split = snapshot.split or split
+  snapshot.standing_buf = standing and buf or nil
+  snapshot.pick = pick
   show(win, buf)
   -- The band is for a window seen from the sidebar, never the one being read.
   if not standing then
@@ -357,14 +362,15 @@ end
 ---them when it is not. The window is moved, not reopened, so it keeps its id.
 function M.relayout()
   local layout = layout_for(vim.o.columns, config.get().layout.min_file_width)
-  if not M.is_visible() or layout == sidebar.layout then
+  local win = M.win()
+  if not win or layout == sidebar.layout then
     return
   end
   sidebar.layout = layout
-  pin(sidebar.win, layout)
+  pin(win, layout)
   -- Neovim refuses to move the last window, which has no layout to change anyway.
   if #M.panes(0) > 1 then
-    vim.api.nvim_win_set_config(sidebar.win, split_for(layout, vim.o.lines))
+    vim.api.nvim_win_set_config(win, split_for(layout, vim.o.lines))
     if vim.o.equalalways then
       vim.cmd("wincmd =")
     end
@@ -381,7 +387,7 @@ function M.open(buf)
   if placeholder then
     local stale = vim.api.nvim_win_get_buf(placeholder)
     sidebar.win = placeholder
-    -- A session saved with 'localoptions' brings it back.
+    -- A session saved with 'localoptions' brings back any 'winfixbuf' the window had.
     setlocal(placeholder, "winfixbuf", false)
     vim.api.nvim_win_set_buf(placeholder, buf)
     pcall(vim.api.nvim_buf_delete, stale, { force = true })
@@ -526,7 +532,7 @@ end
 ---@param band changeset.Band What the band over the window says about the row.
 function M.preview_notice(text, band)
   local buf = new_stand_in()
-  local info = vim.fn.getwininfo(borrow(buf, band))[1]
+  local info = assert(vim.fn.getwininfo(borrow(buf, band))[1], "changeset: the preview window is gone")
   local lines, row = M._centred(text, info.width - info.textoff, info.height)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
@@ -559,16 +565,14 @@ function M.preview_deleted(path, text, band)
   borrow(buf, band)
 end
 
----Make `buf` the chosen contents of `win`: focus it, leave `<C-o>` pointing where
----the window stood before the sidebar, and list the buffer.
+---Make `buf` the chosen contents of `win`: focus it, and leave `<C-o>` pointing where
+---the window stood before the sidebar.
 ---@param win integer
 ---@param buf integer
----@param lnum integer?
+---@param cursor [integer, integer]? Where to put the cursor, as `nvim_win_set_cursor` takes it.
 ---@param how "reuse"|"vsplit"|"split"|"tab"
-local function promote(win, buf, lnum, how)
+local function promote(win, buf, cursor, how)
   preview_bar.clear(win)
-  -- Listed from here on: the user chose this file, so it is theirs now.
-  vim.bo[buf].buflisted = true
 
   local snapshot = sidebar.borrowed[win]
   -- Chosen, not borrowed — and dropped before the focus below, whose `WinEnter`
@@ -593,8 +597,8 @@ local function promote(win, buf, lnum, how)
   if snapshot then
     vim.wo[0].winbar = snapshot.winbar
   end
-  if lnum then
-    vim.api.nvim_win_set_cursor(0, { M._clamp(lnum, vim.api.nvim_buf_line_count(buf)), 0 })
+  if cursor then
+    vim.api.nvim_win_set_cursor(0, { M._clamp(cursor[1], vim.api.nvim_buf_line_count(buf)), cursor[2] })
     M.reveal_cursor()
   end
 end
@@ -615,7 +619,9 @@ function M.commit(commit)
     vim.notify("Changeset: cannot open " .. commit.path, vim.log.levels.WARN)
     return false
   end
-  promote(commit.win or target(), buf, commit.lnum, commit.how)
+  -- Listed from here on: the user chose this file, so it is theirs now.
+  vim.bo[buf].buflisted = true
+  promote(commit.win or target(), buf, commit.lnum and { commit.lnum, 0 }, commit.how)
   return true
 end
 
@@ -625,6 +631,35 @@ end
 function M.previewing(win)
   local snapshot = sidebar.borrowed[win]
   return snapshot ~= nil and snapshot.standing_buf == vim.api.nvim_win_get_buf(win)
+end
+
+---Whether a buffer other than the tree stands in the sidebar's window.
+---@return boolean
+function M.taken()
+  local win, buf = sidebar.win, sidebar.buf
+  return win ~= nil
+    and buf ~= nil
+    and vim.api.nvim_win_is_valid(win)
+    and vim.api.nvim_buf_is_valid(buf)
+    and vim.api.nvim_win_get_buf(win) ~= buf
+end
+
+---Move the buffer standing in the sidebar's window to the window a commit opens into, with its cursor and focus, and
+---put the tree back.
+function M.redirect()
+  local win, tree = sidebar.win, sidebar.buf
+  if not (win and tree and M.taken()) then
+    return
+  end
+  local buf = vim.api.nvim_win_get_buf(win)
+  local cursor = vim.api.nvim_win_get_cursor(win)
+  -- The tree goes back first, or a redraw forced by the focus change below would show the buffer in the sidebar. Kept
+  -- while it stands in no window, should it wipe once hidden.
+  local bufhidden = vim.bo[buf].bufhidden
+  vim.bo[buf].bufhidden = "hide"
+  show(win, tree)
+  promote(target(), buf, cursor, "reuse")
+  vim.bo[buf].bufhidden = bufhidden
 end
 
 ---Commit the focused window if the sidebar previewed into it from elsewhere:
@@ -642,6 +677,7 @@ function M.claim()
   -- The user may have scrolled the preview before reaching it; the swaps inside
   -- the promote would lose that view.
   local view = vim.fn.winsaveview()
+  vim.bo[buf].buflisted = true
   promote(win, buf, nil, "reuse")
   vim.fn.winrestview(view)
   return snapshot.pick
@@ -656,7 +692,7 @@ function M.close()
   for borrowed_win in pairs(sidebar.borrowed) do
     preview_bar.clear(borrowed_win)
   end
-  local borrowed, win = sidebar.borrowed, sidebar.win
+  local borrowed, win, tree = sidebar.borrowed, sidebar.win, sidebar.buf
   sidebar.win, sidebar.buf, sidebar.borrowed = nil, nil, {}
 
   -- Closed rather than put back: it showed nothing before the sidebar made it.
@@ -671,13 +707,13 @@ function M.close()
     end
   end
 
-  if win and vim.api.nvim_win_is_valid(win) then
+  -- One another buffer has taken is the user's window now.
+  if win and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == tree then
     if #M.panes(vim.api.nvim_win_get_tabpage(win)) > 1 then
       vim.api.nvim_win_close(win, true)
     else
       -- The last window cannot be closed, and leaving the tree in it would leave a
       -- panel on screen whose keys no longer answer.
-      setlocal(win, "winfixbuf", false)
       vim.api.nvim_win_call(win, function()
         vim.cmd("enew")
         -- The new buffer still takes the sidebar's local values.
@@ -711,8 +747,9 @@ end
 
 ---Move focus into the sidebar.
 function M.focus()
-  if M.is_visible() then
-    vim.api.nvim_set_current_win(sidebar.win)
+  local win = M.win()
+  if win then
+    vim.api.nvim_set_current_win(win)
   end
 end
 

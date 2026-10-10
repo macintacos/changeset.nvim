@@ -8,26 +8,30 @@ local window = require("changeset.window")
 local ns = vim.api.nvim_create_namespace("changeset.pick")
 local Fixture = require("support.git")
 local Notify = require("support.notify")
+local present = require("support.present")
 require("support.gh")
 
----Press <CR> once the picker is up, so it chooses its current item, and return what `pick()` returned.
+---Press <CR> once the picker is up, so it chooses its current item, and return what starting it returned.
+---@param start (fun(): any)? Opens the picker; the changeset picker when nil.
 ---@return any
-local function choose_current()
+local function choose_current(start)
   local function step()
-    if not MiniPick.is_picker_active() then
+    if not present(MiniPick).is_picker_active() then
       return vim.defer_fn(step, 20)
     end
     vim.api.nvim_feedkeys(vim.keycode("<CR>"), "t", false)
   end
   vim.defer_fn(step, 20)
-  return pick.pick()
+  return (start or pick.pick)()
 end
 
 ---A changeset row with the fields the picker reads.
 ---@param fields table
 ---@return changeset.Row
 local function row(fields)
-  return vim.tbl_extend("keep", fields, { ancestor = false, children = {}, added = 1, removed = 0 })
+  local merged = vim.tbl_extend("keep", fields, { ancestor = false, children = {}, added = 1, removed = 0 })
+  ---@cast merged changeset.Row
+  return merged
 end
 
 ---@param items table[]
@@ -93,9 +97,9 @@ describe("changeset.pick", function()
       local items = pick._items(rows, "/repo")
 
       assert.same({ "lua/a.lua › M › refresh" }, texts(items))
-      assert.equal("lua/a.lua › M", items[1].trail)
-      assert.equal("/repo/lua/a.lua", items[1].path)
-      assert.equal(12, items[1].lnum)
+      assert.equal("lua/a.lua › M", present(items[1]).trail)
+      assert.equal("/repo/lua/a.lua", present(items[1]).path)
+      assert.equal(12, present(items[1]).lnum)
     end)
 
     it("lists a changed symbol and the changed symbol inside it", function()
@@ -119,14 +123,14 @@ describe("changeset.pick", function()
       local items = pick._items(rows, "/repo")
 
       assert.same({ "Makefile › Other changes › L2 all: build" }, texts(items))
-      assert.equal(2, items[1].lnum)
+      assert.equal(2, present(items[1]).lnum)
     end)
 
     it("lists a file with nothing beneath it on its own, with no trail", function()
       local items = pick._items({ row({ kind = "file", path = "a.lua", name = "a.lua", lnum = 1 }) }, "/repo")
 
       assert.same({ "a.lua" }, texts(items))
-      assert.equal("", items[1].trail)
+      assert.equal("", present(items[1]).trail)
     end)
 
     it("leaves out a deleted file, which has nothing to open", function()
@@ -140,10 +144,11 @@ describe("changeset.pick", function()
     it("heads each run of items sharing a trail once, and a trail-less item not at all", function()
       local sym = row({ kind = "symbol", path = "a.lua", name = "x", symbol_kind = "Function" })
       local file = row({ kind = "file", path = "b.lua", name = "b.lua" })
+      ---@type changeset.PickItem[]
       local items = {
-        { text = "a.lua › x", trail = "a.lua", row = sym },
-        { text = "a.lua › x", trail = "a.lua", row = sym },
-        { text = "b.lua", trail = "", row = file },
+        { text = "a.lua › x", trail = "a.lua", path = "/repo/a.lua", row = sym },
+        { text = "a.lua › x", trail = "a.lua", path = "/repo/a.lua", row = sym },
+        { text = "b.lua", trail = "", path = "/repo/b.lua", row = file },
       }
       local buf = vim.api.nvim_create_buf(false, true)
 
@@ -151,7 +156,7 @@ describe("changeset.pick", function()
 
       local headed = {}
       for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
-        if mark[4].virt_lines then
+        if present(mark[4]).virt_lines then
           headed[#headed + 1] = mark[2]
         end
       end
@@ -199,7 +204,8 @@ describe("changeset.pick", function()
   end)
 
   describe("pick", function()
-    local tmp, previous_dir
+    local tmp ---@type string
+    local previous_dir ---@type string
 
     before_each(function()
       tmp, previous_dir = Fixture.enter_tempdir()
@@ -219,17 +225,18 @@ describe("changeset.pick", function()
     end)
 
     it("opens the changeset picker against the base branch when mini.pick is set up", function()
-      local name, returned
+      local name ---@type string?
+      local returned ---@type boolean?
       -- `pick()` blocks until the picker closes, so the step polls for it.
       local function step()
         if returned then
           return
         end
-        if not MiniPick.is_picker_active() then
+        if not present(MiniPick).is_picker_active() then
           return vim.defer_fn(step, 20)
         end
-        name = MiniPick.get_picker_opts().source.name
-        MiniPick.stop()
+        name = present(MiniPick).get_picker_opts().source.name
+        present(MiniPick).stop()
       end
       vim.defer_fn(step, 20)
 
@@ -247,9 +254,9 @@ describe("changeset.pick", function()
       local ok, err = pcall(pick.pick)
 
       restore()
-      assert(ok, err)
+      assert.is_true(ok, tostring(err))
       assert.equal(1, #notes)
-      assert.equal(vim.log.levels.WARN, notes[1].level)
+      assert.equal(vim.log.levels.WARN, present(notes[1]).level)
     end)
 
     it("opens the chosen file in the window the sidebar was opened from, not in the sidebar", function()
@@ -258,7 +265,7 @@ describe("changeset.pick", function()
       vim.cmd("leftabove vnew")
       vim.api.nvim_set_current_win(from)
       require("changeset").open()
-      local sidebar = assert(window.win())
+      local sidebar = present(window.win())
       vim.api.nvim_set_current_win(sidebar)
 
       local chosen = choose_current()
@@ -268,6 +275,34 @@ describe("changeset.pick", function()
       assert.equal(sidebar, window.win())
       assert.equal(window.buf(), vim.api.nvim_win_get_buf(sidebar))
       assert.truthy(chosen.path:find("mod.lua", 1, true))
+    end)
+
+    it("never refocuses the sidebar while another picker's choice stands in it", function()
+      local from = vim.api.nvim_get_current_win()
+      vim.fn.writefile({ "return 0" }, "plain.lua")
+      require("changeset").open()
+      local sidebar = present(window.win())
+      vim.api.nvim_set_current_win(sidebar)
+      -- Entering a window runs handlers that may redraw the screen, which would show the choice in the sidebar.
+      local entered_with_choice = false
+      local group = vim.api.nvim_create_augroup("pick_spec.entered", { clear = true })
+      vim.api.nvim_create_autocmd("WinEnter", {
+        group = group,
+        callback = function()
+          entered_with_choice = entered_with_choice or (vim.api.nvim_get_current_win() == sidebar and window.taken())
+        end,
+      })
+
+      choose_current(function()
+        return present(MiniPick).start({ source = { items = { "plain.lua" } } })
+      end)
+      vim.api.nvim_del_augroup_by_id(group)
+
+      assert.same({ entered = false, focus = from, file = "plain.lua" }, {
+        entered = entered_with_choice,
+        focus = vim.api.nvim_get_current_win(),
+        file = vim.fs.basename(vim.api.nvim_buf_get_name(0)),
+      })
     end)
 
     it("opens the chosen file in the window it was called from when no window can hold a file", function()

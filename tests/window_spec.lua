@@ -1,4 +1,5 @@
 local highlights = require("changeset.highlights")
+local present = require("support.present")
 local window = require("changeset.window")
 
 ---What the band says is the sidebar's business; these tests only need one to pass on.
@@ -19,7 +20,8 @@ end
 ---@return "bottom"|"right"|nil
 local function edge(win)
   local layout = vim.fn.winlayout()
-  local last = layout[2][#layout[2]]
+  local siblings = present(layout[2])
+  local last = present(siblings[#siblings])
   if last[1] ~= "leaf" or last[2] ~= win then
     return nil
   end
@@ -62,11 +64,11 @@ describe("changeset.window", function()
 
   describe("_candidates", function()
     it("offers the window with focus first, then the one focused before it", function()
-      assert.same({ 7, 9, 3 }, window._candidates(7, 9, { 3, 7, 9 }))
+      assert.same({ 7, 9, 3 }, window._candidates({ 7, 9 }, { 3, 7, 9 }))
     end)
 
     it("leaves out a previous window that is no longer there", function()
-      assert.same({ 7, 3, 9 }, window._candidates(7, 0, { 3, 7, 9 }))
+      assert.same({ 7, 3, 9 }, window._candidates({ 7, 0 }, { 3, 7, 9 }))
     end)
   end)
 
@@ -85,7 +87,8 @@ describe("changeset.window", function()
   end)
 
   describe("reveal_cursor", function()
-    local buf, win
+    local buf ---@type integer
+    local win ---@type integer
 
     before_each(function()
       buf = vim.api.nvim_create_buf(false, true)
@@ -184,7 +187,7 @@ describe("changeset.window", function()
 
       local widths = others()
       assert.equal(3, #widths)
-      assert.is_true(widths[3] - widths[1] <= 1)
+      assert.is_true(present(widths[3]) - present(widths[1]) <= 1)
     end)
 
     it("keeps its width while the other windows even out", function()
@@ -219,7 +222,7 @@ describe("changeset.window", function()
       local ok, err = pcall(window.open, buf)
 
       assert.is_true(ok, tostring(err))
-      assert.equal(buf, vim.api.nvim_win_get_buf((assert(window.win()))))
+      assert.equal(buf, vim.api.nvim_win_get_buf((present(window.win()))))
     end)
 
     it("does not take the sidebar it just opened for a leftover", function()
@@ -288,7 +291,7 @@ describe("changeset.window", function()
       assert.equal("right", edge(win))
       assert.equal(width, vim.api.nvim_win_get_width(win))
       local widths = others()
-      assert.is_true(widths[2] - widths[1] <= 1)
+      assert.is_true(present(widths[2]) - present(widths[1]) <= 1)
     end)
 
     it("stays put as the only window when the editor narrows", function()
@@ -321,7 +324,7 @@ describe("changeset.window", function()
 
     it("reports no window once the one it opened is closed by hand", function()
       window.open(vim.api.nvim_create_buf(false, true))
-      vim.api.nvim_win_close(assert(window.win()), true)
+      vim.api.nvim_win_close(present(window.win()), true)
 
       assert.is_nil(window.win())
       assert.is_false(window.is_visible())
@@ -348,15 +351,8 @@ describe("changeset.window", function()
       assert.same({ valid = false, wins = 1 }, seen)
     end)
 
-    it("pins its buffer to its window", function()
-      window.open(vim.api.nvim_create_buf(false, true))
-
-      assert.is_true(vim.wo[assert(window.win())].winfixbuf)
-    end)
-
     it("reports no window once another buffer replaced the tree in it", function()
       local win = window.open(vim.api.nvim_create_buf(false, true))
-      vim.wo[win].winfixbuf = false
       vim.api.nvim_win_set_buf(win, vim.api.nvim_create_buf(true, false))
 
       assert.is_nil(window.win())
@@ -398,7 +394,7 @@ describe("changeset.window", function()
   end)
 
   describe("previewing", function()
-    local files
+    local files ---@type string[]
 
     before_each(function()
       files = {}
@@ -622,7 +618,7 @@ describe("changeset.window", function()
       assert.is_false(vim.bo[buf].buflisted)
       assert.is_false(vim.bo[buf].modifiable)
       assert.truthy(
-        table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n"):find("This file was deleted", 1, true)
+        (table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n"):find("This file was deleted", 1, true))
       )
     end)
 
@@ -635,9 +631,9 @@ describe("changeset.window", function()
       local ns = vim.api.nvim_get_namespaces()["changeset.stand_in"]
       local marks = vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, {})
       assert.equal(1, #marks)
-      assert.truthy(
-        vim.api.nvim_buf_get_lines(buf, marks[1][2], marks[1][2] + 1, false)[1]:find("This file was deleted", 1, true)
-      )
+      local mark = present(marks[1])
+      local line = present(vim.api.nvim_buf_get_lines(buf, mark[2], mark[2] + 1, false)[1])
+      assert.truthy((line:find("This file was deleted", 1, true)))
     end)
 
     it("previews a file into the window a notice is standing in", function()
@@ -664,9 +660,9 @@ describe("changeset.window", function()
       assert.is_false(vim.bo[buf].buflisted)
       for row = 0, 2 do
         local tints = vim.tbl_filter(function(mark)
-          return mark[4].line_hl_group == highlights.DIFF_DELETE_HL
+          return present(mark[4]).line_hl_group == highlights.DIFF_DELETE_HL
         end, vim.api.nvim_buf_get_extmarks(buf, -1, { row, 0 }, { row, -1 }, { details = true, overlap = true }))
-        assert(#tints > 0, ("line %d is not tinted as deleted"):format(row + 1))
+        assert.is_true(#tints > 0, ("line %d is not tinted as deleted"):format(row + 1))
       end
     end)
 
@@ -807,7 +803,7 @@ describe("changeset.window", function()
       local split = vim.tbl_filter(function(win)
         return win ~= sidebar
       end, vim.api.nvim_tabpage_list_wins(0))[1]
-      return sidebar, split, one
+      return sidebar, present(split), one
     end
 
     it("leaves the sidebar's header off a lone sidebar's split once the sidebar's window closes", function()
@@ -852,7 +848,7 @@ describe("changeset.window", function()
       vim.o.hidden = true
       vim.bo[modified].modified = false
 
-      assert.is_true(ok, err)
+      assert.is_true(ok, tostring(err))
       assert.equal(modified, vim.api.nvim_win_get_buf(right))
       assert.is_true(vim.api.nvim_win_is_valid(left))
     end)
@@ -864,7 +860,7 @@ describe("changeset.window", function()
       local ok, err = pcall(window.preview, fixture("three"), 1, BAND)
       vim.wo[right].winfixbuf = false
 
-      assert.is_true(ok, err)
+      assert.is_true(ok, tostring(err))
       assert.equal(vim.fn.resolve(two), showing(right))
       assert.not_equal(vim.fn.resolve(one), showing(left))
     end)
@@ -903,7 +899,7 @@ describe("changeset.window", function()
 
     describe("the body bar", function()
       local SPAN = { first = 1, last = 3, icon = "󰊕", icon_hl = "MiniIconsBlue" }
-      local SPANNED = vim.tbl_extend("force", BAND, { span = SPAN })
+      local SPANNED = vim.tbl_extend("force", BAND, { span = SPAN }) --[[@as changeset.Band]]
 
       local unified_diff = require("changeset.unified_diff")
       local real_tinted_rows = unified_diff.tinted_rows
@@ -921,7 +917,8 @@ describe("changeset.window", function()
         local marks = vim.api.nvim_buf_get_extmarks(buf, namespace, 0, -1, { details = true })
         return vim.tbl_map(function(mark)
           -- Neovim pads a sign's text to its two cells, so the glyph is what is compared.
-          return { row = mark[2], text = vim.trim(mark[4].sign_text), group = mark[4].sign_hl_group }
+          local details = present(mark[4])
+          return { row = mark[2], text = vim.trim(present(details.sign_text)), group = details.sign_hl_group }
         end, marks)
       end
 
@@ -959,11 +956,8 @@ describe("changeset.window", function()
         window.focus()
         window.preview(one, 2, SPANNED)
 
-        window.preview(
-          one,
-          2,
-          vim.tbl_extend("force", BAND, { span = { first = 2, last = 2, icon = SPAN.icon, icon_hl = SPAN.icon_hl } })
-        )
+        local moved = { first = 2, last = 2, icon = SPAN.icon, icon_hl = SPAN.icon_hl }
+        window.preview(one, 2, vim.tbl_extend("force", BAND, { span = moved }) --[[@as changeset.Band]])
 
         assert.same({ { row = 1, text = SPAN.icon, group = SPAN.icon_hl } }, bar_in(right, vim.fn.bufnr(one)))
       end)
@@ -1048,7 +1042,7 @@ describe("changeset.window", function()
         local marks = vim.api.nvim_buf_get_extmarks(vim.fn.bufnr(one), namespace, 0, -1, { details = true })
         assert.is_true(#marks > 0)
         for _, mark in ipairs(marks) do
-          assert.is_true(mark[4].priority < 4096)
+          assert.is_true(present(mark[4]).priority < 4096)
         end
       end)
 
@@ -1060,7 +1054,7 @@ describe("changeset.window", function()
         end
         window.preview(one, 2, SPANNED)
         -- The first paint, with nothing tinted: the repaint below has to change what it left.
-        assert.equal(SPAN.icon_hl, bar_in(right, vim.fn.bufnr(one))[1].group)
+        assert.equal(SPAN.icon_hl, present(bar_in(right, vim.fn.bufnr(one))[1]).group)
 
         unified_diff.tinted_rows = function()
           return { [0] = true }
@@ -1068,7 +1062,7 @@ describe("changeset.window", function()
         -- A plain redraw skips a window nothing has changed, so the repaint needs a full one.
         vim.cmd("redraw!")
 
-        assert.equal(highlights.PREVIEW_BAR_ICON_TINT_HL, bar_in(right, vim.fn.bufnr(one))[1].group)
+        assert.equal(highlights.PREVIEW_BAR_ICON_TINT_HL, present(bar_in(right, vim.fn.bufnr(one))[1]).group)
       end)
 
       it("draws under a diagnostic's sign, so a diagnostic on the body still shows", function()
@@ -1083,14 +1077,15 @@ describe("changeset.window", function()
         assert.is_true(#marks > 0)
         -- Diagnostics' default sign priority.
         for _, mark in ipairs(marks) do
-          assert.is_true(mark[4].priority < 10)
+          assert.is_true(present(mark[4]).priority < 10)
         end
       end)
 
       it("draws the bar on the first line too when the span's icon is blank", function()
         local _, right, one = staged()
         window.focus()
-        local blank = vim.tbl_extend("force", BAND, { span = { first = 1, last = 2, icon = " ", icon_hl = "Normal" } })
+        local blank_span = { first = 1, last = 2, icon = " ", icon_hl = "Normal" }
+        local blank = vim.tbl_extend("force", BAND, { span = blank_span }) --[[@as changeset.Band]]
 
         window.preview(one, 2, blank)
         vim.cmd.redraw()

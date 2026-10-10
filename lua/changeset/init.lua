@@ -41,18 +41,26 @@ local tracking = false
 local left_float = false
 
 ---The keys the open sidebar bound, which its footer and preview band name.
----@type changeset.Config.Keymaps
-local bound_keys = {}
+---@type changeset.Options.Keymaps?
+local bound_keys
+
+---The keys the sidebar bound, for a reader that runs only while the sidebar stands: a sidebar's window exists only
+---after `M.open` has bound them.
+---@return changeset.Options.Keymaps
+local function open_keys()
+  assert(bound_keys, "changeset: the sidebar's keys are read before it opened")
+  return bound_keys
+end
 
 ---The width of the sidebar's window when the tree was last drawn.
 ---@type integer?
 local drawn_width
 
----Draw the tree, naming the keys the sidebar bound.
+---Draw the tree, naming the keys the sidebar bound, if it has bound any.
 local function draw_tree()
   local win = window.win()
   drawn_width = win and vim.api.nvim_win_get_width(win)
-  draw.draw(bound_keys.filter_kinds)
+  draw.draw(bound_keys and bound_keys.filter_kinds)
 end
 
 -- A redraw costing more than a frame, run on every symbols answer, keeps the editor frozen for the whole walk.
@@ -101,7 +109,7 @@ local PREVIEW_MAX_BYTES = 1.5 * 1024 * 1024
 ---@param tree changeset.Tree
 ---@param row changeset.Row
 local function preview_deleted(tree, row)
-  local band = draw.band_for(row, bound_keys.jump)
+  local band = draw.band_for(row, open_keys().jump)
   local from = vim.api.nvim_get_current_win()
   diff.blob(tree.base .. ":" .. row.path, tree.root, function(text)
     local still = draw.row_at_cursor()
@@ -151,21 +159,22 @@ local function preview_current()
   elseif not (row.kind == "comment" or row.lnum or row.kind == "file") then
     return
   elseif (vim.uv.fs_stat(state.tree.root .. "/" .. row.path) or {}).type == "directory" then
-    window.preview_notice(SUBMODULE, draw.band_for(row, bound_keys.jump))
+    window.preview_notice(SUBMODULE, draw.band_for(row, open_keys().jump))
   elseif vim.fn.filereadable(state.tree.root .. "/" .. row.path) == 0 then
-    window.preview_notice(DELETED, draw.band_for(row, bound_keys.jump))
+    window.preview_notice(DELETED, draw.band_for(row, open_keys().jump))
   elseif not previewable(state.tree.root .. "/" .. row.path) then
-    window.preview_notice(UNPREVIEWABLE, draw.band_for(row, bound_keys.jump))
+    window.preview_notice(UNPREVIEWABLE, draw.band_for(row, open_keys().jump))
   else
     window.preview(
       state.tree.root .. "/" .. row.path,
       row.lnum or row.kind == "file" and 1 or nil,
-      draw.band_for(row, bound_keys.jump),
+      draw.band_for(row, open_keys().jump),
       { row = row, state = state }
     )
   end
 end
 
+---@type table<string, true?>
 local PASSING_BUFTYPES = { terminal = true, help = true }
 
 ---Note the file and line the cursor is in, and while the sidebar is open, that the user entered the file. The sidebar,
@@ -416,8 +425,9 @@ local function settle_soon()
   if due <= now then
     return settle()
   end
-  settling.timer = vim.uv.new_timer()
-  settling.timer:start(
+  local timer = assert(vim.uv.new_timer())
+  settling.timer = timer
+  timer:start(
     math.ceil(due - now),
     0,
     vim.schedule_wrap(function()
@@ -476,7 +486,7 @@ function M.footer()
     file = file,
     files = files,
     query = state.view:query(),
-    keys = bound_keys,
+    keys = open_keys(),
     branch = state.tree.branch,
     ref = state.tree.ref,
   })
@@ -591,9 +601,9 @@ function M.open()
 
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].buftype = "nofile"
-  -- Wiped with its window. A scratch buffer is kept otherwise, so every close would
-  -- leave one behind, its extmarks and mappings included.
-  vim.bo[buf].bufhidden = "wipe"
+  -- Hidden, not wiped, while a buffer put in its window moves out of it; the `BufHidden`
+  -- below wipes it with its window.
+  vim.bo[buf].bufhidden = "hide"
   vim.bo[buf].modifiable = false
   -- The tree draws its own guides; a scope line would be a second set.
   vim.b[buf].miniindentscope_disable = true
@@ -606,7 +616,41 @@ function M.open()
   -- In its window, so a `FileType` handler's window options land on the sidebar's, after its own.
   vim.bo[buf].filetype = "changeset"
   -- After `filetype`, so these replace any `]]`/`[[` a plugin maps on the buffer at `FileType`.
-  actions.set_keymaps(buf, bound_keys, { pick = pick, close = M.close })
+  actions.set_keymaps(buf, open_keys(), { pick = pick, close = M.close })
+
+  -- Fires: the tree leaving the last window showing it. A scratch buffer is kept, so every
+  -- close would leave one behind, its extmarks and mappings included. Scheduled, so a
+  -- buffer the `SafeState` below moves out of the sidebar has put the tree back first.
+  vim.api.nvim_create_autocmd("BufHidden", {
+    buffer = buf,
+    desc = "changeset: wipe the tree once no window shows it",
+    callback = function()
+      vim.schedule(function()
+        if vim.api.nvim_buf_is_valid(buf) and #vim.fn.win_findbuf(buf) == 0 then
+          vim.api.nvim_buf_delete(buf, { force = true })
+        end
+      end)
+    end,
+  })
+  -- Fires: any window taking a buffer while the sidebar is open. One the sidebar's took —
+  -- `:edit`, a picker, a jump — moves out on `SafeState`: after the command has placed its
+  -- cursor, and before the screen is drawn, where a scheduled move would let it flash.
+  -- Nested so the move fires the `WinEnter` and `BufEnter` an ordinary open would.
+  vim.api.nvim_create_autocmd("BufWinEnter", {
+    group = augroup,
+    desc = "changeset: move a buffer put in the sidebar's window to the window you were last in",
+    callback = function()
+      if window.taken() then
+        vim.api.nvim_create_autocmd("SafeState", {
+          group = augroup,
+          once = true,
+          nested = true,
+          desc = "changeset: move the buffer standing in the sidebar's window out of it",
+          callback = window.redirect,
+        })
+      end
+    end,
+  })
 
   -- Fires: the sidebar's window going without the plugin being asked — `:q`, `:only`,
   -- `:tabclose`, a layout plugin. Scheduled because the window is still in the layout
@@ -696,6 +740,31 @@ function M.open()
     callback = function()
       left_float = vim.api.nvim_win_get_config(0).relative ~= ""
     end,
+  })
+  -- Fires: a mini.pick picker stopping, its choice already opened and the window it started
+  -- in not yet refocused. Refocusing the sidebar with the choice in it runs `WinEnter`, whose
+  -- handlers may redraw the screen before `SafeState`, so the choice moves out now and the
+  -- picker refocuses where it went.
+  vim.api.nvim_create_autocmd("User", {
+    group = augroup,
+    pattern = "MiniPickStop",
+    nested = true,
+    desc = "changeset: move a picker's choice out of the sidebar before the picker refocuses it",
+    callback = function()
+      if window.taken() then
+        window.redirect()
+        if MiniPick then
+          require("mini.pick").set_picker_target_window(vim.api.nvim_get_current_win())
+        end
+      end
+    end,
+  })
+  -- Fires: leaving any window while the sidebar is open, so previews, and a buffer put in
+  -- the sidebar's window, go to the last a file could open in.
+  vim.api.nvim_create_autocmd("WinLeave", {
+    group = augroup,
+    desc = "changeset: remember the last window a file could open in",
+    callback = window.leave,
   })
   -- Fires: the cursor entering the sidebar by any route — `:Changeset`, a click,
   -- `<C-w>` — but not a return from a float such as the kind menu, which the user
