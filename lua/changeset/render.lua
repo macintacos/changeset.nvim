@@ -743,7 +743,8 @@ end
 ---@param info changeset.Empty
 ---@return string
 function M.empty_message(info)
-  if info.on_default_branch then
+  -- The default branch is compared against its own remote; without one, against itself.
+  if info.on_default_branch and info.ref == info.branch then
     return ("On %s — nothing to compare. Switch to a branch to see its changes."):format(info.branch)
   end
   return ("%s matches %s. Nothing changed yet."):format(info.branch, info.ref)

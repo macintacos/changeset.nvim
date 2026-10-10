@@ -1081,11 +1081,17 @@ describe("changeset.render", function()
   end)
 
   describe("empty_message", function()
-    it("names only the branch you are on when it is the default branch", function()
-      local message = render.empty_message({ on_default_branch = true, branch = "trunk", ref = "upstream/develop" })
+    it("names the default branch, then the remote it matches", function()
+      local message = render.empty_message({ on_default_branch = true, branch = "trunk", ref = "origin/trunk" })
+      local branch_at, ref_at = message:find("trunk", 1, true), message:find("origin/trunk", 1, true)
 
-      assert.truthy(message:find("trunk", 1, true))
-      assert.is_nil(message:find("upstream/develop", 1, true))
+      assert.truthy(branch_at and ref_at and branch_at < ref_at)
+    end)
+
+    it("names the default branch once when it has no remote to compare against", function()
+      local message = render.empty_message({ on_default_branch = true, branch = "trunk", ref = "trunk" })
+
+      assert.equal(1, select(2, message:gsub("trunk", "")))
     end)
 
     it("names a branch with no diff, then the ref it matches", function()
