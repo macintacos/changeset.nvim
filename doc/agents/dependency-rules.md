@@ -25,9 +25,14 @@ A new plugin goes into `pins` first. Then prepend it to `rtp` wherever a spec us
 vim.opt.rtp:prepend(require("support.deps").path("<name>"))
 ```
 
-Add it to `.luarc.check.json`'s `workspace.library` as well, so the type check sees its
-modules. That list holds every pin but `luacov`, which is not a Neovim plugin: its modules
-load through `package.path`.
+Add it to `workspace.library` in `.emmyrc.json` and in `tests/.emmyrc.json` as well, so the
+type check sees its modules. The tests config writes each path from `$PWD/`, because
+emmylua_check checks `tests/` as a workspace of its own and does not resolve `../`.
+
+Both lists hold every Neovim plugin pin but `plenary.nvim`, which no checked file requires,
+and whose own luassert annotations would clash with `tests/types/`. `luacov` is not a
+Neovim plugin: only the tests config lists it, as its `src` directory, which
+`tests/support/coverage.lua` puts on `package.path`.
 
 ## Treesitter parsers
 

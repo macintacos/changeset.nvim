@@ -39,6 +39,11 @@ the process directory.
 A private function a spec needs is exposed as `M._name` on its module. It is not public
 API.
 
+Specs call luassert the way its README does, as in `assert.are.same(want, got)`. A bare
+`assert(v)` fails the type check: `tests/types/luassert.lua` leaves luassert uncallable on
+purpose. To narrow a value, pass it through `require("support.present")`, which rejects only
+nil; check a value that can be `false` with `assert.is_truthy`.
+
 ## Lua conventions
 
 - Annotate with LuaCATS. A module opens with a one-line `---` summary. A public function
@@ -46,6 +51,9 @@ API.
   `---@class changeset.<Name>` with `---@field`. A module-level value whose initializer
   hides its type, such as `nil` or an empty table, gets `---@type`. `mise run typecheck`
   checks the annotations that exist, not that they exist.
+- The type check's only stubs live in `types/`, which both its workspaces read, and
+  `tests/types/`, which only the specs' workspace reads. They override gaps in upstream
+  annotations and never load at runtime.
 - A comment says why, never what the code does or how it changed.
 - Every `nvim_create_autocmd` says what fires it and why, in a `-- Fires:` comment above it
   or in its `desc`. Every keymap has a `desc`.
@@ -74,7 +82,7 @@ digraph rules_router {
     "Changing the repo" -> "What does the change touch?";
     "What does the change touch?" -> "Load doc/agents/design.md" [label="anything a user can see the sidebar do: its look, keys, previews, rebuilds, caching, windows"];
     "What does the change touch?" -> "Load doc/agents/api-rules.md" [label="what users call or configure: options, :Changeset, <Plug> maps, highlight groups, public functions"];
-    "What does the change touch?" -> "Load doc/agents/dependency-rules.md" [label="test dependencies: pins, treesitter parsers, .luarc.check.json"];
+    "What does the change touch?" -> "Load doc/agents/dependency-rules.md" [label="test dependencies: pins, treesitter parsers, the .emmyrc.json libraries"];
     "What does the change touch?" -> "Load doc/agents/herdr.md" [label="handing a review to an AI agent through herdr: the herdr calls, their JSON and error envelope"];
 }
 ```
