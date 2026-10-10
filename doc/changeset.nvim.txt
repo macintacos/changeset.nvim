@@ -22,7 +22,7 @@ CONTENTS                                                  *changeset-contents*
   8. Stepping through changes ........................... |changeset-stepping|
   9. Review comments ............................. |changeset-review-comments|
  10. Ending a review ...................................... |changeset-review|
- 11. PR Review Mode .................................... |changeset-pr-review|
+ 11. The gutter's base ............................... |changeset-gutter-base|
  12. Unified diff ................................... |changeset-unified-diff|
  13. Picker ............................................... |changeset-picker|
  14. Options ............................................. |changeset-options|
@@ -42,7 +42,7 @@ sidebar, changeset:
 - keeps review comments on lines or whole files, then pastes them into an AI
   agent's prompt or copies them (|changeset-review-comments|);
 - points gitsigns' gutter and its inline diff at the same base
-  (|changeset-pr-review|, |changeset-unified-diff|);
+  (|changeset-gutter-base|, |changeset-unified-diff|);
 - lists the same changes in mini.pick (|changeset-picker|).
 
 WHAT IT ADDS TO YOUR EDITOR                                *changeset-startup*
@@ -84,7 +84,7 @@ Each optional integration adds one feature:
 - Treesitter parsers: comment-only changes move to the Docs section, for any
   language whose parser is installed. The `rust`, `typescript` and `tsx`
   parsers also find tests by their syntax (|changeset-sections|).
-- gitsigns.nvim: PR Review Mode, the unified diff, and the colours of the
+- gitsigns.nvim: the gutter's base, the unified diff, and the colours of the
   status rail and the `+N -N` counts.
 - herdr, the terminal multiplexer for coding agents:
   `:Changeset review submit` pastes the review into an agent's prompt. Neovim
@@ -320,13 +320,6 @@ REVIEW
 <C-g>a                                                      *changeset-<C-g>a*
 	Ask, then delete this branch's review comments.
 
-:Changeset review mode                                *:Changeset-review-mode*
-<Plug>(changeset-review-mode)                  *<Plug>(changeset-review-mode)*
-<C-g>m                                                      *changeset-<C-g>m*
-	Turn PR Review Mode off, or back on, for the current branch until
-	Neovim exits (|changeset-pr-review|). Reports an error unless
-	`pr_review.enabled` is set.
-
 ==============================================================================
 6. Default keys                                               *changeset-keys*
 
@@ -356,7 +349,6 @@ Key       Mode            Runs ~
 <C-g>s    Normal          |:Changeset-review-submit|
 <C-g>y    Normal          |:Changeset-review-yank|
 <C-g>a    Normal          |:Changeset-review-abandon|
-<C-g>m    Normal          |:Changeset-review-mode|
 
 Mapping them once startup is done means a map you make anywhere in your config
 counts. A default key is skipped in a mode when a global map in that mode has
@@ -986,17 +978,19 @@ an Enter typed ahead deletes nothing.
 A click presses a button, and leaving the float any other way keeps.
 
 ==============================================================================
-11. PR Review Mode                                       *changeset-pr-review*
+11. The gutter's base                                  *changeset-gutter-base*
 
-PR Review Mode makes gitsigns' gutter mark everything the branch changed, not
-only uncommitted work, by comparing against the same base as the sidebar
-(|changeset-base|). It needs gitsigns, and works with or without the sidebar.
-Turn it on in `setup()`: >lua
-    require("changeset").setup({ pr_review = { enabled = true } })
-<
-It then turns itself on for every branch except the default branch, as
-gitsigns reads a buffer on it. `:Changeset review mode` (`<C-g>m`) turns it
-off, or back on, for the current branch until Neovim exits.
+gitsigns' gutter and its inline diff compare against the same base as the
+sidebar (|changeset-base|), on every branch, the default branch included. On
+the default branch that is the merge base with `origin/main` when that exists,
+so commits you haven't pushed show as changes. It needs gitsigns, and it
+starts with the session, before the sidebar has opened: `setup()` is not
+needed.
+
+When a branch has no merge base at all, the gutter compares against the index,
+and changeset warns, except on the default branch, where the index is the
+quiet fallback. A buffer whose base you set by hand with
+`:Gitsigns change_base <rev>` stays on that base.
 
 ==============================================================================
 12. Unified diff                                      *changeset-unified-diff*
@@ -1004,9 +998,8 @@ off, or back on, for the current branch until Neovim exits.
 Once the sidebar has opened, every file you open shows gitsigns' unified diff,
 as `:Gitsigns diffthis unified=true` draws it: the lines removed since
 gitsigns' base sit inline above the lines that replaced them. It compares
-against the same base as gitsigns' gutter, the branch's base under PR Review
-Mode and the index otherwise. It stays on after the sidebar closes, and needs
-gitsigns.
+against the same base as gitsigns' gutter (|changeset-gutter-base|), the
+sidebar's base. It stays on after the sidebar closes, and needs gitsigns.
 
 A file new since that base, untracked or not, shows every line added. While
 the diff is on, gitsigns attaches to untracked files, as its
@@ -1061,7 +1054,6 @@ Pass |changeset.setup()| the options you change. These are the defaults: >lua
         filter = "f",
       },
       layout = { min_file_width = 80 },
-      pr_review = { enabled = false },
       review = { header = "", footer = "" },
       review_comment = {
         save = { "<C-CR>", "<C-s>" },
@@ -1084,11 +1076,6 @@ layout.min_file_width                 *changeset-option-layout.min_file_width*
 	Number. Default `80`. The fewest columns the files get beside the
 	sidebar; narrower, and the sidebar opens along the bottom
 	(|changeset-layout|).
-
-pr_review.enabled                         *changeset-option-pr_review.enabled*
-	Boolean. Default `false`. Turn PR Review Mode on for every branch but
-	the default (|changeset-pr-review|). It takes effect at once; turning
-	it off again takes a restart.
 
 review.header                                 *changeset-option-review.header*
 	String. Default `""`. Text pasted above the review, trimmed, a blank
@@ -1329,7 +1316,7 @@ nothing, starts no language server and makes no network request.
 - Sessions: |:mksession| restores the sidebar, in whichever tabpage it stood,
   when 'sessionoptions' contains `blank`, as it does by default, and its
   cursor row and scroll too when it also contains `globals`.
-- Kept in memory until Neovim exits: folds, the agent last submitted to, PR
-  Review Mode turned off on a branch, and the unified diff turned off.
+- Kept in memory until Neovim exits: folds, the agent last submitted to, and
+  the unified diff turned off.
 
  vim:tw=78:ts=8:noet:ft=help:norl:

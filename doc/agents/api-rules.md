@@ -9,8 +9,11 @@ What `README.md` and `doc/changeset.nvim.txt` document is the contract with user
 Changing or removing any of it is a breaking change.
 
 `plugin/changeset.lua` requires no `changeset.*` module when it loads, because those
-modules create their autocmds as they load, and a session that never opens the sidebar
-should create none. Its maps run `<Cmd>Changeset …<CR>`, so a map and the command take
+modules create their autocmds as they load. Its one autocmd of its own is a `User
+GitSignsUpdate` that fires once, on the session's first gitsigns update, and hands that
+update to `changeset.review`, which starts the watcher keeping buffers on the sidebar's
+base. It is what puts the gutter on the branch's base from startup, with or without
+`setup()` and the sidebar, and it is why a session without gitsigns loads nothing. Its maps run `<Cmd>Changeset …<CR>`, so a map and the command take
 one route through `:Changeset`, with its range. The exceptions are the walking maps,
 `next`, `prev`, `next symbol`, `prev symbol`, `next file`, `prev file`, `comment next` and
 `comment prev`. They are `g@` operators so that `.` repeats them, and their
@@ -43,7 +46,7 @@ recovery verb, such as `review restore`, gets only its `<Plug>` map. A verb
 that walks the tree and opens what it reaches is `next` or `prev`, with what it counts
 after it, its key under `<C-g>n`, which which-key names "navigation". A verb that writes, walks,
 lists or shows review comments goes under `comment`, its key under `<C-g>c`. One that hands
-off or ends the whole review, or toggles PR Review Mode, goes under `review`. `:Changeset comment` and `:Changeset review` alone are
+off or ends the whole review goes under `review`. `:Changeset comment` and `:Changeset review` alone are
 errors that name their verbs, not defaults.
 
 `footer()` in `lua/changeset/init.lua` stays public although only the plugin calls it. The

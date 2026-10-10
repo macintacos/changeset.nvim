@@ -98,8 +98,7 @@ _Avoid_: committed, final
 **Review**:
 Every review comment of a repository. The first one written starts it, and submitting or
 `:Changeset review abandon` ends it.
-_Avoid_: pending review; bare "review" where PR Review Mode (`lua/changeset/review.lua`)
-could be meant
+_Avoid_: pending review
 
 **Submit**:
 Pasting the review into an AI agent's prompt in another herdr pane, unsent, then deleting

@@ -1112,16 +1112,16 @@ what replaced them, the added lines lit. The sidebar maps where the branch chang
 this keeps those changes in sight in the file being worked on, long after the sidebar has
 closed. Opening the sidebar is the switch rather than an option, because a session that
 opens it is reading a branch, and one that never does is left as gitsigns left it. It
-compares against gitsigns' own base, the fork point under PR Review Mode, so the gutter and
-the inline lines always agree.
+compares against gitsigns' own base, the sidebar's fork point, so the gutter and the inline
+lines always agree.
 
 gitsigns keeps one view per window and drops it when the buffer leaves the window, so
 changeset opens one wherever a file comes to be shown: a window taking a buffer, a buffer or
 window entered, which covers a split of a window already showing it, and a preview, whose
 buffer swap fires no autocommand and so opens its own. A file gitsigns has not read yet
 gets its view on its `GitSignsUpdate`, once the base text is in. The same event, and
-entering the window, reopen a view whose base gitsigns has since replaced, as PR Review
-Mode's arrival does moments after the sidebar opens. A move that leaves the counts alone
+entering the window, reopen a view whose base gitsigns has since replaced, as the
+watcher's own move of the base does. A move that leaves the counts alone
 publishes nothing, so its view follows on the next entry.
 
 The tree counts an untracked file as added, but gitsigns leaves one alone unless its
@@ -1137,7 +1137,7 @@ It doesn't run `diffthis`. That takes the current window only once it has made t
 holding the base, which can wait on git, and from a preview or a `GitSignsUpdate` the
 current window by then is the sidebar or another file. changeset makes that buffer and
 shows the view in the window it meant, with the two gitsigns functions `diffthis` is built
-from, reaching into gitsigns' internals as PR Review Mode does. Without gitsigns, or with
+from, reaching into gitsigns' internals as the gutter's base does. Without gitsigns, or with
 one too old to have unified views, nothing happens. Skipping `diffthis` also gives a
 conflicted file a view in its own window, instead of the three-way split `diffthis` opens
 for one.

@@ -11,8 +11,8 @@ functions, classes and methods those changes touched.
   from any window.
 - **Keeps review comments** on lines or whole files, then pastes them into an AI agent's
   prompt or copies them as text.
-- **Can point gitsigns at the same base**: with PR Review Mode on, gitsigns' gutter and
-  inline diff show the whole branch, not only uncommitted work.
+- **Points gitsigns at the sidebar's base**: gitsigns' gutter and inline diff show the whole
+  branch, not only uncommitted work.
 
 ## Requirements
 
@@ -22,7 +22,7 @@ Neovim 0.12 or newer, and `git`. Everything else is optional:
 | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | A language server for the file's language                                  | The symbol rows under each file. Without one, a file lists only its changes.                          |
 | Treesitter parsers                                                         | Comment-only changes listed under Docs, and Rust and TypeScript tests found by their syntax.          |
-| [gitsigns.nvim](https://github.com/lewis6991/gitsigns.nvim)                | PR Review Mode, which marks the whole branch in the gutter, the unified diff, and the change colours. |
+| [gitsigns.nvim](https://github.com/lewis6991/gitsigns.nvim)                | The gutter's base, which marks the whole branch in the gutter, the unified diff, and the change colours. |
 | [herdr](https://herdr.dev), a terminal multiplexer for coding agents       | `:Changeset review submit`, which pastes your review into an agent's prompt.                          |
 | `gh`                                                                       | The open PR's target as the base, for a branch with no parent.                                        |
 | [mini.icons](https://github.com/nvim-mini/mini.icons) or nvim-web-devicons | Icons.                                                                                                |
@@ -124,7 +124,6 @@ has a `<Plug>(changeset-…)` map named after its words, and these default keys:
 | `<C-g>y`              | `review yank`                   | Copy the review as text                                 |
 | `<C-g>a`              | `review abandon`                | Delete this branch's comments                           |
 |                       | `review restore`                | Bring back a batch of submitted comments                |
-| `<C-g>m`              | `review mode`                   | Turn PR Review Mode off or on for this branch           |
 
 - A default key that clashes with one you've mapped is left alone.
 - Set `vim.g.changeset_no_default_maps = true` to map none of them, then map the `<Plug>`
@@ -166,18 +165,18 @@ The tree shows what changed since your branch left the branch you created it fro
 its open PR's target (found with `gh`), else the default branch. The header names that
 base; `:help changeset-base` has the full rules.
 
-## PR Review Mode and the unified diff
+## The gutter's base and the unified diff
 
 Both need gitsigns.
 
-- **PR Review Mode** makes gitsigns' gutter mark everything the branch changed, not only
-  uncommitted work. Turn it on with `pr_review = { enabled = true }`. It then applies on
-  every branch but the default, and `<C-g>m` turns it off for the current branch.
+- **The gutter's base** makes gitsigns' gutter mark everything the branch changed, not only
+  uncommitted work. It is the sidebar's base on every branch, the default branch included,
+  from the start of the session, so `setup()` is not needed. `:Gitsigns change_base <rev>`
+  still sets a buffer's base by hand, and changeset leaves that buffer alone.
 - **The unified diff** turns on once the sidebar has opened: every file shows its removed
-  lines inline, above the lines that replaced them. It compares against gitsigns' base,
-  which is the index unless PR Review Mode is on. Running `:Gitsigns diffthis unified=true`
-  in a window closes it there and keeps it off for the files you open afterwards, until
-  Neovim exits.
+  lines inline, above the lines that replaced them. It compares against the same base as
+  the gutter. Running `:Gitsigns diffthis unified=true` in a window closes it there and
+  keeps it off for the files you open afterwards, until Neovim exits.
 
 ## Configuration
 
@@ -209,10 +208,6 @@ require("changeset").setup({
   layout = {
     -- Below this many columns left for the files, the sidebar opens along the bottom.
     min_file_width = 80,
-  },
-  pr_review = {
-    -- PR Review Mode on every branch but the default. Turning it off takes a restart.
-    enabled = false,
   },
   review = {
     -- Text pasted above the review, such as a skill to invoke.
