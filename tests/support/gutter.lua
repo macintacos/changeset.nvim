@@ -43,6 +43,9 @@ Obj.change_revision = function(self, revision)
   return result
 end
 
+---`changeset` moves a cached buffer onto its base at the next `GitSignsUpdate`, with a buffer or without one.
+---gitsigns sends buffer-less ones after a `chdir` and as the cwd repository's HEAD changes or disappears. A case
+---that reads or sets a buffer's base waits for changeset's base first.
 ---@param buf integer
 ---@return string? revision nil both before gitsigns caches the buffer and on the
 ---index, so await the cache before awaiting nil.

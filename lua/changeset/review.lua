@@ -226,7 +226,8 @@ function M.activate(event)
   -- gitsigns republishes a buffer's branch on every sign refresh, including after
   -- a checkout made outside Neovim, so this doubles as a repository- and
   -- branch-change hook, and each event also moves buffers that missed the base.
-  -- Its cwd-wide sibling event carries no buffer and is skipped: that watcher
+  -- Its cwd-wide sibling event carries no buffer, so it follows no branch but still moves
+  -- buffers that missed the base. Branches follow from buffer events because that watcher
   -- never starts in a worktree, where `.git` is a file rather than a directory.
   vim.api.nvim_create_autocmd("User", {
     group = group,
