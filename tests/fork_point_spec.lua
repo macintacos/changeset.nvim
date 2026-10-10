@@ -119,6 +119,28 @@ describe("fork_point", function()
     assert.equal(newer, assert(point).base)
   end)
 
+  it("stops measuring again after three measures while HEAD keeps moving, answering with the last", function()
+    local root, default_base = repo()
+    local tree = fixture.git({ "rev-parse", "HEAD^{tree}" }, root)
+    local real_merge_base, measures = Git.merge_base, 0
+    -- HEAD moves on after every measure, as a commit loop in another pane moves it; ten moves keep a measure that never
+    -- stops from running forever.
+    Git.merge_base = function(...)
+      measures = measures + 1
+      local sha, ref = real_merge_base(...)
+      if measures <= 10 then
+        local moved = fixture.git({ "commit-tree", tree, "-p", "HEAD", "-m", "moved " .. measures }, root)
+        fixture.git({ "reset", "-q", "--soft", moved }, root)
+      end
+      return sha, ref
+    end
+
+    local point = fork_point.get(root, "feature")
+    Git.merge_base = real_merge_base
+
+    assert.same({ 3, default_base }, { measures, assert(point).base })
+  end)
+
   it("measures against the branch it was created from without waiting on gh", function()
     local root, _, parent_base = repo("parent")
 

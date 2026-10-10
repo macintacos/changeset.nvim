@@ -82,21 +82,27 @@ local function measure(root, branch, pr)
   return point
 end
 
----`measure`, taken again until HEAD holds still across one, so a point never answers for a HEAD that moved on while it
----was measured, and none lands after a newer one with an older fork point.
+-- How many measures `settled` takes while HEAD keeps moving under them. Its blocking callers would freeze Neovim for as
+-- long as another process kept moving HEAD, and the watcher measures again on HEAD's next move anyway.
+local SETTLE_TRIES = 3
+
+---`measure`, taken again until HEAD holds still across one, up to `SETTLE_TRIES` in all, so a point never answers for a
+---HEAD that moved on while it was measured, and none lands after a newer one with an older fork point.
 ---@param root string
 ---@param branch string
 ---@param pr changeset.fork_point.PrTarget?
 ---@return changeset.ForkPoint?
 local function settled(root, branch, pr)
-  while true do
+  local point
+  for _ = 1, SETTLE_TRIES do
     local _, before = Git.head(root)
-    local point = measure(root, branch, pr)
+    point = measure(root, branch, pr)
     local _, after = Git.head(root)
     if before == after then
-      return point
+      break
     end
   end
+  return point
 end
 
 ---While gh is being asked about `branch`'s PR, have its answer carry `point`, the newest measure, rather than one HEAD
