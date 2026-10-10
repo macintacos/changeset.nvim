@@ -39,15 +39,6 @@ local subcommands = {
   ["preview prev"] = function()
     require("changeset").preview_step(-1)
   end,
-  ["review mode"] = function()
-    if not require("changeset.config").get().pr_review.enabled then
-      return vim.notify(
-        "Changeset: :Changeset review mode needs pr_review.enabled = true in setup()",
-        vim.log.levels.ERROR
-      )
-    end
-    require("changeset.review").toggle()
-  end,
   ["review submit"] = function()
     require("changeset.review_handoff").submit()
   end,
@@ -155,7 +146,7 @@ end, {
   nargs = "*",
   range = true,
   bar = true,
-  desc = "Toggle the changeset sidebar, rebuild it, step through its changes, symbols or files, open or preview them, toggle PR Review Mode, submit, restore, copy or abandon the review, or write, delete, draft, walk, reopen, list or show review comments",
+  desc = "Toggle the changeset sidebar, rebuild it, step through its changes, symbols or files, open or preview them, submit, restore, copy or abandon the review, or write, delete, draft, walk, reopen, list or show review comments",
   complete = function(lead, line)
     -- The words between `Changeset`, with any range before it, and `lead`.
     local typed = vim.trim(line:match("^%S+%s+(.-)%S*$") or "")
@@ -302,12 +293,6 @@ local keys = {
     desc = "Rebuild the changeset sidebar",
     icon = { cat = "filetype", name = "git" },
   },
-  {
-    lhs = "<C-g>m",
-    name = "review mode",
-    desc = "Toggle PR Review Mode",
-    icon = { cat = "directory", name = ".github" },
-  },
 }
 
 local comment_new = assert(vim.iter(keys):find(function(key)
@@ -420,6 +405,17 @@ local function map_defaults()
 end
 
 local group = vim.api.nvim_create_augroup("changeset.plugin", {})
+
+-- Fires: on the session's first gitsigns update, which starts changeset.review's watcher with that update, so the
+-- gutter's base is set from startup. Once only: a session without gitsigns never fires it.
+vim.api.nvim_create_autocmd("User", {
+  group = group,
+  pattern = "GitSignsUpdate",
+  once = true,
+  callback = function(args)
+    require("changeset.review").activate(args)
+  end,
+})
 
 -- Fires: after a session is restored, which brings the sidebar's window back
 -- without its contents. Refills it rather than leaving an empty window behind.

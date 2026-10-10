@@ -1,14 +1,15 @@
----What the PR Review Mode specs share: gitsigns with `changeset.review`
----activated over it, a fake gh, and waits on the base each buffer diffs against.
----Requiring it is what loads them; each spec runs in its own nvim.
+---What the gutter-base specs share: gitsigns with `plugin/changeset.lua` loaded over it, so the
+---base is applied from the session's first update as it is at startup, a fake gh, and waits on the
+---base each buffer diffs against. Requiring it is what loads them; each spec runs in its own nvim.
 local support = require("support.git")
 
+-- Plenary starts each spec's nvim with `--noplugin`, so the startup path is loaded here.
+vim.cmd.runtime("plugin/changeset.lua")
 vim.opt.rtp:prepend(require("support.deps").path("gitsigns.nvim"))
 
--- `changeset.review` state outlives each case; a fresh `review.repo()` per case isolates
+-- `changeset.review` state outlives each case; a fresh `gutter.repo()` per case isolates
 -- it and `fork_point`'s cache, since both are keyed by repository.
 require("gitsigns").setup()
-require("changeset.review").activate()
 
 require("support.gh")
 
@@ -126,6 +127,16 @@ function M.fixture(dir, branch, files)
     vim.fn.writefile({ "one", "two" }, dir .. "/" .. name)
   end
   support.commit("change", dir)
+end
+
+local advanced = 0
+
+---Commit one more file on the checked-out branch, so its tip moves past any fork point cut before it.
+---@param dir string
+function M.advance(dir)
+  advanced = advanced + 1
+  vim.fn.writefile({ "ahead " .. advanced }, dir .. "/ahead" .. advanced .. ".txt")
+  support.commit("advance " .. advanced, dir)
 end
 
 ---@param dir string

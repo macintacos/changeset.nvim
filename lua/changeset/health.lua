@@ -162,10 +162,7 @@ local function gitsigns(facts)
   if facts.gitsigns then
     return finding("ok", "`gitsigns` found")
   end
-  if facts.options.pr_review.enabled then
-    return finding("error", "`gitsigns` not found while `pr_review.enabled` is set: PR Review Mode cannot run")
-  end
-  return finding("info", "`gitsigns` not found: PR Review Mode and the unified diff are unavailable")
+  return finding("info", "`gitsigns` not found: the gutter's branch base and the unified diff are unavailable")
 end
 
 ---@param facts changeset.health.Facts

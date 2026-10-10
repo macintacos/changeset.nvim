@@ -1,0 +1,10 @@
+describe("changeset at startup without gitsigns", function()
+  it("loads no changeset module, so nothing of the gutter's base runs", function()
+    vim.cmd.runtime("plugin/changeset.lua")
+
+    assert.is_false(pcall(require, "gitsigns"))
+    assert.is_false(vim.iter(pairs(package.loaded)):any(function(name)
+      return name == "changeset" or vim.startswith(name, "changeset.")
+    end))
+  end)
+end)

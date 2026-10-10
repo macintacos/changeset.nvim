@@ -248,6 +248,23 @@ function M.merge_base(cwd, branch)
   end
 end
 
+---Resolve the commit where HEAD forked from `branch`'s remote-tracking ref, so local commits that aren't pushed
+---yet count as changes. Falls back to `merge_base` when there is no such ref.
+---@param cwd string? Repository to measure; Neovim's own directory when absent.
+---@param branch string Branch to measure against.
+---@return string? sha nil when the remote ref shares no ancestor with HEAD.
+---@return string? ref
+function M.upstream_merge_base(cwd, branch)
+  local ref = "origin/" .. branch
+  if #M.lines({ "git", "rev-parse", "--verify", "--quiet", ref }, cwd) == 0 then
+    return M.merge_base(cwd, branch)
+  end
+  local sha = M.lines({ "git", "merge-base", "HEAD", ref }, cwd)[1]
+  if sha then
+    return sha, ref
+  end
+end
+
 ---Ask gh which branch the current branch's open PR targets.
 ---@param cwd string? Repository to ask about; Neovim's own directory when absent.
 ---@param cb fun(target: string?, number: integer?, failed: boolean) `target` and `number` nil without an open PR, or

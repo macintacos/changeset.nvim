@@ -36,7 +36,6 @@ describe("changeset.config", function()
       { { keymaps = { jump = true } }, "keymaps.jump" },
       { { keymaps = { jump = "" } }, "keymaps.jump" },
       { { layout = { min_file_width = "80" } }, "layout.min_file_width" },
-      { { pr_review = { enabled = "yes" } }, "pr_review.enabled" },
       { { keymaps = false }, "keymaps" },
       { { review_comment = false }, "review_comment" },
       { { review_comment = { save = "<C-s>" } }, "review_comment.save" },
@@ -92,6 +91,20 @@ describe("changeset.config", function()
         assert.truthy(notes[1].msg:find("keymaps.next, keymaps.prev", 1, true), notes[1].msg)
       end
     )
+
+    it("warns that a leftover pr_review option is unknown, and applies the rest", function()
+      config.setup({ pr_review = { enabled = true }, keymaps = { jump = "o" } })
+      set_up_notifier()
+
+      assert.equal("o", config.get().keymaps.jump)
+      vim.wait(1000, function()
+        return #notes > 0
+      end)
+      vim.wait(20)
+      assert.equal(1, #notes)
+      assert.equal(vim.log.levels.WARN, notes[1].level)
+      assert.truthy(notes[1].msg:find("pr_review", 1, true), notes[1].msg)
+    end)
 
     it("forgets the unknown options of an earlier setup()", function()
       config.setup({ keymaps = { next = "]h" } })

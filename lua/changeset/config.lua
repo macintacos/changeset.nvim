@@ -5,7 +5,6 @@ local M = {}
 ---@class changeset.Config
 ---@field keymaps? changeset.Config.Keymaps The sidebar's keys, each a key or `false` to leave it unbound.
 ---@field layout? changeset.Config.Layout
----@field pr_review? changeset.Config.PrReview
 ---@field review? changeset.Config.Review
 ---@field review_comment? changeset.Config.ReviewComment
 
@@ -32,9 +31,6 @@ local M = {}
 ---@class changeset.Config.Layout
 ---@field min_file_width? number Narrower than this beside the sidebar, the files get the width and the tree moves below them. Default 80.
 
----@class changeset.Config.PrReview
----@field enabled? boolean Turn PR Review Mode on for every branch but the default. Only a restart turns it off again. Default false.
-
 ---@class changeset.Config.Review
 ---@field header? string Text pasted above the review, trimmed, a blank line apart; a blank one adds nothing. Default "".
 ---@field footer? string Text pasted below the review, trimmed, a blank line apart; a blank one adds nothing. Default "".
@@ -48,7 +44,6 @@ local M = {}
 ---@class changeset.Options : changeset.Config
 ---@field keymaps changeset.Config.Keymaps
 ---@field layout changeset.Config.Layout
----@field pr_review changeset.Config.PrReview
 ---@field review changeset.Config.Review
 ---@field review_comment changeset.Config.ReviewComment
 
@@ -75,7 +70,6 @@ local DEFAULTS = {
     filter = "f",
   },
   layout = { min_file_width = 80 },
-  pr_review = { enabled = false },
   review = { header = "", footer = "" },
   review_comment = { save = { "<C-CR>", "<C-s>" }, sign = true, blocks = false },
 }
@@ -88,7 +82,6 @@ local ignored = {}
 local function validate(options)
   vim.validate("keymaps", options.keymaps, "table")
   vim.validate("layout", options.layout, "table")
-  vim.validate("pr_review", options.pr_review, "table")
   vim.validate("review", options.review, "table")
   vim.validate("review_comment", options.review_comment, "table")
   for action, lhs in pairs(options.keymaps) do
@@ -97,7 +90,6 @@ local function validate(options)
     end, "non-empty string or false")
   end
   vim.validate("layout.min_file_width", options.layout.min_file_width, "number")
-  vim.validate("pr_review.enabled", options.pr_review.enabled, "boolean")
   vim.validate("review.header", options.review.header, "string")
   vim.validate("review.footer", options.review.footer, "string")
   vim.validate("review_comment.save", options.review_comment.save, function(v)
@@ -164,7 +156,7 @@ function M.setup(opts)
   end
 end
 
----The options in force: what the last setup() asked for, not whether PR Review Mode is on. Read-only.
+---The options in force: what the last setup() asked for. Read-only.
 ---@return changeset.Options
 function M.get()
   return current

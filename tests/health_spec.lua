@@ -137,11 +137,9 @@ describe("changeset.health", function()
     assert.equal("ok", level({}, "`mini.pick` found"))
   end)
 
-  it("errors on a missing gitsigns only while PR Review Mode is enabled", function()
+  it("reports a missing gitsigns as info, since the gutter's base and the unified diff need it", function()
     assert.equal("ok", level({}, "`gitsigns` found"))
-    assert.equal("info", level({ gitsigns = false }, "`gitsigns` not found"))
-    local review = vim.tbl_deep_extend("force", config.get(), { pr_review = { enabled = true } })
-    assert.equal("error", level({ gitsigns = false, options = review }, "`gitsigns` not found"))
+    assert.equal("info", level({ gitsigns = false }, "the gutter's branch base and the unified diff are unavailable"))
   end)
 
   it("tells a gitsigns too old for the unified diff from a current one", function()

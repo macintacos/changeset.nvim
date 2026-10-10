@@ -523,16 +523,13 @@ function M.bubble(buf, lnum)
   return review_comments.bubble(buf, lnum)
 end
 
----Configure changeset. Optional; reaches the sidebar the next time it opens; PR Review Mode, once on, stays on.
+---Configure changeset. Optional; reaches the sidebar the next time it opens.
 ---See `changeset.Config`.
 ---@param opts changeset.Config?
 function M.setup(opts)
   config.setup(opts)
   -- The marks drew before setup(), to the defaults.
   review_comments.redraw()
-  if config.get().pr_review.enabled then
-    require("changeset.review").activate()
-  end
 end
 
 ---Drop everything the sidebar set up but its window.

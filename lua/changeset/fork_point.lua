@@ -49,7 +49,14 @@ end
 ---@return changeset.ForkPoint?
 local function measure(root, branch, pr)
   local default_branch = Git.default_base(root)
-  local base, ref = Git.merge_base(root, default_branch)
+  local base, ref
+  -- Its remote's fork point, so its unpushed commits show. Elsewhere the newer of the two, so a stacked branch
+  -- leaves out its parent's unpushed commits.
+  if branch == default_branch then
+    base, ref = Git.upstream_merge_base(root, branch)
+  else
+    base, ref = Git.merge_base(root, default_branch)
+  end
   local parent = Git.parent(root, branch)
   if parent and parent ~= default_branch then
     local parent_base, parent_ref = Git.merge_base(root, parent)

@@ -1,67 +1,75 @@
 local support = require("support.git")
-local review = require("support.pr_review")
+local gutter = require("support.gutter")
 
 local await, await_all, await_cached, edit, revision, settle =
-  review.await, review.await_all, review.await_cached, review.edit, review.revision, review.settle
+  gutter.await, gutter.await_all, gutter.await_cached, gutter.edit, gutter.revision, gutter.settle
 
-describe("PR Review Mode", function()
+describe("the gutter's base", function()
   local dir, cwd
 
   before_each(function()
     cwd = vim.fn.getcwd()
-    dir = review.repo()
+    dir = gutter.repo()
   end)
 
   after_each(function()
-    review.teardown(dir, cwd)
+    gutter.teardown(dir, cwd)
   end)
 
   it("moves attached buffers to the new merge base after an external branch switch", function()
     local files = { "a.txt", "b.txt", "c.txt", "d.txt" }
-    review.fixture(dir, "switched", files)
+    gutter.fixture(dir, "switched", files)
     support.git({ "switch", "-q", "main" }, dir)
+    gutter.advance(dir)
     vim.fn.chdir(dir)
 
     local bufs = edit(files)
     assert.is_true(await_cached(bufs))
+    assert.is_true(await(bufs, gutter.merge_base(dir), 10000))
 
     support.git({ "switch", "-q", "switched" }, dir)
 
-    assert.is_true(await(bufs, review.merge_base(dir), 10000))
+    assert.is_true(await(bufs, gutter.merge_base(dir), 10000))
   end)
 
   it("moves attached buffers to the merge base after a switch to a branch named in hex digits", function()
     local files = { "a.txt", "b.txt" }
-    review.fixture(dir, "20261008", files)
+    gutter.fixture(dir, "20261008", files)
     support.git({ "switch", "-q", "main" }, dir)
+    gutter.advance(dir)
     vim.fn.chdir(dir)
     local bufs = edit(files)
     assert.is_true(await_cached(bufs))
+    assert.is_true(await(bufs, gutter.merge_base(dir), 10000))
 
     support.git({ "switch", "-q", "20261008" }, dir)
 
-    assert.is_true(await(bufs, review.merge_base(dir), 10000))
+    assert.is_true(await(bufs, gutter.merge_base(dir), 10000))
   end)
 
-  it("moves buffers back to the index after an external switch to the default branch", function()
+  it("moves buffers onto the default branch's own base after an external switch to it", function()
     local files = { "a.txt", "b.txt" }
-    review.fixture(dir, "left", files)
+    gutter.fixture(dir, "left", files)
+    support.git({ "switch", "-q", "main" }, dir)
+    gutter.advance(dir)
+    local main_tip = support.git({ "rev-parse", "HEAD" }, dir)
+    support.git({ "switch", "-q", "left" }, dir)
     vim.fn.chdir(dir)
     local bufs = edit(files)
-    assert.is_true(await(bufs, review.merge_base(dir), 10000))
+    assert.is_true(await(bufs, gutter.merge_base(dir), 10000))
 
     support.git({ "switch", "-q", "main" }, dir)
 
-    assert.is_true(await(bufs, nil, 10000))
+    assert.is_true(await(bufs, main_tip, 10000))
   end)
 
   it("keeps what is applied, asking nothing, while HEAD is detached", function()
     local fork_point = require("changeset.fork_point")
     local files = { "a.txt" }
-    review.fixture(dir, "picking", files)
+    gutter.fixture(dir, "picking", files)
     vim.fn.chdir(dir)
     local bufs = edit(files)
-    local base = review.merge_base(dir)
+    local base = gutter.merge_base(dir)
     assert.is_true(await(bufs, base, 10000))
     local get, asked = fork_point.get, {}
     fork_point.get = function(root, branch)
@@ -91,13 +99,14 @@ describe("PR Review Mode", function()
       vim.fn.writefile({ "base " .. i, "change" }, dir .. "/a.txt")
       support.commit("change " .. i, dir)
       support.git({ "switch", "-q", "main" }, dir)
+      gutter.advance(dir)
 
       local bufs = edit({ "a.txt" })
       assert.is_true(await_cached(bufs))
-      assert.is_true(await(bufs, nil, 5000))
+      assert.is_true(await(bufs, gutter.merge_base(dir), 5000))
 
       support.git({ "switch", "-q", "lone-" .. i }, dir)
-      local base = review.merge_base(dir)
+      local base = gutter.merge_base(dir)
       assert.is_true(await(bufs, base, 10000), "iteration " .. i)
       assert.is_false(vim.wait(500, function()
         return revision(bufs[1]) ~= base
@@ -114,24 +123,27 @@ describe("PR Review Mode", function()
     support.init_repo("main", other)
     vim.fn.writefile({ "one" }, other .. "/x.txt")
     support.commit("base", other)
-    review.fixture(dir, "scoped", { "a.txt" })
+    local theirs = gutter.merge_base(other)
+    gutter.fixture(dir, "scoped", { "a.txt" })
     support.git({ "switch", "-q", "main" }, dir)
+    gutter.advance(dir)
     vim.fn.chdir(dir)
 
-    local bufs = edit({ "a.txt", other .. "/x.txt" })
-    assert.is_true(await_cached(bufs))
-    assert.is_true(await(bufs, nil, 5000))
+    local ours = edit({ "a.txt" })
+    assert.is_true(await(ours, gutter.merge_base(dir), 5000))
+    local their_bufs = edit({ other .. "/x.txt" })
+    assert.is_true(await(their_bufs, theirs, 5000))
 
     support.git({ "switch", "-q", "scoped" }, dir)
-    assert.is_true(await({ bufs[1] }, review.merge_base(dir), 10000))
+    assert.is_true(await(ours, gutter.merge_base(dir), 10000))
 
     assert.is_true(settle())
     vim.fn.delete(other, "rf")
-    assert.is_nil(revision(bufs[2]))
+    assert.equal(theirs, revision(their_bufs[1]))
   end)
 
   it("leaves gitsigns' own blob buffers alone", function()
-    review.fixture(dir, "blob", { "a.txt" })
+    gutter.fixture(dir, "blob", { "a.txt" })
     support.git({ "switch", "-q", "main" }, dir)
     vim.fn.chdir(dir)
     local bufs = edit({ "a.txt" })
@@ -151,7 +163,7 @@ describe("PR Review Mode", function()
     assert.is_nil(revision(blob))
 
     support.git({ "switch", "-q", "blob" }, dir)
-    assert.is_true(await(bufs, review.merge_base(dir), 10000))
+    assert.is_true(await(bufs, gutter.merge_base(dir), 10000))
 
     assert.is_true(settle())
     assert.is_nil(revision(blob))
@@ -162,18 +174,19 @@ describe("PR Review Mode", function()
     for i = 1, 18 do
       files[i] = i .. ".txt"
     end
-    review.fixture(dir, "counted", files)
+    gutter.fixture(dir, "counted", files)
     support.git({ "switch", "-q", "main" }, dir)
+    gutter.advance(dir)
     vim.fn.chdir(dir)
 
     local bufs = edit(vim.list_slice(files, 1, 12))
     assert.is_true(await_cached(bufs))
-    assert.is_true(await(bufs, nil, 5000))
+    assert.is_true(await(bufs, gutter.merge_base(dir), 5000))
 
-    local before = review.moves
+    local before = gutter.moves
 
     support.git({ "switch", "-q", "counted" }, dir)
-    local base = review.merge_base(dir)
+    local base = gutter.merge_base(dir)
     -- The first buffer reaching the base marks the switch; the rest attach on the
     -- index while the moves run, and move once each.
     assert.is_true(vim.wait(10000, function()
@@ -183,14 +196,14 @@ describe("PR Review Mode", function()
 
     assert.is_true(await(bufs, base, 10000))
     assert.is_true(settle())
-    assert.equal(18, review.moves - before)
+    assert.equal(18, gutter.moves - before)
   end)
 
   it("moves a buffer that lost its base once, across a burst of updates", function()
     local files = { "a.txt", "b.txt", "c.txt", "d.txt" }
-    review.fixture(dir, "burst", files)
+    gutter.fixture(dir, "burst", files)
     vim.fn.chdir(dir)
-    local base = review.merge_base(dir)
+    local base = gutter.merge_base(dir)
     local bufs = edit(files)
     assert.is_true(await(bufs, base, 10000))
     assert.is_true(settle())
@@ -200,13 +213,13 @@ describe("PR Review Mode", function()
     for _, buf in ipairs(bufs) do
       require("gitsigns.cache").cache[buf].git_obj.revision = nil
     end
-    local before = review.moves
+    local before = gutter.moves
     for _ = 1, 3 do
       vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate" })
     end
 
     assert.is_true(await(bufs, base, 10000))
     assert.is_true(settle())
-    assert.equal(#bufs, review.moves - before)
+    assert.equal(#bufs, gutter.moves - before)
   end)
 end)

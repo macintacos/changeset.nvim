@@ -113,10 +113,7 @@ describe("plugin/changeset.lua", function()
       vim.fn.getcompletion("Changeset comment ", "cmdline")
     )
     assert.same({ "last", "list" }, vim.fn.getcompletion("'<,'>Changeset  comment  l", "cmdline"))
-    assert.same(
-      { "abandon", "mode", "restore", "submit", "yank" },
-      vim.fn.getcompletion("Changeset review ", "cmdline")
-    )
+    assert.same({ "abandon", "restore", "submit", "yank" }, vim.fn.getcompletion("Changeset review ", "cmdline"))
     assert.same({ "file", "symbol" }, vim.fn.getcompletion("Changeset next ", "cmdline"))
     assert.same({ "next", "prev" }, vim.fn.getcompletion("Changeset preview ", "cmdline"))
     assert.same({}, vim.fn.getcompletion("Changeset toggle ", "cmdline"))
@@ -174,30 +171,9 @@ describe("plugin/changeset.lua", function()
     )
     assert.equal(vim.log.levels.ERROR, notes[2].level)
     assert.equal(
-      "Changeset: :Changeset review has no verb bogus; its verbs: abandon, mode, restore, submit, yank",
+      "Changeset: :Changeset review has no verb bogus; its verbs: abandon, restore, submit, yank",
       notes[2].msg
     )
-  end)
-
-  it("refuses review mode while pr_review.enabled is off", function()
-    vim.cmd("Changeset review mode")
-
-    assert.equal(1, #notes)
-    assert.equal(vim.log.levels.ERROR, notes[1].level)
-    assert.truthy(notes[1].msg:find("pr_review.enabled", 1, true))
-    assert.is_nil(package.loaded["changeset.review"])
-  end)
-
-  it("toggles review mode once pr_review.enabled is on", function()
-    local calls = {}
-    require("changeset.config").setup({ pr_review = { enabled = true } })
-    package.loaded["changeset.review"] = { toggle = counter(calls, "toggle") }
-
-    vim.cmd("Changeset review mode")
-
-    package.loaded["changeset.review"] = nil
-    require("changeset.config").setup()
-    assert.equal(1, calls.toggle)
   end)
 
   it("refills a sidebar window a session left behind", function()
@@ -305,18 +281,15 @@ describe("plugin/changeset.lua", function()
     package.loaded["changeset.reviewing"] = reviewing
     package.loaded["changeset.review_handoff"] = review_handoff
     package.loaded.changeset = { refresh = counter(calls, "refresh") }
-    require("changeset.config").setup({ pr_review = { enabled = true } })
-    package.loaded["changeset.review"] = { toggle = counter(calls, "review") }
     package.loaded["changeset.review_comments"] = { toggle = counter(calls, "blocks") }
 
-    for _, name in ipairs(vim.list_extend({ "refresh", "review-mode", "comment-toggle" }, vim.tbl_keys(plugs))) do
+    for _, name in ipairs(vim.list_extend({ "refresh", "comment-toggle" }, vim.tbl_keys(plugs))) do
       vim.api.nvim_feedkeys(vim.keycode(("<Plug>(changeset-%s)"):format(name)), "x", false)
     end
 
     package.loaded["changeset.reviewing"] = nil
     package.loaded["changeset.review_handoff"] = nil
     package.loaded.changeset = nil
-    package.loaded["changeset.review"] = nil
     package.loaded["changeset.review_comments"] = nil
     require("changeset.config").setup()
     for name, count in pairs(calls) do
@@ -420,7 +393,7 @@ describe("plugin/changeset.lua", function()
   end)
 
   it("maps the default keys once startup is done", function()
-    local probe = "for _, lhs in ipairs({ 'cc', 'cd', 'cq', 'd', 'l', 's', 'n', 'nn', 'np', 'ns', 'nS', 'nf', 'nF', 'm', 'g', 't' }) do"
+    local probe = "for _, lhs in ipairs({ 'cc', 'cd', 'cq', 'd', 'l', 's', 'n', 'nn', 'np', 'ns', 'nS', 'nf', 'nF', 'g', 't' }) do"
       .. " io.write(vim.fn.maparg('<C-g>' .. lhs, 'n'), ' ') end"
       .. " io.write(vim.fn.maparg('<C-g>cc', 'x'), ' ', vim.fn.maparg(']g', 'n'), ' ', vim.fn.maparg('[g', 'n'))"
 
@@ -428,7 +401,7 @@ describe("plugin/changeset.lua", function()
       "<Plug>(changeset-comment-new) <Plug>(changeset-comment-del) <Plug>(changeset-comment-list)   "
         .. "<Plug>(changeset-review-submit)  <Plug>(changeset-next) <Plug>(changeset-prev) "
         .. "<Plug>(changeset-next-symbol) <Plug>(changeset-prev-symbol) <Plug>(changeset-next-file) "
-        .. "<Plug>(changeset-prev-file) <Plug>(changeset-review-mode) <Plug>(changeset-toggle)  "
+        .. "<Plug>(changeset-prev-file) <Plug>(changeset-toggle)  "
         .. "<Plug>(changeset-comment-new) "
         .. "<Plug>(changeset-preview-next) <Plug>(changeset-preview-prev)",
       after_startup({}, probe)
