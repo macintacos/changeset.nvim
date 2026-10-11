@@ -231,6 +231,19 @@ background, or `TabLine`'s when `Normal` is transparent, rather than linked, so 
 token keeps its own colour on top. It draws beneath every row mark, so the rail, the row
 colours and a filter match stay on top; the glyph draws over the stat's blank tail.
 
+With `'mousemoveevent'` on, the row under the mouse pointer wears a fourth tint,
+`ChangesetHover`, mixed toward `DiagnosticInfo` instead: a cool hue that no state, diff
+colour or badge carries, so the pointer's row never reads as a state. It draws beneath the
+states' tint, since a state says something about the tree and the pointer only says where
+it is. It is a highlight and nothing more. A preview would swap the file window's buffer
+for every row the pointer crossed. changeset never sets the option, which Neovim warns can
+cancel a half-typed mapping when the mouse moves. Without the option Neovim knows the
+pointer only from the last click, so nothing is tinted. Every paint reads the row from
+`getmousepos()`, so a redraw keeps the tint under the pointer. A `<MouseMove>` repaints only
+when it reaches another line, as one arrives for every cell crossed, and the sidebar
+scrolling repaints, as the tree moves under a pointer that stays put. No event says the
+pointer left the terminal, so the tint stays on the last row it crossed.
+
 The cursor itself is hidden while it is in the sidebar, and the selected row stands in for
 it: the cursor would sit on each row's first cell, a block in the margin beside the row.
 Only in normal and visual mode, so a prompt on the command line still shows one. It hides
@@ -250,7 +263,9 @@ compressed chain — its nearest visible ancestor wears the highlight instead.
 Focusing the sidebar, by `:Changeset`, a click or `<C-w>`, puts its cursor on that same
 row, and previews it the way moving onto it would. A click from another window only
 focuses, landing there too rather than on the row clicked, which would take your row's
-place; once the sidebar has focus, a click moves to the row clicked. Focused before your
+place; once the sidebar has focus, a click moves to the row clicked. With
+`'mousemoveevent'` on, a click from another window lands on the row clicked, as the
+pointer's tint has already named it. Focused before your
 file's symbols are in, it lands on the file row and follows you into your symbol when
 they arrive, unless you have moved the cursor or left the sidebar by then. From a file outside the
 changeset the cursor stays where you left it. Closing the kind menu is not a new arrival:

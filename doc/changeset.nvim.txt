@@ -547,9 +547,14 @@ The tree marks three rows in its right margin: `◀` the selected row, while the
 sidebar has focus; `◁` the row for where your cursor is; `•` the row you
 opened last.
 
+With 'mousemoveevent' on, the row under the mouse pointer is tinted too
+(|ChangesetHover|). changeset leaves that option to you, as Neovim warns it
+can cancel a mapping you are halfway through typing when the mouse moves.
+
 A click from another window focuses the sidebar on the row for where your
-cursor is, as |changeset-<C-g>g| does. Once the sidebar has focus, a click
-moves to the row clicked.
+cursor is, as |changeset-<C-g>g| does. With 'mousemoveevent' on, it lands on
+the row clicked instead, the one the pointer tints. Once the sidebar has
+focus, a click moves to the row clicked.
 
 PREVIEWS                                                   *changeset-preview*
 
@@ -1281,6 +1286,10 @@ ChangesetHere                                                  *ChangesetHere*
 
 ChangesetPicked                                              *ChangesetPicked*
 	The row you opened last. A lighter `Statement` tint still.
+
+ChangesetHover                                                *ChangesetHover*
+	The row under the mouse pointer, while 'mousemoveevent' is on.
+	`Normal`'s background tinted toward `DiagnosticInfo`.
 
 ChangesetSelectedIcon                                  *ChangesetSelectedIcon*
 	The `◀` on the selected row. `Statement`'s colour.
