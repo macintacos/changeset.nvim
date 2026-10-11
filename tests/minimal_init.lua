@@ -25,14 +25,15 @@ for name in pairs(vim.fn.environ()) do
     vim.env[name] = nil
   end
 end
--- Set after the scrub, which would otherwise delete them. User and system git
--- config (`diff.noprefix`, say) reshapes the output the specs parse.
-vim.env.GIT_CONFIG_GLOBAL = "/dev/null"
-vim.env.GIT_CONFIG_SYSTEM = "/dev/null"
 -- The repo root is two levels up from this file, wherever nvim was started.
 local info = debug.getinfo(1, "S")
 ---@cast info -?
 local root = vim.fn.fnamemodify(info.source:sub(2), ":p:h:h")
+-- Set after the scrub, which would otherwise delete them. User and system git
+-- config (`diff.noprefix`, say) reshapes the output the specs parse. The
+-- fixtures' config names who commits, so no fixture repo needs its own.
+vim.env.GIT_CONFIG_GLOBAL = root .. "/tests/support/gitconfig"
+vim.env.GIT_CONFIG_SYSTEM = "/dev/null"
 vim.opt.rtp:prepend(root)
 -- `rtp` reaches `lua/` only, so fixture modules under `tests/support/` need their own path.
 package.path = root .. "/tests/?.lua;" .. package.path

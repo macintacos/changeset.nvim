@@ -12,22 +12,64 @@ function M.git(args, cwd)
   return vim.trim(out)
 end
 
+---@class support.git.Template
+---@field dir string
+---@field value any What building it returned.
+
+---The repos this process built, by what built them.
+---@type table<string, support.git.Template>
+local templates = {}
+
+---Copy everything under `from` into `to`.
+---@param from string
+---@param to string
+local function copy_tree(from, to)
+  vim.fn.mkdir(to, "p")
+  for name, kind in vim.fs.dir(from) do
+    local source, target = vim.fs.joinpath(from, name), vim.fs.joinpath(to, name)
+    if kind == "directory" then
+      copy_tree(source, target)
+    else
+      local copied, err = vim.uv.fs_copyfile(source, target)
+      assert.is_true(copied, err)
+    end
+  end
+end
+
+---Fill `cwd` with what `build` makes in an empty directory, returning what it returned. Each `key` is built once
+---and copied after: spawning git is most of the suite's time.
+---@generic T
+---@param key string
+---@param cwd string
+---@param build fun(dir: string): T
+---@return T
+local function from_template(key, cwd, build)
+  local template = templates[key]
+  if not template then
+    local dir = vim.fn.tempname()
+    vim.fn.mkdir(dir, "p")
+    template = { dir = dir, value = build(dir) }
+    templates[key] = template
+  end
+  copy_tree(template.dir, cwd)
+  return template.value
+end
+
 ---Initialise a repo on `branch` with one empty commit, and return its SHA.
 ---@param branch string
 ---@param cwd string
 ---@return string
 function M.init_repo(branch, cwd)
-  M.git({ "init", "-q", "-b", branch }, cwd)
-  -- A stray GIT_* var outranks `-C`, so without this the commits and config
-  -- below would land in whatever repo it points at.
-  local root = vim.fn.resolve(M.git({ "rev-parse", "--show-toplevel" }, cwd))
-  assert.equal(vim.fn.resolve(cwd), root, "fixture git repo escaped to " .. root)
+  return from_template("init " .. branch, cwd, function(dir)
+    M.git({ "init", "-q", "-b", branch }, dir)
+    -- A stray GIT_* var outranks `-C`, so without this the commit below would
+    -- land in whatever repo it points at.
+    local root = vim.fn.resolve(M.git({ "rev-parse", "--show-toplevel" }, dir))
+    assert.equal(vim.fn.resolve(dir), root, "fixture git repo escaped to " .. root)
 
-  M.git({ "config", "user.email", "test@example.com" }, cwd)
-  M.git({ "config", "user.name", "Test" }, cwd)
-  M.git({ "config", "commit.gpgsign", "false" }, cwd)
-  M.git({ "commit", "-q", "--allow-empty", "-m", "root" }, cwd)
-  return M.git({ "rev-parse", "HEAD" }, cwd)
+    M.git({ "commit", "-q", "--allow-empty", "-m", "root" }, dir)
+    return M.git({ "rev-parse", "HEAD" }, dir)
+  end)
 end
 
 ---Stage everything and commit it, returning the new HEAD.
@@ -57,7 +99,9 @@ end
 ---@param cwd string
 local function write_all(files, cwd)
   for path, lines in pairs(files) do
-    vim.fn.writefile(lines, vim.fs.joinpath(cwd, path))
+    local target = vim.fs.joinpath(cwd, path)
+    vim.fn.mkdir(vim.fs.dirname(target), "p")
+    vim.fn.writefile(lines, target)
   end
 end
 
@@ -66,12 +110,14 @@ end
 ---@param change table<string, string[]>
 ---@param cwd string
 function M.feature(base, change, cwd)
-  M.init_repo("trunk", cwd)
-  write_all(base, cwd)
-  M.commit("base", cwd)
-  M.git({ "checkout", "-q", "-b", "feature" }, cwd)
-  write_all(change, cwd)
-  M.commit("change", cwd)
+  from_template("feature " .. vim.inspect({ base, change }), cwd, function(dir)
+    M.init_repo("trunk", dir)
+    write_all(base, dir)
+    M.commit("base", dir)
+    M.git({ "checkout", "-q", "-b", "feature" }, dir)
+    write_all(change, dir)
+    M.commit("change", dir)
+  end)
 end
 
 ---@param count integer
