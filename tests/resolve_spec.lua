@@ -167,8 +167,15 @@ describe("changeset.resolve", function()
     ---@return string[]
     local function reported_at_once()
       local seen = {}
-      local file =
-        { path = "mod.lua", status = "added", section = "implementation", added = 1, removed = 0, hunks = {} }
+      local file = {
+        path = "mod.lua",
+        status = "added",
+        section = "implementation",
+        added = 1,
+        removed = 0,
+        hunks = {},
+        digest = "d",
+      }
       local cancel = resolve.start({ root = root, base = "HEAD" }, { file }, function(path)
         seen[#seen + 1] = path
       end)
@@ -211,8 +218,15 @@ describe("changeset.resolve", function()
       vim.lsp.enable("stub_lua")
       enabled = "stub_lua"
       local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
-      local file =
-        { path = "mod.lua", status = "added", section = "implementation", added = 1, removed = 0, hunks = {} }
+      local file = {
+        path = "mod.lua",
+        status = "added",
+        section = "implementation",
+        added = 1,
+        removed = 0,
+        hunks = {},
+        digest = "d",
+      }
 
       resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items)
         report = { items = items }
@@ -265,8 +279,15 @@ describe("changeset.resolve", function()
         }, { bufnr = buf })
       end
       local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
-      local file =
-        { path = "mod.lua", status = "added", section = "implementation", added = 1, removed = 0, hunks = {} }
+      local file = {
+        path = "mod.lua",
+        status = "added",
+        section = "implementation",
+        added = 1,
+        removed = 0,
+        hunks = {},
+        digest = "d",
+      }
       resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items)
         report = { items = items }
       end)
@@ -340,13 +361,19 @@ describe("changeset.resolve", function()
     ---@return table<string, { test: true? }>? by name
     local function resolved(path)
       local answer, done
-      resolve.start(
-        { root = root, base = "HEAD" },
-        { { path = path, status = "added", section = "implementation", added = 1, removed = 0, hunks = {} } },
-        function(_, items)
-          answer, done = items, true
-        end
-      )
+      resolve.start({ root = root, base = "HEAD" }, {
+        {
+          path = path,
+          status = "added",
+          section = "implementation",
+          added = 1,
+          removed = 0,
+          hunks = {},
+          digest = "d",
+        },
+      }, function(_, items)
+        answer, done = items, true
+      end)
       vim.wait(2000, function()
         return done
       end)
@@ -365,8 +392,15 @@ describe("changeset.resolve", function()
       Fixture.commit("base", root)
       vim.fn.writefile({ "return { 1 }" }, root .. "/mod.lua")
       local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
-      local file =
-        { path = "mod.lua", status = "modified", section = "implementation", added = 1, removed = 1, hunks = {} }
+      local file = {
+        path = "mod.lua",
+        status = "modified",
+        section = "implementation",
+        added = 1,
+        removed = 1,
+        hunks = {},
+        digest = "d",
+      }
 
       resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items)
         report = { items = items }
@@ -385,7 +419,15 @@ describe("changeset.resolve", function()
       Fixture.commit("base", root)
       vim.fn.writefile({ "# new note", "x = 1" }, root .. "/conf.toml")
       local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
-      local file = { path = "conf.toml", status = "modified", section = "config", added = 1, removed = 1, hunks = {} }
+      local file = {
+        path = "conf.toml",
+        status = "modified",
+        section = "config",
+        added = 1,
+        removed = 1,
+        hunks = {},
+        digest = "d",
+      }
 
       resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items, found)
         report = { items = items, comments = found }
@@ -406,7 +448,8 @@ describe("changeset.resolve", function()
       Fixture.commit("base", root)
       vim.fn.writefile({ "# Title", "<!-- note -->" }, root .. "/README.md")
       local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
-      local file = { path = "README.md", status = "modified", section = "docs", added = 1, removed = 0, hunks = {} }
+      local file =
+        { path = "README.md", status = "modified", section = "docs", added = 1, removed = 0, hunks = {}, digest = "d" }
 
       resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items, found)
         report = { items = items, comments = found }
@@ -527,8 +570,15 @@ describe("changeset.resolve", function()
     end
 
     local function start(on_file)
-      local file =
-        { path = "mod.lua", status = "added", section = "implementation", added = 1, removed = 0, hunks = {} }
+      local file = {
+        path = "mod.lua",
+        status = "added",
+        section = "implementation",
+        added = 1,
+        removed = 0,
+        hunks = {},
+        digest = "d",
+      }
       return resolve.start({ root = root, base = "HEAD" }, { file }, on_file)
     end
 
@@ -924,8 +974,15 @@ describe("changeset.resolve", function()
         end
         return real_parser(text, ...)
       end
-      local file =
-        { path = "big.lua", status = "modified", added = 1, removed = 0, hunks = {}, section = "implementation" }
+      local file = {
+        path = "big.lua",
+        status = "modified",
+        added = 1,
+        removed = 0,
+        hunks = {},
+        section = "implementation",
+        digest = "d",
+      }
       local got
       resolve.start(
         { root = tmp, base = Fixture.git({ "merge-base", "HEAD", "trunk" }, tmp) },

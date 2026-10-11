@@ -50,6 +50,7 @@ local function file(path, hunks, status)
     added = added,
     removed = removed,
     hunks = hunks,
+    digest = "d",
   }
 end
 

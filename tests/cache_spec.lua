@@ -12,6 +12,7 @@ local function file(path, added)
     added = added or 1,
     removed = 0,
     hunks = {},
+    digest = "d",
   }
 end
 

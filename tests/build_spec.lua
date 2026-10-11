@@ -285,6 +285,18 @@ describe("changeset.build", function()
       assert.not_equal(file, moved)
     end)
 
+    it("hands a refresh a file of its own once a changed line's text changes with the same counts", function()
+      build_and_collect()
+      local file = present(present(build.current()).files[1])
+      vim.fn.writefile({ "return 3" }, "mod.lua")
+
+      refresh_and_collect()
+
+      local edited = present(present(build.current()).files[1])
+      assert.same({ file.added, file.removed, #file.hunks }, { edited.added, edited.removed, #edited.hunks })
+      assert.not_equal(file, edited)
+    end)
+
     it("does not cache the symbols read from a buffer holding unwritten edits", function()
       answer({ Changes.sym("f", "Function", 0, 1, 1) })
       vim.api.nvim_buf_set_lines(0, 0, -1, false, { "return 3" })

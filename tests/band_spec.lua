@@ -343,6 +343,7 @@ describe("changeset preview band's band_for", function()
         added = 3,
         removed = 1,
         hunks = hunks,
+        digest = "d",
       }
       local folded = Rows.compress(Rows.build({ file }, { ["mod.lua"] = chain })) --[[@as changeset.Row[] ]]
       local top = present(folded[1])
