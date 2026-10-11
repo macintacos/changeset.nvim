@@ -10,11 +10,11 @@ local Repo = require("gitsigns.git.repo")
 ---@cast Repo table
 local read_text = Repo.get_show_text
 ---@type string? blob whose next read has a base move land under it
-local held
+local held_blob
 ---@type string? Base of the fork point measured last.
-local measured
+local measured_base
 fork_point.subscribe(function(_, _, point)
-  measured = point.base
+  measured_base = point.base
 end)
 
 ---The buffer-less GitSignsUpdate gitsigns sends after a chdir, landing mid-read.
@@ -22,7 +22,7 @@ local function land_buffer_less()
   vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate", modeline = false })
   gutter.settle()
 end
----@type fun() What the next read of `held` waits for, so a base move lands under it.
+---@type fun() What the next read of `held_blob` waits for, so a base move lands under it.
 local hold = land_buffer_less
 
 ---@async
@@ -32,8 +32,8 @@ local hold = land_buffer_less
 ---@return string[] stdout
 ---@return string? stderr
 Repo.get_show_text = function(self, object, encoding)
-  if object == held then
-    held = nil
+  if object == held_blob then
+    held_blob = nil
     hold()
   end
   return read_text(self, object, encoding)
@@ -59,7 +59,7 @@ describe("the gutter's base", function()
       vim.fn.delete(other, "rf")
     end
     outside, other = nil, nil
-    held, hold = nil, land_buffer_less
+    held_blob, hold = nil, land_buffer_less
   end)
 
   it("diffs a single edited file against the merge base, with no setup() call", function()
@@ -176,14 +176,14 @@ describe("the gutter's base", function()
     vim.fn.chdir(dir)
     -- b.txt lands changeset's base first, so the move under a.txt's read is a.txt's only one.
     assert.is_true(await(edit({ "b.txt" }), base, 5000))
-    held = support.git({ "rev-parse", ":a.txt" }, dir)
+    held_blob = support.git({ "rev-parse", ":a.txt" }, dir)
 
     local a = present(edit({ "a.txt" })[1])
 
     vim.wait(5000, function()
       return vim.deep_equal(text(a), want)
     end, 20)
-    assert.is_nil(held) -- the read went through the hook, or the case proves nothing
+    assert.is_nil(held_blob) -- the read went through the hook, or the case proves nothing
     assert.are.same(want, text(a))
   end)
 
@@ -220,16 +220,16 @@ describe("the gutter's base", function()
     -- Holds the re-read until the pull's fork point has moved the base under it.
     hold = function()
       vim.wait(10000, function()
-        return measured == pulled
+        return measured_base == pulled
       end, 20)
     end
-    held = support.git({ "rev-parse", pushed .. ":a.txt" }, dir)
+    held_blob = support.git({ "rev-parse", pushed .. ":a.txt" }, dir)
     vim.fn.writefile({ "one", "two" }, dir .. "/a.txt")
     pulled = support.commit("pulled", dir)
     support.git({ "update-ref", "refs/remotes/origin/main", pulled }, dir)
 
     assert.is_true(await_shown(bufs, pulled, 10000))
-    assert.is_nil(held) -- the re-read went through the hook, or the case proves nothing
+    assert.is_nil(held_blob) -- the re-read went through the hook, or the case proves nothing
     assert.are.same(vim.split(support.git({ "show", pulled .. ":a.txt" }, dir) .. "\n", "\n"), text(present(bufs[1])))
   end)
 end)
