@@ -260,6 +260,11 @@ function M.sync(win)
   local buf = vim.api.nvim_win_get_buf(win)
   if opened[win] and opened[win].buf ~= buf then
     opened[win] = nil
+    -- A preview swaps the buffer without BufWinLeave, so gitsigns still holds our view, and would hand it back once
+    -- the buffer returns. One showing now is on this buffer, so the user's own.
+    if not showing(win) then
+      require("gitsigns.unified").close(win)
+    end
   end
   local path = tree_file(vim.api.nvim_buf_get_name(buf))
   if not (path and reaches(path)) then

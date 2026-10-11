@@ -133,6 +133,20 @@ describe("the unified diff of a file marked viewed", function()
     assert.is_true(becomes(true))
   end)
 
+  it("covers and closes the view on the file once a preview of another file has come and gone", function()
+    rewrite({ "local M = {}", "", "function M.one()", "  return 4", "end", "", "return M" })
+    Sidebar.cursor_to("other.lua")
+    Sidebar.cursor_to("mod.lua")
+    vim.api.nvim_set_current_win(file_win)
+    assert.is_true(vim.wait(5000, function()
+      return covers() > 0
+    end, 20))
+
+    toggle()
+
+    assert.is_true(becomes(false))
+  end)
+
   vim.notify = quiet
   changeset.close()
   vim.cmd("silent! %bwipeout!")

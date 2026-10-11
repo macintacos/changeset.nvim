@@ -1262,7 +1262,9 @@ open as it does.
 gitsigns keeps one view per window and drops it when the buffer leaves the window, so
 changeset opens one wherever a file comes to be shown: a window taking a buffer, a buffer or
 window entered, which covers a split of a window already showing it, and a preview, whose
-buffer swap fires no autocommand and so opens its own. A file gitsigns has not read yet
+buffer swap fires no autocommand and so opens its own. Nor does that swap close the view
+on the file it swaps out, so changeset closes it then, or gitsigns would hand it back
+uncovered when the file returns. A file gitsigns has not read yet
 gets its view on its `GitSignsUpdate`, once the base text is in. The same event, and
 entering the window, reopen a view whose base gitsigns has since replaced, as the
 watcher's own move of the base does. A move that leaves the counts alone
