@@ -695,6 +695,18 @@ keymaps.toggle_viewed                 *changeset-option-keymaps.toggle_viewed*
 	once the tree is built again for another branch or base, or after
 	your next `x`.
 
+X                                                        *changeset-sidebar-X*
+keymaps.toggle_viewed_all         *changeset-option-keymaps.toggle_viewed_all*
+	Mark every file the tree lists viewed, or, when every one already is,
+	clear every mark. It covers each file whatever a filter, a hidden kind
+	or a folded section hides, deleted files too. A viewed file looks as
+	|changeset-sidebar-x| describes. If the marks can't be written,
+	changeset reports an error and changes nothing.
+
+	After marking, every file folds and the cursor moves to its file's own
+	row in the section it was in. Clearing unfolds every file and leaves
+	the cursor where it is.
+
 d                                                        *changeset-sidebar-d*
 keymaps.delete_comment               *changeset-option-keymaps.delete_comment*
 	On a Comments row, ask, then delete its review comment. Nothing on any

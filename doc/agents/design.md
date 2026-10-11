@@ -199,6 +199,9 @@ Marking then moves the cursor to the next file row below that is not viewed, ski
 copies of the marked file, and previews it as a cursor move does: reviewing is a walk down
 the files. With none below, the cursor stays on the marked row. Unmarking leaves it put.
 
+`X` marks every file viewed, or clears every mark once all are, so one key both finishes a
+review and starts it over.
+
 The key is `x`, which the kind menu already uses to hide or show the kind under the cursor,
 so `x` means "toggle this row" in both places.
 
