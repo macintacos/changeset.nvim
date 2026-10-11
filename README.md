@@ -114,7 +114,8 @@ has a `<Plug>(changeset-…)` map named after its words, and these default keys:
 | `<C-g>bt`             | `base tag`                      | Pick a tag to compare against                           |
 | `<C-g>bc`             | `base commit`                   | Pick a commit to compare against                        |
 | `<C-g>br`             | `base reset`                    | Compare against the base changeset guesses again        |
-| `<C-g>d`              | `diff`                          | Turn the unified diff on or off                         |
+| `<C-g>d`              | `diff`                          | Turn the diff on or off                                 |
+| `<C-g>D`              | `diff split`                    | Switch the diff between unified and side by side        |
 | `<C-g>r`              | `refresh`                       | Rebuild the tree                                        |
 | `<C-g>nn` / `<C-g>np` | `next` / `prev`                 | Open the next / previous change                         |
 | `<C-g>ns` / `<C-g>nS` | `next symbol` / `prev symbol`   | Open the next / previous changed symbol                 |

@@ -268,7 +268,15 @@ UNIFIED DIFF
 	Before any tree was built, it first builds one for the current
 	buffer's repository, or warns "no merge base with the default branch"
 	and stays off. Without gitsigns, or one too old for unified views, it
-	warns that the unified diff needs gitsigns and stays off.
+	warns that the diff needs gitsigns and stays off.
+
+:Changeset diff split                                  *:Changeset-diff-split*
+<Plug>(changeset-diff-split)                    *<Plug>(changeset-diff-split)*
+<C-g>D                                                      *changeset-<C-g>D*
+	Switch the diff between unified and side by side, for every file of
+	the branch, turning it on when it is off. It says which view is on.
+	Like |:Changeset-diff|, it builds a tree when there is none, and warns
+	that the diff needs gitsigns without it.
 
 STEPPING
 
@@ -415,6 +423,7 @@ Key       Mode            Runs ~
 <C-g>bc   Normal          |:Changeset-base-commit|
 <C-g>br   Normal          |:Changeset-base-reset|
 <C-g>d    Normal          |:Changeset-diff|
+<C-g>D    Normal          |:Changeset-diff-split|
 <C-g>r    Normal          |:Changeset-refresh|
 <C-g>nn   Normal          |:Changeset-next|
 <C-g>np   Normal          |:Changeset-prev|

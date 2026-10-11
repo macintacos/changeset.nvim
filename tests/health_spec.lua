@@ -143,11 +143,11 @@ describe("changeset.health", function()
 
   it("reports a missing gitsigns as info, since the gutter's base and the unified diff need it", function()
     assert.equal("ok", level({}, "`gitsigns` found"))
-    assert.equal("info", level({ gitsigns = false }, "the gutter's branch base and the unified diff are unavailable"))
+    assert.equal("info", level({ gitsigns = false }, "the gutter's branch base and the diff are unavailable"))
   end)
 
   it("tells a gitsigns too old for the unified diff from a current one", function()
-    assert.equal("info", level({ gitsigns_unified = false }, "`gitsigns` has no unified view"))
+    assert.equal("info", level({ gitsigns_unified = false }, "`gitsigns` has no unified view: update it for the diff"))
   end)
 
   it("names the language servers that provide symbols", function()

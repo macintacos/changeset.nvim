@@ -158,12 +158,12 @@ end
 ---@param facts changeset.health.Facts
 local function gitsigns(facts)
   if facts.gitsigns and not facts.gitsigns_unified then
-    return finding("info", "`gitsigns` has no unified view: update it for the unified diff")
+    return finding("info", "`gitsigns` has no unified view: update it for the diff")
   end
   if facts.gitsigns then
     return finding("ok", "`gitsigns` found")
   end
-  return finding("info", "`gitsigns` not found: the gutter's branch base and the unified diff are unavailable")
+  return finding("info", "`gitsigns` not found: the gutter's branch base and the diff are unavailable")
 end
 
 ---@param facts changeset.health.Facts

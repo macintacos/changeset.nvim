@@ -388,12 +388,19 @@ end
 ---@param win integer
 function M.read(win)
   local tab = vim.api.nvim_win_get_tabpage(win)
-  if started and allowed(vim.api.nvim_win_get_buf(win)) then
+  -- Floating, as the window `nvim_buf_call` borrows is: entering it reads nothing, and it is gone right after.
+  if started and vim.api.nvim_win_get_config(win).relative == "" and allowed(vim.api.nvim_win_get_buf(win)) then
     reading[tab] = win
   end
   for _, w in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
     M.sync(w)
   end
+end
+
+---Switch the view between unified and side by side, for the rest of the session, redrawing every window's diff in it.
+function M.switch()
+  switched = M.view() == "split" and "unified" or "split"
+  sync_all()
 end
 
 ---Close at once, in every window, each view this module opened on a file `keeps` turns down.

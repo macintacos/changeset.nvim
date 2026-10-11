@@ -832,21 +832,46 @@ function M.close()
   unified_diff.limit(config.get().unified_diff.keep)
 end
 
----Turn the unified diff off everywhere, or on for every file of the tree as the sidebar opening does, building the
+---The active view's name, as messages say it.
+---@return string
+local function view_name()
+  return unified_diff.view() == "split" and "side-by-side diff" or "unified diff"
+end
+
+---Warn that the diff needs gitsigns when it is missing.
+---@return boolean available
+local function diff_available()
+  if not unified_diff.available() then
+    vim.notify("Changeset: the diff needs gitsigns", vim.log.levels.WARN)
+  end
+  return unified_diff.available()
+end
+
+---Turn the diff off everywhere, or on for every file of the tree as the sidebar opening does, building the
 ---current buffer's repository's tree when there is none, and say which; warn when gitsigns can't show it.
 function M.diff()
   if unified_diff.on() then
     unified_diff.limit("none")
-    return vim.notify("Changeset: unified diff off")
+    return vim.notify(("Changeset: %s off"):format(view_name()))
   end
-  if not unified_diff.available() then
-    return vim.notify("Changeset: the unified diff needs gitsigns", vim.log.levels.WARN)
-  end
-  if not (build.current() or built()) then
+  if not (diff_available() and (build.current() or built())) then
     return
   end
   unified_diff.turn_on()
-  vim.notify("Changeset: unified diff on")
+  vim.notify(("Changeset: %s on"):format(view_name()))
+end
+
+---Switch the diff between unified and side by side, turning it on when it is off, building the current buffer's
+---repository's tree when there is none, and say which view is on; warn when gitsigns can't show it.
+function M.diff_split()
+  if not (diff_available() and (build.current() or built())) then
+    return
+  end
+  unified_diff.switch()
+  if not unified_diff.on() then
+    unified_diff.turn_on()
+  end
+  vim.notify(("Changeset: %s on"):format(view_name()))
 end
 
 ---Fill `placeholder`, in the current tabpage, with the tree, or let go of it when there is no tree to fill it with.

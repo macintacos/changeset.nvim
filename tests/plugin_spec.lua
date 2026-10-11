@@ -121,6 +121,7 @@ describe("plugin/changeset.lua", function()
     assert.same({ "file", "symbol" }, vim.fn.getcompletion("Changeset next ", "cmdline"))
     assert.same({ "next", "prev" }, vim.fn.getcompletion("Changeset preview ", "cmdline"))
     assert.same({ "commit", "reset", "tag" }, vim.fn.getcompletion("Changeset base ", "cmdline"))
+    assert.same({ "split" }, vim.fn.getcompletion("Changeset diff ", "cmdline"))
     assert.same({}, vim.fn.getcompletion("Changeset toggle ", "cmdline"))
   end)
 
@@ -155,6 +156,17 @@ describe("plugin/changeset.lua", function()
 
     package.loaded.changeset = nil
     assert.equal(2, calls.diff)
+  end)
+
+  it("routes diff split and its <Plug> map to the switch between views", function()
+    local calls = {}
+    package.loaded.changeset = { diff_split = counter(calls, "diff_split") }
+
+    vim.cmd("Changeset diff split")
+    vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-diff-split)"), "x", false)
+
+    package.loaded.changeset = nil
+    assert.same({ diff_split = 2 }, calls)
   end)
 
   it("routes pick and its <Plug> map to the picker", function()
@@ -234,8 +246,9 @@ describe("plugin/changeset.lua", function()
   it("names the verbs a subcommand takes when its verb is missing or unknown", function()
     vim.cmd("Changeset comment")
     vim.cmd("Changeset review bogus")
+    vim.cmd("Changeset diff x")
 
-    assert.equal(2, #notes)
+    assert.equal(3, #notes)
     assert.equal(vim.log.levels.ERROR, present(notes[1]).level)
     assert.equal(
       "Changeset: :Changeset comment takes a verb: del, draft, last, list, new, next, prev, toggle",
@@ -246,6 +259,7 @@ describe("plugin/changeset.lua", function()
       "Changeset: :Changeset review has no verb bogus; its verbs: abandon, restore, submit, yank",
       present(notes[2]).msg
     )
+    assert.equal("Changeset: :Changeset diff has no verb x; its verbs: split", present(notes[3]).msg)
   end)
 
   it("refills a sidebar window a session left behind", function()
@@ -466,12 +480,12 @@ describe("plugin/changeset.lua", function()
   end)
 
   it("maps the default keys once startup is done", function()
-    local probe = "for _, lhs in ipairs({ 'cc', 'cd', 'cq', 'd', 'l', 's', 'n', 'nn', 'np', 'ns', 'nS', 'nf', 'nF', 'g', 'j', 'bb', 'bt', 'bc', 'br', 't' }) do"
+    local probe = "for _, lhs in ipairs({ 'cc', 'cd', 'cq', 'd', 'D', 'l', 's', 'n', 'nn', 'np', 'ns', 'nS', 'nf', 'nF', 'g', 'j', 'bb', 'bt', 'bc', 'br', 't' }) do"
       .. " io.write(vim.fn.maparg('<C-g>' .. lhs, 'n'), ' ') end"
       .. " io.write(vim.fn.maparg('<C-g>cc', 'x'), ' ', vim.fn.maparg(']g', 'n'), ' ', vim.fn.maparg('[g', 'n'))"
 
     assert.equal(
-      "<Plug>(changeset-comment-new) <Plug>(changeset-comment-del) <Plug>(changeset-comment-list) <Plug>(changeset-diff)  "
+      "<Plug>(changeset-comment-new) <Plug>(changeset-comment-del) <Plug>(changeset-comment-list) <Plug>(changeset-diff) <Plug>(changeset-diff-split)  "
         .. "<Plug>(changeset-review-submit)  <Plug>(changeset-next) <Plug>(changeset-prev) "
         .. "<Plug>(changeset-next-symbol) <Plug>(changeset-prev-symbol) <Plug>(changeset-next-file) "
         .. "<Plug>(changeset-prev-file) <Plug>(changeset-toggle) <Plug>(changeset-pick) <Plug>(changeset-base) "

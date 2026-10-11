@@ -21,6 +21,9 @@ local subcommands = {
   diff = function()
     require("changeset").diff()
   end,
+  ["diff split"] = function()
+    require("changeset").diff_split()
+  end,
   base = function(opts)
     local base = require("changeset.base")
     if opts.fargs[2] then
@@ -178,7 +181,7 @@ end, {
   nargs = "*",
   range = true,
   bar = true,
-  desc = "Toggle the changeset sidebar, rebuild it, pick a change from a list, set the base it compares against, turn the unified diff on or off, step through its changes, symbols or files, open or preview them, submit, restore, copy or abandon the review, or write, delete, draft, walk, reopen, list or show review comments",
+  desc = "Toggle the changeset sidebar, rebuild it, pick a change from a list, set the base it compares against, turn the diff on or off or switch it between unified and side by side, step through its changes, symbols or files, open or preview them, submit, restore, copy or abandon the review, or write, delete, draft, walk, reopen, list or show review comments",
   complete = function(lead, line)
     -- The words between `Changeset`, with any range before it, and `lead`.
     local typed = vim.trim(line:match("^%S+%s+(.-)%S*$") or "")
@@ -363,7 +366,13 @@ local keys = {
   {
     lhs = "<C-g>d",
     name = "diff",
-    desc = "Turn the unified diff on or off",
+    desc = "Turn the diff on or off",
+    icon = { cat = "filetype", name = "diff" },
+  },
+  {
+    lhs = "<C-g>D",
+    name = "diff split",
+    desc = "Switch the diff between unified and side by side",
     icon = { cat = "filetype", name = "diff" },
   },
 }

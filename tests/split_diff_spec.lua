@@ -248,6 +248,23 @@ describe("the side-by-side diff", function()
     assert.is_not_nil(partner(win))
   end)
 
+  it("swaps the reading window between its pair and its unified view as the view switches, both ways", function()
+    unified_diff.turn_on()
+    vim.cmd.edit("a.txt")
+    local win = vim.api.nvim_get_current_win()
+    assert.is_not_nil(partner(win))
+
+    unified_diff.switch()
+
+    assert.is_true(unified(win))
+    assert.same({ win }, vim.api.nvim_tabpage_list_wins(0))
+
+    unified_diff.switch()
+
+    assert.is_not_nil(partner(win))
+    assert.is_nil(require("gitsigns.unified").get_view(win))
+  end)
+
   it("closes the pair on a file marked viewed", function()
     vim.cmd.edit("a.txt")
     local win = vim.api.nvim_get_current_win()
