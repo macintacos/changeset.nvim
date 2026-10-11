@@ -6,6 +6,8 @@ local build = require("changeset.build")
 local diff_reach = require("changeset.diff_reach")
 local highlights = require("changeset.highlights")
 local Paths = require("changeset.paths")
+local sidebar_state = require("changeset.sidebar_state")
+local viewed = require("changeset.viewed")
 
 local M = {}
 
@@ -70,12 +72,29 @@ local function tree_file(name)
   end
 end
 
+---Whether the diff reaches `path` now: as far as the reach allows, and not while the file's viewed mark holds.
+---@param path string An absolute path.
+---@return boolean
+local function reaches(path)
+  local state = sidebar_state.current()
+  if state then
+    local relative = Paths.relative(state.tree.root, path)
+    local file = vim.iter(state.tree.files):find(function(f)
+      return f.path == relative
+    end)
+    if file and viewed.holds(state.marks, file.path, file.digest) then
+      return false
+    end
+  end
+  return reach:allows(path)
+end
+
 ---Whether the diff reaches the file `buf` holds.
 ---@param buf integer
 ---@return boolean
 local function allowed(buf)
   local path = tree_file(vim.api.nvim_buf_get_name(buf))
-  return path ~= nil and reach:allows(path)
+  return path ~= nil and reaches(path)
 end
 
 ---Whether the view this module opened in `win` went while `win` still shows its buffer, which only the user does.
@@ -215,7 +234,7 @@ local function open(view)
     if not base then
       return
     end
-    if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf and reach:allows(path) then
+    if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf and reaches(path) then
       if table.concat(text, "\n") == "" then
         -- gitsigns writes a base without the file as one blank line, which the view reads back with its newline.
         vim.bo[base].endofline = false
@@ -241,9 +260,14 @@ function M.sync(win)
   local buf = vim.api.nvim_win_get_buf(win)
   if opened[win] and opened[win].buf ~= buf then
     opened[win] = nil
+    -- A preview swaps the buffer without BufWinLeave, so gitsigns still holds our view, and would hand it back once
+    -- the buffer returns. One showing now is on this buffer, so the user's own.
+    if not showing(win) then
+      require("gitsigns.unified").close(win)
+    end
   end
   local path = tree_file(vim.api.nvim_buf_get_name(buf))
-  if not (path and reach:allows(path)) then
+  if not (path and reaches(path)) then
     return
   end
   -- gitsigns drops a buffer's status before the last update it publishes as it lets go, mid-unload, of the buffer.
@@ -296,7 +320,7 @@ local function start()
   build.subscribe(function(event)
     if event == "diff" then
       close_unless(function(path)
-        return tree_file(path) ~= nil
+        return tree_file(path) ~= nil and reaches(path)
       end)
       sync_all()
     end
@@ -428,9 +452,7 @@ end
 ---@param keep changeset.DiffReach.Keep
 function M.limit(keep)
   reach:limit(keep)
-  close_unless(function(path)
-    return reach:allows(path)
-  end)
+  close_unless(reaches)
   if untracked_was ~= nil and not reach:on() then
     require("gitsigns.config").config.attach_to_untracked = untracked_was
     untracked_was = nil
@@ -445,6 +467,16 @@ function M.enter(path)
   if file and reach:enter(file) then
     sync_all()
   end
+end
+
+---Follow the sidebar's viewed marks changing: close the views on files they now keep the diff from, and open the
+---rest where the diff reaches.
+function M.refresh_viewed()
+  if not started then
+    return
+  end
+  close_unless(reaches)
+  sync_all()
 end
 
 ---Whether the diff reaches any file.

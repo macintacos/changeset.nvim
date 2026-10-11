@@ -19,6 +19,8 @@ local M = {}
 ---@field added integer
 ---@field removed integer
 ---@field hunks changeset.Hunk[] Ascending by line, as git emits them; empty for a binary or pure rename.
+---@field digest string The sha256 of the file's patch, or of an untracked file's content; for a patch with no text, of
+---its status and old path.
 
 ---@class changeset.File : changeset.diff.Unfiled A changed file and the hunks inside it.
 ---@field section changeset.SectionKey The section `sections.classify` files it under, decided once when the diff is read.
@@ -36,6 +38,8 @@ local M = {}
 ---@field statuses table<string, changeset.diff.Entry> By new path.
 ---@field hunks table<string, changeset.Hunk[]> By new path.
 ---@field untracked table<string, integer> Line count by path.
+---@field digests table<string, string> Each file's diff section or untracked content, hashed, by path; an untracked
+---file's wins where a path is both.
 
 -- Any other name-status code (M, T) reads as a modification.
 ---@type table<string, "added"|"deleted">
@@ -131,15 +135,24 @@ local function side_path(side, prefix)
   return vim.startswith(path, prefix) and path:sub(#prefix + 1) or nil
 end
 
----Hunks per path from `git diff --unified=0 -M`. Each file is keyed from its `+++` line, or
----its `---` line when it was deleted; the `diff --git` line can't be split when a path holds ` b/`.
+---Hunks, and a digest of each file's section, per path from `git diff --unified=0 -M --full-index`.
+---Each file is keyed from its `+++` line, or its `---` line when it was deleted; the `diff --git` line can't be split when a path holds ` b/`.
 ---@param lines string[]
 ---@return table<string, changeset.Hunk[]> hunks By new path; a file with no text hunks is absent.
+---@return table<string, string> digests The sha256 of each keyed file's section, by new path.
 function M._parse_hunks(lines)
-  local hunks, old, in_header = {}, nil, false
+  local hunks, digests, old, in_header = {}, {}, nil, false
   local current ---@type changeset.Hunk[]?
+  local section_lines, section_path = {}, nil ---@type string[], string?
+  local function digest_section()
+    if section_path then
+      digests[section_path] = vim.fn.sha256(table.concat(section_lines, "\n"))
+    end
+    section_lines, section_path = {}, nil
+  end
   for _, line in ipairs(lines) do
     if vim.startswith(line, "diff --git ") then
+      digest_section()
       current, old, in_header = nil, nil, true
     elseif in_header and vim.startswith(line, "--- ") then
       old = side_path(line:sub(5), "a/")
@@ -147,7 +160,7 @@ function M._parse_hunks(lines)
       local path = side_path(line:sub(5), "b/") or old
       current = {}
       if path then
-        hunks[path] = current
+        hunks[path], section_path = current, path
       end
     else
       local hunk = parse_hunk_header(line)
@@ -160,8 +173,10 @@ function M._parse_hunks(lines)
         end
       end
     end
+    table.insert(section_lines, line)
   end
-  return hunks
+  digest_section()
+  return hunks, digests
 end
 
 ---@param path string
@@ -177,13 +192,16 @@ local function tracked_file(path, entry, parts)
     added = stat.added,
     removed = stat.removed,
     hunks = parts.hunks[path] or {},
+    -- ponytail: a binary file edited in place keeps its digest; parse its `Binary files … differ` line if that matters.
+    digest = parts.digests[path] or vim.fn.sha256(entry.status .. "\0" .. (entry.oldpath or "")),
   }
 end
 
 ---@param path string
 ---@param lines integer
+---@param digest string
 ---@return changeset.diff.Unfiled
-local function untracked_file(path, lines)
+local function untracked_file(path, lines, digest)
   local whole_file = { lnum = 1, count = lines, added = lines, removed = 0, old_lnum = 0 }
   return {
     path = path,
@@ -191,6 +209,7 @@ local function untracked_file(path, lines)
     added = lines,
     removed = 0,
     hunks = lines > 0 and { whole_file } or {},
+    digest = digest,
   }
 end
 
@@ -242,7 +261,7 @@ function M._assemble(parts)
     table.insert(files, tracked_file(path, entry, parts))
   end
   for path, lines in pairs(parts.untracked) do
-    table.insert(files, untracked_file(path, lines))
+    table.insert(files, untracked_file(path, lines, parts.digests[path]))
   end
   table.sort(files, function(a, b)
     local a_dir, a_name = sort_key(a.path)
@@ -257,7 +276,8 @@ end
 
 -- These pin output the user's own git config can otherwise reshape: quotepath keeps
 -- non-ASCII paths as real filenames, and the prefix, colour and external-driver flags
--- keep the `diff --git a/x b/x` header the hunk parser reads.
+-- keep the `diff --git a/x b/x` header the hunk parser reads, and `--full-index` keeps each file's `index` line,
+-- which its digest hashes, the same length whatever `core.abbrev` or the repository's size.
 ---@param base string
 ---@return table<string, string[]> argv By result name.
 local function git_commands(base)
@@ -271,7 +291,7 @@ local function git_commands(base)
   return {
     numstat = diff_cmd("--numstat", "-z", base),
     name_status = diff_cmd("--name-status", "-z", base),
-    hunks = diff_cmd("--unified=0", "--inter-hunk-context=0", base),
+    hunks = diff_cmd("--unified=0", "--inter-hunk-context=0", "--full-index", base),
     untracked = cmd("ls-files", "-z", "--others", "--exclude-standard"),
     commits = cmd("rev-list", "--count", base .. "..HEAD"),
   }
@@ -310,19 +330,21 @@ local function stdout_lines(result)
   return vim.split(result.stdout or "", "\n", { trimempty = true })
 end
 
----Line count per readable file; directories (untracked nested repos) and dangling symlinks are skipped.
+---Line count and content digest per readable file; directories (untracked nested repos) and dangling symlinks are skipped.
 ---@param paths string[] Relative to `cwd`.
 ---@param cwd string
----@return table<string, integer>
+---@return table<string, integer> counts
+---@return table<string, string> digests The sha256 of each counted file's lines.
 local function count_lines(paths, cwd)
-  local counts = {}
+  local counts, digests = {}, {}
   for _, path in ipairs(paths) do
     local abs = vim.fs.joinpath(cwd, path)
     if vim.fn.filereadable(abs) == 1 then
-      counts[path] = #vim.fn.readfile(abs)
+      local lines = vim.fn.readfile(abs)
+      counts[path], digests[path] = #lines, vim.fn.sha256(table.concat(lines, "\n"))
     end
   end
-  return counts
+  return counts, digests
 end
 
 ---Whether the Go file at `abs` has a generated header; false when it can't be read.
@@ -382,11 +404,17 @@ function M.collect(base, cwd, callback)
     if err then
       return callback(nil, err)
     end
+    local hunks, digests = M._parse_hunks(stdout_lines(results.hunks))
+    local untracked, untracked_digests =
+      count_lines(vim.split(results.untracked.stdout or "", "\0", { trimempty = true }), cwd)
     local files = M._assemble({
       numstat = M._parse_numstat(results.numstat.stdout or ""),
       statuses = M._parse_name_status(results.name_status.stdout or ""),
-      hunks = M._parse_hunks(stdout_lines(results.hunks)),
-      untracked = count_lines(vim.split(results.untracked.stdout or "", "\0", { trimempty = true }), cwd),
+      hunks = hunks,
+      untracked = untracked,
+      -- A path is both deleted and untracked after `git rm --cached`; the untracked digest wins so both rows share
+      -- one mark.
+      digests = vim.tbl_extend("force", digests, untracked_digests),
     })
     generated_paths(files, cwd, function(marked)
       ---@cast files changeset.File[]

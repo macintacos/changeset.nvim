@@ -660,6 +660,53 @@ keymaps.yank                                   *changeset-option-keymaps.yank*
 	provider. A Comments row on a range copies `path:first-last`. A row
 	with no line copies the path alone.
 
+x                                                        *changeset-sidebar-x*
+keymaps.toggle_viewed                 *changeset-option-keymaps.toggle_viewed*
+	Mark the file viewed, or clear its mark. It acts on the file the row
+	belongs to: its file row, or a symbol's, a change's or an "Other
+	changes" row under it. Nothing on a section or Comments row. If the
+	mark can't be written, changeset reports an error and changes nothing.
+
+	A viewed file changes in every section it shows in:
+	- Its file row and every line under it take a faint |ChangesetViewed|
+	  wash, under the |ChangesetSelected|, |ChangesetHere|,
+	  |ChangesetPicked| and |ChangesetHover| tints.
+	- A |ChangesetViewedIcon| `✔` takes its icon's place.
+	- The word `viewed` sits left of its stat, in |ChangesetMeta|. A long
+	  name is trimmed to make room.
+	- The file folds.
+	Its unified diff closes too (|changeset-unified-diff|).
+
+	After marking, the cursor moves to the next file row below that isn't
+	viewed, skipping other copies of the file you marked, and previews it.
+	With none below, it stays on the marked file. Clearing a mark unfolds
+	the file and leaves the cursor where it is.
+
+	A file whose mark holds starts folded the first time the sidebar draws
+	it at that diff, as after a restart. After that your own fold wins: a
+	viewed file you open with `l` stays open until you mark it again.
+
+	A mark holds only while the file's diff is the one you viewed. It
+	stops showing once that diff changes, and shows again if the change
+	is reverted or the base switched back. A mark that stops holding
+	leaves the fold as it is. `x` on a file whose mark no longer holds
+	marks its new diff. A file whose patch has no text, such as a binary
+	file edited in place, keeps its mark. Marks another Neovim writes show
+	once the tree is built again for another branch or base, or after
+	your next `x`.
+
+X                                                        *changeset-sidebar-X*
+keymaps.toggle_viewed_all         *changeset-option-keymaps.toggle_viewed_all*
+	Mark every file the tree lists viewed, or, when every one already is,
+	clear every mark. It covers each file whatever a filter, a hidden kind
+	or a folded section hides, deleted files too. A viewed file looks as
+	|changeset-sidebar-x| describes. If the marks can't be written,
+	changeset reports an error and changes nothing.
+
+	After marking, every file folds and the cursor moves to its file's own
+	row in the section it was in. Clearing unfolds every file and leaves
+	the cursor where it is.
+
 d                                                        *changeset-sidebar-d*
 keymaps.delete_comment               *changeset-option-keymaps.delete_comment*
 	On a Comments row, ask, then delete its review comment. Nothing on any
@@ -1137,6 +1184,13 @@ anything else gitsigns offers, closes changeset's views of that file in every
 window as you leave it, and keeps them closed until the diff next turns on, by
 the sidebar opening or |:Changeset-diff|. Other files keep theirs.
 
+changeset keeps the diff off a file marked viewed (|changeset-sidebar-x|)
+while its mark holds. Marking it closes its views in every window, and its
+buffer goes back to how gitsigns alone draws it, signs included. Clearing the
+mark opens them again where the diff reaches the file. So does editing the
+file, once the sidebar has read the new diff. Undoing that edit, so the diff
+is the one you viewed, closes them again.
+
 A file new since that base, untracked or not, shows every line added. While
 the diff is on, gitsigns attaches to untracked files, as its
 `attach_to_untracked` option would have it; turning the diff off puts that
@@ -1276,6 +1330,13 @@ ChangesetMatch                                                *ChangesetMatch*
 
 ChangesetHidden                                              *ChangesetHidden*
 	A hidden kind in the kind menu. `Comment`'s colour, struck through.
+
+ChangesetViewed                                              *ChangesetViewed*
+	The background of a viewed file's rows (|changeset-sidebar-x|).
+	`Normal`'s background tinted faintly toward `Comment`'s colour.
+
+ChangesetViewedIcon                                      *ChangesetViewedIcon*
+	The `✔` in place of a viewed file's icon. Links to `Comment`.
 
 ChangesetSelected                                          *ChangesetSelected*
 	The selected row while the sidebar has focus. `Normal`'s background
@@ -1478,6 +1539,9 @@ nothing, starts no language server and makes no network request.
   once.
 - Hidden symbol kinds: `stdpath("state")/changeset/filters.json`.
 - Bases set with |:Changeset-base|: `stdpath("state")/changeset/bases.json`.
+- Files marked viewed with |changeset-sidebar-x|:
+  `stdpath("state")/changeset/viewed.json`. An unreadable one is never
+  written over.
 - Swap files: a file changeset reads or previews gets none until you enter
   its buffer, so another Neovim opening it shows no |E325| warning.
 - Review comments, and each branch's last 10 submitted batches:
@@ -1485,7 +1549,8 @@ nothing, starts no language server and makes no network request.
 - Sessions: |:mksession| restores the sidebar, in whichever tabpage it stood,
   when 'sessionoptions' contains `blank`, as it does by default, and its
   cursor row and scroll too when it also contains `globals`.
-- Kept in memory until Neovim exits: folds, the agent last submitted to, how
+- Kept in memory until Neovim exits: folds, which diff each viewed file
+  was last folded at, the agent last submitted to, how
   far the unified diff reaches, the files you entered
   (|changeset-entered-files|), and the files whose view you closed.
 

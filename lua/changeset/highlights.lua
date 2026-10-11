@@ -61,6 +61,17 @@ M.REVIEW_COMMENT_DRAFT_CIRCLE = "◌"
 M.REVIEW_COMMENT_BUBBLE = "󰍩"
 M.REVIEW_COMMENT_DRAFT_BUBBLE = "󰍪"
 
+---Background of a viewed file's rows. Created by `define_highlights`.
+---@type string
+M.VIEWED_HL = "ChangesetViewed"
+
+---Group for a viewed file's check. Created by `define_highlights`.
+---@type string
+M.VIEWED_ICON_HL = "ChangesetViewedIcon"
+
+---Drawn in place of a viewed file's icon.
+M.VIEWED_ICON = "✔"
+
 ---The review comment's group, or the draft group for a draft.
 ---@param comment { draft: true? }
 ---@return string
@@ -214,6 +225,9 @@ local SELECTED_TINT, HERE_TINT, PICKED_TINT = 0.2, 0.12, 0.06
 -- How far the row under the pointer moves from the window's background toward the info colour.
 local HOVER_TINT = 0.15
 
+-- How far a viewed file's rows move from the window's background toward Comment's grey: a wash, under every state's.
+local VIEWED_TINT = 0.08
+
 -- How far a dialog's button moves from the float's background toward its text, when it can't take the editor's.
 local BUTTON_SHADE = 0.15
 
@@ -349,6 +363,7 @@ function M.define_highlights()
   -- The saved green faded halfway to Comment and unbolded: the same note, not yet committed to.
   set_default(M.REVIEW_COMMENT_DRAFT_HL, { fg = ok and comment.fg and mix(ok, comment.fg, 0.5) or ok or comment.fg })
   set_default(M.REVIEW_COMMENT_BODY_HL, { link = M.META_HL })
+  set_default(M.VIEWED_ICON_HL, { link = "Comment" })
   set_default(M.BADGE_HL, { fg = directory, reverse = true, bold = true })
   local statusline = vim.api.nvim_get_hl(0, { name = "StatusLine", link = false })
   set_default(M.FOOTER_HL, { fg = comment.fg, bg = statusline.bg })
@@ -370,6 +385,7 @@ function M.define_highlights()
   -- A cool hue no state, diff colour or badge carries, so the pointer's row never reads as one of them.
   local info = vim.api.nvim_get_hl(0, { name = "DiagnosticInfo", link = false }).fg or accent
   set_default(M.HOVER_HL, { bg = mix(base, info, HOVER_TINT) })
+  set_default(M.VIEWED_HL, { bg = mix(base, comment.fg or accent, VIEWED_TINT) })
   set_default(M.SELECTED_ICON_HL, { fg = accent })
   set_default(M.HERE_ICON_HL, { fg = accent })
   set_default(M.PICKED_ICON_HL, { fg = accent })

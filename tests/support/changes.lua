@@ -35,6 +35,7 @@ function M.file(path, lines)
     added = #lines,
     removed = 0,
     hunks = hunks,
+    digest = path,
   }
 end
 

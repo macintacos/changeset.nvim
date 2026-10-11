@@ -9,6 +9,7 @@ local render = require("changeset.render")
 local Rows = require("changeset.rows")
 local sidebar_state = require("changeset.sidebar_state")
 local view = require("changeset.view")
+local viewed = require("changeset.viewed")
 local window = require("changeset.window")
 
 -- The totals row over the tree and the blank one under it.
@@ -44,6 +45,15 @@ local function icon_for(row)
     return icons.get("file", row.path)
   end
   return icons.get("lsp", row.kind == "symbol" and row.symbol_kind or "Text")
+end
+
+---Whether `row` is a file marked viewed in `marks`.
+---@param marks changeset.ViewedMarks
+---@return fun(row: changeset.Row): boolean
+local function viewed_in(marks)
+  return function(row)
+    return row.kind == "file" and viewed.holds(marks, row.path, row.digest)
+  end
 end
 
 ---The row under the sidebar's cursor.
@@ -204,6 +214,9 @@ local function apply_marks(buf, lines, first)
     for _, mark in ipairs(line.marks or {}) do
       vim.api.nvim_buf_set_extmark(buf, ns, first + i - 1, mark.col or 0, {
         end_col = mark.end_col,
+        end_row = mark.hl_eol and first + i or nil,
+        hl_eol = mark.hl_eol,
+        strict = not mark.hl_eol,
         hl_group = mark.hl,
         virt_text = mark.virt_text,
         virt_text_pos = mark.pos,
@@ -335,6 +348,7 @@ local function mark_key(mark)
     mark.hl or "",
     mark.pos or "",
     mark.hl_mode or "",
+    mark.hl_eol and "eol" or "",
     mark.priority or "",
     mark.virt_lines and vim.inspect(mark.virt_lines) or "",
   }
@@ -501,8 +515,15 @@ function M.draw(kinds_key)
   local width = vim.api.nvim_win_get_width(win)
   local cursor, top = vim.api.nvim_win_get_cursor(win)[1], vim.fn.line("w0", win)
   comments_section = comments_for(state.tree)
+  local is_viewed = viewed_in(state.marks)
+  state.view:fold_viewed(state.rows, is_viewed)
   local tree = laid_out(state.rows)
-  local lines, lnum, blocks = state.view:show(tree, { icon = icon_for, width = width, cursor = cursor })
+  local lines, lnum, blocks = state.view:show(tree, {
+    icon = icon_for,
+    viewed = is_viewed,
+    width = width,
+    cursor = cursor,
+  })
 
   -- Read before the lines go, which takes the header's filler rows with them.
   local saved = vim.api.nvim_win_call(win, vim.fn.winsaveview)

@@ -148,7 +148,7 @@ local function file_answer(root, path, answer, stamp)
 end
 
 local HUNK_FIELDS = { "lnum", "count", "added", "removed", "old_lnum" }
-local FILE_FIELDS = { "path", "oldpath", "status", "section", "added", "removed" }
+local FILE_FIELDS = { "path", "oldpath", "status", "section", "added", "removed", "digest" }
 
 ---Whether `a` and `b` hold the same diff of the same file.
 ---@param a changeset.File

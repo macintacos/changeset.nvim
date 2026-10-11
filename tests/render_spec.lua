@@ -722,6 +722,48 @@ describe("changeset.render", function()
     end)
   end)
 
+  describe("a viewed file", function()
+    local viewing = opts({
+      viewed = function(row)
+        return row.kind == "file"
+      end,
+    })
+
+    it("draws the check in the icon's cell", function()
+      local line = present(file_lines({ file() }, viewing)[1])
+
+      assert.same(highlights.VIEWED_ICON_HL, present(mark_over(line, highlights.VIEWED_ICON)).hl)
+    end)
+
+    it("labels the file row viewed, left of its stat", function()
+      local chunks = present(present(stat_mark(present(file_lines({ file() }, viewing)[1]))).virt_text)
+
+      assert.same({ { "viewed", highlights.META_HL }, { " " } }, vim.list_slice(chunks, 1, 2))
+      assert.same("+12", present(chunks[3])[1])
+    end)
+
+    it("tints the file row and every line under it, beneath the row states", function()
+      local lines = file_lines({ file({ children = { symbol() } }) }, viewing)
+
+      for _, line in ipairs(lines) do
+        local tint = present(vim.iter(line.marks):find(function(mark)
+          return mark.hl == highlights.VIEWED_HL
+        end))
+        assert.is_true(tint.hl_eol)
+        assert.is_true(present(tint.priority) < present(present(render.state_marks("picked", 80)[1]).priority))
+      end
+    end)
+
+    it("trims the name before the label", function()
+      local path = "src/" .. ("n"):rep(40) .. ".lua"
+      local plain = present(file_lines({ file({ path = path, name = path }) }, opts({ width = 40 }))[1])
+      local marked =
+        present(file_lines({ file({ path = path, name = path }) }, vim.tbl_extend("force", viewing, { width = 40 }))[1])
+
+      assert.equal(vim.fn.strdisplaywidth(plain.text) - #"viewed ", vim.fn.strdisplaywidth(marked.text))
+    end)
+  end)
+
   describe("filter highlighting", function()
     it("marks the characters a filter query matched", function()
       local lines = file_lines({ file() }, opts({ query = "a.lua" }))

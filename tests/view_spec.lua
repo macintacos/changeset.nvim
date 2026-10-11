@@ -681,4 +681,78 @@ describe("changeset.view", function()
       assert.same({ "Generated" }, vim.list_slice(show(v, rows), 4))
     end)
   end)
+
+  describe("folding viewed files", function()
+    ---@param section string
+    ---@param digest string
+    ---@return changeset.Row
+    local function copy(section, digest)
+      local partial = { id = section .. "\0a.lua", kind = "file", path = "a.lua", digest = digest, children = {} }
+      return partial --[[@as changeset.Row]]
+    end
+
+    ---@param files changeset.Row[]
+    ---@return changeset.Row[]
+    local function sections(files)
+      return vim.tbl_map(function(f)
+        return row(present(f.id:match("^[^%z]*")), "section", { f })
+      end, files)
+    end
+
+    local function all()
+      return true
+    end
+
+    it("folds every copy of a viewed file", function()
+      local folds = { collapsed = {}, chains = {} }
+
+      view._fold_viewed(sections({ copy("#tests", "d1"), copy("#implementation", "d1") }), all, folds)
+
+      assert.same({ ["#tests\0a.lua"] = true, ["#implementation\0a.lua"] = true }, folds.collapsed)
+    end)
+
+    it("leaves a viewed file the user opened open while its digest stays", function()
+      local folds = { collapsed = {}, chains = {} }
+      local rows = sections({ copy("#tests", "d1") })
+      view._fold_viewed(rows, all, folds)
+      folds.collapsed = {}
+
+      view._fold_viewed(rows, all, folds)
+
+      assert.same({}, folds.collapsed)
+    end)
+
+    it("folds a viewed file again at a new digest", function()
+      local folds = { collapsed = {}, chains = {} }
+      view._fold_viewed(sections({ copy("#tests", "d1") }), all, folds)
+      folds.collapsed = {}
+
+      view._fold_viewed(sections({ copy("#tests", "d2") }), all, folds)
+
+      assert.same({ ["#tests\0a.lua"] = true }, folds.collapsed)
+    end)
+
+    it("leaves a file that is not viewed alone", function()
+      local folds = { collapsed = {}, chains = {} }
+
+      view._fold_viewed(sections({ copy("#tests", "d1") }), function()
+        return false
+      end, folds)
+
+      assert.same({}, folds.collapsed)
+    end)
+
+    it("unfolds every copy of an unviewed file, and folds it again once it is marked", function()
+      local folds = { collapsed = {}, chains = {} }
+      local rows = sections({ copy("#tests", "d1"), copy("#implementation", "d1") })
+      local v = view.new(folds, {})
+      view._fold_viewed(rows, all, folds)
+
+      v:unview(rows, "a.lua")
+      assert.same({}, folds.collapsed)
+
+      view._fold_viewed(rows, all, folds)
+      assert.same({ ["#tests\0a.lua"] = true, ["#implementation\0a.lua"] = true }, folds.collapsed)
+    end)
+  end)
 end)

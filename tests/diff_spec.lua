@@ -255,17 +255,45 @@ describe("changeset.diff._parse_hunks", function()
   end)
 
   it("drops a hunk header that arrives before any file header", function()
-    assert.same({}, diff._parse_hunks({ "@@ -1 +1 @@" }))
+    assert.same({}, (diff._parse_hunks({ "@@ -1 +1 @@" })))
   end)
 
   it("returns an empty table for an empty diff", function()
-    assert.same({}, diff._parse_hunks({}))
+    assert.same({}, (diff._parse_hunks({})))
+  end)
+
+  ---@param path string
+  ---@param added string
+  ---@return string[]
+  local function section(path, added)
+    return {
+      "diff --git a/" .. path .. " b/" .. path,
+      "--- a/" .. path,
+      "+++ b/" .. path,
+      "@@ -1 +1 @@",
+      "-old",
+      "+" .. added,
+    }
+  end
+
+  it("digests each file's section on its own", function()
+    local _, digests = diff._parse_hunks(vim.list_extend(section("a.lua", "x"), section("b.lua", "y")))
+
+    assert.not_equal(digests["a.lua"], digests["b.lua"])
+    assert.equal(select(2, diff._parse_hunks(section("a.lua", "x")))["a.lua"], digests["a.lua"])
+  end)
+
+  it("digests a changed line's text, not only the hunk counts", function()
+    local _, before = diff._parse_hunks(section("a.lua", "x"))
+    local _, after = diff._parse_hunks(section("a.lua", "z"))
+
+    assert.not_equal(before["a.lua"], after["a.lua"])
   end)
 end)
 
 describe("changeset.diff._assemble", function()
   ---@type changeset.diff.Parts
-  local NO_PARTS = { numstat = {}, statuses = {}, hunks = {}, untracked = {} }
+  local NO_PARTS = { numstat = {}, statuses = {}, hunks = {}, untracked = {}, digests = {} }
 
   ---@param overrides table
   local function assemble(overrides)
@@ -280,15 +308,24 @@ describe("changeset.diff._assemble", function()
       numstat = { ["new.lua"] = { added = 1, removed = 1 } },
       statuses = { ["new.lua"] = { status = "renamed", oldpath = "old.lua" } },
       hunks = { ["new.lua"] = { hunk } },
+      digests = { ["new.lua"] = "d" },
     })
 
     assert.same({
-      { path = "new.lua", oldpath = "old.lua", status = "renamed", added = 1, removed = 1, hunks = { hunk } },
+      {
+        path = "new.lua",
+        oldpath = "old.lua",
+        status = "renamed",
+        added = 1,
+        removed = 1,
+        hunks = { hunk },
+        digest = "d",
+      },
     }, files)
   end)
 
   it("reports an untracked file as one hunk over all of its lines", function()
-    local files = assemble({ untracked = { ["scratch.txt"] = 3 } })
+    local files = assemble({ untracked = { ["scratch.txt"] = 3 }, digests = { ["scratch.txt"] = "d" } })
 
     assert.same({
       {
@@ -297,6 +334,7 @@ describe("changeset.diff._assemble", function()
         added = 3,
         removed = 0,
         hunks = { { lnum = 1, count = 3, added = 3, removed = 0, old_lnum = 0 } },
+        digest = "d",
       },
     }, files)
   end)
@@ -330,10 +368,20 @@ describe("changeset.diff._assemble", function()
 
   it("zero-fills a tracked path the other git calls did not report", function()
     local files = assemble({ statuses = { ["edited-mid-run.lua"] = { status = "modified" } } })
+    present(files[1]).digest = nil
 
     assert.same({
       { path = "edited-mid-run.lua", status = "modified", added = 0, removed = 0, hunks = {} },
     }, files)
+  end)
+
+  it("digests a file the patch gives no text for from its status and old path", function()
+    local function digest(entry)
+      return present(assemble({ statuses = { ["img.png"] = entry } })[1]).digest
+    end
+
+    assert.equal(digest({ status = "modified" }), digest({ status = "modified" }))
+    assert.not_equal(digest({ status = "modified" }), digest({ status = "renamed", oldpath = "old.png" }))
   end)
 
   it("returns an empty list when nothing changed", function()
@@ -426,6 +474,17 @@ local function collect(base, cwd)
   return present(files, err)
 end
 
+---`files` with their digests dropped, for comparing against literals.
+---@param files changeset.File[]
+---@return table[]
+local function undigested(files)
+  return vim.tbl_map(function(file)
+    local copy = vim.deepcopy(file)
+    copy.digest = nil
+    return copy
+  end, files)
+end
+
 ---The sorted paths `diff.collect` marks generated.
 ---@param base string
 ---@param cwd string
@@ -482,7 +541,21 @@ describe("changeset.diff.collect", function()
           { lnum = 8, count = 1, added = 1, removed = 1, old_lnum = 8 },
         },
       },
-    }, collect(base, tmp))
+    }, undigested(collect(base, tmp)))
+  end)
+
+  it("lists a file removed from the index but left on disk as both deleted and untracked", function()
+    Fixture.init_repo("trunk", tmp)
+    write("foo", { "a" })
+    local base = Fixture.commit("seed", tmp)
+    Fixture.git({ "rm", "-q", "--cached", "foo" }, tmp)
+
+    assert.same(
+      { { "foo", "deleted" }, { "foo", "untracked" } },
+      vim.tbl_map(function(file)
+        return { file.path, file.status }
+      end, collect(base, tmp))
+    )
   end)
 
   it("keeps two edits three lines apart in separate hunks under a wider diff.interHunkContext", function()
@@ -629,7 +702,7 @@ describe("changeset.diff.collect", function()
         removed = 0,
         hunks = {},
       },
-    }, collect(base, tmp))
+    }, undigested(collect(base, tmp)))
   end)
 
   it("leaves gitignored paths out of the untracked files", function()
@@ -649,7 +722,17 @@ describe("changeset.diff.collect", function()
         removed = 0,
         hunks = { { lnum = 1, count = 3, added = 3, removed = 0, old_lnum = 0 } },
       },
-    }, collect(base, tmp))
+    }, undigested(collect(base, tmp)))
+  end)
+
+  it("digests an untracked file's content, so editing it changes the digest", function()
+    local base = Fixture.init_repo("trunk", tmp)
+    write("scratch.txt", { "a" })
+    local before = present(collect(base, tmp)[1]).digest
+    write("scratch.txt", { "b" })
+
+    assert.is_truthy(before)
+    assert.are_not.equal(before, present(collect(base, tmp)[1]).digest)
   end)
 
   it("counts only the untracked paths it can read", function()
