@@ -1336,6 +1336,51 @@ stay directly under their line, the deleted lines after them. A parked block's r
 counted from the head of the filler above the next line rather than its end, since the
 deleted lines over the next line sit between the stack and that line.
 
+### Side by side
+
+The side-by-side diff is the same reconciler drawing another way. Each window still decides
+whether a diff belongs there, through the same opening, closing, reach and viewed rules; it
+only asks, too, which view it wants, and reopens when that changes, as it reopens on a base
+that moved. A window opened in one view closes through that view's side.
+
+Vim's diff mode belongs to the tabpage, not to a pair of windows, so two pairs in one
+tabpage would merge into a four-way diff. So each tabpage has one pair, in the window being
+read: the one the cursor last entered on a listed file, or the one the sidebar previews
+into. Entering the base window, the sidebar or an unlisted file doesn't move it, nor does a
+floating window, as the one `nvim_buf_call` borrows. Every other window keeps the unified
+view, which needs no partner. A tabpage holding a diff of the user's own gets no pair, and
+a window in diff mode changeset didn't pair counts as the user's own view, left alone as a
+unified view of theirs is.
+
+It doesn't run `gitsigns.diffthis()` either. Its no-argument call does diff the base
+changeset set, but takes the current window late, as the unified `diffthis` does, splits a
+conflicted file three ways, and makes a buffer that writes back to the index. The base
+window holds the read-only revision buffer the unified view already uses, opened on the
+file window's left so the pair reads base | file, as GitHub's split does.
+
+A file new since the base stays unified: its base text is empty, which gitsigns writes as
+one blank line, and Vim's diff can't show "every line added" against that, while the
+unified view already does.
+
+A preview swap parks the base window for the next listed file rather than closing it, so
+holding `j` in the sidebar doesn't open and close a window per row. Turning the diff off,
+or lowering its reach, closes every base window no view names. Closing a file window takes
+its base window with it, so none is left diffing nothing; closing the base window by hand
+closes that file's diff as a hand-closed unified view does. A reload keeps the pair, since
+`:e!` takes gitsigns' unified view with the buffer but not a window.
+
+'diff' is window-local, and a window-local option comes back with the buffer it was set
+for. So a window taking back a buffer changeset had diffed, with no base window beside it,
+would sit in a one-sided diff; changeset turns that 'diff' off.
+
+Switching views is not a hand-close. It redraws every window in the other view, the user
+asking for the diff another way, not for less of it; counting it as closing each file's
+view would leave every file without one.
+
+A session restores a base window as an empty `gitsigns://` buffer, since gitsigns reads no
+such buffer back. So on `SessionLoadPost` changeset closes each one, unless it is the last
+window, and the reconciler opens a fresh pair.
+
 ### The diff follows the sidebar
 
 Opening the sidebar is an implicit request to read the branch, so it turns the diff on
@@ -1353,8 +1398,8 @@ diff on every file the cursor passed over. The set lasts the session, so a file 
 an hour ago keeps its diff after the next close. It records which files, not when, since
 nothing reads a time.
 
-Closing one of changeset's views by hand, with gitsigns' toggle or by switching to its split
-diff, is about that file. Its views close in every window showing it, so none is left frozen
+Closing one of changeset's views by hand, with gitsigns' toggle or by opening gitsigns' own
+split diff, is about that file. Its views close in every window showing it, so none is left frozen
 there with gitsigns' signs drawn beside it, and they stay closed until the diff next turns
 on, by the sidebar or the toggle, each the user asking for the diff again; nothing writes it
 down. Turning every file off for it would make one stray toggle cost the session's diff.

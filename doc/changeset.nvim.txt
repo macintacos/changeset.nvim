@@ -262,13 +262,13 @@ UNIFIED DIFF
 :Changeset diff                                              *:Changeset-diff*
 <Plug>(changeset-diff)                                *<Plug>(changeset-diff)*
 <C-g>d                                                      *changeset-<C-g>d*
-	Turn the unified diff off everywhere when it is on, else on for every
-	file the sidebar lists, as opening the sidebar does, with the sidebar
-	open or closed (|changeset-unified-diff|). It says which, in one line.
-	Before any tree was built, it first builds one for the current
-	buffer's repository, or warns "no merge base with the default branch"
-	and stays off. Without gitsigns, or one too old for unified views, it
-	warns that the diff needs gitsigns and stays off.
+	Turn the diff off everywhere when it is on, else on for every file
+	the sidebar lists, as opening the sidebar does, with the sidebar open
+	or closed, in the view it is in (|changeset-unified-diff|). It says
+	which, in one line. Before any tree was built, it first builds one
+	for the current buffer's repository, or warns "no merge base with the
+	default branch" and stays off. Without gitsigns, or one too old for
+	unified views, it warns that the diff needs gitsigns and stays off.
 
 :Changeset diff split                                  *:Changeset-diff-split*
 <Plug>(changeset-diff-split)                    *<Plug>(changeset-diff-split)*
@@ -1165,6 +1165,21 @@ and needs gitsigns. changeset opens it in no other file, and closes it in a
 file the sidebar stops listing, as when you switch branches, once the
 sidebar has read the new diff.
 
+                                                        *changeset-split-diff*
+|:Changeset-diff-split| switches it side by side, or back, for the session;
+`unified_diff.view` picks the view a session starts in
+(|changeset-option-unified_diff.view|). Side by side, the window you are
+reading shows its file's base in a window on its left, the two in
+|diff-mode|. Diff mode belongs to the tab page, so only that window of each
+tab page goes side by side, and the other windows there keep the unified
+view. The window you are reading is the one your cursor last entered on a
+file the sidebar lists, or the one the sidebar previews into, and the base
+window moves with it. A file added or untracked since the base stays
+unified, and so does a tab page holding a diff of your own. Closing the base
+window yourself closes that file's diff, as closing its unified view does
+(below). `unified_diff.keep` and viewed marks govern the side-by-side diff as
+they govern the unified one. 'diffopt' is yours.
+
 It is off when Neovim starts. Opening the sidebar, by any route, turns it on
 for every file the sidebar lists, in every window, files you open later
 included. Closing the sidebar, by any route, keeps it on only as far as
@@ -1307,17 +1322,15 @@ review_comment.blocks                 *changeset-option-review_comment.blocks*
 	as blocks of their whole text (|changeset-blocks|).
 
 unified_diff.keep                         *changeset-option-unified_diff.keep*
-	`"none"`, `"entered"` or `"all"`. Default `"none"`. How far the unified
-	diff stays on once the sidebar closes: for no file, for the files you
-	entered, or for every file the sidebar lists (|changeset-unified-diff|).
-	Read each time the sidebar closes.
+	`"none"`, `"entered"` or `"all"`. Default `"none"`. How far the diff
+	stays on once the sidebar closes: for no file, for the files you
+	entered, or for every file the sidebar lists
+	(|changeset-unified-diff|). Read each time the sidebar closes.
 
 unified_diff.view                         *changeset-option-unified_diff.view*
-	`"unified"` or `"split"`. Default `"unified"`. How the diff is drawn:
-	inline, or side by side, the file's base in a window on the left of
-	the window you are reading, the two in |diff-mode|. Only that window
-	of each tab page goes side by side, the rest stay inline, and so does
-	a file new since the base. 'diffopt' is yours. Read as the diff opens.
+	`"unified"` or `"split"`. Default `"unified"`. The view a session's
+	diff starts in: inline, or side by side (|changeset-split-diff|). Read
+	as the diff opens, until |:Changeset-diff-split| switches it.
 
 ==============================================================================
 15. Highlight groups                                    *changeset-highlights*

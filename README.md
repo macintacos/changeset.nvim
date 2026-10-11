@@ -198,7 +198,9 @@ Both need gitsigns.
   base as the gutter. Closing the sidebar turns it off, or, as `unified_diff.keep` says, keeps
   it on for the files you entered (opened from the sidebar, a step or the picker) or for all
   of them. `<C-g>d` turns it off or on at any time, and `:Gitsigns diffthis unified=true`
-  closes one file's view until it next turns on.
+  closes one file's view until it next turns on. `<C-g>D` switches it side by side, the window
+  you are reading beside the file's base, or back; `unified_diff.view` picks the view a session
+  starts in.
 
 ## Configuration
 
