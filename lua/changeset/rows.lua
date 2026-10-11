@@ -42,6 +42,7 @@ end
 ---@field range { [1]: integer, [2]: integer }? Lines a symbol's body or an orphan hunk covers, inclusive.
 ---@field status string?      File rows only.
 ---@field read changeset.ReadStatus? File rows only: how far this file's symbols have been read.
+---@field digest string?     File rows only: the fingerprint of the file's diff.
 ---@field files integer?      Section rows only: how many files the section holds, before any filter.
 ---@field icon string?        Section rows only: the directory name its section header's icon is looked up by.
 ---@field comments integer?   The Comments section's row only: how many rows it lists, before any filter.
@@ -493,6 +494,7 @@ local function file_row(file, read, section)
     removed = not deleted and file.removed or nil,
     ancestor = false,
     status = file.status,
+    digest = file.digest,
     children = {},
   }
 end

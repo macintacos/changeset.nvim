@@ -11,6 +11,7 @@ local review_comment = require("changeset.review_comment")
 local reviewing = require("changeset.reviewing")
 local sidebar_state = require("changeset.sidebar_state")
 local view = require("changeset.view")
+local viewed = require("changeset.viewed")
 local window = require("changeset.window")
 
 -- input() reads a line, so it can never hand one back: free to mean "cancelled".
@@ -437,6 +438,25 @@ function M.set_keymaps(buf, keys, hooks)
       or row.path
     Paths.copy(text, "relative path:line")
   end, "Yank path:line")
+  map(keys.toggle_viewed, function(state)
+    local row = draw.row_at_cursor()
+    if not row or row.kind == "section" or row.kind == "comment" then
+      return
+    end
+    local file = vim.iter(state.tree.files):find(function(f)
+      return f.path == row.path
+    end)
+    if not file then
+      return
+    end
+    local record = viewed.path()
+    local marks = viewed.toggle(record, state.tree.root, file.path, file.digest)
+    if not marks then
+      return vim.notify("Changeset: could not write " .. record, vim.log.levels.ERROR)
+    end
+    state.marks = marks
+    redraw()
+  end, "Mark the file viewed, or not")
   map(keys.help, function()
     help.show(buf, own)
   end, "Show these keymaps")

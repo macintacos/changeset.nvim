@@ -4,6 +4,7 @@ local build = require("changeset.build")
 local position = require("changeset.position")
 local prefs = require("changeset.prefs")
 local view = require("changeset.view")
+local viewed = require("changeset.viewed")
 
 local M = {}
 
@@ -13,6 +14,7 @@ local M = {}
 ---@field rows changeset.Row[]
 ---@field view changeset.View What the sidebar shows of the tree.
 ---@field position changeset.Position Where the user stands in this tree.
+---@field marks changeset.ViewedMarks The files marked viewed in this repository.
 
 ---@type changeset.SidebarState?
 local state
@@ -33,6 +35,7 @@ function M.current()
       rows = {},
       view = view.for_root(tree.root, prefs.resolve(prefs.load(prefs_file), tree.root, tree.branch)),
       position = position.new(),
+      marks = viewed.marks(viewed.load(viewed.path()), tree.root),
     }
   end
   return state

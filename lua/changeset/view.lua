@@ -10,6 +10,7 @@ local Rows = require("changeset.rows")
 
 ---@class changeset.view.Layout
 ---@field icon fun(row: changeset.Row): string, string Glyph and highlight for a row.
+---@field viewed? fun(row: changeset.Row): boolean Whether a row is drawn as viewed.
 ---@field width integer
 ---@field cursor integer The cursor's line before this redraw.
 
@@ -239,6 +240,7 @@ end
 ---@field query string
 ---@field hidden table<string, true>
 ---@field folds string
+---@field viewed boolean?
 
 ---Each row under a section as last drawn, by the row `Rows.build` made, which stays the same table while the row does.
 ---@type table<changeset.Row, changeset.view.Drawn>
@@ -279,10 +281,18 @@ end
 ---@param opts changeset.RenderOpts
 ---@param hidden table<string, true>
 ---@param is_open fun(id: string): boolean
+---@param viewed boolean? Whether `child` is drawn as viewed, which its row alone does not say.
 ---@return changeset.view.Drawn
-local function draw_child(section, child, folds, opts, hidden, is_open)
+local function draw_child(section, child, folds, opts, hidden, is_open, viewed)
   local was, query = drawn[child], opts.query or ""
-  if was and was.width == opts.width and was.query == query and was.hidden == hidden and was.folds == folds then
+  if
+    was
+    and was.width == opts.width
+    and was.query == query
+    and was.hidden == hidden
+    and was.folds == folds
+    and was.viewed == viewed
+  then
     return was
   end
   local kept = M.filter(M.by_kind({ child }, hidden), query)[1]
@@ -295,6 +305,7 @@ local function draw_child(section, child, folds, opts, hidden, is_open)
     query = query,
     hidden = hidden,
     folds = folds,
+    viewed = viewed,
   }
   -- A comment row is made anew on every draw, so it never hits; and its entry, holding its own weak key, never goes.
   if child.kind ~= "comment" then
@@ -327,7 +338,8 @@ function View:show(rows, layout)
   for _, section in ipairs(rows) do
     local children, under = {}, {}
     for _, child in ipairs(section.children) do
-      local d = draw_child(section, child, folds[child.id] or "", opts, self.kinds_hidden, is_open)
+      local viewed = layout.viewed and layout.viewed(child)
+      local d = draw_child(section, child, folds[child.id] or "", opts, self.kinds_hidden, is_open, viewed)
       if d.laid then
         children[#children + 1] = d.laid
         under[#under + 1] = d.block

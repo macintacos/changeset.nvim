@@ -61,6 +61,13 @@ M.REVIEW_COMMENT_DRAFT_CIRCLE = "◌"
 M.REVIEW_COMMENT_BUBBLE = "󰍩"
 M.REVIEW_COMMENT_DRAFT_BUBBLE = "󰍪"
 
+---Group for a viewed file's check. Created by `define_highlights`.
+---@type string
+M.VIEWED_HL = "ChangesetViewed"
+
+---Drawn in place of a viewed file's icon.
+M.VIEWED_ICON = "✔"
+
 ---The review comment's group, or the draft group for a draft.
 ---@param comment { draft: true? }
 ---@return string
@@ -349,6 +356,7 @@ function M.define_highlights()
   -- The saved green faded halfway to Comment and unbolded: the same note, not yet committed to.
   set_default(M.REVIEW_COMMENT_DRAFT_HL, { fg = ok and comment.fg and mix(ok, comment.fg, 0.5) or ok or comment.fg })
   set_default(M.REVIEW_COMMENT_BODY_HL, { link = M.META_HL })
+  set_default(M.VIEWED_HL, { link = "Comment" })
   set_default(M.BADGE_HL, { fg = directory, reverse = true, bold = true })
   local statusline = vim.api.nvim_get_hl(0, { name = "StatusLine", link = false })
   set_default(M.FOOTER_HL, { fg = comment.fg, bg = statusline.bg })

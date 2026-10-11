@@ -9,6 +9,7 @@ local render = require("changeset.render")
 local Rows = require("changeset.rows")
 local sidebar_state = require("changeset.sidebar_state")
 local view = require("changeset.view")
+local viewed = require("changeset.viewed")
 local window = require("changeset.window")
 
 -- The totals row over the tree and the blank one under it.
@@ -502,7 +503,20 @@ function M.draw(kinds_key)
   local cursor, top = vim.api.nvim_win_get_cursor(win)[1], vim.fn.line("w0", win)
   comments_section = comments_for(state.tree)
   local tree = laid_out(state.rows)
-  local lines, lnum, blocks = state.view:show(tree, { icon = icon_for, width = width, cursor = cursor })
+  local function is_viewed(row)
+    return row.kind == "file" and viewed.holds(state.marks, row.path, row.digest)
+  end
+  local lines, lnum, blocks = state.view:show(tree, {
+    icon = function(row)
+      if is_viewed(row) then
+        return highlights.VIEWED_ICON, highlights.VIEWED_HL
+      end
+      return icon_for(row)
+    end,
+    viewed = is_viewed,
+    width = width,
+    cursor = cursor,
+  })
 
   -- Read before the lines go, which takes the header's filler rows with them.
   local saved = vim.api.nvim_win_call(win, vim.fn.winsaveview)

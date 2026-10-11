@@ -1542,4 +1542,114 @@ describe("changeset sidebar", function()
 
     assert.same(narrowed, lines_of(buf))
   end)
+
+  describe("marking files viewed", function()
+    local viewed = require("changeset.viewed")
+
+    before_each(function()
+      os.remove(viewed.path())
+    end)
+
+    ---@param name string
+    ---@return string
+    local function line_named(name)
+      return present(Sidebar.lines()[line_of(present(window.buf()), name)])
+    end
+
+    ---@param name string
+    local function mark(name)
+      Sidebar.cursor_to(name)
+      press("v")
+    end
+
+    ---@param path string
+    ---@param lines string[]
+    local function rewrite(path, lines)
+      local before = present(build.current()).files
+      write(path, lines)
+      build.refresh()
+      assert.is_true(vim.wait(10000, function()
+        return present(build.current()).files ~= before
+      end, 25))
+      Sidebar.settle()
+    end
+
+    it("checks the file's row in the viewed group, leaving the others' icons", function()
+      local buf = open_sidebar()
+      local other = line_named("other.lua")
+
+      mark("mod.lua")
+
+      local lnum = line_of(buf, "mod.lua")
+      assert.truthy((line_named("mod.lua"):find(highlights.VIEWED_ICON, 1, true)))
+      assert.same(other, line_named("other.lua"))
+      local groups = vim.tbl_map(function(m)
+        return present(m[4]).hl_group
+      end, vim.api.nvim_buf_get_extmarks(buf, ns, { lnum - 1, 0 }, { lnum - 1, -1 }, { details = true }))
+      assert.truthy(vim.tbl_contains(groups, highlights.VIEWED_HL))
+    end)
+
+    it("restores the icon when marked again", function()
+      open_sidebar()
+      local unmarked = line_named("mod.lua")
+
+      mark("mod.lua")
+      mark("mod.lua")
+
+      assert.same(unmarked, line_named("mod.lua"))
+    end)
+
+    it("keeps a file checked while another file's diff changes", function()
+      open_sidebar()
+      mark("mod.lua")
+
+      rewrite("other.lua", { "return { a = 1, b = 3 }" })
+
+      assert.truthy((line_named("mod.lua"):find(highlights.VIEWED_ICON, 1, true)))
+    end)
+
+    it("clears the check once the file's own diff changes", function()
+      open_sidebar()
+      mark("mod.lua")
+
+      rewrite("mod.lua", { "local M = {}", "", "function M.one()", "  return 3", "end", "", "return M" })
+
+      assert.falsy((line_named("mod.lua"):find(highlights.VIEWED_ICON, 1, true)))
+    end)
+
+    it("marks the file a symbol row under it belongs to", function()
+      local source = Symbols.install()
+      local restore_due = Sidebar.draw_at_once()
+      vim.cmd.edit("mod.lua")
+      changeset.open()
+      assert.is_truthy(vim.wait(10000, function()
+        local buf = window.buf()
+        return buf ~= nil and table.concat(lines_of(buf), "\n"):find("other.lua", 1, true) ~= nil
+      end, 25))
+      source.answer("mod.lua", { Changes.sym("one", "Function", 0, 3, 5) })
+      source.answer("other.lua", {})
+      Sidebar.flush()
+
+      Sidebar.cursor_to("one")
+      press("v")
+      local got = line_named("mod.lua")
+      restore_due()
+      source.restore()
+
+      assert.truthy((got:find(highlights.VIEWED_ICON, 1, true)))
+    end)
+
+    it("reports a mark it could not write", function()
+      open_sidebar()
+      vim.fn.mkdir(vim.fs.dirname(viewed.path()), "p")
+      vim.fn.writefile({ "[1,2]" }, viewed.path())
+      local notify = require("support.notify")
+      local notes, restore = notify.capture()
+
+      mark("mod.lua")
+      restore()
+
+      assert.same({ "Changeset: could not write " .. viewed.path() }, notify.messages(notes, vim.log.levels.ERROR))
+    end)
+  end)
 end)
