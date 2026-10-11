@@ -124,6 +124,11 @@ M.HERE_HL = "ChangesetHere"
 ---@type string
 M.PICKED_HL = "ChangesetPicked"
 
+---Background of the row under the mouse pointer, while 'mousemoveevent' reports where it is. Created by
+---`define_highlights`.
+---@type string
+M.HOVER_HL = "ChangesetHover"
+
 ---Group for the selected row's glyph. Created by `define_highlights`.
 ---@type string
 M.SELECTED_ICON_HL = "ChangesetSelectedIcon"
@@ -205,6 +210,9 @@ M.PREVIEW_BAR_ICON_TINT_HL = "ChangesetPreviewBarIconTint"
 
 -- How far each state's background moves from the window's toward the accent.
 local SELECTED_TINT, HERE_TINT, PICKED_TINT = 0.2, 0.12, 0.06
+
+-- How far the row under the pointer moves from the window's background toward the info colour.
+local HOVER_TINT = 0.15
 
 -- How far a dialog's button moves from the float's background toward its text, when it can't take the editor's.
 local BUTTON_SHADE = 0.15
@@ -359,6 +367,9 @@ function M.define_highlights()
   set_default(M.SELECTED_HL, { bg = mix(base, accent, SELECTED_TINT) })
   set_default(M.HERE_HL, { bg = mix(base, accent, HERE_TINT) })
   set_default(M.PICKED_HL, { bg = mix(base, accent, PICKED_TINT) })
+  -- A cool hue no state, diff colour or badge carries, so the pointer's row never reads as one of them.
+  local info = vim.api.nvim_get_hl(0, { name = "DiagnosticInfo", link = false }).fg or accent
+  set_default(M.HOVER_HL, { bg = mix(base, info, HOVER_TINT) })
   set_default(M.SELECTED_ICON_HL, { fg = accent })
   set_default(M.HERE_ICON_HL, { fg = accent })
   set_default(M.PICKED_ICON_HL, { fg = accent })

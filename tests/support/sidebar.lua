@@ -88,6 +88,33 @@ function M.cursor_to(text)
   error("no sidebar line contains " .. text)
 end
 
+---Move the mouse pointer onto line `lnum` of `win`, as a terminal reports a move there, and let what it scheduled run.
+---@param win integer
+---@param lnum integer
+function M.point_at(win, lnum)
+  -- `getmousepos` finds no window on a screen that was never drawn, which a spec's isn't until it asks.
+  vim.cmd.redraw()
+  local pos = vim.fn.screenpos(win, lnum, 1)
+  vim.api.nvim_input_mouse("move", "", "", 0, pos.row - 1, pos.col - 1)
+  -- Takes the move out of the input queue, which only the main loop reads and a spec never reaches, so `on_key` sees
+  -- it. `getchar` then skips it, answering 0. Feeding `<MouseMove>` instead would put the pointer back where the
+  -- queue's first move left it.
+  vim.fn.getchar(0)
+  M.flush()
+end
+
+---Move the mouse pointer onto the first sidebar line containing `text`.
+---@param text string
+function M.point(text)
+  for lnum, line in ipairs(M.lines()) do
+    if line:find(text, 1, true) then
+      M.point_at(present(window.win()), lnum)
+      return
+    end
+  end
+  error("no sidebar line contains " .. text)
+end
+
 ---Click the first sidebar line containing `text`. A UI-less Neovim takes no mouse input, so this presses the button
 ---where `getmousepos` says, answering as a terminal would for a click there.
 ---@param text string

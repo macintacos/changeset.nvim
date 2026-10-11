@@ -96,6 +96,9 @@ local MATCH_PRIORITY = M.MARK_PRIORITY + 1
 -- Beneath every row mark, so the rail, the row colours and a filter match stay on top.
 local TINT_PRIORITY = M.MARK_PRIORITY - 1
 
+-- Beneath a state's tint: a state says something about the tree, the pointer only where it is.
+local HOVER_PRIORITY = TINT_PRIORITY - 1
+
 -- Over the stat: its right-aligned text ends in the gutter's blanks, which would
 -- otherwise be drawn over the glyph.
 local GLYPH_PRIORITY = MATCH_PRIORITY + 1
@@ -224,6 +227,10 @@ function M.state_marks(state, width)
     },
   }
 end
+
+---The mark tinting the row under the mouse pointer.
+---@type vim.api.keyset.set_extmark[]
+M.HOVER_MARKS = { { hl_group = highlights.HOVER_HL, hl_eol = true, priority = HOVER_PRIORITY } }
 
 ---A memo of `vim.fn.strdisplaywidth`, for the few strings every row repeats: margins, guides, glyph prefixes, stat
 ---chunks and markers. Made per render, since `'ambiwidth'` changes the width of `│ └ ─ ▎ ●`.

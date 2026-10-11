@@ -281,6 +281,18 @@ describe("define_highlights", function()
     assert.same({ 0x10, 0x10 }, { picked[2], picked[3] })
   end)
 
+  it("tints the row under the pointer part of the way from the background to the theme's info colour", function()
+    vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = BACKGROUND })
+    vim.api.nvim_set_hl(0, "Statement", { fg = RED })
+    vim.api.nvim_set_hl(0, "DiagnosticInfo", { fg = 0x1010f0 })
+
+    highlights.define_highlights()
+
+    local r, g, b = unpack(channels(present(group(highlights.HOVER_HL).bg)))
+    assert.same({ 0x10, 0x10 }, { r, g })
+    assert.is_true(b > 0x10 and b < 0xf0)
+  end)
+
   it("tints over the theme's chrome when Normal is transparent", function()
     vim.api.nvim_set_hl(0, "Statement", { fg = RED })
     vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = BACKGROUND })

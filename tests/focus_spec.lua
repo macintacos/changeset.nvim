@@ -36,6 +36,7 @@ describe("changeset sidebar focus", function()
   end)
 
   after_each(function()
+    vim.o.mousemoveevent = false
     changeset.close()
     vim.cmd("silent! %bwipeout!")
     vim.fn.chdir(previous_dir)
@@ -65,6 +66,20 @@ describe("changeset sidebar focus", function()
 
     assert.equal(window.win(), vim.api.nvim_get_current_win())
     assert.truthy((Sidebar.cursor_line():find("Other changes", 1, true)))
+  end)
+
+  it("lands a click from another window on the row clicked while 'mousemoveevent' is on", function()
+    vim.o.mousemoveevent = true
+    vim.cmd.edit("mod.lua")
+    vim.api.nvim_win_set_cursor(0, { 8, 0 })
+    changeset.open()
+    Sidebar.settle()
+    Sidebar.point("other.lua")
+
+    Sidebar.click("other.lua")
+
+    assert.equal(window.win(), vim.api.nvim_get_current_win())
+    assert.truthy((Sidebar.cursor_line():find("other.lua", 1, true)))
   end)
 
   it("keeps the cursor on a landed row that you expand", function()

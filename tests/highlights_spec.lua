@@ -27,6 +27,7 @@ describe("changeset row highlights", function()
   end)
 
   after_each(function()
+    vim.o.mousemoveevent = false
     changeset.close()
     vim.cmd("silent! %bwipeout!")
     vim.fn.chdir(previous_dir)
@@ -230,5 +231,69 @@ describe("changeset row highlights", function()
     vim.cmd.wincmd("p")
 
     assert.is_nil(Sidebar.line_with(highlights.HERE_HL))
+  end)
+
+  it("tints the row under the mouse pointer while 'mousemoveevent' reports its moves", function()
+    vim.o.mousemoveevent = true
+    vim.cmd.edit("mod.lua")
+    open_sidebar()
+
+    Sidebar.point("other.lua")
+
+    assert.truthy((present(Sidebar.line_with(highlights.HOVER_HL)):find("other.lua", 1, true)))
+  end)
+
+  it("moves the pointer's tint to each row the pointer moves onto", function()
+    vim.o.mousemoveevent = true
+    vim.cmd.edit("mod.lua")
+    open_sidebar()
+    Sidebar.point("Other changes")
+
+    Sidebar.point("other.lua")
+
+    assert.truthy((present(Sidebar.line_with(highlights.HOVER_HL)):find("other.lua", 1, true)))
+  end)
+
+  it("drops the pointer's tint once the pointer leaves the sidebar", function()
+    vim.o.mousemoveevent = true
+    vim.cmd.edit("mod.lua")
+    open_sidebar()
+    Sidebar.point("other.lua")
+
+    Sidebar.point_at(vim.api.nvim_get_current_win(), 1)
+
+    assert.is_nil(Sidebar.line_with(highlights.HOVER_HL))
+  end)
+
+  it("keeps the pointer's tint on the row under the pointer as the tree scrolls beneath it", function()
+    vim.o.mousemoveevent = true
+    vim.cmd.edit("mod.lua")
+    open_sidebar()
+    local win = present(window.win())
+    Sidebar.point("Other changes")
+    local pointer_row = vim.fn.getmousepos().screenrow
+
+    vim.api.nvim_feedkeys(vim.keycode("<ScrollWheelDown>"), "x", false)
+    -- Neovim fires WinScrolled from its main loop, which a spec never reaches.
+    vim.api.nvim_exec_autocmds("WinScrolled", { group = "changeset.pointer", pattern = tostring(win) })
+
+    local under ---@type string?
+    for lnum, line in ipairs(Sidebar.lines()) do
+      if vim.fn.screenpos(win, lnum, 1).row == pointer_row then
+        under = line
+      end
+    end
+    assert.is_falsy((present(under):find("Other changes", 1, true)))
+    assert.equal(under, Sidebar.line_with(highlights.HOVER_HL))
+  end)
+
+  it("tints no row under the pointer while 'mousemoveevent' is off", function()
+    vim.cmd.edit("mod.lua")
+    open_sidebar()
+    Sidebar.point("other.lua")
+
+    Sidebar.cursor_to("Other changes")
+
+    assert.is_nil(Sidebar.line_with(highlights.HOVER_HL))
   end)
 end)

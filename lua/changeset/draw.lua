@@ -139,7 +139,24 @@ local function mark_row(buf, lnum, marks)
   end
 end
 
----Mark the rows `changeset.position` says are selected, where you are, and last opened.
+---The sidebar line the last paint found the mouse pointer on.
+---@type integer?
+local hovered
+
+---The line of `win` under the mouse pointer. Without 'mousemoveevent', Neovim knows the pointer only from the last
+---click, which is no longer where it is.
+---@param win integer
+---@return integer?
+local function pointed_at(win)
+  if not vim.o.mousemoveevent then
+    return nil
+  end
+  local pos = vim.fn.getmousepos()
+  return pos.winid == win and pos.line > 0 and pos.line or nil
+end
+
+---Mark the rows `changeset.position` says are selected, where you are, and last opened, and the row under the mouse
+---pointer.
 function M.paint()
   local state = sidebar_state.current()
   local buf, win = window.buf(), window.win()
@@ -151,7 +168,33 @@ function M.paint()
   for _, mark in ipairs(state.position:marks(M.view())) do
     mark_row(buf, mark.lnum, render.state_marks(mark.kind, width))
   end
+  hovered = pointed_at(win)
+  if hovered and state.view:row(hovered) then
+    mark_row(buf, hovered, render.HOVER_MARKS)
+  end
 end
+
+local MOUSE_MOVE = vim.keycode("<MouseMove>")
+
+-- A move arrives for every cell the pointer crosses, so only one onto another line repaints. Scheduled because an
+-- error inside an `on_key` listener removes it.
+vim.on_key(function(key)
+  local win = window.win()
+  if key == MOUSE_MOVE and win and pointed_at(win) ~= hovered then
+    vim.schedule(M.paint)
+  end
+end, vim.api.nvim_create_namespace("changeset.pointer"))
+
+-- Fires: any window scrolling, by any means. The sidebar's moves the tree under a pointer that stays put.
+vim.api.nvim_create_autocmd("WinScrolled", {
+  group = vim.api.nvim_create_augroup("changeset.pointer", { clear = true }),
+  desc = "changeset: move the pointer's tint to the row now under it",
+  callback = function(args)
+    if tonumber(args.match) == window.win() then
+      M.paint()
+    end
+  end,
+})
 
 ---@param buf integer
 ---@param lines changeset.Line[] Rendered lines, each carrying its own marks.

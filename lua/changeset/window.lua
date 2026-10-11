@@ -759,10 +759,11 @@ local LEFT_MOUSE = vim.keycode("<LeftMouse>")
 local CLICK_LEAVES = { n = true, nt = true, i = true, v = true, V = true, ["\22"] = true, t = true }
 
 -- A click from another window only focuses the sidebar, so it lands on your row as any arrival does rather than on the
--- row clicked. Its status line and border are let through, where a drag resizes it. Focus is scheduled because an error
--- inside an `on_key` listener removes it.
+-- row clicked. With 'mousemoveevent' on it lands on the row clicked, which the pointer's tint has already named. Its
+-- status line and border are let through, where a drag resizes it. Focus is scheduled because an error inside an
+-- `on_key` listener removes it.
 vim.on_key(function(key)
-  if key ~= LEFT_MOUSE or not CLICK_LEAVES[vim.api.nvim_get_mode().mode] then
+  if key ~= LEFT_MOUSE or vim.o.mousemoveevent or not CLICK_LEAVES[vim.api.nvim_get_mode().mode] then
     return
   end
   local pos = vim.fn.getmousepos()
