@@ -10,7 +10,11 @@ local function kinds(path, lines)
   comments.read(table.concat(lines, "\n"), path, function(found)
     read = found
   end)
-  local known = present(read, "no kinds read before read returned")
+  -- Neovim parses in 3 ms slices, so a slow machine can answer even a few lines on a later tick.
+  vim.wait(10000, function()
+    return read ~= nil
+  end, 1)
+  local known = present(read, "no kinds read")
   return vim.tbl_map(function(lnum)
     return comments.kind(known, lnum)
   end, vim.fn.range(1, #lines))

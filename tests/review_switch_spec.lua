@@ -3,8 +3,14 @@ local support = require("support.git")
 local gutter = require("support.gutter")
 local present = require("support.present")
 
-local await, await_cached, edit, revision, settle =
-  gutter.await, gutter.await_cached, gutter.edit, gutter.revision, gutter.settle
+local await, await_cached, show_and_await, edit, revision, settle, base_text =
+  gutter.await,
+  gutter.await_cached,
+  gutter.show_and_await,
+  gutter.edit,
+  gutter.revision,
+  gutter.settle,
+  gutter.base_text
 
 local function moves()
   return gutter.moves
@@ -33,11 +39,11 @@ describe("the gutter's base", function()
 
     local bufs = edit(files)
     assert.is_true(await_cached(bufs))
-    assert.is_true(await(bufs, gutter.merge_base(dir), 10000))
+    assert.is_true(show_and_await(bufs, gutter.merge_base(dir), 10000))
 
     support.git({ "switch", "-q", "switched" }, dir)
 
-    assert.is_true(await(bufs, gutter.merge_base(dir), 10000))
+    assert.is_true(show_and_await(bufs, gutter.merge_base(dir), 10000))
   end)
 
   it("moves attached buffers to the merge base after a switch to a branch named in hex digits", function()
@@ -48,11 +54,11 @@ describe("the gutter's base", function()
     vim.fn.chdir(dir)
     local bufs = edit(files)
     assert.is_true(await_cached(bufs))
-    assert.is_true(await(bufs, gutter.merge_base(dir), 10000))
+    assert.is_true(show_and_await(bufs, gutter.merge_base(dir), 10000))
 
     support.git({ "switch", "-q", "20261008" }, dir)
 
-    assert.is_true(await(bufs, gutter.merge_base(dir), 10000))
+    assert.is_true(show_and_await(bufs, gutter.merge_base(dir), 10000))
   end)
 
   it("moves buffers onto the default branch's own base after an external switch to it", function()
@@ -64,11 +70,11 @@ describe("the gutter's base", function()
     support.git({ "switch", "-q", "left" }, dir)
     vim.fn.chdir(dir)
     local bufs = edit(files)
-    assert.is_true(await(bufs, gutter.merge_base(dir), 10000))
+    assert.is_true(show_and_await(bufs, gutter.merge_base(dir), 10000))
 
     support.git({ "switch", "-q", "main" }, dir)
 
-    assert.is_true(await(bufs, main_tip, 10000))
+    assert.is_true(show_and_await(bufs, main_tip, 10000))
   end)
 
   it("keeps what is applied, asking nothing, while HEAD is detached", function()
@@ -138,12 +144,12 @@ describe("the gutter's base", function()
     vim.fn.chdir(dir)
 
     local ours = edit({ "a.txt" })
-    assert.is_true(await(ours, gutter.merge_base(dir), 5000))
+    assert.is_true(show_and_await(ours, gutter.merge_base(dir), 5000))
     local their_bufs = edit({ other .. "/x.txt" })
     assert.is_true(await(their_bufs, theirs, 5000))
 
     support.git({ "switch", "-q", "scoped" }, dir)
-    assert.is_true(await(ours, gutter.merge_base(dir), 10000))
+    assert.is_true(show_and_await(ours, gutter.merge_base(dir), 10000))
 
     assert.is_true(settle())
     vim.fn.delete(other, "rf")
@@ -187,20 +193,17 @@ describe("the gutter's base", function()
 
     local bufs = edit(vim.list_slice(files, 1, 12))
     assert.is_true(await_cached(bufs))
-    assert.is_true(await(bufs, gutter.merge_base(dir), 5000))
+    assert.is_true(show_and_await(bufs, gutter.merge_base(dir), 5000))
 
     local before = moves()
 
     support.git({ "switch", "-q", "counted" }, dir)
     local base = gutter.merge_base(dir)
-    -- The first buffer reaching the base marks the switch; the rest attach on the
-    -- index while the moves run, and move once each.
-    assert.is_true(vim.wait(10000, function()
-      return revision(present(bufs[1])) == base
-    end, 1))
+    -- Show one buffer to land the switch, then attach six more; each buffer moves once.
+    assert.is_true(show_and_await({ bufs[1] }, base, 10000))
     vim.list_extend(bufs, edit(vim.list_slice(files, 13, 18)))
 
-    assert.is_true(await(bufs, base, 10000))
+    assert.is_true(show_and_await(bufs, base, 10000))
     assert.is_true(settle())
     assert.equal(18, moves() - before)
   end)
@@ -353,7 +356,7 @@ describe("the gutter's base", function()
     vim.fn.chdir(dir)
     local base = gutter.merge_base(dir)
     local bufs = edit(files)
-    assert.is_true(await(bufs, base, 10000))
+    assert.is_true(show_and_await(bufs, base, 10000))
     assert.is_true(settle())
 
     -- As if every buffer had attached on the old base, then caught a burst of
@@ -370,5 +373,40 @@ describe("the gutter's base", function()
     assert.is_true(await(bufs, base, 10000))
     assert.is_true(settle())
     assert.equal(#bufs, moves() - before)
+  end)
+
+  it("moves a hidden buffer whose text a commit dropped onto the new base once it is shown", function()
+    local files = { "a.txt", "b.txt" }
+    gutter.fixture(dir, "left", files)
+    support.git({ "switch", "-q", "main" }, dir)
+    vim.fn.writefile({ "one", "two" }, dir .. "/b.txt")
+    local main_tip = support.commit("main", dir)
+    support.git({ "update-ref", "refs/remotes/origin/main", main_tip }, dir)
+    support.git({ "switch", "-q", "left" }, dir)
+    vim.fn.chdir(dir)
+    local base = gutter.merge_base(dir)
+    local bufs = edit(files)
+    local a, b = present(bufs[1]), present(bufs[2])
+    assert.is_true(show_and_await(bufs, base, 10000))
+
+    -- The commit drops every open file's text: a is in view and reads its own back, b stays hidden and keeps none.
+    vim.api.nvim_set_current_buf(a)
+    vim.fn.writefile({ "c" }, dir .. "/c.txt")
+    support.commit("c", dir)
+    assert.is_true(vim.wait(10000, function()
+      return base_text(b) == nil
+    end, 20))
+    support.git({ "switch", "-q", "main" }, dir)
+    assert.is_true(await({ a }, main_tip, 10000))
+    -- Once b's status names main while it is hidden, its read on show leaves the status unchanged,
+    -- so gitsigns sends no GitSignsUpdate for it.
+    assert.is_true(vim.wait(10000, function()
+      local status = vim.b[b].gitsigns_status_dict
+      return status ~= nil and status.head == "main"
+    end, 20))
+
+    local want = gutter.blob_lines(dir, main_tip .. ":b.txt")
+    assert.is_true(show_and_await({ b }, main_tip, 10000))
+    assert.are.same(want, base_text(b))
   end)
 end)

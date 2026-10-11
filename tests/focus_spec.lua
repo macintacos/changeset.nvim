@@ -122,13 +122,16 @@ describe("changeset sidebar focus", function()
     local source ---@type support.symbols.Source
     ---@type fun(path: string, items: table[]?)
     local answer
+    local restore_due ---@type fun()
 
     before_each(function()
       source = Symbols.install()
       answer = source.answer
+      restore_due = Sidebar.draw_at_once()
     end)
 
     after_each(function()
+      restore_due()
       source.restore()
     end)
 
