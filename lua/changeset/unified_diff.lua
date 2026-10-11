@@ -254,6 +254,14 @@ local function cover(buf, ns, top, bot, added)
   end
 end
 
+---Close `win`'s base window, if it has one.
+---@param win integer
+local function close_paired(win)
+  if vim.list_contains(split_diff.paired(), win) then
+    split_diff.close(win)
+  end
+end
+
 ---A view to open: the window, the buffer and file it shows, and the base gitsigns holds for the buffer.
 ---@class changeset.unified_diff.View
 ---@field win integer
@@ -286,6 +294,9 @@ local function open(view)
     if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf and reaches(path) then
       -- Asked again: the reading window can have moved while git read the base.
       local drawn = wanted(win, text)
+      if drawn == "unified" then
+        close_paired(win)
+      end
       -- Before `show`, which registers the view at once but then waits on its diff.
       opened[win] = { buf = buf, path = path, base = base, text = text, view = drawn }
       if drawn == "split" then
@@ -298,8 +309,13 @@ local function open(view)
       end
       paint(win)
       require("gitsigns.unified").show(win, base, created, loaded)
-    elseif created then
-      vim.api.nvim_buf_delete(base, { force = true })
+    else
+      if vim.api.nvim_win_is_valid(win) and not opened[win] then
+        close_paired(win)
+      end
+      if created then
+        vim.api.nvim_buf_delete(base, { force = true })
+      end
     end
   end
   require("gitsigns.async").run(run):raise_on_error()
@@ -312,20 +328,24 @@ function M.sync(win)
   if not started then
     return
   end
+  split_diff.scrub(win)
   local buf = vim.api.nvim_win_get_buf(win)
   local left = opened[win]
+  local path = tree_file(vim.api.nvim_buf_get_name(buf))
+  local reached = path ~= nil and reaches(path)
   if left and left.buf ~= buf then
     opened[win] = nil
     -- A preview swaps the buffer without BufWinLeave, so gitsigns still holds our view, and would hand it back once
-    -- the buffer returns. One showing now is on this buffer, so the user's own.
-    if not showing(win) then
+    -- the buffer returns. One showing now is on this buffer, so the user's own. A base window stays for the next file
+    -- the diff reaches, so holding `j` in the sidebar doesn't open and close one per row.
+    if not showing(win) and not (left.view == "split" and reached) then
       close(win, left)
     end
   end
-  local path = tree_file(vim.api.nvim_buf_get_name(buf))
-  if not (path and reaches(path)) then
+  if not reached then
     return
   end
+  ---@cast path -nil
   -- gitsigns drops a buffer's status before the last update it publishes as it lets go, mid-unload, of the buffer.
   local tracked = vim.bo[buf].buftype == "" and vim.b[buf].gitsigns_status_dict ~= nil
   local bcache = tracked and require("gitsigns.cache").cache[buf]
@@ -385,6 +405,12 @@ local function close_unless(keeps)
       if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == mine.buf then
         close(win, mine)
       end
+    end
+  end
+  -- One no view names was kept through a preview, or came back with its buffer.
+  for _, win in ipairs(split_diff.paired()) do
+    if not opened[win] then
+      split_diff.close(win)
     end
   end
 end
@@ -459,13 +485,14 @@ local function start()
       end
     end,
   })
-  -- Fires: any window closing, which takes its view with it.
+  -- Fires: any window closing, which takes its view, and its base window, with it.
   vim.api.nvim_create_autocmd("WinClosed", {
     group = group,
-    desc = "changeset: forget the unified diff of a closed window",
+    desc = "changeset: forget the diff of a closed window, closing its base window",
     callback = function(args)
       local win = tonumber(args.match) --[[@as integer]]
       opened[win], covered[win], opening[win] = nil, nil, nil
+      split_diff.forget(win)
     end,
   })
   -- gitsigns signs a buffer and draws a view's hunks anew with no event to say so, but always redraws the window after.

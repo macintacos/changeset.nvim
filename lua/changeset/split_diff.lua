@@ -6,6 +6,10 @@ local M = {}
 ---@type table<integer, { win: integer, buf: integer }>
 local partners = {}
 
+---The file buffers this module put in diff mode, which a window showing one again takes 'diff' back from.
+---@type table<integer, true>
+local diffed = {}
+
 ---Show `base` beside `win`, which shows `buf`, the two diffed, reusing the base window `win` already has.
 ---@param win integer
 ---@param buf integer
@@ -20,6 +24,7 @@ function M.show(win, buf, base)
     base_win = vim.api.nvim_open_win(base, false, { split = "left", win = win })
   end
   partners[win] = { win = base_win, buf = buf }
+  diffed[buf] = true
   vim.api.nvim_win_call(base_win, vim.cmd.diffthis)
   vim.api.nvim_win_call(win, vim.cmd.diffthis)
 end
@@ -54,6 +59,37 @@ function M.close(win)
   end
   if vim.api.nvim_win_is_valid(win) then
     vim.api.nvim_win_call(win, vim.cmd.diffoff)
+  end
+end
+
+---The file windows with a base window open, whether or not they still show the buffer it was opened for.
+---@return integer[]
+function M.paired()
+  local wins = {}
+  for win, partner in pairs(partners) do
+    if vim.api.nvim_win_is_valid(partner.win) then
+      wins[#wins + 1] = win
+    end
+  end
+  return wins
+end
+
+---Take `win` out of diff mode when its buffer brought back a 'diff' this module set, as a window-local option comes back
+---with the buffer it was set for, and no base window shows beside it.
+---@param win integer
+function M.scrub(win)
+  if vim.wo[win].diff and diffed[vim.api.nvim_win_get_buf(win)] and not M.showing(win) then
+    vim.api.nvim_win_call(win, vim.cmd.diffoff)
+  end
+end
+
+---Close the base window of `closed`, a file window closing, unless that would leave no window.
+---@param closed integer
+function M.forget(closed)
+  local partner = partners[closed]
+  partners[closed] = nil
+  if partner and vim.api.nvim_win_is_valid(partner.win) and #vim.api.nvim_list_wins() > 2 then
+    vim.api.nvim_win_close(partner.win, true)
   end
 end
 

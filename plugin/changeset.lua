@@ -487,6 +487,16 @@ vim.api.nvim_create_autocmd("User", {
 vim.api.nvim_create_autocmd("SessionLoadPost", {
   group = group,
   callback = function()
+    -- A side-by-side diff's base window comes back empty, since gitsigns reads no `gitsigns://` buffer back; the diff
+    -- opens a fresh one.
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+      if
+        vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win)):find("^gitsigns://")
+        and #vim.api.nvim_list_wins() > 1
+      then
+        vim.api.nvim_win_close(win, true)
+      end
+    end
     for _, win in ipairs(vim.api.nvim_list_wins()) do
       -- Keep in sync with NAME in lua/changeset/window.lua.
       if vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win)):find("changeset://", 1, true) then

@@ -264,4 +264,170 @@ describe("the side-by-side diff", function()
 
     assert.is_true(no_pair())
   end)
+
+  describe("as windows change", function()
+    ---The sidebar, open beside the window showing `name`, with the cursor in it.
+    ---@param name string
+    ---@return integer
+    local function sidebar_beside(name)
+      unified_diff.turn_on()
+      vim.cmd.edit(name)
+      assert.is_not_nil(partner(vim.api.nvim_get_current_win()))
+      local sidebar = window.open(vim.api.nvim_create_buf(false, true))
+      vim.api.nvim_set_current_win(sidebar)
+      return sidebar
+    end
+
+    it("keeps the base window through a preview of another listed file, showing that file's base", function()
+      sidebar_beside("a.txt")
+      window.preview(dir .. "/a.txt", 1, BAND)
+      local win = vim.fn.bufwinid(dir .. "/a.txt")
+      local base = present(partner(win))
+
+      window.preview(dir .. "/b.txt", 1, BAND)
+
+      assert.is_true(vim.wait(5000, function()
+        return vim.api.nvim_win_is_valid(base)
+          and vim.wo[base].diff
+          and vim.deep_equal(
+            { "b one", "b two" },
+            vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(base), 0, -1, false)
+          )
+      end, 20))
+    end)
+
+    it("shows the base of a previewed file once gitsigns attaches to it", function()
+      sidebar_beside("a.txt")
+      window.preview(dir .. "/a.txt", 1, BAND)
+      local win = vim.fn.bufwinid(dir .. "/a.txt")
+      assert.is_not_nil(partner(win))
+
+      window.preview(dir .. "/b.txt", 1, BAND)
+
+      local base = present(partner(win))
+      assert.is_true(vim.wait(5000, function()
+        return vim.deep_equal(
+          { "b one", "b two" },
+          vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(base), 0, -1, false)
+        )
+      end, 20))
+    end)
+
+    it("closes the base window as a preview fills its file window with an unlisted file", function()
+      vim.fn.writefile({ "x" }, "unlisted.txt")
+      sidebar_beside("a.txt")
+      window.preview(dir .. "/a.txt", 1, BAND)
+      local win = vim.fn.bufwinid(dir .. "/a.txt")
+      local base = present(partner(win))
+
+      window.preview(dir .. "/unlisted.txt", 1, BAND)
+
+      assert.is_false(vim.api.nvim_win_is_valid(base))
+      assert.is_false(vim.wo[win].diff)
+    end)
+
+    it("leaves no base window once the sidebar closes after a preview", function()
+      sidebar_beside("a.txt")
+      window.preview(dir .. "/a.txt", 1, BAND)
+      local win = vim.fn.bufwinid(dir .. "/a.txt")
+      assert.is_not_nil(partner(win))
+      window.preview(dir .. "/b.txt", 1, BAND)
+
+      changeset.close()
+
+      assert.same({ win }, vim.api.nvim_tabpage_list_wins(0))
+      assert.same({}, diffing())
+    end)
+
+    it("leaves diff mode off a file shown again after the sidebar closed", function()
+      sidebar_beside("a.txt")
+      window.preview(dir .. "/a.txt", 1, BAND)
+      local win = vim.fn.bufwinid(dir .. "/a.txt")
+      assert.is_not_nil(partner(win))
+      window.preview(dir .. "/b.txt", 1, BAND)
+      assert.is_not_nil(partner(win))
+      changeset.close()
+
+      vim.api.nvim_win_call(win, function()
+        vim.cmd.buffer(vim.fn.bufnr(dir .. "/b.txt"))
+      end)
+
+      assert.is_false(vim.wo[win].diff)
+      assert.same({ win }, vim.api.nvim_tabpage_list_wins(0))
+    end)
+
+    it("keeps the pair through a reload", function()
+      unified_diff.turn_on()
+      vim.cmd.edit("a.txt")
+      local win = vim.api.nvim_get_current_win()
+      local base = present(partner(win))
+
+      vim.cmd("edit!")
+      vim.wait(500)
+
+      assert.is_true(vim.api.nvim_win_is_valid(base))
+      assert.equal(base, partner(win))
+      unified_diff.limit("none")
+      assert.same({ win }, vim.api.nvim_tabpage_list_wins(0))
+    end)
+
+    it("closes the base window with its file window", function()
+      unified_diff.turn_on()
+      vim.cmd.edit("a.txt")
+      local win = vim.api.nvim_get_current_win()
+      vim.cmd.split("b.txt")
+      local other = vim.api.nvim_get_current_win()
+      vim.api.nvim_set_current_win(win)
+      local base = present(partner(win))
+
+      vim.api.nvim_win_close(win, false)
+
+      assert.is_false(vim.api.nvim_win_is_valid(base))
+      assert.same(
+        { other },
+        vim.tbl_filter(function(w)
+          return w ~= present(partner(other))
+        end, vim.api.nvim_tabpage_list_wins(0))
+      )
+    end)
+
+    it("leaves one empty window as a lone sidebar closes after a preview", function()
+      local sidebar = sidebar_beside("a.txt")
+      vim.api.nvim_win_call(sidebar, function()
+        vim.cmd("only")
+      end)
+      window.preview(dir .. "/a.txt", 1, BAND)
+      assert.is_not_nil(partner(vim.fn.bufwinid(dir .. "/a.txt")))
+
+      changeset.close()
+
+      local wins = vim.api.nvim_tabpage_list_wins(0)
+      assert.equal(1, #wins)
+      assert.is_false(vim.wo[wins[1]].diff)
+    end)
+
+    it("leaves no gitsigns window behind as a session is restored", function()
+      vim.cmd.runtime("plugin/changeset.lua")
+      local session = vim.fn.tempname()
+      changeset.open()
+      assert.is_true(vim.wait(10000, function()
+        return window.buf() ~= nil and Sidebar.text():find("a.txt", 1, true) ~= nil
+      end, 25))
+      window.preview(dir .. "/a.txt", 1, BAND)
+      assert.is_not_nil(partner(vim.fn.bufwinid(dir .. "/a.txt")))
+      vim.cmd("mksession! " .. vim.fn.fnameescape(session))
+
+      vim.cmd("silent! source " .. vim.fn.fnameescape(session))
+      vim.fn.delete(session)
+
+      assert.is_false(vim.wait(1000, function()
+        return vim.iter(vim.api.nvim_list_wins()):any(function(w)
+          local buf = vim.api.nvim_win_get_buf(w)
+          return vim.api.nvim_buf_get_name(buf):find("^gitsigns://") ~= nil
+            and vim.api.nvim_buf_line_count(buf) <= 1
+            and vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] == ""
+        end)
+      end, 20))
+    end)
+  end)
 end)
