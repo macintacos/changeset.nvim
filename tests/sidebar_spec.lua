@@ -1720,6 +1720,18 @@ describe("changeset sidebar", function()
         assert.is_true(shows("one"))
       end)
 
+      it("folds every file on marking all and unfolds them on clearing all", function()
+        open_with_symbols()
+        Sidebar.cursor_to("one")
+
+        press("X")
+        assert.is_false(shows("one"))
+        assert.truthy((Sidebar.cursor_line():find("mod.lua", 1, true)))
+
+        press("X")
+        assert.is_true(shows("one"))
+      end)
+
       it("moves the cursor to the next file not viewed", function()
         open_with_symbols()
 
@@ -1781,6 +1793,56 @@ describe("changeset sidebar", function()
           return m.hl_group == highlights.VIEWED_HL
         end)
         assert.is_true(present(present(selected)[4]).priority > present(tint).priority)
+      end)
+    end)
+
+    describe("every file at once", function()
+      ---@param name string
+      ---@return boolean
+      local function checked(name)
+        return line_named(name):find(highlights.VIEWED_ICON, 1, true) ~= nil
+      end
+
+      it("marks every file when none is viewed", function()
+        open_sidebar()
+
+        press("X")
+
+        assert.is_true(checked("mod.lua"))
+        assert.is_true(checked("other.lua"))
+      end)
+
+      it("marks the rest when some are viewed", function()
+        open_sidebar()
+        mark("mod.lua")
+
+        press("X")
+
+        assert.is_true(checked("mod.lua"))
+        assert.is_true(checked("other.lua"))
+      end)
+
+      it("clears every mark when every file is viewed", function()
+        open_sidebar()
+        press("X")
+
+        press("X")
+
+        assert.is_false(checked("mod.lua"))
+        assert.is_false(checked("other.lua"))
+      end)
+
+      it("reports marks it could not write", function()
+        open_sidebar()
+        vim.fn.mkdir(vim.fs.dirname(viewed.path()), "p")
+        vim.fn.writefile({ "[1,2]" }, viewed.path())
+        local notify = require("support.notify")
+        local notes, restore = notify.capture()
+
+        press("X")
+        restore()
+
+        assert.same({ "Changeset: could not write " .. viewed.path() }, notify.messages(notes, vim.log.levels.ERROR))
       end)
     end)
 

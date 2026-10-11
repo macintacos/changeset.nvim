@@ -25,6 +25,7 @@ local M = {}
 ---@field refresh? string|false Rebuild the tree. Default `R`.
 ---@field yank? string|false Yank path:line. Default `y`.
 ---@field toggle_viewed? string|false Mark the file viewed, or not. Default `x`.
+---@field toggle_viewed_all? string|false Mark every file viewed, or none. Default `X`.
 ---@field delete_comment? string|false Delete the review comment a Comments row lists. Default `d`.
 ---@field help? string|false Show these keymaps. Default `?`.
 ---@field filter_kinds? string|false Filter by symbol kind. Default `F`.
@@ -69,6 +70,7 @@ local M = {}
 ---@field refresh string|false
 ---@field yank string|false
 ---@field toggle_viewed string|false
+---@field toggle_viewed_all string|false
 ---@field delete_comment string|false
 ---@field help string|false
 ---@field filter_kinds string|false
@@ -107,6 +109,7 @@ local DEFAULTS = {
     refresh = "R",
     yank = "y",
     toggle_viewed = "x",
+    toggle_viewed_all = "X",
     delete_comment = "d",
     help = "?",
     filter_kinds = "F",

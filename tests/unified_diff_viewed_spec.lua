@@ -121,6 +121,18 @@ describe("the unified diff of a file marked viewed", function()
     assert.is_true(becomes(true))
   end)
 
+  it("closes the view once every file is marked, and reopens it once every mark is cleared", function()
+    Sidebar.cursor_to("mod.lua")
+    vim.api.nvim_feedkeys("X", "xt", false)
+    vim.api.nvim_set_current_win(file_win)
+    assert.is_true(becomes(false))
+
+    Sidebar.cursor_to("mod.lua")
+    vim.api.nvim_feedkeys("X", "xt", false)
+    vim.api.nvim_set_current_win(file_win)
+    assert.is_true(becomes(true))
+  end)
+
   vim.notify = quiet
   changeset.close()
   vim.cmd("silent! %bwipeout!")

@@ -368,6 +368,39 @@ function M.set_keymaps(buf, keys, hooks)
     end, desc)
   end
 
+  ---Show `marks`, just written for `paths`, or report they could not be: unview `paths` when the mark of `path`, the
+  ---cursor's file, no longer holds, else move the cursor past it.
+  ---@param state changeset.SidebarState
+  ---@param marks changeset.ViewedMarks?
+  ---@param paths string[]
+  ---@param path string?
+  local function show_marks(state, marks, paths, path)
+    if not marks then
+      return vim.notify("Changeset: could not write " .. viewed.path(), vim.log.levels.ERROR)
+    end
+    state.marks = marks
+    unified_diff.refresh_viewed()
+    local file = path and vim.iter(state.tree.files):find(function(f)
+      return f.path == path
+    end)
+    if not (file and viewed.holds(marks, file.path, file.digest)) then
+      for _, p in ipairs(paths) do
+        state.view:unview(state.rows, p)
+      end
+      return redraw()
+    end
+    local shown, lnum = state.view:visible(), assert(window.cursor(), "changeset: sidebar is closed")
+    local target = M._after_viewing(shown, lnum, file.path, function(r)
+      return viewed.holds(marks, r.path, r.digest)
+    end)
+    redraw()
+    for at, r in ipairs(state.view:visible()) do
+      if target and r.id == target.id then
+        return move(at)
+      end
+    end
+  end
+
   map(keys.jump, function()
     jump("reuse", hooks)
   end, "Go to this change")
@@ -472,28 +505,16 @@ function M.set_keymaps(buf, keys, hooks)
     if not file then
       return
     end
-    local record = viewed.path()
-    local marks = viewed.toggle(record, state.tree.root, file.path, file.digest)
-    if not marks then
-      return vim.notify("Changeset: could not write " .. record, vim.log.levels.ERROR)
-    end
-    state.marks = marks
-    unified_diff.refresh_viewed()
-    if not viewed.holds(marks, file.path, file.digest) then
-      state.view:unview(state.rows, file.path)
-      return redraw()
-    end
-    local shown, lnum = state.view:visible(), assert(window.cursor(), "changeset: sidebar is closed")
-    local target = M._after_viewing(shown, lnum, file.path, function(r)
-      return viewed.holds(marks, r.path, r.digest)
-    end)
-    redraw()
-    for at, r in ipairs(state.view:visible()) do
-      if target and r.id == target.id then
-        return move(at)
-      end
-    end
+    show_marks(state, viewed.toggle(viewed.path(), state.tree.root, file.path, file.digest), { file.path }, file.path)
   end, "Mark the file viewed, or not")
+  map(keys.toggle_viewed_all, function(state)
+    local row = draw.row_at_cursor()
+    local files = state.tree.files
+    local paths = vim.tbl_map(function(f)
+      return f.path
+    end, files)
+    show_marks(state, viewed.toggle_all(viewed.path(), state.tree.root, files), paths, row and row.path)
+  end, "Mark every file viewed, or none")
   map(keys.help, function()
     help.show(buf, own)
   end, "Show these keymaps")

@@ -62,6 +62,24 @@ function M._apply(data, root, path, digest)
   return out
 end
 
+---Rewrite `file` with `change` applied to its data, never writing over an unreadable record: the marks in it can't
+---be derived again.
+---@param file string
+---@param root string
+---@param change fun(data: table): table
+---@return changeset.ViewedMarks? marks The root's marks now; nil when the record is unreadable or unwritten.
+local function rewrite(file, root, change)
+  local data = jsonfile.read_object(file)
+  if not data then
+    return nil
+  end
+  local out = change(data)
+  if not jsonfile.write(file, vim.tbl_isempty(out) and vim.empty_dict() or out) then
+    return nil
+  end
+  return M.marks(out, root)
+end
+
 ---Mark `path` viewed at `digest` in `file`, or clear its mark when one holds there.
 ---@param file string
 ---@param root string
@@ -69,17 +87,28 @@ end
 ---@param digest string
 ---@return changeset.ViewedMarks? marks The root's marks now; nil when the record is unreadable or unwritten.
 function M.toggle(file, root, path, digest)
-  -- Never written over when unreadable: the marks in it can't be derived again.
-  local data = jsonfile.read_object(file)
-  if not data then
-    return nil
-  end
-  local marked = M.holds(M.marks(data, root), path, digest)
-  local out = M._apply(data, root, path, not marked and digest or nil)
-  if not jsonfile.write(file, vim.tbl_isempty(out) and vim.empty_dict() or out) then
-    return nil
-  end
-  return M.marks(out, root)
+  return rewrite(file, root, function(data)
+    local marked = M.holds(M.marks(data, root), path, digest)
+    return M._apply(data, root, path, not marked and digest or nil)
+  end)
+end
+
+---Clear the mark of every one of `files` in `file` when each holds, else mark each viewed at its digest.
+---@param file string
+---@param root string
+---@param files { path: string, digest: string? }[]
+---@return changeset.ViewedMarks? marks The root's marks now; nil when the record is unreadable or unwritten.
+function M.toggle_all(file, root, files)
+  return rewrite(file, root, function(data)
+    local marks = M.marks(data, root)
+    local all = vim.iter(files):all(function(f)
+      return M.holds(marks, f.path, f.digest)
+    end)
+    for _, f in ipairs(files) do
+      data = M._apply(data, root, f.path, not all and f.digest or nil)
+    end
+    return data
+  end)
 end
 
 return M

@@ -76,4 +76,30 @@ describe("changeset.viewed", function()
       assert.are.same({ "[1,2]" }, vim.fn.readfile(viewed.path()))
     end)
   end)
+
+  describe("toggle_all", function()
+    local files = { { path = "a.lua", digest = "d1" }, { path = "b.lua", digest = "d2" } }
+
+    it("marks every path in one write when one is not viewed", function()
+      viewed.toggle(viewed.path(), ROOT, "a.lua", "d1")
+
+      local want = { ["a.lua"] = "d1", ["b.lua"] = "d2" }
+      assert.are.same(want, viewed.toggle_all(viewed.path(), ROOT, files))
+      assert.are.same(want, viewed.marks(viewed.load(viewed.path()), ROOT))
+    end)
+
+    it("clears every mark when every path is viewed", function()
+      viewed.toggle_all(viewed.path(), ROOT, files)
+
+      assert.are.same({}, viewed.toggle_all(viewed.path(), ROOT, files))
+      assert.are.same({}, viewed.load(viewed.path()))
+    end)
+
+    it("never writes over a record that is not a JSON object", function()
+      write_record("[1,2]")
+
+      assert.is_nil(viewed.toggle_all(viewed.path(), ROOT, files))
+      assert.are.same({ "[1,2]" }, vim.fn.readfile(viewed.path()))
+    end)
+  end)
 end)
