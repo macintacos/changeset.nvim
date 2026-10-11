@@ -167,6 +167,26 @@ restarts. With mini.icons:
 
 A future icon-set change propagates everywhere at once. That is the point.
 
+### A viewed file wears a check in its icon's place
+
+A file marked viewed (`v`) draws `✔` in `ChangesetViewed`, linked to `Comment`, in the cell
+its file icon holds:
+
+- **It reads as a checklist.** The checks fill the icon column, so finished files read down
+  one edge. A grey check among coloured icons lets a viewed file recede, as GitHub's Viewed
+  does.
+- **It changes no layout.** It is one cell, like an icon, so the row's width budget is
+  unchanged.
+- **It is the config's own check.** The config already uses `✔` as its "selected" marker,
+  and no icon plugin has a "viewed" category to ask for.
+- **Its colour means nothing else on a row.** `DiagnosticOk` green already means "review
+  comment".
+
+Placements rejected: the left margin, where the check would butt against the rail; after
+the name, where it would move with the name's length and could be matched by the filter;
+the right gutter, which the row-state glyphs own; and dimming the name, since `Comment` on
+a name already means "context".
+
 ### Kind labels are dropped; the icon carries kind
 
 The config's outline picker right-aligns a kind label (`Method`, `Class`). A sidebar is
@@ -1360,6 +1380,16 @@ older entry's stamp would otherwise still match. Folds — a section's as well a
 repository for as long as Neovim is running, so reopening looks like you left it; a restart
 starts expanded, except Generated, which starts folded. Per repository because a row is
 identified by a repo-relative path, which two checkouts can easily both have.
+
+Files marked viewed are kept in `stdpath("state")/changeset/viewed.json`, per repository
+root and path, so every copy of a file (its path section, Tests, Docs) shows the mark. Each
+mark holds the digest of the diff it was viewed at, not the File's identity: identity is
+per tree and per session, while a digest names the exact diff, so a mark stops showing once
+the diff changes and shows again if the change is reverted. A patch with no text, as a
+binary file's, digests its status and old path, so editing it in place keeps its mark. The
+digest is one of the fields `keep_identity` compares, so rewriting a line at the same counts
+gives the file a new identity and redraws its row. An unreadable record is never written
+over, since its marks can't be derived again.
 
 ## Hidden kinds
 

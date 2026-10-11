@@ -660,6 +660,20 @@ keymaps.yank                                   *changeset-option-keymaps.yank*
 	provider. A Comments row on a range copies `path:first-last`. A row
 	with no line copies the path alone.
 
+v                                                        *changeset-sidebar-v*
+keymaps.toggle_viewed                 *changeset-option-keymaps.toggle_viewed*
+	Mark the file viewed, or clear its mark. It acts on the file the row
+	belongs to: its file row, or a symbol or orphan row under it. Nothing
+	on a section or Comments row. A viewed file draws a |ChangesetViewed|
+	`✔` in its icon's place, in every section it shows in.
+
+	A mark holds only while the file's diff is the one you viewed. It
+	stops showing once that diff changes, and shows again if the change
+	is reverted or the base switched back. `v` on a file whose mark no
+	longer holds marks its new diff. A file whose patch has no text, such
+	as a binary file edited in place, keeps its mark. Marks another Neovim
+	writes show from the next rebuild.
+
 d                                                        *changeset-sidebar-d*
 keymaps.delete_comment               *changeset-option-keymaps.delete_comment*
 	On a Comments row, ask, then delete its review comment. Nothing on any
@@ -1291,6 +1305,10 @@ ChangesetHover                                                *ChangesetHover*
 	The row under the mouse pointer, while 'mousemoveevent' is on.
 	`Normal`'s background tinted toward `DiagnosticInfo`.
 
+ChangesetViewed                                              *ChangesetViewed*
+	The `✔` in a viewed file's icon place (|changeset-sidebar-v|).
+	Linked to `Comment`.
+
 ChangesetSelectedIcon                                  *ChangesetSelectedIcon*
 	The `◀` on the selected row. `Statement`'s colour.
 
@@ -1478,6 +1496,9 @@ nothing, starts no language server and makes no network request.
   once.
 - Hidden symbol kinds: `stdpath("state")/changeset/filters.json`.
 - Bases set with |:Changeset-base|: `stdpath("state")/changeset/bases.json`.
+- Files marked viewed with |changeset-sidebar-v|:
+  `stdpath("state")/changeset/viewed.json`. An unreadable one is never
+  written over.
 - Swap files: a file changeset reads or previews gets none until you enter
   its buffer, so another Neovim opening it shows no |E325| warning.
 - Review comments, and each branch's last 10 submitted batches:
