@@ -16,6 +16,7 @@ local symbols = require("changeset.symbols")
 ---@field virt_text? table[]   `nvim_buf_set_extmark` virtual-text chunks.
 ---@field pos? "inline"|"right_align" Where the virtual text is drawn.
 ---@field hl_mode? "combine" Lays the virtual text over the line's background instead of blanking it.
+---@field hl_eol? boolean     Carries `hl` on to the window's edge, over the whole line.
 ---@field virt_lines? table[]  `nvim_buf_set_extmark` virtual lines, hung below the line.
 
 ---@class changeset.Line
@@ -29,6 +30,7 @@ local symbols = require("changeset.symbols")
 ---@field collapsed fun(id: string): boolean         Whether the row with this id hides its children.
 ---@field width integer                              Window width in cells; long names and directories are trimmed so stats stay visible.
 ---@field query? string                               Filter text; every occurrence of it in a line is marked.
+---@field viewed? fun(row: changeset.Row): boolean     Whether a file row is marked viewed.
 
 ---@class changeset.Summary
 ---@field ref string        What the branch is compared against, e.g. "origin/trunk".
@@ -98,6 +100,10 @@ local TINT_PRIORITY = M.MARK_PRIORITY - 1
 
 -- Beneath a state's tint: a state says something about the tree, the pointer only where it is.
 local HOVER_PRIORITY = TINT_PRIORITY - 1
+
+-- Beneath the row states' and the pointer's tints, so a viewed row still shows which one is selected and where the
+-- pointer is.
+local VIEWED_PRIORITY = HOVER_PRIORITY - 1
 
 -- Over the stat: its right-aligned text ends in the gutter's blanks, which would
 -- otherwise be drawn over the glyph.
@@ -266,11 +272,17 @@ end
 ---@param file changeset.Row
 ---@param opts changeset.RenderOpts
 ---@param width fun(text: string): integer
+---@param viewed boolean Whether the file is marked viewed.
 ---@return changeset.Line
-local function file_line(file, opts, width)
+local function file_line(file, opts, width, viewed)
   local glyph, icon_hl = opts.icon(file)
   local marker = STATUS_MARKER[file.status]
   local stat = M.stat_chunks(file)
+  if viewed then
+    glyph, icon_hl = highlights.VIEWED_ICON, highlights.VIEWED_ICON_HL
+    local label = { "viewed", highlights.META_HL }
+    stat = stat and vim.list_extend({ label, { " " } }, stat) or { label }
+  end
   local room = opts.width
     - width(MARGIN .. RAIL .. " " .. glyph .. " ")
     - (marker and width(marker) or 0)
@@ -415,17 +427,23 @@ end
 ---@param opts changeset.RenderOpts
 ---@param width fun(text: string): integer
 local function append_file(out, file, opts, width)
-  out[#out + 1] = file_line(file, opts, width)
-  if opts.collapsed(file.id) then
-    return
+  local first = #out + 1
+  local viewed = opts.viewed ~= nil and opts.viewed(file)
+  out[first] = file_line(file, opts, width, viewed)
+  if not opts.collapsed(file.id) then
+    -- A file with nothing under it is either waiting on a server or genuinely has
+    -- nothing to show — a 100% rename, a binary change. Only the first gets the
+    -- placeholder, so the read status decides it, not an empty child list.
+    if file.read == "reading" then
+      out[#out + 1] = placeholder_line(file)
+    else
+      append_children(out, file, "", opts, width)
+    end
   end
-  -- A file with nothing under it is either waiting on a server or genuinely has
-  -- nothing to show — a 100% rename, a binary change. Only the first gets the
-  -- placeholder, so the read status decides it, not an empty child list.
-  if file.read == "reading" then
-    out[#out + 1] = placeholder_line(file)
-  else
-    append_children(out, file, "", opts, width)
+  if viewed then
+    for i = first, #out do
+      table.insert(out[i].marks, { col = 0, hl = highlights.VIEWED_HL, hl_eol = true, priority = VIEWED_PRIORITY })
+    end
   end
 end
 

@@ -293,6 +293,19 @@ describe("define_highlights", function()
     assert.is_true(b > 0x10 and b < 0xf0)
   end)
 
+  it("washes a viewed file's rows toward Comment, fainter than the selection", function()
+    vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = BACKGROUND })
+    vim.api.nvim_set_hl(0, "Comment", { fg = 0x10f010 })
+    vim.api.nvim_set_hl(0, "Statement", { fg = 0x10f010 })
+
+    highlights.define_highlights()
+
+    local viewed, selected =
+      channels(present(group(highlights.VIEWED_HL).bg)), channels(present(group(highlights.SELECTED_HL).bg))
+    assert.is_true(viewed[2] > 0x10 and viewed[2] < selected[2])
+    assert.same({ 0x10, 0x10 }, { viewed[1], viewed[3] })
+  end)
+
   it("tints over the theme's chrome when Normal is transparent", function()
     vim.api.nvim_set_hl(0, "Statement", { fg = RED })
     vim.api.nvim_set_hl(0, "Normal", { fg = 0xcccccc, bg = BACKGROUND })

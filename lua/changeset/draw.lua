@@ -47,21 +47,13 @@ local function icon_for(row)
   return icons.get("lsp", row.kind == "symbol" and row.symbol_kind or "Text")
 end
 
----The icon for each row, checking files viewed in `marks`, and whether it checks `row`.
+---Whether `row` is a file marked viewed in `marks`.
 ---@param marks changeset.ViewedMarks
----@return fun(row: changeset.Row): string, string icon
----@return fun(row: changeset.Row): boolean is_viewed
-local function viewed_layout(marks)
-  local function is_viewed(row)
+---@return fun(row: changeset.Row): boolean
+local function viewed_in(marks)
+  return function(row)
     return row.kind == "file" and viewed.holds(marks, row.path, row.digest)
   end
-  return function(row)
-    if is_viewed(row) then
-      return highlights.VIEWED_ICON, highlights.VIEWED_HL
-    end
-    return icon_for(row)
-  end,
-    is_viewed
 end
 
 ---The row under the sidebar's cursor.
@@ -222,6 +214,9 @@ local function apply_marks(buf, lines, first)
     for _, mark in ipairs(line.marks or {}) do
       vim.api.nvim_buf_set_extmark(buf, ns, first + i - 1, mark.col or 0, {
         end_col = mark.end_col,
+        end_row = mark.hl_eol and first + i or nil,
+        hl_eol = mark.hl_eol,
+        strict = not mark.hl_eol,
         hl_group = mark.hl,
         virt_text = mark.virt_text,
         virt_text_pos = mark.pos,
@@ -353,6 +348,7 @@ local function mark_key(mark)
     mark.hl or "",
     mark.pos or "",
     mark.hl_mode or "",
+    mark.hl_eol and "eol" or "",
     mark.priority or "",
     mark.virt_lines and vim.inspect(mark.virt_lines) or "",
   }
@@ -519,10 +515,11 @@ function M.draw(kinds_key)
   local width = vim.api.nvim_win_get_width(win)
   local cursor, top = vim.api.nvim_win_get_cursor(win)[1], vim.fn.line("w0", win)
   comments_section = comments_for(state.tree)
+  local is_viewed = viewed_in(state.marks)
+  state.view:fold_viewed(state.rows, is_viewed)
   local tree = laid_out(state.rows)
-  local icon, is_viewed = viewed_layout(state.marks)
   local lines, lnum, blocks = state.view:show(tree, {
-    icon = icon,
+    icon = icon_for,
     viewed = is_viewed,
     width = width,
     cursor = cursor,

@@ -7,10 +7,11 @@ local Rows = require("changeset.rows")
 ---@class changeset.view.Folds
 ---@field collapsed table<string, true?> Rows whose children are hidden.
 ---@field chains table<string, true> Compressed chains the user opened out.
+---@field viewed_at? table<string, string> The digest each path was last folded at for being viewed, by path.
 
 ---@class changeset.view.Layout
 ---@field icon fun(row: changeset.Row): string, string Glyph and highlight for a row.
----@field viewed? fun(row: changeset.Row): boolean Whether `icon` draws `row` as viewed; a change redraws its block, as the row alone does not.
+---@field viewed? fun(row: changeset.Row): boolean Whether a file row is marked viewed; a change redraws its block, as the row alone does not.
 ---@field width integer
 ---@field cursor integer The cursor's line before this redraw.
 
@@ -329,6 +330,7 @@ function View:show(rows, layout)
     end,
     width = layout.width,
     query = self.narrowed,
+    viewed = layout.viewed,
   }
   local function is_open(id)
     return self.folds.chains[id] == true
@@ -456,6 +458,44 @@ end
 function View:fold_files(rows)
   for _, row in ipairs(Rows.files(rows)) do
     self.folds.collapsed[row.id] = true
+  end
+end
+
+---Fold each file row of `rows` that `is_viewed` holds for at a digest not yet folded at, every copy of it, and
+---record the digest: once folded, the user's own fold wins until the file is marked at another digest.
+---@param rows changeset.Row[] Section rows from `Rows.build`.
+---@param is_viewed fun(row: changeset.Row): boolean
+---@param folds changeset.view.Folds Updated in place.
+function M._fold_viewed(rows, is_viewed, folds)
+  local at = folds.viewed_at or {}
+  folds.viewed_at = at
+  local fresh = vim.tbl_filter(function(row)
+    return is_viewed(row) and at[row.path] ~= row.digest
+  end, Rows.files(rows))
+  for _, row in ipairs(fresh) do
+    folds.collapsed[row.id] = true
+    at[row.path] = row.digest
+  end
+end
+
+---Fold the viewed files of `rows` that have not been folded for it at their digest.
+---@param rows changeset.Row[] Section rows from `Rows.build`.
+---@param is_viewed fun(row: changeset.Row): boolean
+function View:fold_viewed(rows, is_viewed)
+  M._fold_viewed(rows, is_viewed, self.folds)
+end
+
+---Unfold every copy of `path`'s row in `rows` and forget it was folded for being viewed.
+---@param rows changeset.Row[] Section rows from `Rows.build`.
+---@param path string
+function View:unview(rows, path)
+  if self.folds.viewed_at then
+    self.folds.viewed_at[path] = nil
+  end
+  for _, row in ipairs(Rows.files(rows)) do
+    if row.path == path then
+      self.folds.collapsed[row.id] = nil
+    end
   end
 end
 

@@ -1559,7 +1559,7 @@ describe("changeset sidebar", function()
     ---@param name string
     local function mark(name)
       Sidebar.cursor_to(name)
-      press("v")
+      press("x")
     end
 
     ---@param path string
@@ -1574,19 +1574,44 @@ describe("changeset sidebar", function()
       Sidebar.settle()
     end
 
-    it("checks the file's row in the viewed group, leaving the others' icons", function()
+    ---The extmarks in `ns` on 1-based line `lnum`.
+    ---@param buf integer
+    ---@param lnum integer
+    ---@return vim.api.keyset.extmark_details[]
+    local function marks_on(buf, lnum)
+      return vim.tbl_map(function(m)
+        return present(m[4])
+      end, vim.api.nvim_buf_get_extmarks(buf, ns, { lnum - 1, 0 }, { lnum - 1, -1 }, { details = true }))
+    end
+
+    ---@param buf integer
+    ---@param lnum integer
+    ---@return boolean
+    local function tinted(buf, lnum)
+      return vim.iter(marks_on(buf, lnum)):any(function(m)
+        return m.hl_group == highlights.VIEWED_HL and m.hl_eol == true
+      end)
+    end
+
+    it("checks the file's row, tints it and labels it viewed, leaving the others", function()
       local buf = open_sidebar()
-      local other = line_named("other.lua")
 
       mark("mod.lua")
 
       local lnum = line_of(buf, "mod.lua")
       assert.truthy((line_named("mod.lua"):find(highlights.VIEWED_ICON, 1, true)))
-      assert.same(other, line_named("other.lua"))
-      local groups = vim.tbl_map(function(m)
-        return present(m[4]).hl_group
-      end, vim.api.nvim_buf_get_extmarks(buf, ns, { lnum - 1, 0 }, { lnum - 1, -1 }, { details = true }))
-      assert.truthy(vim.tbl_contains(groups, highlights.VIEWED_HL))
+      assert.is_true(tinted(buf, lnum))
+      assert.is_false(tinted(buf, line_of(buf, "other.lua")))
+      local marks = marks_on(buf, lnum)
+      assert.is_true(vim.iter(marks):any(function(m)
+        return m.hl_group == highlights.VIEWED_ICON_HL
+      end))
+      assert.is_true(vim.iter(marks):any(function(m)
+        return m.virt_text_pos == "right_align"
+          and vim.iter(m.virt_text):any(function(chunk)
+            return chunk[1] == "viewed"
+          end)
+      end))
     end)
 
     it("restores the icon when marked again", function()
@@ -1655,9 +1680,107 @@ describe("changeset sidebar", function()
         Sidebar.flush()
 
         Sidebar.cursor_to("one")
-        press("v")
+        press("x")
 
         assert.truthy((line_named("mod.lua"):find(highlights.VIEWED_ICON, 1, true)))
+      end)
+
+      local function open_with_symbols()
+        vim.cmd.edit("mod.lua")
+        changeset.open()
+        Sidebar.await_diff()
+        source.answer("mod.lua", { Changes.sym("one", "Function", 0, 3, 5) })
+        source.answer("other.lua", {})
+        Sidebar.flush()
+      end
+
+      ---@return boolean
+      local function shows(text)
+        return Sidebar.text():find(text, 1, true) ~= nil
+      end
+
+      it("tints every line under the file", function()
+        open_with_symbols()
+        local buf = present(window.buf())
+
+        mark("mod.lua")
+        Sidebar.cursor_to("mod.lua")
+        press("l")
+
+        assert.is_true(tinted(buf, line_of(buf, "one")))
+      end)
+
+      it("folds the file on marking and unfolds it on unmarking", function()
+        open_with_symbols()
+
+        mark("mod.lua")
+        assert.is_false(shows("one"))
+
+        mark("mod.lua")
+        assert.is_true(shows("one"))
+      end)
+
+      it("moves the cursor to the next file not viewed", function()
+        open_with_symbols()
+
+        Sidebar.cursor_to("one")
+        press("x")
+
+        assert.truthy((Sidebar.cursor_line():find("other.lua", 1, true)))
+      end)
+
+      it("keeps the cursor on the marked file's row when no file below is left to view", function()
+        open_with_symbols()
+        mark("other.lua")
+        assert.truthy((Sidebar.cursor_line():find("other.lua", 1, true)))
+
+        Sidebar.cursor_to("one")
+        press("x")
+
+        assert.truthy((Sidebar.cursor_line():find("mod.lua", 1, true)))
+      end)
+
+      it("starts a file marked in an earlier session folded, and keeps it open once opened", function()
+        open_with_symbols()
+        local tree = present(build.current())
+        local file = present(vim.iter(tree.files):find(function(f)
+          return f.path == "mod.lua"
+        end))
+        changeset.close()
+        viewed.toggle(viewed.path(), tree.root, "mod.lua", file.digest)
+        Fixture.git({ "checkout", "-q", "-b", "other", Fixture.git({ "rev-parse", "HEAD" }, tmp) }, tmp)
+        open_with_symbols()
+        assert.is_false(shows("one"))
+
+        Sidebar.cursor_to("mod.lua")
+        press("l")
+        assert.is_true(shows("one"))
+        build.refresh()
+        Sidebar.flush()
+
+        assert.is_true(shows("one"))
+      end)
+
+      it("draws the selection's tint over a viewed row's", function()
+        open_with_symbols()
+        mark("other.lua")
+        local buf = present(window.buf())
+        Sidebar.cursor_to("other.lua")
+        Sidebar.flush()
+
+        local lnum = line_of(buf, "other.lua")
+        local rows_ns = vim.api.nvim_get_namespaces()["changeset.rows"]
+        local selected = vim
+          .iter(vim.api.nvim_buf_get_extmarks(buf, rows_ns, { lnum - 1, 0 }, { lnum - 1, -1 }, {
+            details = true,
+          }))
+          :find(function(m)
+            return present(m[4]).hl_group == highlights.SELECTED_HL
+          end)
+        local tint = vim.iter(marks_on(buf, lnum)):find(function(m)
+          return m.hl_group == highlights.VIEWED_HL
+        end)
+        assert.is_true(present(present(selected)[4]).priority > present(tint).priority)
       end)
     end)
 
