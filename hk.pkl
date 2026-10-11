@@ -118,6 +118,8 @@ hooks {
       // Output is printed only on failure, minus plenary's passing specs: hk prints a step's
       // stderr even when it passes.
       ["Lua(Types+Test)   [[emmylua_check, plenary]]"] = new Step {
+        // No spec or type check reads Markdown. The vimdoc stays in: docs_spec reads it.
+        exclude = List("**/*.md")
         check =
           #"out=$(mise run -q typecheck ::: test 2>&1) || { printf '%s\n' "$out" | grep -v 'Success.*||' >&2; exit 1; }"#
       }
