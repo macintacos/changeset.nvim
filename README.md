@@ -160,7 +160,7 @@ has a `<Plug>(changeset-…)` map named after its words, and these default keys:
 | `f`                         | `filter`                                  | Filter the tree as you type                                             |
 | `F`                         | `filter_kinds`                            | Hide symbol kinds, remembered for this branch, repository or everywhere |
 | `y`                         | `yank`                                    | Copy the row's `path:line`, or a ranged comment's `path:first-last`     |
-| `v`                         | `toggle_viewed`                           | Mark the file viewed, or not, until its diff changes                    |
+| `x`                         | `toggle_viewed`                           | Mark the file viewed, or not, until its diff changes                    |
 | `d`                         | `delete_comment`                          | Delete the review comment on a Comments row                             |
 | `R`                         | `refresh`                                 | Rebuild the tree                                                        |
 | `?`                         | `help`                                    | List the sidebar's keys                                                 |
@@ -220,7 +220,7 @@ require("changeset").setup({
     prev_section = "[[",
     refresh = "R",
     yank = "y",
-    toggle_viewed = "v",
+    toggle_viewed = "x",
     delete_comment = "d",
     help = "?",
     filter_kinds = "F",

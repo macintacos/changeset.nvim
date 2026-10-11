@@ -154,8 +154,8 @@ restarts. With mini.icons:
 - Symbol rows: `MiniIcons.get("lsp", kind)` — the exact call that config's outline picker
   makes, so a method is the same glyph in the same hue in both the outline picker and the
   sidebar.
-- File rows: `MiniIcons.get("file", path)`, or the viewed check (§ A viewed file wears a
-  check in its icon's place).
+- File rows: `MiniIcons.get("file", path)`, or the viewed check (§ A viewed file
+  recedes).
 - Section headers: `MiniIcons.get("directory", …)` with `src`, `tests`, `docs`,
   `.config` and `build`, so each header wears the icon its kind of directory already has.
 - Orphan-hunk groups: the `lsp`/`Text` icon, dimmed. Not a bespoke glyph.
@@ -168,28 +168,44 @@ restarts. With mini.icons:
 
 A future icon-set change propagates everywhere at once. That is the point.
 
-### A viewed file wears a check in its icon's place
+### A viewed file recedes
 
-A file marked viewed (`v`) draws `✔` in `ChangesetViewed`, linked to `Comment`, in the cell
-its file icon holds:
+A file marked viewed (`x`) is one the user has finished with, so it steps back in four ways,
+in every section it shows in. Three of them (wash, check, label) are quiet signals that add
+no new hue, so the status rail stays the one bold element.
 
-- **It reads as a checklist.** The checks fill the icon column, so finished files read down
-  one edge. A grey check among coloured icons lets a viewed file recede, as GitHub's Viewed
-  does.
-- **It changes no layout.** It is one cell, like an icon, so the row's width budget is
-  unchanged.
-- **It is the config's own check.** The config already uses `✔` as its "selected" marker,
-  and no icon plugin has a "viewed" category to ask for.
-- **Its colour recedes.** `Comment`'s grey is the tree's "not the point" colour, for context
-  and meta, which is what a viewed file has become. `DiagnosticOk` green already means
-  "review comment".
-- **Its key is `v`.** It is mnemonic, and Visual mode has no use in the sidebar, since no
-  sidebar key takes a range.
+- **A wash.** The file row and every line under it take `ChangesetViewed`, a background 8%
+  of the way from the window's to `Comment`'s grey. Every row state tints toward
+  `Statement`'s accent (selected 20%, here 12%, picked 6%), so a neutral wash never reads as
+  one of them. It is clearly fainter than the selection, about as quiet as picked, and draws
+  beneath all three, which still show over it.
+- **A check in the icon's place.** `✔` in `ChangesetViewedIcon`, linked to `Comment`, mirroring
+  the `ChangesetSelected`/`ChangesetSelectedIcon` pair. The checks fill the icon column, so
+  finished files read down one edge, as a checklist. It is one cell, so the width budget is
+  unchanged. The config already uses `✔` as its "selected" marker, and no icon plugin has a
+  "viewed" category to ask for. `Comment`'s grey is the tree's "not the point" colour;
+  `DiagnosticOk` green already means "review comment".
+- **A label.** `viewed`, right-aligned just left of the stat, in `ChangesetMeta`: the "not
+  content" level of the three levels of emphasis. It counts in the width budget, so the
+  name trims first. It says `viewed`, not "(read)", so the feature keeps one name: the
+  `toggle_viewed` option, `viewed.json`, GitHub's "Viewed".
+- **A fold.** Marking folds every copy of the file, to give the rest the room; unmarking
+  unfolds them. A file whose mark holds the first time the session draws it at that digest
+  starts folded, which covers a restart and a mark another Neovim wrote. After that the
+  user's fold wins: one opened with `l` stays open until it is marked again. A mark that
+  stops holding leaves the fold alone, since the user may already be reading the change.
 
-Placements rejected: the left margin, where the check would butt against the rail; after
-the name, where it would move with the name's length and could be matched by the filter;
-the right gutter, which the row-state glyphs own; and dimming the name, since `Comment` on
-a name already means "context".
+Marking then moves the cursor to the next file row below that is not viewed, skipping other
+copies of the marked file, and previews it as a cursor move does: reviewing is a walk down
+the files. With none below, the cursor stays on the marked row. Unmarking leaves it put.
+
+The key is `x`, which the kind menu already uses to hide or show the kind under the cursor,
+so `x` means "toggle this row" in both places.
+
+Placements rejected for the check: the left margin, where it would butt against the rail;
+after the name, where it would move with the name's length and could be matched by the
+filter; the right gutter, which the row-state glyphs own; and dimming the name, since
+`Comment` on a name already means "context".
 
 ### Kind labels are dropped; the icon carries kind
 
@@ -1337,6 +1353,11 @@ there with gitsigns' signs drawn beside it, and they stay closed until the diff 
 on, by the sidebar or the toggle, each the user asking for the diff again; nothing writes it
 down. Turning every file off for it would make one stray toggle cost the session's diff.
 
+A file marked viewed has no diff while its mark holds: the user has read it, so its buffer
+goes back to how gitsigns alone draws it. The diff returns when the file's diff changes,
+since there is something new to read, or when the mark is cleared. Viewed is its own
+condition, apart from the reach and from a view closed by hand.
+
 ## What it remembers
 
 The tree is built the first time something asks for it — `:Changeset`, `:Changeset
@@ -1382,7 +1403,9 @@ is never parsed again and its base is never read again. The file name carries a
 format number, bumped whenever what an entry holds or how it is derived changes, because an
 older entry's stamp would otherwise still match. Folds — a section's as well as a file's — are remembered per
 repository for as long as Neovim is running, so reopening looks like you left it; a restart
-starts expanded, except Generated, which starts folded. Per repository because a row is
+starts expanded, except Generated, which starts folded. Beside the folds, each viewed file
+records the digest it was last folded at, so a viewed file folds once per diff and the
+user's unfold sticks. Per repository because a row is
 identified by a repo-relative path, which two checkouts can easily both have.
 
 Files marked viewed are kept in `stdpath("state")/changeset/viewed.json`, per repository
