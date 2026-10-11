@@ -2,8 +2,8 @@ local support = require("support.git")
 local gutter = require("support.gutter")
 local present = require("support.present")
 
-local await, await_cached, await_shown, edit, revision, text =
-  gutter.await, gutter.await_cached, gutter.await_shown, gutter.edit, gutter.revision, gutter.text
+local await, await_cached, show_and_await, edit, revision, base_text =
+  gutter.await, gutter.await_cached, gutter.show_and_await, gutter.edit, gutter.revision, gutter.base_text
 
 local fork_point = require("changeset.fork_point")
 local Repo = require("gitsigns.git.repo")
@@ -45,6 +45,20 @@ describe("the gutter's base", function()
   local outside ---@type string?
   local other ---@type string?
 
+  ---A branch whose a.txt has a further change staged, so the index differs from the base.
+  ---@param branch string
+  ---@return string base The merge base.
+  ---@return string[] want a.txt as the base holds it.
+  local function branch_with_staged_change(branch)
+    gutter.fixture(dir, branch, { "a.txt", "b.txt" })
+    vim.fn.writefile({ "one", "two", "three" }, dir .. "/a.txt")
+    support.git({ "add", "a.txt" }, dir)
+    local base = gutter.merge_base(dir)
+    local want = gutter.blob_lines(dir, base .. ":a.txt")
+    vim.fn.chdir(dir)
+    return base, want
+  end
+
   before_each(function()
     cwd = vim.fn.getcwd()
     dir = gutter.repo()
@@ -77,7 +91,7 @@ describe("the gutter's base", function()
 
     local bufs = edit({ "a.txt", "b.txt", "c.txt" })
 
-    assert.is_true(await_shown(bufs, gutter.merge_base(dir), 5000))
+    assert.is_true(show_and_await(bufs, gutter.merge_base(dir), 5000))
   end)
 
   it("leaves a base set by hand alone", function()
@@ -88,7 +102,7 @@ describe("the gutter's base", function()
     vim.fn.chdir(dir)
 
     local bufs = edit({ "a.txt", "b.txt" })
-    assert.is_true(await_shown(bufs, gutter.merge_base(dir), 5000))
+    assert.is_true(show_and_await(bufs, gutter.merge_base(dir), 5000))
     vim.api.nvim_buf_call(present(bufs[1]), function()
       require("gitsigns").change_base(parent)
     end)
@@ -167,13 +181,7 @@ describe("the gutter's base", function()
   end)
 
   it("diffs a buffer whose base moves while its first read runs against the merge base", function()
-    gutter.fixture(dir, "mid", { "a.txt", "b.txt" })
-    vim.fn.writefile({ "one", "two", "three" }, dir .. "/a.txt")
-    support.git({ "add", "a.txt" }, dir)
-    local base = gutter.merge_base(dir)
-    -- gitsigns keeps the blob's final newline as an empty last line; support.git trims it.
-    local want = vim.split(support.git({ "show", base .. ":a.txt" }, dir) .. "\n", "\n")
-    vim.fn.chdir(dir)
+    local base, want = branch_with_staged_change("mid")
     -- b.txt lands changeset's base first, so the move under a.txt's read is a.txt's only one.
     assert.is_true(await(edit({ "b.txt" }), base, 5000))
     held_blob = support.git({ "rev-parse", ":a.txt" }, dir)
@@ -181,19 +189,14 @@ describe("the gutter's base", function()
     local a = present(edit({ "a.txt" })[1])
 
     vim.wait(5000, function()
-      return vim.deep_equal(text(a), want)
+      return vim.deep_equal(base_text(a), want)
     end, 20)
     assert.is_nil(held_blob) -- the read went through the hook, or the case proves nothing
-    assert.are.same(want, text(a))
+    assert.are.same(want, base_text(a))
   end)
 
   it("moves a buffer loaded out of view onto the merge base once it is shown", function()
-    gutter.fixture(dir, "hidden", { "a.txt", "b.txt" })
-    vim.fn.writefile({ "one", "two", "three" }, dir .. "/a.txt")
-    support.git({ "add", "a.txt" }, dir)
-    local base = gutter.merge_base(dir)
-    local want = vim.split(support.git({ "show", base .. ":a.txt" }, dir) .. "\n", "\n")
-    vim.fn.chdir(dir)
+    local base, want = branch_with_staged_change("hidden")
     local a = vim.fn.bufadd(dir .. "/a.txt")
     vim.fn.bufload(a) -- loaded, never shown: gitsigns defers its first read
     assert.is_true(await_cached({ a }))
@@ -204,7 +207,7 @@ describe("the gutter's base", function()
 
     assert.is_true(await({ a }, base, 5000))
     assert.is_true(vim.wait(5000, function()
-      return vim.deep_equal(text(a), want)
+      return vim.deep_equal(base_text(a), want)
     end, 20))
   end)
 
@@ -228,8 +231,8 @@ describe("the gutter's base", function()
     pulled = support.commit("pulled", dir)
     support.git({ "update-ref", "refs/remotes/origin/main", pulled }, dir)
 
-    assert.is_true(await_shown(bufs, pulled, 10000))
+    assert.is_true(show_and_await(bufs, pulled, 10000))
     assert.is_nil(held_blob) -- the re-read went through the hook, or the case proves nothing
-    assert.are.same(vim.split(support.git({ "show", pulled .. ":a.txt" }, dir) .. "\n", "\n"), text(present(bufs[1])))
+    assert.are.same(gutter.blob_lines(dir, pulled .. ":a.txt"), base_text(present(bufs[1])))
   end)
 end)

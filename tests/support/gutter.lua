@@ -46,7 +46,7 @@ end
 ---`changeset` moves a cached buffer that holds its text onto its base at the next `GitSignsUpdate`, with a buffer or
 ---without one, or once gitsigns' read of it lands. gitsigns sends buffer-less ones after a `chdir` and as the cwd
 ---repository's HEAD changes or disappears. A buffer gitsigns has no text for moves once it is shown, so await it with
----`M.await_shown`. A case that reads or sets a buffer's base waits for changeset's base first.
+---`M.show_and_await`. A case that reads or sets a buffer's base waits for changeset's base first.
 ---@param buf integer
 ---@return string? revision nil both before gitsigns caches the buffer and on the
 ---index, so await the cache before awaiting nil.
@@ -55,9 +55,10 @@ function M.revision(buf)
   return bcache and bcache.git_obj.revision
 end
 
+---The text gitsigns diffs `buf` against; nil while it holds none.
 ---@param buf integer
----@return string[]? text What gitsigns diffs the buffer against; nil while it holds none.
-function M.text(buf)
+---@return string[]?
+function M.base_text(buf)
   local bcache = require("gitsigns.cache").cache[buf]
   return bcache and bcache.compare_text
 end
@@ -104,7 +105,7 @@ end
 ---@param want string?
 ---@param timeout integer Per buffer.
 ---@return boolean
-function M.await_shown(bufs, want, timeout)
+function M.show_and_await(bufs, want, timeout)
   for _, buf in ipairs(bufs) do
     vim.api.nvim_set_current_buf(buf)
     local landed = vim.wait(timeout, function()
@@ -185,6 +186,15 @@ end
 ---@return string
 function M.merge_base(dir, branch)
   return support.git({ "merge-base", "HEAD", branch or "main" }, dir)
+end
+
+---The lines gitsigns holds for the blob `object`.
+---@param dir string
+---@param object string A `git show` object, such as `rev .. ":a.txt"`.
+---@return string[]
+function M.blob_lines(dir, object)
+  -- gitsigns keeps the blob's final newline as an empty last line, and `support.git` trims it.
+  return vim.split(support.git({ "show", object }, dir) .. "\n", "\n")
 end
 
 ---Let a case's base changes land, then drop its buffers, its base and its repo.
