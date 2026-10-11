@@ -28,13 +28,17 @@ checkout of the plugin: from a worktree, silently the main one.
 Specs sit flat in `tests/`, named `<module>_spec.lua` or for a behaviour
 (`sidebar_spec.lua`). Each spec file runs in its own child Neovim under
 `tests/minimal_init.lua`. It drops your config from `rtp`, gives state and cache temporary
-directories, makes `.tests/data` the data directory, and hides your git environment and
-global git config.
+directories, makes `.tests/data` the data directory, and hides your git environment. It
+swaps your global git config for `tests/support/gitconfig`, which names who commits.
 
 A spec creates its temporary files and repositories and removes them after. Build them with
 the fixtures in `tests/support/`, such as `require("support.git")`, rather than shelling
 out to git. Change directory only when the code under test resolves the repository from
 the process directory.
+
+Spawning git takes most of the suite's time, so `init_repo` and `feature` build each
+repository once per spec file and copy it after. Two repositories a spec file builds alike
+share their commits' SHAs.
 
 A private function a spec needs is exposed as `M._name` on its module. It is not public
 API.
@@ -64,8 +68,8 @@ nil; check a value that can be `false` with `assert.is_truthy`.
 ## Before a PR
 
 Run `mise run preflight` and make it pass. The pre-commit hook formats and lints the staged
-files, and pre-push runs the type check and the suite. Never bypass them with
-`--no-verify`.
+files, and pre-push runs the type check and the suite unless the push changes only Markdown.
+Never bypass them with `--no-verify`.
 
 ## Routing
 
