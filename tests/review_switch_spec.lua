@@ -383,7 +383,7 @@ describe("the gutter's base", function()
     local a, b = present(bufs[1]), present(bufs[2])
     assert.is_true(await_shown(bufs, base, 10000))
 
-    -- Shown while b is hidden, so the commit drops only b's text.
+    -- The commit drops every open file's text: a is in view and reads its own back, b stays hidden and keeps none.
     vim.api.nvim_set_current_buf(a)
     vim.fn.writefile({ "c" }, dir .. "/c.txt")
     support.commit("c", dir)

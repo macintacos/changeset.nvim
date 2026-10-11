@@ -41,16 +41,15 @@ local hears_reads = false
 
 -- Reaches into gitsigns internals: its buffer cache, git_obj.revision, compare_text,
 -- repo.toplevel and repo.head_oid, gitsigns.manager's on_update, and non-global change_base
--- reading current_buf() before it yields. The compare_text gate relies on gitsigns reading
--- a buffer only while compare_text is nil, and storing a read before checking it was
--- invalidated.
+-- reading current_buf() before it yields. The compare_text gate also assumes gitsigns reads
+-- a buffer only while compare_text is nil.
 
 ---Whether this file may move a buffer's base now. Buffers of another repository,
----fugitive/gitsigns blob buffers and bases set by hand are never its to move. A
+---fugitive/gitsigns blob buffers and bases set by hand are left alone. A
 ---per-buffer reset to the index is indistinguishable from the default, so the
 ---watcher reclaims it. A buffer gitsigns holds no text for may have a read in flight,
----and gitsigns stores that read's text even after a move has replaced its base; it
----waits for the update that publishes the read.
+---and gitsigns stores that read's text even after a move has replaced its base, so the
+---move waits for the update that publishes the read.
 ---@param buf integer
 ---@param bcache Gitsigns.CacheEntry
 ---@return boolean
@@ -100,8 +99,7 @@ local function reconcile()
   end
 end
 
----Point every buffer this file may move now at `base`; `reconcile` moves the rest as gitsigns reads them, and ones
----attached later.
+---Point every buffer this file may move now at `base`; the rest move once gitsigns reads them.
 ---@param base string?
 ---@param done fun(err: string?)? Called once every move has landed, with the first error.
 local function apply(base, done)
@@ -246,12 +244,9 @@ function M.activate(event)
     require("gitsigns.manager").on_update(on_read)
   end
   local group = vim.api.nvim_create_augroup("changeset.review", { clear = true })
-  -- gitsigns republishes a buffer's branch whenever its status changes, including after
-  -- a checkout made outside Neovim, so this doubles as a repository- and
-  -- branch-change hook, and each event also moves buffers that missed the base.
-  -- Its cwd-wide sibling event carries no buffer, so it follows no branch but still moves
-  -- buffers that missed the base. Branches follow from buffer events because that watcher
-  -- never starts in a worktree, where `.git` is a file rather than a directory.
+  -- gitsigns republishes a buffer's branch whenever its status changes, so this also hooks
+  -- repository and branch changes, including a checkout made outside Neovim. Branches follow
+  -- from buffer events because the gitdir watcher never starts in a worktree, where `.git` is a file.
   vim.api.nvim_create_autocmd("User", {
     group = group,
     pattern = "GitSignsUpdate",
