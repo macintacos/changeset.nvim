@@ -10,6 +10,7 @@ local icons = require("changeset.icons")
 local review_comment = require("changeset.review_comment")
 local reviewing = require("changeset.reviewing")
 local sidebar_state = require("changeset.sidebar_state")
+local unified_diff = require("changeset.unified_diff")
 local view = require("changeset.view")
 local viewed = require("changeset.viewed")
 local window = require("changeset.window")
@@ -477,6 +478,7 @@ function M.set_keymaps(buf, keys, hooks)
       return vim.notify("Changeset: could not write " .. record, vim.log.levels.ERROR)
     end
     state.marks = marks
+    unified_diff.refresh_viewed()
     if not viewed.holds(marks, file.path, file.digest) then
       state.view:unview(state.rows, file.path)
       return redraw()
