@@ -178,7 +178,8 @@ no new hue, so the status rail stays the one bold element.
   of the way from the window's to `Comment`'s grey. Every row state tints toward
   `Statement`'s accent (selected 20%, here 12%, picked 6%), so a neutral wash never reads as
   one of them. It is clearly fainter than the selection, about as quiet as picked, and draws
-  beneath all three, which still show over it.
+  beneath all three, which still show over it. It draws beneath the pointer's
+  `ChangesetHover` too, which would otherwise vanish across a viewed file's rows.
 - **A check in the icon's place.** `✔` in `ChangesetViewedIcon`, linked to `Comment`, mirroring
   the `ChangesetSelected`/`ChangesetSelectedIcon` pair. The checks fill the icon column, so
   finished files read down one edge, as a checklist. It is one cell, so the width budget is

@@ -669,8 +669,8 @@ keymaps.toggle_viewed                 *changeset-option-keymaps.toggle_viewed*
 
 	A viewed file changes in every section it shows in:
 	- Its file row and every line under it take a faint |ChangesetViewed|
-	  wash, under the |ChangesetSelected|, |ChangesetHere| and
-	  |ChangesetPicked| tints.
+	  wash, under the |ChangesetSelected|, |ChangesetHere|,
+	  |ChangesetPicked| and |ChangesetHover| tints.
 	- A |ChangesetViewedIcon| `✔` takes its icon's place.
 	- The word `viewed` sits left of its stat, in |ChangesetMeta|. A long
 	  name is trimmed to make room.
