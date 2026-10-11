@@ -481,6 +481,18 @@ function View:step(lnum, delta)
   end)
 end
 
+---The nearest row past `lnum` in `delta`'s direction that `j` and `k` stop on: any but
+---an unfolded section's header, or the line itself when there is none that way.
+---@param lnum integer
+---@param delta integer 1 or -1.
+---@return integer
+function View:walk(lnum, delta)
+  return seek(self.shown, lnum, delta, function(row)
+    -- A folded section's header is the only row it has left.
+    return row.kind ~= "section" or self.folds.collapsed[row.id] == true
+  end)
+end
+
 ---The nearest section header past `lnum` in `delta`'s direction, a folded
 ---one included, or the line itself when there is none that way.
 ---@param lnum integer

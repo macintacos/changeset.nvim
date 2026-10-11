@@ -252,6 +252,19 @@ function M.preview_step(count, preview)
   preview()
 end
 
+---Moves the sidebar's cursor `count` rows, over every section header but a folded one.
+---@param count integer Down for positive.
+local function walk(count)
+  local state, lnum = sidebar_state.current(), window.cursor()
+  if not (state and lnum) then
+    return
+  end
+  for _ = 1, math.abs(count) do
+    lnum = state.view:walk(lnum, count > 0 and 1 or -1)
+  end
+  move(lnum)
+end
+
 ---Open the symbol-kind filter menu, redrawing as kinds are toggled.
 ---@param state changeset.SidebarState
 ---@param redraw fun() Redraw the tree.
@@ -402,6 +415,17 @@ function M.set_keymaps(buf, keys, hooks)
       move(state.view:step_section(lnum, -1))
     end
   end, "Previous section")
+  -- Not `keymaps` options: they take the place of Neovim's own `j` and `k`.
+  for _, lhs in ipairs({ "j", "<Down>" }) do
+    set(lhs, function()
+      walk(vim.v.count1)
+    end, "Next row")
+  end
+  for _, lhs in ipairs({ "k", "<Up>" }) do
+    set(lhs, function()
+      walk(-vim.v.count1)
+    end, "Previous row")
+  end
   map(keys.refresh, build.update, "Rebuild the tree")
   map(keys.yank, function()
     local row = draw.row_at_cursor()

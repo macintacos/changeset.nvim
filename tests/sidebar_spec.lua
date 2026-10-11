@@ -546,6 +546,40 @@ describe("changeset sidebar", function()
       assert.equal(line_of(buf, "README.md"), vim.api.nvim_win_get_cursor(0)[1])
       assert.truthy((vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(target)):find("README.md$")))
     end)
+
+    it("steps over a section header with j and k", function()
+      local buf = open_sidebar()
+      local last = line_of(buf, "Docs") - 1
+      vim.api.nvim_set_current_win((present(window.win())))
+      vim.api.nvim_win_set_cursor(0, { last, 0 })
+
+      press("j")
+      assert.equal(line_of(buf, "README.md"), vim.api.nvim_win_get_cursor(0)[1])
+      press("k")
+      assert.equal(last, vim.api.nvim_win_get_cursor(0)[1])
+    end)
+
+    it("steps a count of rows over a section header", function()
+      local buf = open_sidebar()
+      vim.api.nvim_set_current_win((present(window.win())))
+      vim.api.nvim_win_set_cursor(0, { line_of(buf, "README.md"), 0 })
+
+      press("2k")
+
+      assert.equal(line_of(buf, "Docs") - 2, vim.api.nvim_win_get_cursor(0)[1])
+    end)
+
+    it("stops on a folded section's header with j", function()
+      local buf = open_sidebar()
+      vim.api.nvim_set_current_win((present(window.win())))
+      vim.api.nvim_win_set_cursor(0, { line_of(buf, "Docs"), 0 })
+      press("h")
+      vim.api.nvim_win_set_cursor(0, { line_of(buf, "Docs") - 1, 0 })
+
+      press("j")
+
+      assert.equal(line_of(buf, "Docs"), vim.api.nvim_win_get_cursor(0)[1])
+    end)
   end)
 
   describe("with inline tests", function()
