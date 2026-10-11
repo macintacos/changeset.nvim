@@ -31,6 +31,20 @@ function M.settle()
   assert.is_true(settled, "the sidebar never settled")
 end
 
+---Redraw the sidebar at once on every rebuild. On a slow machine a redraw costing over a frame holds the next one back
+---on a timer, which only `throttle_spec` is about.
+---@return fun() restore
+function M.draw_at_once()
+  local changeset = require("changeset")
+  local due = changeset._due
+  changeset._due = function(now_ms)
+    return now_ms
+  end
+  return function()
+    changeset._due = due
+  end
+end
+
 ---Let what the sidebar scheduled, such as its "you are here" tracking, run.
 function M.flush()
   local flushed = false

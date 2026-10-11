@@ -552,6 +552,7 @@ describe("changeset sidebar", function()
     local source ---@type support.symbols.Source
     ---@type fun(path: string, items: changeset.Symbol[]?, comments: changeset.Comments?)?
     local answer
+    local restore_due ---@type fun()
 
     local SESSION = {
       Changes.sym("load", "Function", 0, 1, 3),
@@ -624,9 +625,11 @@ describe("changeset sidebar", function()
       Fixture.commit("rust", tmp)
       source = Symbols.install()
       answer = source.answer
+      restore_due = Sidebar.draw_at_once()
     end)
 
     after_each(function()
+      restore_due()
       source.restore()
     end)
 
