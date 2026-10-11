@@ -43,14 +43,17 @@ local moving = {}
 ---Whether this file may move a buffer's base: buffers of another repository,
 ---fugitive/gitsigns blob buffers and bases set by hand are left alone. A
 ---per-buffer reset to the index is indistinguishable from the default, so the
----watcher reclaims it.
+---watcher reclaims it. gitsigns keeps a read that a move overtakes, so a buffer
+---it has no text for waits for its next update.
 ---@param buf integer
----@param git_obj Gitsigns.GitObj
+---@param bcache Gitsigns.CacheEntry
 ---@return boolean
-local function owned(buf, git_obj)
+local function owned(buf, bcache)
+  local git_obj = bcache.git_obj
   return git_obj.repo.toplevel == toplevel
     and not vim.api.nvim_buf_get_name(buf):match("^%a+://")
     and (git_obj.revision == nil or ours[git_obj.revision] == true)
+    and bcache.compare_text ~= nil
 end
 
 ---Move one buffer onto `want`, unless a move there is already in flight.
@@ -85,7 +88,7 @@ end
 ---Move buffers that missed the base, such as ones attached while it changed.
 local function reconcile()
   for buf, bcache in pairs(require("gitsigns.cache").cache) do
-    if bcache.git_obj.revision ~= want and owned(buf, bcache.git_obj) then
+    if bcache.git_obj.revision ~= want and owned(buf, bcache) then
       move(buf, report)
     end
   end
@@ -108,7 +111,7 @@ local function apply(base, done)
     end
   end
   for buf, bcache in pairs(require("gitsigns.cache").cache) do
-    if owned(buf, bcache.git_obj) then
+    if owned(buf, bcache) then
       -- The repo watcher's refresh reads this field right after GitSignsUpdate
       -- and writes it back when it lands; setting it now makes that refresh land
       -- on the new base.

@@ -89,6 +89,26 @@ function M.await_cached(bufs)
   end, 5000)
 end
 
+---Show each buffer in turn until it is on `want` with its text read again. A move's read runs only while a window
+---shows the buffer, and it lands after the revision changes, so the revision alone is not enough to leave the buffer.
+---@param bufs integer[]
+---@param want string?
+---@param timeout integer
+---@return boolean
+function M.await_shown(bufs, want, timeout)
+  for _, buf in ipairs(bufs) do
+    vim.api.nvim_set_current_buf(buf)
+    local landed = vim.wait(timeout, function()
+      local bcache = require("gitsigns.cache").cache[buf]
+      return bcache ~= nil and bcache.git_obj.revision == want and bcache.compare_text ~= nil and in_flight == 0
+    end, 20)
+    if not landed then
+      return false
+    end
+  end
+  return true
+end
+
 ---Wait until no base change has been in flight for 200 ms.
 ---@return boolean
 function M.settle()

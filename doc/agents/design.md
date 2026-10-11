@@ -1175,6 +1175,13 @@ process kept moving HEAD, and HEAD's next move measures again through the watche
 gh is still being asked, its answer carries the newest measure rather than the one it was
 asked with.
 
+A buffer moves onto a new base only once gitsigns holds its text. gitsigns keeps a read
+that a move overtakes, so a buffer moved mid-read would name the base and diff the index.
+The price is that a buffer gitsigns has not read since it was loaded, such as a file
+nobody has shown, or has not read since it last dropped its text, as a commit or a
+checkout does to every open file, moves only when it is next shown, after one draw against
+its old base. Only a gitsigns change could remove that price.
+
 ## Every file shows its diff inline
 
 While the sidebar is open, every file the tree lists shows gitsigns' unified diff, the view

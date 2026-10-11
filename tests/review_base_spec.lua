@@ -2,7 +2,8 @@ local support = require("support.git")
 local gutter = require("support.gutter")
 local present = require("support.present")
 
-local await, await_cached, edit, revision = gutter.await, gutter.await_cached, gutter.edit, gutter.revision
+local await, await_cached, await_shown, edit, revision =
+  gutter.await, gutter.await_cached, gutter.await_shown, gutter.edit, gutter.revision
 
 local Repo = require("gitsigns.git.repo")
 ---@cast Repo table
@@ -71,7 +72,7 @@ describe("the gutter's base", function()
 
     local bufs = edit({ "a.txt", "b.txt", "c.txt" })
 
-    assert.is_true(await(bufs, gutter.merge_base(dir), 5000))
+    assert.is_true(await_shown(bufs, gutter.merge_base(dir), 5000))
   end)
 
   it("leaves a base set by hand alone", function()
@@ -82,7 +83,7 @@ describe("the gutter's base", function()
     vim.fn.chdir(dir)
 
     local bufs = edit({ "a.txt", "b.txt" })
-    assert.is_true(await(bufs, gutter.merge_base(dir), 5000))
+    assert.is_true(await_shown(bufs, gutter.merge_base(dir), 5000))
     vim.api.nvim_buf_call(present(bufs[1]), function()
       require("gitsigns").change_base(parent)
     end)
@@ -179,5 +180,26 @@ describe("the gutter's base", function()
     end, 20)
     assert.is_nil(held) -- the read went through the hook, or the case proves nothing
     assert.are.same(want, text(a))
+  end)
+
+  it("moves a buffer loaded out of view onto the merge base once it is shown", function()
+    gutter.fixture(dir, "hidden", { "a.txt", "b.txt" })
+    vim.fn.writefile({ "one", "two", "three" }, dir .. "/a.txt")
+    support.git({ "add", "a.txt" }, dir)
+    local base = gutter.merge_base(dir)
+    local want = vim.split(support.git({ "show", base .. ":a.txt" }, dir) .. "\n", "\n")
+    vim.fn.chdir(dir)
+    local a = vim.fn.bufadd(dir .. "/a.txt")
+    vim.fn.bufload(a) -- loaded, never shown: gitsigns defers its first read
+    assert.is_true(await_cached({ a }))
+    assert.is_true(await(edit({ "b.txt" }), base, 5000))
+    assert.is_true(gutter.settle())
+
+    vim.api.nvim_set_current_buf(a)
+
+    assert.is_true(await({ a }, base, 5000))
+    assert.is_true(vim.wait(5000, function()
+      return vim.deep_equal(text(a), want)
+    end, 20))
   end)
 end)
