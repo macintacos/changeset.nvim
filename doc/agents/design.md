@@ -45,7 +45,10 @@ glyphs. A blank virtual line hangs between sections — not a row, so the cursor
 on it.
 
 `h` / `l` on a section header fold and unfold the section, and the fold is remembered per
-repo like a file's. `]]` / `[[` move from header to header, a folded one included.
+repo like a file's. `]]` / `[[` move from header to header, a folded one included. `j` /
+`k` step over a header, from one section's last row to the next's first, but stop on a
+folded section's, its only row. They are mapped rather than a `CursorMoved` pushing the
+cursor off headers, since `]]`, `h`, `gg` and a click land on one on purpose.
 
 Generated renders last and starts folded the first time a repository shows it; `l` unfolds
 it and that is remembered like any other fold, and, like every section, `L` leaves it as it

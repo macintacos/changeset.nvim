@@ -164,7 +164,8 @@ has a `<Plug>(changeset-…)` map named after its words, and these default keys:
 | `R`                         | `refresh`                                 | Rebuild the tree                                                        |
 | `?`                         | `help`                                    | List the sidebar's keys                                                 |
 
-Set a key to `false` to leave it unbound. `/` searches the tree.
+Set a key to `false` to leave it unbound. `j` and `k` step over section headers, stopping only on
+a folded one. `/` searches the tree.
 
 ## What it compares against
 

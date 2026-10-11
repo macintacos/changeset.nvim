@@ -584,8 +584,9 @@ previewed window showed.
 SIDEBAR KEYS                                          *changeset-sidebar-keys*
 
 Each key is a `keymaps` option (|changeset-option-keymaps|); set one to
-`false` to leave it unbound. `?` lists the keys bound. `j`, `k` and any other
-motion move and preview, and `/` searches the tree.
+`false` to leave it unbound. `?` lists the keys bound. `j`, `k`, `<Down>` and
+`<Up>` step over a section's header, stopping only on a folded one. They and
+any other motion move and preview, and `/` searches the tree.
 
 <CR>                                                  *changeset-sidebar-<CR>*
 keymaps.jump                                   *changeset-option-keymaps.jump*
