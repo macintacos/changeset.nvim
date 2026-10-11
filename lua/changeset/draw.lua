@@ -186,11 +186,11 @@ end
 
 local MOUSE_MOVE = vim.keycode("<MouseMove>")
 
--- A move arrives for every cell the pointer crosses, so only one onto another line repaints. Scheduled because an
--- error inside an `on_key` listener removes it.
-vim.on_key(function(key)
+-- A move arrives for every cell the pointer crosses, so only one onto another line repaints. Read as typed, since a
+-- map of `<MouseMove>` hands on its own keys instead. Scheduled because an error inside an `on_key` listener removes it.
+vim.on_key(function(_, typed)
   local win = window.win()
-  if key == MOUSE_MOVE and win and pointed_at(win) ~= hovered then
+  if typed == MOUSE_MOVE and win and pointed_at(win) ~= hovered then
     vim.schedule(M.paint)
   end
 end, vim.api.nvim_create_namespace("changeset.pointer"))

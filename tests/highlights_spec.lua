@@ -27,7 +27,11 @@ describe("changeset row highlights", function()
   end)
 
   after_each(function()
+    -- Onto the command line: the pointer outlives a case, and the next case's sidebar would open under it.
+    vim.api.nvim_input_mouse("move", "", "", 0, vim.o.lines - 1, 0)
+    vim.fn.getchar(0)
     vim.o.mousemoveevent = false
+    pcall(vim.keymap.del, "n", "<MouseMove>")
     changeset.close()
     vim.cmd("silent! %bwipeout!")
     vim.fn.chdir(previous_dir)
@@ -239,6 +243,17 @@ describe("changeset row highlights", function()
     open_sidebar()
 
     Sidebar.point("other.lua")
+
+    assert.truthy((present(Sidebar.line_with(highlights.HOVER_HL)):find("other.lua", 1, true)))
+  end)
+
+  it("tints the row under the mouse pointer while a map of your own takes its moves", function()
+    vim.o.mousemoveevent = true
+    vim.keymap.set("n", "<MouseMove>", function() end)
+    vim.cmd.edit("mod.lua")
+    open_sidebar()
+
+    Sidebar.point_through_maps("other.lua")
 
     assert.truthy((present(Sidebar.line_with(highlights.HOVER_HL)):find("other.lua", 1, true)))
   end)

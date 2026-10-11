@@ -115,6 +115,34 @@ function M.point(text)
   error("no sidebar line contains " .. text)
 end
 
+---Move the mouse pointer onto the first sidebar line containing `text` as a typed move, which a map of `<MouseMove>`
+---takes as it does a terminal's. Only the main loop maps a move `nvim_input_mouse` queued, so this feeds the key with
+---`getmousepos` answering for the line, until what it scheduled has run. What was scheduled before runs first, as it
+---would otherwise find the pointer there too.
+---@param text string
+function M.point_through_maps(text)
+  M.flush()
+  local win = present(window.win())
+  for lnum, line in ipairs(M.lines()) do
+    local col = line:find(text, 1, true)
+    if col then
+      local getmousepos = vim.fn.getmousepos
+      vim.fn.getmousepos = function()
+        return { winid = win, line = lnum, column = col }
+      end
+      local ok, err = pcall(function()
+        vim.api.nvim_feedkeys(vim.keycode("<MouseMove>"), "xt", false)
+        M.flush()
+      end)
+      vim.fn.getmousepos = getmousepos
+      ---@cast err string?
+      assert.is_true(ok, err)
+      return
+    end
+  end
+  error("no sidebar line contains " .. text)
+end
+
 ---Click the first sidebar line containing `text`. A UI-less Neovim takes no mouse input, so this presses the button
 ---where `getmousepos` says, answering as a terminal would for a click there.
 ---@param text string
