@@ -143,16 +143,16 @@ end
 function M._parse_hunks(lines)
   local hunks, digests, old, in_header = {}, {}, nil, false
   local current ---@type changeset.Hunk[]?
-  local section, keyed = {}, nil ---@type string[], string?
-  local function close()
-    if keyed then
-      digests[keyed] = vim.fn.sha256(table.concat(section, "\n"))
+  local section_lines, section_path = {}, nil ---@type string[], string?
+  local function digest_section()
+    if section_path then
+      digests[section_path] = vim.fn.sha256(table.concat(section_lines, "\n"))
     end
-    section, keyed = {}, nil
+    section_lines, section_path = {}, nil
   end
   for _, line in ipairs(lines) do
     if vim.startswith(line, "diff --git ") then
-      close()
+      digest_section()
       current, old, in_header = nil, nil, true
     elseif in_header and vim.startswith(line, "--- ") then
       old = side_path(line:sub(5), "a/")
@@ -160,7 +160,7 @@ function M._parse_hunks(lines)
       local path = side_path(line:sub(5), "b/") or old
       current = {}
       if path then
-        hunks[path], keyed = current, path
+        hunks[path], section_path = current, path
       end
     else
       local hunk = parse_hunk_header(line)
@@ -173,9 +173,9 @@ function M._parse_hunks(lines)
         end
       end
     end
-    table.insert(section, line)
+    table.insert(section_lines, line)
   end
-  close()
+  digest_section()
   return hunks, digests
 end
 
