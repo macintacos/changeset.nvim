@@ -1,0 +1,267 @@
+local Fixture = require("support.git")
+local Sidebar = require("support.sidebar")
+local build = require("changeset.build")
+local changeset = require("changeset")
+local config = require("changeset.config")
+local unified_diff = require("changeset.unified_diff")
+local window = require("changeset.window")
+local present = require("support.present")
+
+vim.opt.rtp:prepend(require("support.deps").path("gitsigns.nvim"))
+require("gitsigns").setup()
+require("support.gh")
+
+---@type changeset.Band
+local BAND = { icon = "󰢱", icon_hl = "MiniIconsAzure", path = "a.txt" }
+
+describe("the side-by-side diff", function()
+  local dir ---@type string
+  local previous ---@type string
+
+  before_each(function()
+    dir, previous = Fixture.enter_tempdir()
+    dir = vim.fn.resolve(dir)
+    Fixture.init_repo("trunk", dir)
+    vim.fn.writefile(Fixture.numbered(6), "a.txt")
+    vim.fn.writefile({ "b one", "b two" }, "b.txt")
+    local base = Fixture.commit("base", dir)
+    Fixture.git({ "switch", "-q", "-c", "feature" }, dir)
+    vim.fn.writefile({ "line 1", "line 3", "line 4", "changed 5", "line 6" }, "a.txt")
+    vim.fn.writefile({ "b one", "b changed" }, "b.txt")
+    vim.fn.writefile({ "added" }, "added.txt")
+    Fixture.commit("change", dir)
+    vim.fn.writefile({ "untracked" }, "new.txt")
+    local done = false
+    require("gitsigns").change_base(base, true, function()
+      done = true
+    end)
+    assert.is_true(vim.wait(5000, function()
+      return done
+    end, 20))
+    build.build()
+    assert.is_true(vim.wait(5000, function()
+      return vim.iter(present(build.current()).files):any(function(file)
+        return file.path == "new.txt"
+      end)
+    end, 20))
+    config.setup({ unified_diff = { view = "split" } })
+  end)
+
+  after_each(function()
+    unified_diff.limit("none")
+    window.close()
+    vim.cmd("silent! only")
+    vim.cmd("silent! %bwipeout!")
+    require("gitsigns").change_base(nil, true)
+    config.setup({})
+    vim.fn.chdir(previous)
+    vim.fn.delete(dir, "rf")
+  end)
+
+  ---The windows of the current tabpage in diff mode.
+  ---@return integer[]
+  local function diffing()
+    return vim.tbl_filter(function(win)
+      return vim.wo[win].diff
+    end, vim.api.nvim_tabpage_list_wins(0))
+  end
+
+  ---The window in diff mode beside `win`, once there is one.
+  ---@param win integer
+  ---@return integer?
+  local function partner(win)
+    local found
+    vim.wait(5000, function()
+      local wins = diffing()
+      if #wins == 2 and vim.list_contains(wins, win) then
+        found = wins[1] == win and wins[2] or wins[1]
+      end
+      return found ~= nil
+    end, 20)
+    return found
+  end
+
+  ---@param win integer
+  ---@return boolean
+  local function unified(win)
+    return (vim.wait(5000, function()
+      return require("gitsigns.unified").get_view(win) ~= nil
+    end, 20))
+  end
+
+  ---Wait for gitsigns to hold the base text of the current buffer.
+  local function attached()
+    local buf = vim.api.nvim_get_current_buf()
+    assert.is_true(vim.wait(5000, function()
+      local bcache = require("gitsigns.cache").cache[buf]
+      return bcache ~= nil and bcache.compare_text ~= nil
+    end, 20))
+  end
+
+  ---Whether the tabpage stays without a window in diff mode for half a second.
+  ---@return boolean
+  local function no_pair()
+    return not vim.wait(500, function()
+      return #diffing() > 0
+    end, 20)
+  end
+
+  it("shows the file's base in diff mode on its left", function()
+    unified_diff.turn_on()
+    vim.cmd.edit("a.txt")
+    local win = vim.api.nvim_get_current_win()
+
+    local base = present(partner(win))
+
+    assert.is_true(vim.fn.win_screenpos(base)[2] < vim.fn.win_screenpos(win)[2])
+    assert.same(Fixture.numbered(6), vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(base), 0, -1, false))
+    assert.is_nil(require("gitsigns.unified").get_view(win))
+  end)
+
+  it("pairs only the window being read, the rest of the tabpage unified", function()
+    unified_diff.turn_on()
+    vim.cmd.edit("a.txt")
+    local a = vim.api.nvim_get_current_win()
+    vim.cmd.split("b.txt")
+    local b = vim.api.nvim_get_current_win()
+
+    assert.is_not_nil(partner(b))
+    assert.is_true(unified(a))
+    assert.equal(3, #vim.api.nvim_tabpage_list_wins(0))
+  end)
+
+  it("moves the pair to the window the cursor enters", function()
+    unified_diff.turn_on()
+    vim.cmd.edit("a.txt")
+    local a = vim.api.nvim_get_current_win()
+    vim.cmd.split("b.txt")
+    local b = vim.api.nvim_get_current_win()
+    assert.is_not_nil(partner(b))
+
+    vim.api.nvim_set_current_win(a)
+
+    assert.is_not_nil(partner(a))
+    assert.is_true(unified(b))
+    assert.is_false(vim.wo[b].diff)
+  end)
+
+  it("moves the pair to the window a preview fills", function()
+    unified_diff.turn_on()
+    vim.cmd.edit("b.txt")
+    local sidebar = window.open(vim.api.nvim_create_buf(false, true))
+    vim.api.nvim_set_current_win(sidebar)
+
+    window.preview(dir .. "/a.txt", 1, BAND)
+
+    assert.is_not_nil(partner(vim.fn.bufwinid(dir .. "/a.txt")))
+    assert.equal(sidebar, vim.api.nvim_get_current_win())
+  end)
+
+  it("shows a file new since the base unified, added or untracked", function()
+    unified_diff.turn_on()
+    for _, name in ipairs({ "added.txt", "new.txt" }) do
+      vim.cmd.edit(name)
+
+      assert.is_true(unified(vim.api.nvim_get_current_win()))
+      assert.is_true(no_pair())
+    end
+  end)
+
+  it("leaves the user's own unified view alone", function()
+    vim.cmd.edit("a.txt")
+    attached()
+    vim.cmd("Gitsigns diffthis unified=true")
+    assert.is_true(unified(vim.api.nvim_get_current_win()))
+
+    unified_diff.turn_on()
+
+    assert.is_true(no_pair())
+  end)
+
+  it("pairs nothing in a tabpage holding the user's own diff", function()
+    vim.cmd.edit("a.txt")
+    attached()
+    vim.cmd("Gitsigns diffthis")
+    assert.is_true(vim.wait(5000, function()
+      return #diffing() == 2
+    end, 20))
+
+    unified_diff.turn_on()
+    vim.wait(500)
+
+    assert.equal(2, #vim.api.nvim_tabpage_list_wins(0))
+    assert.equal(2, #diffing())
+  end)
+
+  it("opens nothing from the base window", function()
+    unified_diff.turn_on()
+    vim.cmd.edit("a.txt")
+    local win = vim.api.nvim_get_current_win()
+    local base = present(partner(win))
+
+    vim.api.nvim_set_current_win(base)
+    vim.wait(500)
+
+    assert.equal(2, #vim.api.nvim_tabpage_list_wins(0))
+    assert.equal(base, partner(win))
+  end)
+
+  it("opens unified while the option is unset", function()
+    config.setup({})
+    unified_diff.turn_on()
+    vim.cmd.edit("a.txt")
+
+    assert.is_true(unified(vim.api.nvim_get_current_win()))
+    assert.is_true(no_pair())
+  end)
+
+  it("closes the base window as the diff turns off", function()
+    unified_diff.turn_on()
+    vim.cmd.edit("a.txt")
+    local win = vim.api.nvim_get_current_win()
+    assert.is_not_nil(partner(win))
+
+    unified_diff.limit("none")
+
+    assert.same({ win }, vim.api.nvim_tabpage_list_wins(0))
+    assert.is_false(vim.wo[win].diff)
+  end)
+
+  it("takes closing the base window by hand as closing the file's diff, until turned on again", function()
+    unified_diff.turn_on()
+    vim.cmd.edit("a.txt")
+    local win = vim.api.nvim_get_current_win()
+    vim.cmd.split("b.txt")
+    local other = vim.api.nvim_get_current_win()
+    vim.api.nvim_set_current_win(win)
+    vim.api.nvim_win_close(present(partner(win)), false)
+
+    vim.api.nvim_set_current_win(other)
+    vim.api.nvim_set_current_win(win)
+
+    assert.is_false(vim.wait(500, function()
+      return vim.wo[win].diff or require("gitsigns.unified").get_view(win) ~= nil
+    end, 20))
+
+    unified_diff.turn_on()
+
+    assert.is_not_nil(partner(win))
+  end)
+
+  it("closes the pair on a file marked viewed", function()
+    vim.cmd.edit("a.txt")
+    local win = vim.api.nvim_get_current_win()
+    changeset.open()
+    assert.is_true(vim.wait(10000, function()
+      return window.buf() ~= nil and Sidebar.text():find("a.txt", 1, true) ~= nil
+    end, 25))
+    vim.api.nvim_set_current_win(win)
+    assert.is_not_nil(partner(win))
+
+    Sidebar.cursor_to("a.txt")
+    vim.api.nvim_feedkeys("x", "xt", false)
+    unified_diff.refresh_viewed()
+
+    assert.is_true(no_pair())
+  end)
+end)

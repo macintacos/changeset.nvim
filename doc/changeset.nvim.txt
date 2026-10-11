@@ -1256,7 +1256,7 @@ Pass |changeset.setup()| the options you change. These are the defaults: >lua
         sign = true,
         blocks = false,
       },
-      unified_diff = { keep = "none" },
+      unified_diff = { keep = "none", view = "unified" },
     })
 <
 Each `setup()` call starts from the defaults, not from the previous call. An
@@ -1302,6 +1302,13 @@ unified_diff.keep                         *changeset-option-unified_diff.keep*
 	diff stays on once the sidebar closes: for no file, for the files you
 	entered, or for every file the sidebar lists (|changeset-unified-diff|).
 	Read each time the sidebar closes.
+
+unified_diff.view                         *changeset-option-unified_diff.view*
+	`"unified"` or `"split"`. Default `"unified"`. How the diff is drawn:
+	inline, or side by side, the file's base in a window on the left of
+	the window you are reading, the two in |diff-mode|. Only that window
+	of each tab page goes side by side, the rest stay inline, and so does
+	a file new since the base. 'diffopt' is yours. Read as the diff opens.
 
 ==============================================================================
 15. Highlight groups                                    *changeset-highlights*

@@ -51,6 +51,7 @@ describe("changeset.config", function()
       { { unified_diff = false }, "unified_diff" },
       { { unified_diff = { keep = "some" } }, "unified_diff.keep" },
       { { unified_diff = { keep = false } }, "unified_diff.keep" },
+      { { unified_diff = { view = "x" } }, "unified_diff.view" },
     }
     for _, case in ipairs(cases) do
       local ok, err = pcall(config.setup, case[1])
@@ -123,7 +124,11 @@ describe("changeset.config", function()
 
     it("says nothing when it knows every option", function()
       set_up_notifier()
-      config.setup({ keymaps = { jump = "o" }, review_comment = { save = { "<C-j>" } } })
+      config.setup({
+        keymaps = { jump = "o" },
+        review_comment = { save = { "<C-j>" } },
+        unified_diff = { view = "split" },
+      })
       vim.wait(20)
 
       assert.same({}, notes)

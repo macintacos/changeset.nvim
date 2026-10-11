@@ -492,7 +492,7 @@ function M.preview(path, lnum, band, pick)
     preview_bar.show(win, buf, band.span)
   end
   sign(buf)
-  unified_diff.sync(win)
+  unified_diff.read(win)
   if lnum then
     local last = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
     vim.api.nvim_win_set_cursor(win, { M._clamp(lnum, last), 0 })

@@ -43,8 +43,11 @@ local M = {}
 ---@field sign? boolean Put a comment bubble in the sign column on each review comment's first line; `false` leaves it to a statuscolumn that draws `require("changeset").bubble()`. Default true.
 ---@field blocks? boolean Start the session showing each review comment's whole text in a box under its last line, rather than its first line at the end of the line; `:Changeset comment toggle` switches. Default false.
 
+---@alias changeset.DiffView "unified"|"split"
+
 ---@class changeset.Config.UnifiedDiff
 ---@field keep? changeset.DiffReach.Keep Which files keep the unified diff once the sidebar closes: none, those entered, or all. Default "none".
+---@field view? changeset.DiffView The view the diff starts each session in: inline, or side by side in the window being read. Default "unified".
 
 ---The options in force: every field set.
 ---@class changeset.Options : changeset.Config
@@ -90,6 +93,7 @@ local M = {}
 
 ---@class changeset.Options.UnifiedDiff : changeset.Config.UnifiedDiff
 ---@field keep changeset.DiffReach.Keep
+---@field view changeset.DiffView
 
 ---@type changeset.Options
 local DEFAULTS = {
@@ -118,7 +122,7 @@ local DEFAULTS = {
   layout = { min_file_width = 80 },
   review = { header = "", footer = "" },
   review_comment = { save = { "<C-CR>", "<C-s>" }, sign = true, blocks = false },
-  unified_diff = { keep = "none" },
+  unified_diff = { keep = "none", view = "unified" },
 }
 
 local current = vim.deepcopy(DEFAULTS)
@@ -153,6 +157,9 @@ local function validate(options)
   vim.validate("unified_diff.keep", options.unified_diff.keep, function(v)
     return v == "none" or v == "entered" or v == "all"
   end, '"none", "entered" or "all"')
+  vim.validate("unified_diff.view", options.unified_diff.view, function(v)
+    return v == "unified" or v == "split"
+  end, '"unified" or "split"')
 end
 
 ---Splits `opts` into the options `defaults` has and the dotted paths of those it doesn't. A list is one option.

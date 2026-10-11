@@ -249,6 +249,8 @@ require("changeset").setup({
   unified_diff = {
     -- Once the sidebar closes, keep the diff on "none", the "entered" files or "all".
     keep = "none",
+    -- Draw the diff "unified" inline, or "split" side by side beside the window you read.
+    view = "unified",
   },
 })
 ```
