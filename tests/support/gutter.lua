@@ -43,15 +43,23 @@ Obj.change_revision = function(self, revision)
   return result
 end
 
----`changeset` moves a cached buffer onto its base at the next `GitSignsUpdate`, with a buffer or without one.
----gitsigns sends buffer-less ones after a `chdir` and as the cwd repository's HEAD changes or disappears. A case
----that reads or sets a buffer's base waits for changeset's base first.
+---`changeset` moves a cached buffer that holds its text onto its base at the next `GitSignsUpdate`, with a buffer or
+---without one, or once gitsigns' read of it lands. gitsigns sends buffer-less ones after a `chdir` and as the cwd
+---repository's HEAD changes or disappears. A buffer gitsigns has no text for moves once it is shown, so await it with
+---`M.await_shown`. A case that reads or sets a buffer's base waits for changeset's base first.
 ---@param buf integer
 ---@return string? revision nil both before gitsigns caches the buffer and on the
 ---index, so await the cache before awaiting nil.
 function M.revision(buf)
   local bcache = require("gitsigns.cache").cache[buf]
   return bcache and bcache.git_obj.revision
+end
+
+---@param buf integer
+---@return string[]? text What gitsigns diffs the buffer against; nil while it holds none.
+function M.text(buf)
+  local bcache = require("gitsigns.cache").cache[buf]
+  return bcache and bcache.compare_text
 end
 
 ---@param bufs integer[]
@@ -89,11 +97,12 @@ function M.await_cached(bufs)
   end, 5000)
 end
 
----Show each buffer in turn until it is on `want` with its text read again. A move's read runs only while a window
----shows the buffer, and it lands after the revision changes, so the revision alone is not enough to leave the buffer.
+---Show each buffer in turn until gitsigns has read it on `want` and no move is in flight. changeset moves only a buffer
+---gitsigns holds text for, and gitsigns reads only a buffer in view. A move changes the revision before it drops the old
+---text, so neither alone means the move landed.
 ---@param bufs integer[]
 ---@param want string?
----@param timeout integer
+---@param timeout integer Per buffer.
 ---@return boolean
 function M.await_shown(bufs, want, timeout)
   for _, buf in ipairs(bufs) do

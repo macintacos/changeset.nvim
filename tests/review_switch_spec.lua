@@ -3,8 +3,8 @@ local support = require("support.git")
 local gutter = require("support.gutter")
 local present = require("support.present")
 
-local await, await_cached, await_shown, edit, revision, settle =
-  gutter.await, gutter.await_cached, gutter.await_shown, gutter.edit, gutter.revision, gutter.settle
+local await, await_cached, await_shown, edit, revision, settle, text =
+  gutter.await, gutter.await_cached, gutter.await_shown, gutter.edit, gutter.revision, gutter.settle, gutter.text
 
 local function moves()
   return gutter.moves
@@ -193,8 +193,7 @@ describe("the gutter's base", function()
 
     support.git({ "switch", "-q", "counted" }, dir)
     local base = gutter.merge_base(dir)
-    -- The first buffer reaching the base marks the switch; the rest attach on the
-    -- index while the moves run, and move once each.
+    -- Show one buffer to land the switch, then attach six more; each buffer moves once.
     assert.is_true(await_shown({ bufs[1] }, base, 10000))
     vim.list_extend(bufs, edit(vim.list_slice(files, 13, 18)))
 
@@ -365,8 +364,42 @@ describe("the gutter's base", function()
       vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate" })
     end
 
-    assert.is_true(await_shown(bufs, base, 10000))
+    assert.is_true(await(bufs, base, 10000))
     assert.is_true(settle())
     assert.equal(#bufs, moves() - before)
+  end)
+
+  it("moves a hidden buffer whose text a commit dropped onto the new base once it is shown", function()
+    local files = { "a.txt", "b.txt" }
+    gutter.fixture(dir, "left", files)
+    support.git({ "switch", "-q", "main" }, dir)
+    vim.fn.writefile({ "one", "two" }, dir .. "/b.txt")
+    local main_tip = support.commit("main", dir)
+    support.git({ "update-ref", "refs/remotes/origin/main", main_tip }, dir)
+    support.git({ "switch", "-q", "left" }, dir)
+    vim.fn.chdir(dir)
+    local base = gutter.merge_base(dir)
+    local bufs = edit(files)
+    local a, b = present(bufs[1]), present(bufs[2])
+    assert.is_true(await_shown(bufs, base, 10000))
+
+    -- Shown while b is hidden, so the commit drops only b's text.
+    vim.api.nvim_set_current_buf(a)
+    vim.fn.writefile({ "c" }, dir .. "/c.txt")
+    support.commit("c", dir)
+    assert.is_true(vim.wait(10000, function()
+      return text(b) == nil
+    end, 20))
+    support.git({ "switch", "-q", "main" }, dir)
+    assert.is_true(await({ a }, main_tip, 10000))
+    -- b's status catches up with the branch while it is hidden, so its read on show changes no count.
+    assert.is_true(vim.wait(10000, function()
+      local status = vim.b[b].gitsigns_status_dict
+      return status ~= nil and status.head == "main"
+    end, 20))
+
+    local want = vim.split(support.git({ "show", main_tip .. ":b.txt" }, dir) .. "\n", "\n")
+    assert.is_true(await_shown({ b }, main_tip, 10000))
+    assert.are.same(want, text(b))
   end)
 end)

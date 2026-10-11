@@ -2,14 +2,28 @@ local support = require("support.git")
 local gutter = require("support.gutter")
 local present = require("support.present")
 
-local await, await_cached, await_shown, edit, revision =
-  gutter.await, gutter.await_cached, gutter.await_shown, gutter.edit, gutter.revision
+local await, await_cached, await_shown, edit, revision, text =
+  gutter.await, gutter.await_cached, gutter.await_shown, gutter.edit, gutter.revision, gutter.text
 
+local fork_point = require("changeset.fork_point")
 local Repo = require("gitsigns.git.repo")
 ---@cast Repo table
 local read_text = Repo.get_show_text
 ---@type string? blob whose next read has a base move land under it
 local held
+---@type string? Base of the fork point measured last.
+local measured
+fork_point.subscribe(function(_, _, point)
+  measured = point.base
+end)
+
+---The buffer-less GitSignsUpdate gitsigns sends after a chdir, landing mid-read.
+local function land_buffer_less()
+  vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate", modeline = false })
+  gutter.settle()
+end
+---@type fun() What the next read of `held` waits for, so a base move lands under it.
+local hold = land_buffer_less
 
 ---@async
 ---@param self Gitsigns.Repo
@@ -20,18 +34,9 @@ local held
 Repo.get_show_text = function(self, object, encoding)
   if object == held then
     held = nil
-    -- The buffer-less GitSignsUpdate gitsigns sends after a chdir, landing mid-read.
-    vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate", modeline = false })
-    gutter.settle()
+    hold()
   end
   return read_text(self, object, encoding)
-end
-
----@param buf integer
----@return string[]?
-local function text(buf)
-  local bcache = require("gitsigns.cache").cache[buf]
-  return bcache and bcache.compare_text
 end
 
 describe("the gutter's base", function()
@@ -54,7 +59,7 @@ describe("the gutter's base", function()
       vim.fn.delete(other, "rf")
     end
     outside, other = nil, nil
-    held = nil
+    held, hold = nil, land_buffer_less
   end)
 
   it("diffs a single edited file against the merge base, with no setup() call", function()
@@ -201,5 +206,30 @@ describe("the gutter's base", function()
     assert.is_true(vim.wait(5000, function()
       return vim.deep_equal(text(a), want)
     end, 20))
+  end)
+
+  it("follows a pull onto the new base when the buffer's re-read is still running as the base moves", function()
+    vim.fn.writefile({ "one" }, dir .. "/a.txt")
+    local pushed = support.commit("pushed", dir)
+    support.git({ "update-ref", "refs/remotes/origin/main", pushed }, dir)
+    vim.fn.chdir(dir)
+    local bufs = edit({ "a.txt" })
+    assert.is_true(await(bufs, pushed, 5000))
+
+    local pulled ---@type string?
+    -- Holds the re-read until the pull's fork point has moved the base under it.
+    hold = function()
+      vim.wait(10000, function()
+        return measured == pulled
+      end, 20)
+    end
+    held = support.git({ "rev-parse", pushed .. ":a.txt" }, dir)
+    vim.fn.writefile({ "one", "two" }, dir .. "/a.txt")
+    pulled = support.commit("pulled", dir)
+    support.git({ "update-ref", "refs/remotes/origin/main", pulled }, dir)
+
+    assert.is_true(await_shown(bufs, pulled, 10000))
+    assert.is_nil(held) -- the re-read went through the hook, or the case proves nothing
+    assert.are.same(vim.split(support.git({ "show", pulled .. ":a.txt" }, dir) .. "\n", "\n"), text(present(bufs[1])))
   end)
 end)
