@@ -154,7 +154,8 @@ restarts. With mini.icons:
 - Symbol rows: `MiniIcons.get("lsp", kind)` — the exact call that config's outline picker
   makes, so a method is the same glyph in the same hue in both the outline picker and the
   sidebar.
-- File rows: `MiniIcons.get("file", path)`.
+- File rows: `MiniIcons.get("file", path)`, or the viewed check (§ A viewed file wears a
+  check in its icon's place).
 - Section headers: `MiniIcons.get("directory", …)` with `src`, `tests`, `docs`,
   `.config` and `build`, so each header wears the icon its kind of directory already has.
 - Orphan-hunk groups: the `lsp`/`Text` icon, dimmed. Not a bespoke glyph.
@@ -179,8 +180,11 @@ its file icon holds:
   unchanged.
 - **It is the config's own check.** The config already uses `✔` as its "selected" marker,
   and no icon plugin has a "viewed" category to ask for.
-- **Its colour means nothing else on a row.** `DiagnosticOk` green already means "review
-  comment".
+- **Its colour recedes.** `Comment`'s grey is the tree's "not the point" colour, for context
+  and meta, which is what a viewed file has become. `DiagnosticOk` green already means
+  "review comment".
+- **Its key is `v`.** It is mnemonic, and Visual mode has no use in the sidebar, since no
+  sidebar key takes a range.
 
 Placements rejected: the left margin, where the check would butt against the rail; after
 the name, where it would move with the name's length and could be matched by the filter;

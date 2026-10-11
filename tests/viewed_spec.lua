@@ -13,21 +13,21 @@ describe("changeset.viewed", function()
     os.remove(viewed.path())
   end)
 
-  describe("apply", function()
+  describe("_apply", function()
     it("marks a path with its digest", function()
-      assert.are.same({ [ROOT] = { ["a.lua"] = "d1" } }, viewed.apply({}, ROOT, "a.lua", "d1"))
+      assert.are.same({ [ROOT] = { ["a.lua"] = "d1" } }, viewed._apply({}, ROOT, "a.lua", "d1"))
     end)
 
     it("clears a mark and prunes the root it empties", function()
       local data = { [ROOT] = { ["a.lua"] = "d1" }, ["/other"] = { ["b.lua"] = "d2" } }
 
-      assert.are.same({ ["/other"] = { ["b.lua"] = "d2" } }, viewed.apply(data, ROOT, "a.lua", nil))
+      assert.are.same({ ["/other"] = { ["b.lua"] = "d2" } }, viewed._apply(data, ROOT, "a.lua", nil))
     end)
 
     it("leaves its input unmodified", function()
       local data = { [ROOT] = { ["a.lua"] = "d1" } }
 
-      viewed.apply(data, ROOT, "a.lua", nil)
+      viewed._apply(data, ROOT, "a.lua", nil)
 
       assert.are.same({ [ROOT] = { ["a.lua"] = "d1" } }, data)
     end)

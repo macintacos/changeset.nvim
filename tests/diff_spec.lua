@@ -725,6 +725,16 @@ describe("changeset.diff.collect", function()
     }, undigested(collect(base, tmp)))
   end)
 
+  it("digests an untracked file's content, so editing it changes the digest", function()
+    local base = Fixture.init_repo("trunk", tmp)
+    write("scratch.txt", { "a" })
+    local before = present(collect(base, tmp)[1]).digest
+    write("scratch.txt", { "b" })
+
+    assert.is_truthy(before)
+    assert.are_not.equal(before, present(collect(base, tmp)[1]).digest)
+  end)
+
   it("counts only the untracked paths it can read", function()
     local base = Fixture.init_repo("trunk", tmp)
     write("scratch.txt", { "a", "b", "c" })

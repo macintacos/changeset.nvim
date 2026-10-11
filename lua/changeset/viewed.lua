@@ -52,7 +52,7 @@ end
 ---@param path string
 ---@param digest string?
 ---@return table
-function M.apply(data, root, path, digest)
+function M._apply(data, root, path, digest)
   local out = vim.deepcopy(data)
   out[root] = type(out[root]) == "table" and out[root] or {}
   out[root][path] = digest
@@ -75,7 +75,7 @@ function M.toggle(file, root, path, digest)
     return nil
   end
   local marked = M.holds(M.marks(data, root), path, digest)
-  local out = M.apply(data, root, path, not marked and digest or nil)
+  local out = M._apply(data, root, path, not marked and digest or nil)
   if not jsonfile.write(file, vim.tbl_isempty(out) and vim.empty_dict() or out) then
     return nil
   end

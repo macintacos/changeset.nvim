@@ -663,16 +663,18 @@ keymaps.yank                                   *changeset-option-keymaps.yank*
 v                                                        *changeset-sidebar-v*
 keymaps.toggle_viewed                 *changeset-option-keymaps.toggle_viewed*
 	Mark the file viewed, or clear its mark. It acts on the file the row
-	belongs to: its file row, or a symbol or orphan row under it. Nothing
-	on a section or Comments row. A viewed file draws a |ChangesetViewed|
-	`✔` in its icon's place, in every section it shows in.
+	belongs to: its file row, or a symbol's, a change's or an "Other
+	changes" row under it. Nothing on a section or Comments row. A viewed
+	file draws a |ChangesetViewed| `✔` in its icon's place, in every
+	section it shows in.
 
 	A mark holds only while the file's diff is the one you viewed. It
 	stops showing once that diff changes, and shows again if the change
 	is reverted or the base switched back. `v` on a file whose mark no
 	longer holds marks its new diff. A file whose patch has no text, such
 	as a binary file edited in place, keeps its mark. Marks another Neovim
-	writes show from the next rebuild.
+	writes show once the tree is built again for another branch or base,
+	or after your next `v`.
 
 d                                                        *changeset-sidebar-d*
 keymaps.delete_comment               *changeset-option-keymaps.delete_comment*
@@ -1291,6 +1293,10 @@ ChangesetMatch                                                *ChangesetMatch*
 ChangesetHidden                                              *ChangesetHidden*
 	A hidden kind in the kind menu. `Comment`'s colour, struck through.
 
+ChangesetViewed                                              *ChangesetViewed*
+	The `✔` in place of a viewed file's icon (|changeset-sidebar-v|).
+	Links to `Comment`.
+
 ChangesetSelected                                          *ChangesetSelected*
 	The selected row while the sidebar has focus. `Normal`'s background
 	tinted toward `Statement`.
@@ -1304,10 +1310,6 @@ ChangesetPicked                                              *ChangesetPicked*
 ChangesetHover                                                *ChangesetHover*
 	The row under the mouse pointer, while 'mousemoveevent' is on.
 	`Normal`'s background tinted toward `DiagnosticInfo`.
-
-ChangesetViewed                                              *ChangesetViewed*
-	The `✔` in a viewed file's icon place (|changeset-sidebar-v|).
-	Linked to `Comment`.
 
 ChangesetSelectedIcon                                  *ChangesetSelectedIcon*
 	The `◀` on the selected row. `Statement`'s colour.

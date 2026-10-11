@@ -3,6 +3,19 @@ local Fixture = require("support.git")
 local resolve = require("changeset.resolve")
 local present = require("support.present")
 
+---@param fields table
+---@return changeset.File
+local function new_file(fields)
+  return vim.tbl_extend("keep", fields, {
+    status = "added",
+    section = "implementation",
+    added = 1,
+    removed = 0,
+    hunks = {},
+    digest = "d",
+  }) --[[@as changeset.File]]
+end
+
 ---A step that parks each call so the spec decides when it answers.
 ---@return fun(path: string, done: fun(items: changeset.Symbol[]?, comments: changeset.Comments?)) run
 ---@return table[] pending
@@ -167,15 +180,7 @@ describe("changeset.resolve", function()
     ---@return string[]
     local function reported_at_once()
       local seen = {}
-      local file = {
-        path = "mod.lua",
-        status = "added",
-        section = "implementation",
-        added = 1,
-        removed = 0,
-        hunks = {},
-        digest = "d",
-      }
+      local file = new_file({ path = "mod.lua" })
       local cancel = resolve.start({ root = root, base = "HEAD" }, { file }, function(path)
         seen[#seen + 1] = path
       end)
@@ -218,15 +223,7 @@ describe("changeset.resolve", function()
       vim.lsp.enable("stub_lua")
       enabled = "stub_lua"
       local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
-      local file = {
-        path = "mod.lua",
-        status = "added",
-        section = "implementation",
-        added = 1,
-        removed = 0,
-        hunks = {},
-        digest = "d",
-      }
+      local file = new_file({ path = "mod.lua" })
 
       resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items)
         report = { items = items }
@@ -279,15 +276,7 @@ describe("changeset.resolve", function()
         }, { bufnr = buf })
       end
       local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
-      local file = {
-        path = "mod.lua",
-        status = "added",
-        section = "implementation",
-        added = 1,
-        removed = 0,
-        hunks = {},
-        digest = "d",
-      }
+      local file = new_file({ path = "mod.lua" })
       resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items)
         report = { items = items }
       end)
@@ -362,15 +351,7 @@ describe("changeset.resolve", function()
     local function resolved(path)
       local answer, done
       resolve.start({ root = root, base = "HEAD" }, {
-        {
-          path = path,
-          status = "added",
-          section = "implementation",
-          added = 1,
-          removed = 0,
-          hunks = {},
-          digest = "d",
-        },
+        new_file({ path = path }),
       }, function(_, items)
         answer, done = items, true
       end)
@@ -392,15 +373,7 @@ describe("changeset.resolve", function()
       Fixture.commit("base", root)
       vim.fn.writefile({ "return { 1 }" }, root .. "/mod.lua")
       local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
-      local file = {
-        path = "mod.lua",
-        status = "modified",
-        section = "implementation",
-        added = 1,
-        removed = 1,
-        hunks = {},
-        digest = "d",
-      }
+      local file = new_file({ path = "mod.lua", status = "modified", removed = 1 })
 
       resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items)
         report = { items = items }
@@ -419,15 +392,7 @@ describe("changeset.resolve", function()
       Fixture.commit("base", root)
       vim.fn.writefile({ "# new note", "x = 1" }, root .. "/conf.toml")
       local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
-      local file = {
-        path = "conf.toml",
-        status = "modified",
-        section = "config",
-        added = 1,
-        removed = 1,
-        hunks = {},
-        digest = "d",
-      }
+      local file = new_file({ path = "conf.toml", status = "modified", section = "config", removed = 1 })
 
       resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items, found)
         report = { items = items, comments = found }
@@ -448,8 +413,7 @@ describe("changeset.resolve", function()
       Fixture.commit("base", root)
       vim.fn.writefile({ "# Title", "<!-- note -->" }, root .. "/README.md")
       local report ---@type { items: changeset.Symbol[]?, comments: changeset.Comments?, timed_out: boolean? }?
-      local file =
-        { path = "README.md", status = "modified", section = "docs", added = 1, removed = 0, hunks = {}, digest = "d" }
+      local file = new_file({ path = "README.md", status = "modified", section = "docs" })
 
       resolve.start({ root = root, base = "HEAD" }, { file }, function(_, items, found)
         report = { items = items, comments = found }
@@ -570,15 +534,7 @@ describe("changeset.resolve", function()
     end
 
     local function start(on_file)
-      local file = {
-        path = "mod.lua",
-        status = "added",
-        section = "implementation",
-        added = 1,
-        removed = 0,
-        hunks = {},
-        digest = "d",
-      }
+      local file = new_file({ path = "mod.lua" })
       return resolve.start({ root = root, base = "HEAD" }, { file }, on_file)
     end
 
@@ -974,15 +930,7 @@ describe("changeset.resolve", function()
         end
         return real_parser(text, ...)
       end
-      local file = {
-        path = "big.lua",
-        status = "modified",
-        added = 1,
-        removed = 0,
-        hunks = {},
-        section = "implementation",
-        digest = "d",
-      }
+      local file = new_file({ path = "big.lua", status = "modified" })
       local got
       resolve.start(
         { root = tmp, base = Fixture.git({ "merge-base", "HEAD", "trunk" }, tmp) },

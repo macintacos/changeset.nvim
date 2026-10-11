@@ -19,7 +19,8 @@ local M = {}
 ---@field added integer
 ---@field removed integer
 ---@field hunks changeset.Hunk[] Ascending by line, as git emits them; empty for a binary or pure rename.
----@field digest string Changes whenever the file's diff does.
+---@field digest string The sha256 of the file's patch, or of an untracked file's content; for a patch with no text, of
+---its status and old path.
 
 ---@class changeset.File : changeset.diff.Unfiled A changed file and the hunks inside it.
 ---@field section changeset.SectionKey The section `sections.classify` files it under, decided once when the diff is read.
@@ -37,7 +38,8 @@ local M = {}
 ---@field statuses table<string, changeset.diff.Entry> By new path.
 ---@field hunks table<string, changeset.Hunk[]> By new path.
 ---@field untracked table<string, integer> Line count by path.
----@field digests table<string, string> Each file's diff section or untracked content, hashed, by path.
+---@field digests table<string, string> Each file's diff section or untracked content, hashed, by path; an untracked
+---file's wins where a path is both.
 
 -- Any other name-status code (M, T) reads as a modification.
 ---@type table<string, "added"|"deleted">
@@ -133,8 +135,8 @@ local function side_path(side, prefix)
   return vim.startswith(path, prefix) and path:sub(#prefix + 1) or nil
 end
 
----Hunks per path from `git diff --unified=0 -M`. Each file is keyed from its `+++` line, or
----its `---` line when it was deleted; the `diff --git` line can't be split when a path holds ` b/`.
+---Hunks, and a digest of each file's section, per path from `git diff --unified=0 -M --full-index`.
+---Each file is keyed from its `+++` line, or its `---` line when it was deleted; the `diff --git` line can't be split when a path holds ` b/`.
 ---@param lines string[]
 ---@return table<string, changeset.Hunk[]> hunks By new path; a file with no text hunks is absent.
 ---@return table<string, string> digests The sha256 of each keyed file's section, by new path.
@@ -274,7 +276,8 @@ end
 
 -- These pin output the user's own git config can otherwise reshape: quotepath keeps
 -- non-ASCII paths as real filenames, and the prefix, colour and external-driver flags
--- keep the `diff --git a/x b/x` header the hunk parser reads.
+-- keep the `diff --git a/x b/x` header the hunk parser reads, and `--full-index` keeps each file's `index` line,
+-- which its digest hashes, the same length whatever `core.abbrev` or the repository's size.
 ---@param base string
 ---@return table<string, string[]> argv By result name.
 local function git_commands(base)
@@ -327,7 +330,7 @@ local function stdout_lines(result)
   return vim.split(result.stdout or "", "\n", { trimempty = true })
 end
 
----Line count per readable file; directories (untracked nested repos) and dangling symlinks are skipped.
+---Line count and content digest per readable file; directories (untracked nested repos) and dangling symlinks are skipped.
 ---@param paths string[] Relative to `cwd`.
 ---@param cwd string
 ---@return table<string, integer> counts
@@ -409,6 +412,8 @@ function M.collect(base, cwd, callback)
       statuses = M._parse_name_status(results.name_status.stdout or ""),
       hunks = hunks,
       untracked = untracked,
+      -- A path is both deleted and untracked after `git rm --cached`; the untracked digest wins so both rows share
+      -- one mark.
       digests = vim.tbl_extend("force", digests, untracked_digests),
     })
     generated_paths(files, cwd, function(marked)

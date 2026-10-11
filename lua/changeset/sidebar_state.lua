@@ -14,7 +14,7 @@ local M = {}
 ---@field rows changeset.Row[]
 ---@field view changeset.View What the sidebar shows of the tree.
 ---@field position changeset.Position Where the user stands in this tree.
----@field marks changeset.ViewedMarks The files marked viewed in this repository.
+---@field marks changeset.ViewedMarks The files marked viewed in this repository, as read when this state was made and as each toggle here leaves them.
 
 ---@type changeset.SidebarState?
 local state

@@ -10,7 +10,7 @@ local Rows = require("changeset.rows")
 
 ---@class changeset.view.Layout
 ---@field icon fun(row: changeset.Row): string, string Glyph and highlight for a row.
----@field viewed? fun(row: changeset.Row): boolean Whether a row is drawn as viewed.
+---@field viewed? fun(row: changeset.Row): boolean Whether `icon` draws `row` as viewed; a change redraws its block, as the row alone does not.
 ---@field width integer
 ---@field cursor integer The cursor's line before this redraw.
 

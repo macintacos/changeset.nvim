@@ -1617,26 +1617,48 @@ describe("changeset sidebar", function()
       assert.falsy((line_named("mod.lua"):find(highlights.VIEWED_ICON, 1, true)))
     end)
 
-    it("marks the file a symbol row under it belongs to", function()
-      local source = Symbols.install()
-      local restore_due = Sidebar.draw_at_once()
-      vim.cmd.edit("mod.lua")
-      changeset.open()
-      assert.is_truthy(vim.wait(10000, function()
-        local buf = window.buf()
-        return buf ~= nil and table.concat(lines_of(buf), "\n"):find("other.lua", 1, true) ~= nil
-      end, 25))
-      source.answer("mod.lua", { Changes.sym("one", "Function", 0, 3, 5) })
-      source.answer("other.lua", {})
-      Sidebar.flush()
+    it("checks a file marked in an earlier session", function()
+      open_sidebar()
+      local tree = present(build.current())
+      local file = present(vim.iter(tree.files):find(function(f)
+        return f.path == "mod.lua"
+      end))
+      changeset.close()
+      viewed.toggle(viewed.path(), tree.root, "mod.lua", file.digest)
+      -- A new branch builds a new tree, which reads the record again. Cut from the commit, it shows the same diff.
+      Fixture.git({ "checkout", "-q", "-b", "other", Fixture.git({ "rev-parse", "HEAD" }, tmp) }, tmp)
+      open_sidebar()
 
-      Sidebar.cursor_to("one")
-      press("v")
-      local got = line_named("mod.lua")
-      restore_due()
-      source.restore()
+      assert.truthy((line_named("mod.lua"):find(highlights.VIEWED_ICON, 1, true)))
+    end)
 
-      assert.truthy((got:find(highlights.VIEWED_ICON, 1, true)))
+    describe("on a symbol row", function()
+      local source ---@type support.symbols.Source
+      local restore_due ---@type fun()
+
+      before_each(function()
+        source = Symbols.install()
+        restore_due = Sidebar.draw_at_once()
+      end)
+
+      after_each(function()
+        restore_due()
+        source.restore()
+      end)
+
+      it("marks the file the row belongs to", function()
+        vim.cmd.edit("mod.lua")
+        changeset.open()
+        Sidebar.await_diff()
+        source.answer("mod.lua", { Changes.sym("one", "Function", 0, 3, 5) })
+        source.answer("other.lua", {})
+        Sidebar.flush()
+
+        Sidebar.cursor_to("one")
+        press("v")
+
+        assert.truthy((line_named("mod.lua"):find(highlights.VIEWED_ICON, 1, true)))
+      end)
     end)
 
     it("reports a mark it could not write", function()

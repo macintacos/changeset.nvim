@@ -47,6 +47,23 @@ local function icon_for(row)
   return icons.get("lsp", row.kind == "symbol" and row.symbol_kind or "Text")
 end
 
+---The icon for each row, checking files viewed in `marks`, and whether it checks `row`.
+---@param marks changeset.ViewedMarks
+---@return fun(row: changeset.Row): string, string icon
+---@return fun(row: changeset.Row): boolean is_viewed
+local function viewed_layout(marks)
+  local function is_viewed(row)
+    return row.kind == "file" and viewed.holds(marks, row.path, row.digest)
+  end
+  return function(row)
+    if is_viewed(row) then
+      return highlights.VIEWED_ICON, highlights.VIEWED_HL
+    end
+    return icon_for(row)
+  end,
+    is_viewed
+end
+
 ---The row under the sidebar's cursor.
 ---@return changeset.Row?
 function M.row_at_cursor()
@@ -503,16 +520,9 @@ function M.draw(kinds_key)
   local cursor, top = vim.api.nvim_win_get_cursor(win)[1], vim.fn.line("w0", win)
   comments_section = comments_for(state.tree)
   local tree = laid_out(state.rows)
-  local function is_viewed(row)
-    return row.kind == "file" and viewed.holds(state.marks, row.path, row.digest)
-  end
+  local icon, is_viewed = viewed_layout(state.marks)
   local lines, lnum, blocks = state.view:show(tree, {
-    icon = function(row)
-      if is_viewed(row) then
-        return highlights.VIEWED_ICON, highlights.VIEWED_HL
-      end
-      return icon_for(row)
-    end,
+    icon = icon,
     viewed = is_viewed,
     width = width,
     cursor = cursor,
