@@ -215,7 +215,8 @@ local function parse(source, lang, on_tree)
 end
 
 ---Read the kinds of `source`'s lines, calling back with nil when no parser for its language is installed or the
----parser fails. Parses in slices, so a large text calls back on a later tick; a small one before `read` returns.
+---parser fails. Parses in slices, so a large text calls back on a later tick; a small one usually before `read`
+---returns.
 ---@param source string
 ---@param path string Its name, or failing that `source`'s content, picks the language.
 ---@param on_done fun(kinds: changeset.LineKinds?, parsed: changeset.Parsed?)
