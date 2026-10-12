@@ -249,6 +249,28 @@ describe("changeset.git", function()
       Fixture.init_repo("main", tmp)
     end)
 
+    it("spawns its git commands without vim.system, whose spawn blocks Neovim longer", function()
+      local real = vim.system
+      vim.system = function()
+        error("spawned through vim.system")
+      end
+      local lines = run(function()
+        return Git.lines({ "git", "branch", "--show-current" }, tmp)
+      end)
+      vim.system = real
+
+      assert.same({ "main" }, lines)
+    end)
+
+    it("reads a command that fails to spawn as no lines", function()
+      assert.same(
+        {},
+        run(function()
+          return Git.lines({ "changeset-no-such-program" })
+        end)
+      )
+    end)
+
     it("reads a failed command's lines as none", function()
       assert.same(
         {},

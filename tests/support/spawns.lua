@@ -24,12 +24,12 @@ local function spying(targets, fn)
   return argvs
 end
 
----Runs `fn`, keeping the argv of every process started through `vim.system` or `vim.fn.systemlist`.
+---Runs `fn`, keeping the argv of every process started through `vim.system`, `vim.fn.jobstart` or `vim.fn.systemlist`.
 ---A wait belongs inside `fn`: `check-attr` starts from a scheduled callback, after `build()` returns.
 ---@param fn fun()
 ---@return string[][]
 function M.recording(fn)
-  return spying({ { vim, "system" }, { vim.fn, "systemlist" } }, fn)
+  return spying({ { vim, "system" }, { vim.fn, "jobstart" }, { vim.fn, "systemlist" } }, fn)
 end
 
 ---Runs `fn`, keeping the argv of every process started through `vim.fn.systemlist` or `vim.fn.system`, which block

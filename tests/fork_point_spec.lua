@@ -329,13 +329,10 @@ describe("fork_point", function()
       measures = measures + 1
       return real_get_async(...)
     end
-    local real_system, held = vim.system, {}
-    vim.system = function(argv, opts, on_exit)
-      if argv[1] == "gh" then
-        return real_system(argv, opts, on_exit)
-      end
-      held[#held + 1] = { argv, opts, on_exit }
-      return {}
+    local real_jobstart, held = vim.fn.jobstart, {}
+    vim.fn.jobstart = function(argv, opts)
+      held[#held + 1] = { argv, opts }
+      return 1
     end
     local done = false
     fork_point.get_async(root, "feature", function()
@@ -345,9 +342,9 @@ describe("fork_point", function()
     local answered = vim.wait(5000, function()
       return asks == 2 and #held > 1
     end, 10)
-    vim.system = real_system
+    vim.fn.jobstart = real_jobstart
     for _, process in ipairs(held) do
-      real_system(unpack(process))
+      real_jobstart(unpack(process))
     end
     assert.is_true(answered)
 
@@ -371,13 +368,13 @@ describe("fork_point", function()
       end)
     end
     get(root, "feature")
-    local real_system, held = vim.system, {}
-    vim.system = function(argv, opts, on_exit)
-      if argv[1] == "gh" or answered then
-        return real_system(argv, opts, on_exit)
+    local real_jobstart, held = vim.fn.jobstart, {}
+    vim.fn.jobstart = function(argv, opts)
+      if answered then
+        return real_jobstart(argv, opts)
       end
-      held[#held + 1] = { argv, opts, on_exit }
-      return {}
+      held[#held + 1] = { argv, opts }
+      return 1
     end
     local point ---@type changeset.ForkPoint?
     fork_point.get_async(root, "feature", function(landed)
@@ -386,9 +383,9 @@ describe("fork_point", function()
     local done = vim.wait(5000, function()
       return answered
     end, 10)
-    vim.system = real_system
+    vim.fn.jobstart = real_jobstart
     for _, process in ipairs(held) do
-      real_system(unpack(process))
+      real_jobstart(unpack(process))
     end
     assert.is_true(done)
 

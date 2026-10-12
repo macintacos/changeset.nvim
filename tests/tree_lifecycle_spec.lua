@@ -334,16 +334,26 @@ describe("changeset tree", function()
 
     describe("reopened on a kept tree", function()
       local real_system ---@type function
+      local real_jobstart ---@type function
       local real_systemlist ---@type function
       local held ---@type table[]
       local waited
 
-      ---Hold every `vim.system` process unstarted, and count the git processes Neovim waits on.
+      ---Put back every spawner `hold` replaced.
+      local function unhold()
+        vim.system, vim.fn.jobstart, vim.fn.systemlist = real_system, real_jobstart, real_systemlist
+      end
+
+      ---Hold every `vim.system` and `jobstart` process unstarted, and count the git processes Neovim waits on.
       local function hold()
         held, waited = {}, 0
         vim.system = function(argv, opts, on_exit)
-          held[#held + 1] = { argv, opts, on_exit }
+          held[#held + 1] = { real_system, argv, opts, on_exit }
           return {}
+        end
+        vim.fn.jobstart = function(argv, opts)
+          held[#held + 1] = { real_jobstart, argv, opts }
+          return 1
         end
         vim.fn.systemlist = function(...)
           waited = waited + 1
@@ -353,21 +363,21 @@ describe("changeset tree", function()
 
       ---Start every held process, now.
       local function release()
-        vim.system, vim.fn.systemlist = real_system, real_systemlist
+        unhold()
         for _, process in ipairs(held) do
-          real_system(unpack(process))
+          process[1](unpack(process, 2))
         end
         held = {}
       end
 
       before_each(function()
-        real_system, real_systemlist = vim.system, vim.fn.systemlist
+        real_system, real_jobstart, real_systemlist = vim.system, vim.fn.jobstart, vim.fn.systemlist
         Build.build()
         assert.is_true(wait_for_file("mod.lua"))
       end)
 
       after_each(function()
-        vim.system, vim.fn.systemlist = real_system, real_systemlist
+        unhold()
       end)
 
       it("draws the kept tree before waiting on git", function()
@@ -428,7 +438,7 @@ describe("changeset tree", function()
       it("builds for the branch HEAD moved to before the re-measure landed", function()
         hold()
         changeset.open()
-        vim.system, vim.fn.systemlist = real_system, real_systemlist
+        unhold()
         Fixture.git({ "checkout", "-q", "-b", "feature2" }, tmp)
 
         release()
@@ -441,7 +451,7 @@ describe("changeset tree", function()
       it("keeps the tree a build for another branch made before the re-measure landed", function()
         hold()
         changeset.open()
-        vim.system, vim.fn.systemlist = real_system, real_systemlist
+        unhold()
         Fixture.git({ "checkout", "-q", "-b", "feature2" }, tmp)
         Build.build()
         local tree = present(build.current())

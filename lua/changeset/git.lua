@@ -92,13 +92,41 @@ end
 ---@type table<thread, true>
 local async_threads = setmetatable({}, { __mode = "k" })
 
+---What a command `async` spawned exited with and printed.
+---@class changeset.git.Spawned
+---@field code integer
+---@field stdout string
+
+---Start `argv` through `jobstart`, whose spawn blocks Neovim a fraction as long as `vim.system`'s. A failed spawn
+---reaches `on_exit` as a failed result instead of raising.
+---@param argv string[]
+---@param on_exit fun(result: changeset.git.Spawned)
+local function spawn(argv, on_exit)
+  local stdout = {} ---@type string[]
+  local ok, job = pcall(vim.fn.jobstart, argv, {
+    stdin = "null",
+    stdout_buffered = true,
+    on_stdout = function(_, data)
+      stdout = data
+    end,
+    on_exit = function(_, code)
+      on_exit({ code = code, stdout = table.concat(stdout, "\n") })
+    end,
+  })
+  if not ok or job <= 0 then
+    vim.schedule(function()
+      on_exit({ code = -1, stdout = "" })
+    end)
+  end
+end
+
 ---In a coroutine `async` runs, `args`' result, waited for without blocking Neovim; nil elsewhere.
 ---@param args string[]
----@return vim.SystemCompleted?
+---@return changeset.git.Spawned?
 local function await(args)
   local co = coroutine.running()
   if co and async_threads[co] then
-    return (coroutine.yield --[[@as fun(args: string[]): vim.SystemCompleted]])(args)
+    return (coroutine.yield --[[@as fun(args: string[]): changeset.git.Spawned]])(args)
   end
 end
 
@@ -119,7 +147,7 @@ function M.async(fn, on_done)
     if coroutine.status(co) == "dead" then
       return on_done(value)
     end
-    M.system(value, { text = true }, step)
+    spawn(value, step)
   end
   step()
 end
