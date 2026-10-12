@@ -102,15 +102,15 @@ local async_threads = setmetatable({}, { __mode = "k" })
 ---@param argv string[]
 ---@param on_exit fun(result: changeset.git.Spawned)
 local function spawn(argv, on_exit)
-  local stdout = {} ---@type string[]
+  local lines = {} ---@type string[]
   local ok, job = pcall(vim.fn.jobstart, argv, {
     stdin = "null",
     stdout_buffered = true,
     on_stdout = function(_, data)
-      stdout = data
+      lines = data
     end,
     on_exit = function(_, code)
-      on_exit({ code = code, stdout = table.concat(stdout, "\n") })
+      on_exit({ code = code, stdout = table.concat(lines, "\n") })
     end,
   })
   if not ok or job <= 0 then

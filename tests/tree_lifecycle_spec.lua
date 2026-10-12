@@ -364,8 +364,8 @@ describe("changeset tree", function()
       ---Start every held process, now.
       local function release()
         unhold()
-        for _, process in ipairs(held) do
-          process[1](unpack(process, 2))
+        for _, call in ipairs(held) do
+          call[1](unpack(call, 2))
         end
         held = {}
       end
