@@ -103,17 +103,18 @@ local function await(args)
 end
 
 ---Run `fn` with every git command `lines` and `is_ancestor` start inside it spawned without blocking Neovim, then
----call `on_done` on the main loop with what `fn` returns.
+---call `on_done` on the main loop with what `fn` returns, or with nil after reporting the error `fn` raised.
 ---@generic T
 ---@param fn fun(): T
----@param on_done fun(result: T)
+---@param on_done fun(result: T?)
 function M.async(fn, on_done)
   local co = coroutine.create(fn)
   async_threads[co] = true
   local function step(...)
     local ok, value = coroutine.resume(co, ...)
     if not ok then
-      error(debug.traceback(co, value))
+      vim.notify("Changeset: " .. debug.traceback(co, value), vim.log.levels.ERROR)
+      return on_done(nil)
     end
     if coroutine.status(co) == "dead" then
       return on_done(value)

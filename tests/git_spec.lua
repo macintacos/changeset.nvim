@@ -1,5 +1,6 @@
 local Git = require("changeset.git")
 local Fixture = require("support.git")
+local Notify = require("support.notify")
 local present = require("support.present")
 
 describe("changeset.git", function()
@@ -284,14 +285,19 @@ describe("changeset.git", function()
       )
     end)
 
-    it("raises an error raised inside fn, with its traceback", function()
-      local ok, err = pcall(Git.async, function()
+    it("reports an error fn raises after a git command, and calls back with nil", function()
+      local notes, restore = Notify.capture()
+      local result = run(function()
+        Git.lines({ "git", "branch", "--show-current" }, tmp)
         error("measure failed")
-      end, function() end)
+      end)
+      restore()
 
-      assert.is_false(ok)
-      ---@cast err string
-      assert.matches("measure failed.*stack traceback", err)
+      assert.is_nil(result)
+      assert.matches(
+        "^Changeset: .*measure failed.*stack traceback",
+        present(Notify.messages(notes, vim.log.levels.ERROR)[1])
+      )
     end)
   end)
 
