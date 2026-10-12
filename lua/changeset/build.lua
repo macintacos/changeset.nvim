@@ -274,14 +274,51 @@ end
 ---@type fun(root: string, branch: string, commit: string?, point: changeset.ForkPoint?): boolean
 local place
 
----Build the tree for the repository at `root`, unless it is already built there.
+---@type { root: string, branch: string, waiters: fun(ready: boolean?)[], again: boolean? }? The first build in flight.
+local building
+
+---Build the tree for the repository at `root` unless it is already built there, measuring its fork point without
+---blocking, then call `on_done` once on the main loop: true when built, false when the repository has no merge base
+---with its default branch, nil when an ask for another repository replaced this one. An ask for `root` while one is
+---in flight waits on it, and has it measure again once it lands, since a ref can have moved after it started. A
+---landing that finds HEAD on another branch measures again for that branch.
 ---@param root string
----@return boolean ready false when the repository has no merge base with its default
----branch, which includes a `root` outside any repository.
-local function build_at(root)
-  local branch, commit = Git.head(root)
-  branch = branch or "HEAD"
-  return place(root, branch, commit, fork_point.get(root, branch))
+---@param on_done fun(ready: boolean?)
+local function build_at(root, on_done)
+  if building and building.root == root then
+    table.insert(building.waiters, on_done)
+    building.again = true
+    return
+  end
+  local replaced = building
+  local request = { root = root, branch = Git.head(root) or "HEAD", waiters = { on_done } }
+  building = request
+  if replaced then
+    for _, waiter in ipairs(replaced.waiters) do
+      waiter(nil)
+    end
+  end
+  local function measure()
+    fork_point.get_async(root, request.branch, function(point)
+      if
+        building --[[@as table?]]
+        ~= request
+      then
+        return
+      end
+      local branch, commit = Git.head(root)
+      if request.again or (branch or "HEAD") ~= request.branch then
+        request.branch, request.again = branch or "HEAD", nil
+        return measure()
+      end
+      building = nil
+      local ready = place(root, request.branch, commit, point)
+      for _, waiter in ipairs(request.waiters) do
+        waiter(ready)
+      end
+    end)
+  end
+  measure()
 end
 
 ---Keep the tree when `point` is the one it was built on, else build one there.
@@ -335,10 +372,9 @@ end
 ---
 ---The buffer's repository, not Neovim's directory: with the two different, a base
 ---measured in the wrong one leaves every later `git diff` on a bad object.
----@return boolean ready false when the repository has no merge base with its default
----branch, which includes a buffer outside any repository.
-function M.build()
-  return build_at(Paths.root(0))
+---@param on_done fun(ready: boolean?) As `build_at` calls it; false includes a buffer outside any repository.
+function M.build(on_done)
+  build_at(Paths.root(0), on_done)
 end
 
 ---The tree, while it is for the current buffer's repository and HEAD is still on its branch.
@@ -371,17 +407,18 @@ function M.remeasure(on_no_base, on_kept)
       return
     end
     remeasuring = nil
-    local branch, commit = Git.head(kept.root)
-    local ready
-    if (branch or "HEAD") ~= kept.branch then
-      ready = build_at(kept.root)
-    else
-      ready = place(kept.root, kept.branch, commit, point)
+    local function finish(ready)
+      if ready == false and on_no_base then
+        on_no_base()
+      elseif ready and tree == kept and on_kept then
+        on_kept()
+      end
     end
-    if not ready and on_no_base then
-      on_no_base()
-    elseif ready and tree == kept and on_kept then
-      on_kept()
+    local branch, commit = Git.head(kept.root)
+    if (branch or "HEAD") ~= kept.branch then
+      build_at(kept.root, finish)
+    else
+      finish(place(kept.root, kept.branch, commit, point))
     end
   end)
 end
@@ -403,9 +440,11 @@ function M.update()
     return M.remeasure(nil, M.refresh)
   end
   local kept = tree
-  if not build_at(tree.root) or tree == kept then
-    M.refresh()
-  end
+  build_at(tree.root, function(ready)
+    if ready ~= nil and (not ready or tree == kept) then
+      M.refresh()
+    end
+  end)
 end
 
 -- Fires: gh answering a fork_point lookup, or a fork point measured without blocking, for any repository and branch.

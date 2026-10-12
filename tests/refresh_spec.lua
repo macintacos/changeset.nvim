@@ -35,6 +35,9 @@ describe(":Changeset refresh", function()
 
   it("says why when there is no tree and none can be built", function()
     vim.cmd("Changeset refresh")
+    assert.is_true(vim.wait(10000, function()
+      return #notes > 0
+    end, 10))
 
     assert.is_nil(build().current())
     assert.same({ { msg = "Changeset: no merge base with the default branch", level = vim.log.levels.WARN } }, notes)
@@ -45,6 +48,9 @@ describe(":Changeset refresh", function()
     vim.cmd.edit("mod.lua")
 
     vim.cmd("Changeset refresh")
+    assert.is_true(vim.wait(10000, function()
+      return build().current() ~= nil
+    end, 10))
 
     assert.equal(Paths.root(0), present(build().current()).root)
   end)

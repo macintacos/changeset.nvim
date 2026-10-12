@@ -72,7 +72,7 @@ describe("the unified diff over a session", function()
     changeset.refresh()
 
     assert.is_true(vim.wait(5000, function()
-      return present(build.current()).collected
+      return (build.current() or {}).collected
     end, 20))
     assert.is_true(bare(file_window("mod.lua")))
   end)

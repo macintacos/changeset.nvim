@@ -14,6 +14,16 @@ function M.text()
   return table.concat(M.lines(), "\n")
 end
 
+---Wait for a sidebar opened before its fork point landed to stand.
+function M.await_open()
+  assert.is_true(
+    vim.wait(10000, function()
+      return window.is_visible()
+    end, 10),
+    "the sidebar never opened"
+  )
+end
+
 ---Wait for the tree to hold `other.lua`, its symbols read or not.
 function M.await_diff()
   local arrived = vim.wait(10000, function()

@@ -1,3 +1,4 @@
+local Build = require("support.build")
 local Fixture = require("support.git")
 local Symbols = require("support.symbols")
 local present = require("support.present")
@@ -24,7 +25,7 @@ describe("the sidebar loaded after the tree's diff was read", function()
 
   it("hands the picker the rows of that diff", function()
     Fixture.feature_one_file(tmp)
-    build.build()
+    Build.build()
     assert.is_true(vim.wait(10000, function()
       return present(build.current()).collected
     end, 10))

@@ -1,3 +1,4 @@
+local Build = require("support.build")
 local Changes = require("support.changes")
 local Fixture = require("support.git")
 local Symbols = require("support.symbols")
@@ -21,7 +22,7 @@ describe("changeset.sidebar_state", function()
 
   ---Build the tree and wait for its diff.
   local function built()
-    build.build()
+    Build.build()
     assert.is_true(vim.wait(10000, function()
       return present(build.current()).collected
     end, 10))

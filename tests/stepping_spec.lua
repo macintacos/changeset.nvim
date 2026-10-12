@@ -67,6 +67,7 @@ describe("changeset.step", function()
     local win = edit(2)
 
     changeset.step(1)
+    Sidebar.await_open()
     assert.truthy(window.is_visible())
     assert.equal(win, vim.api.nvim_get_current_win())
     settle()
@@ -258,6 +259,7 @@ describe("changeset.step", function()
     local win = edit(2)
 
     changeset.step(1)
+    Sidebar.await_open()
     vim.cmd.tabnew()
     assert.is_truthy((vim.wait(5000, function()
       local tree = require("changeset.build").current()
@@ -385,6 +387,7 @@ describe("changeset.step", function()
       local win = edit(8)
 
       vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-preview-next)"), "x", false)
+      Sidebar.await_open()
       assert.truthy(window.is_visible())
       settle()
 

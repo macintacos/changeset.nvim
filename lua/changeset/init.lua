@@ -495,20 +495,29 @@ end
 ---Public API: the file rows under the sidebar's sections, less the kinds it hides, for the current buffer's repository.
 ---
 ---The first call builds and keeps the tree, loading the changed files and their language servers, and
----blocks up to `DIFF_WAIT_MS` (2 s) while the diff is read. `rows` are the file rows, uncompressed, with
+---blocks up to `DIFF_WAIT_MS` (2 s), keeping the event loop turning, while the fork point is measured and the diff read. `rows` are the file rows, uncompressed, with
 ---their symbols under `children`.
 ---@return { rows: changeset.Row[], root: string, ref: string }? tree
 ---@return string? err Why there is no tree yet.
 function M.rows()
   local kept = build.kept()
-  if not (kept or build.build()) then
-    return nil, NO_BASE
+  local answered = kept and true or nil
+  if not kept then
+    build.build(function(answer)
+      answered = answer
+    end)
   end
   -- The first ask builds the tree too, and a picker cannot fill in behind it the way the sidebar does.
   vim.wait(DIFF_WAIT_MS, function()
+    if answered == nil then
+      return false
+    end
     local tree = build.current()
-    return not tree or tree.collected
+    return not answered or not tree or tree.collected
   end, 10)
+  if answered == false then
+    return nil, NO_BASE
+  end
   local state = sidebar_state.current()
   if not (state and state.tree.collected) then
     return nil, "still reading the diff"
@@ -548,8 +557,15 @@ function M.setup(opts)
   review_comments.redraw()
 end
 
+---@type { afters: fun()[], focus: { win: integer }? }? An open whose fork point is being measured; release() drops it.
+local opening
+
+---@type table? A `diff()` waiting on the build to turn the unified diff on; a second `diff()` clears it.
+local diff_pending
+
 ---Drop everything the sidebar set up but its window.
 local function release()
+  opening = nil
   cancel_settle()
   waiting = nil
   opened_id, stepping_back = nil, false
@@ -558,15 +574,19 @@ local function release()
 end
 
 ---Builds the tree for the current buffer's repository, unless it is already built there, warning when it can't.
----@return boolean ready
-local function built()
-  if not build.build() then
-    vim.notify("Changeset: " .. NO_BASE, vim.log.levels.WARN)
-    return false
-  end
-  -- The cursor is still where the user was, and nothing tracked it before a tree existed.
-  track()
-  return true
+---@param on_done fun(ready: boolean?)? Called as `build.build` calls back, after the warning.
+local function built(on_done)
+  build.build(function(answer)
+    if answer == false then
+      vim.notify("Changeset: " .. NO_BASE, vim.log.levels.WARN)
+    elseif answer then
+      -- The tracker records no cursor before a tree exists.
+      track()
+    end
+    if on_done then
+      on_done(answer)
+    end
+  end)
 end
 
 ---Rebuild the tree now, or build the current buffer's repository's when there is none.
@@ -578,25 +598,10 @@ function M.refresh()
   end
 end
 
----Open the sidebar on the current buffer's repository, drawing its tree.
-function M.open()
-  -- `window.buf()`, not `window.win()`: the buffer is wiped with its window, so it is
-  -- live exactly while a sidebar stands on some tabpage.
-  if window.buf() then
-    M.close()
-  else
-    -- A session read over the sidebar closes its window, and this runs before the
-    -- `WinClosed` close that would let go of it.
-    release()
-  end
-  local previous = build.current()
-  -- A kept tree draws at once; its fork point is measured again behind it.
-  local kept = build.kept()
-  if kept then
-    track()
-  elseif not built() then
-    return
-  end
+---Open the sidebar's window on the tree just built or kept.
+---@param kept changeset.Tree? The kept tree it opens on, re-measured behind it.
+---@param previous changeset.Tree? The tree before the build.
+local function show(kept, previous)
   bound_keys = config.get().keymaps
 
   local buf = vim.api.nvim_create_buf(false, true)
@@ -661,8 +666,8 @@ function M.open()
     desc = "changeset: let go of the sidebar when its window closes another way",
     callback = function()
       vim.schedule(function()
-        -- A session read over the sidebar opens its own before this runs.
-        if not window.is_visible() then
+        -- A session read over the sidebar opens its own before this runs, and an open made since waits on its own.
+        if not (window.is_visible() or opening) then
           M.close()
         end
       end)
@@ -824,6 +829,70 @@ function M.open()
   end
 end
 
+---Open the sidebar on the current buffer's repository, drawing its tree, then call `after` once the open lands,
+---whether or not a window opened. A kept tree opens at once. The window opens in the tabpage `open` was called from,
+---and none opens if that tabpage is gone by then.
+---@param after fun()?
+function M.open(after)
+  if opening then
+    table.insert(opening.afters, after)
+    return
+  end
+  -- `window.buf()`, not `window.win()`: the buffer is wiped with its window, so it is
+  -- live exactly while a sidebar stands on some tabpage.
+  if window.buf() then
+    M.close()
+  else
+    -- A session read over the sidebar closes its window, and this runs before the
+    -- `WinClosed` close that would let go of it.
+    release()
+  end
+  local previous = build.current()
+  -- A kept tree draws at once; its fork point is measured again behind it.
+  local kept = build.kept()
+  if kept then
+    track()
+    show(kept, previous)
+    if after then
+      after()
+    end
+    return
+  end
+  local pending = { afters = { after } } ---@type { afters: fun()[], focus: { win: integer }? }
+  opening = pending
+  local tab = vim.api.nvim_get_current_tabpage()
+  built(function(answer)
+    if
+      opening --[[@as table?]]
+      ~= pending
+    then
+      return
+    end
+    opening = nil
+    if not vim.api.nvim_tabpage_is_valid(tab) then
+      for _, fn in ipairs(pending.afters) do
+        fn()
+      end
+      return
+    end
+    local here = vim.api.nvim_get_current_tabpage()
+    vim.api.nvim_set_current_tabpage(tab)
+    if answer then
+      show(nil, previous)
+      local focus = pending.focus
+      if focus and vim.api.nvim_get_current_win() == focus.win and vim.api.nvim_get_mode().mode == "n" then
+        window.focus()
+      end
+    end
+    for _, fn in ipairs(pending.afters) do
+      fn()
+    end
+    if here ~= tab and vim.api.nvim_tabpage_is_valid(here) then
+      vim.api.nvim_set_current_tabpage(here)
+    end
+  end)
+end
+
 ---Dismiss the sidebar, the unified diff kept on only as far as `unified_diff.keep` says. The tree stays, and keeps
 ---refreshing.
 function M.close()
@@ -842,18 +911,45 @@ function M.diff()
   if not unified_diff.available() then
     return vim.notify("Changeset: the unified diff needs gitsigns", vim.log.levels.WARN)
   end
-  if not (build.current() or built()) then
+  if build.current() then
+    unified_diff.turn_on()
+    return vim.notify("Changeset: unified diff on")
+  end
+  -- A second ask before the build lands turns back off what the first would have turned on.
+  if diff_pending then
+    diff_pending = nil
     return
   end
-  unified_diff.turn_on()
-  vim.notify("Changeset: unified diff on")
+  local token = {}
+  diff_pending = token
+  built(function(answer)
+    if
+      diff_pending --[[@as table?]]
+      ~= token
+    then
+      return
+    end
+    diff_pending = nil
+    if answer then
+      unified_diff.turn_on()
+      vim.notify("Changeset: unified diff on")
+    end
+  end)
 end
 
 ---Fill `placeholder`, in the current tabpage, with the tree, or let go of it when there is no tree to fill it with.
 ---@param placeholder integer
 local function fill(placeholder)
-  M.open()
-  if not window.is_visible() then
+  -- Read now: the tracker can record over it before the open lands.
+  local ok, recorded = pcall(vim.json.decode, vim.g[POSITION_GLOBAL])
+  M.open(function()
+    if window.is_visible() then
+      local state = assert(sidebar_state.current(), "changeset: no tree built yet")
+      return apply(state.position:restore(ok and recorded or nil, draw.view(), decided))
+    end
+    if not vim.api.nvim_win_is_valid(placeholder) then
+      return
+    end
     local stale = vim.api.nvim_win_get_buf(placeholder)
     if #window.panes(0) > 1 then
       vim.api.nvim_win_close(placeholder, true)
@@ -862,12 +958,7 @@ local function fill(placeholder)
     end
     -- A session lists it, under a name nothing else answers to.
     pcall(vim.api.nvim_buf_delete, stale, { force = true })
-    return
-  end
-  local state = sidebar_state.current()
-  assert(state, "changeset: no tree built yet")
-  local ok, recorded = pcall(vim.json.decode, vim.g[POSITION_GLOBAL])
-  apply(state.position:restore(ok and recorded or nil, draw.view(), decided))
+  end)
 end
 
 ---Fill the window a restored session left standing where the sidebar was, and bring
@@ -907,12 +998,17 @@ end
 ---@param take fun(count: integer)
 local function walk(count, kind, take)
   if not window.is_visible() then
-    M.open()
-    if not window.is_visible() then
-      return
-    end
-    local state = assert(sidebar_state.current(), "changeset: no tree built yet")
-    apply(state.position:entered(draw.view()))
+    local win = vim.api.nvim_get_current_win()
+    local buf = vim.api.nvim_win_get_buf(win)
+    vim.api.nvim_echo({ { "reading the changes…" } }, false, {})
+    return M.open(function()
+      if not window.is_visible() or vim.api.nvim_get_current_win() ~= win or vim.api.nvim_win_get_buf(win) ~= buf then
+        return
+      end
+      local state = assert(sidebar_state.current(), "changeset: no tree built yet")
+      apply(state.position:entered(draw.view()))
+      walk(count, kind, take)
+    end)
   end
   local tree = build.current()
   if not (tree and ready(tree)) then
@@ -954,10 +1050,24 @@ end
 
 ---Open, focus, or dismiss the sidebar, depending on where the cursor is.
 function M.toggle()
+  if opening then
+    -- The second press closes what the first opens.
+    if opening.focus then
+      release()
+    else
+      opening.focus = { win = vim.api.nvim_get_current_win() }
+    end
+    return
+  end
   local action = next_action({ visible = window.is_visible(), focused = window.is_focused() })
   if action == "open" then
     M.open()
-    window.focus()
+    local pending = opening --[[@as { focus: { win: integer }? }?]]
+    if pending then
+      pending.focus = { win = vim.api.nvim_get_current_win() }
+    else
+      window.focus()
+    end
   elseif action == "focus" then
     window.focus()
   else
@@ -1001,6 +1111,8 @@ vim.api.nvim_create_autocmd("SessionLoadPre", {
   callback = function()
     if window.buf() then
       M.close()
+    elseif opening then
+      release()
     end
   end,
 })

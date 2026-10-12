@@ -1,3 +1,4 @@
+local Build = require("support.build")
 local changeset = require("changeset")
 local highlights = require("changeset.highlights")
 local Rows = require("changeset.rows")
@@ -120,6 +121,49 @@ describe("changeset position in a session", function()
     assert.truthy((Sidebar.cursor_line():find("other.lua", 1, true)))
   end)
 
+  it("a restored session fills its placeholder in the placeholder's tabpage once the fork point lands", function()
+    vim.cmd.edit("mod.lua")
+    changeset.open()
+    Sidebar.settle()
+    Sidebar.cursor_to("other.lua")
+    Sidebar.flush()
+    local recorded = vim.g.ChangesetPosition
+    changeset.close()
+    Fixture.git({ "checkout", "-q", "-b", "scratch", "trunk" }, tmp)
+    vim.fn.writefile({ "return 1" }, tmp .. "/scratch.lua")
+    Fixture.git({ "add", "scratch.lua" }, tmp)
+    Fixture.commit("scratch", tmp)
+    assert.is_true(Build.build())
+    Fixture.git({ "checkout", "-q", "feature" }, tmp)
+    local session_tab = vim.api.nvim_get_current_tabpage()
+
+    restore_session(recorded)
+    vim.cmd.tabnew()
+    assert.is_true(vim.wait(10000, function()
+      return window.buf() ~= nil
+    end, 10))
+    vim.api.nvim_set_current_tabpage(session_tab)
+    Sidebar.settle()
+    Sidebar.flush()
+    vim.cmd("silent! tabonly!")
+
+    assert.equal(session_tab, vim.api.nvim_win_get_tabpage(present(window.win())))
+    assert.truthy((Sidebar.cursor_line():find("other.lua", 1, true)))
+  end)
+
+  it("a session loaded while an open waits cancels it", function()
+    vim.cmd.edit("mod.lua")
+
+    changeset.open()
+    vim.api.nvim_exec_autocmds("SessionLoadPre", {})
+    assert.is_true(vim.wait(10000, function()
+      return require("changeset.build").kept() ~= nil
+    end, 10))
+    Sidebar.flush()
+
+    assert.is_false(window.is_visible())
+  end)
+
   it("brings the sidebar back scrolled as it was", function()
     vim.cmd.edit("mod.lua")
     changeset.open()
@@ -185,6 +229,7 @@ describe("changeset position in a session", function()
     vim.cmd.edit("mod.lua")
 
     restore_session({ here = { path = "mod.lua", lnum = 8 } }, true)
+    Sidebar.await_open()
 
     assert.equal(window.win(), vim.api.nvim_get_current_win())
     assert.is_true(Cursor.hidden())
@@ -257,7 +302,9 @@ describe("changeset position in a session", function()
     vim.fn.chdir(tmp)
     vim.fn.delete(outside, "rf")
     assert.is_true(ok, tostring(err))
-    assert.equal(before, #vim.api.nvim_tabpage_list_wins(0))
+    assert.is_true(vim.wait(10000, function()
+      return before == #vim.api.nvim_tabpage_list_wins(0)
+    end, 10))
   end)
 
   it("lets go of a restored sidebar window it cannot fill when it is the only window, and of its buffer", function()
@@ -275,7 +322,9 @@ describe("changeset position in a session", function()
     vim.fn.delete(outside, "rf")
 
     assert.is_true(ok, tostring(err))
-    assert.is_false(vim.api.nvim_buf_is_valid(stale))
+    assert.is_true(vim.wait(10000, function()
+      return not vim.api.nvim_buf_is_valid(stale)
+    end, 10))
   end)
 
   it("lets go of a restored sidebar window it cannot fill when only floats stand beside it", function()
@@ -301,7 +350,9 @@ describe("changeset position in a session", function()
     vim.fn.delete(outside, "rf")
 
     assert.is_true(ok, tostring(err))
-    assert.is_false(vim.api.nvim_buf_is_valid(stale))
+    assert.is_true(vim.wait(10000, function()
+      return not vim.api.nvim_buf_is_valid(stale)
+    end, 10))
   end)
 
   it(
@@ -318,6 +369,9 @@ describe("changeset position in a session", function()
       vim.api.nvim_set_current_tabpage(first)
 
       vim.api.nvim_exec_autocmds("SessionLoadPost", {})
+      assert.is_true(vim.wait(10000, function()
+        return window.buf() ~= nil
+      end, 10))
       local seen = { tab = vim.api.nvim_get_current_tabpage(), shown = vim.api.nvim_win_get_buf(placeholder) }
       local tree = window.buf()
       vim.cmd("silent! tabonly")
