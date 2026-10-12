@@ -193,16 +193,24 @@ local function ask(root, branch, point)
   Git.pr_target(root, function(target, number)
     local heard = asking[key] ---@type changeset.ForkPoint?
     asking[key] = nil
-    if target and number then
-      targets[key] = { target = target, number = number }
-      -- HEAD can have moved by the time gh answers; subscribers still need a point.
-      heard = settled(root, branch, targets[key]) or heard
-    end
-    if heard then
-      for fn in pairs(subscribers) do
-        fn(root, branch, heard)
+    local function tell(told)
+      if told then
+        for fn in pairs(subscribers) do
+          fn(root, branch, told)
+        end
       end
     end
+    if not (target and number) then
+      return tell(heard)
+    end
+    local pr = { target = target, number = number }
+    targets[key] = pr
+    -- HEAD can have moved by the time gh answers; subscribers still need a point.
+    Git.async(function()
+      return settled(root, branch, pr)
+    end, function(remeasured)
+      tell(remeasured or heard)
+    end)
   end)
   return point, true
 end

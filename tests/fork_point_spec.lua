@@ -1,6 +1,7 @@
 local gh = require("support.gh")
 local fixture = require("support.git")
 local present = require("support.present")
+local spawns = require("support.spawns")
 local Git = require("changeset.git")
 local fork_point = require("changeset.fork_point")
 
@@ -375,10 +376,18 @@ describe("fork_point", function()
     vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
     vim.env.FAKE_GH_DELAY = "0.5"
     local root, _, parent_base = repo()
+    local answered = false
+    local pr_target = Git.pr_target
+    Git.pr_target = function(r, on_answer)
+      return pr_target(r, function(...)
+        on_answer(...)
+        answered = true
+      end)
+    end
     fork_point.get(root, "feature")
     local real_system, held = vim.system, {}
     vim.system = function(argv, opts, on_exit)
-      if argv[1] == "gh" then
+      if argv[1] == "gh" or answered then
         return real_system(argv, opts, on_exit)
       end
       held[#held + 1] = { argv, opts, on_exit }
@@ -388,18 +397,39 @@ describe("fork_point", function()
     fork_point.get_async(root, "feature", function(measured)
       point = measured
     end)
-    local answered = await_heard(root, 1)
+    local done = vim.wait(5000, function()
+      return answered
+    end, 10)
     vim.system = real_system
     for _, process in ipairs(held) do
       real_system(unpack(process))
     end
-    assert.is_true(answered)
+    assert.is_true(done)
 
     assert.is_true(vim.wait(5000, function()
       return point ~= nil
     end, 10))
     assert.equal(parent_base, present(point).base)
     assert.equal(7, present(point).pr)
+  end)
+
+  it("measures again without blocking once gh names a target", function()
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
+    local root, _, parent_base = repo()
+
+    local blocked = spawns.blocking(function()
+      fork_point.get_async(root, "feature", function() end)
+      assert.is_true(vim.wait(5000, function()
+        return vim.iter(heard_in(root)):any(function(h)
+          return h.point.pr == 7
+        end)
+      end, 10))
+    end)
+
+    for _, argv in ipairs(blocked) do
+      assert.is_false(spawns.measuring(argv), table.concat(argv, " "))
+    end
+    assert.equal(parent_base, present(heard_in(root)[#heard_in(root)]).point.base)
   end)
 
   it("stays on the default base when the PR's target shares no fork point", function()

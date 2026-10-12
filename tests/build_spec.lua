@@ -6,6 +6,7 @@ local Notify = require("support.notify")
 local symbols = require("support.symbols")
 local gh = require("support.gh") -- a fake gh on PATH: never the real one, never the network
 local present = require("support.present")
+local spawns = require("support.spawns")
 
 ---Every announcement the tree makes, in order; emptied before each case.
 ---@type changeset.TreeEvent[]
@@ -14,35 +15,7 @@ build.subscribe(function(event)
   events[#events + 1] = event
 end)
 
----Runs `fn`, keeping the argv of every process started through `vim.system` or `vim.fn.systemlist`.
----A wait belongs inside `fn`: `check-attr` starts from a scheduled callback, after `build()` returns.
----@param fn fun()
----@return string[][]
-local function recording(fn)
-  local argvs = {}
-  local real_system, real_systemlist = vim.system, vim.fn.systemlist
-  vim.system = function(argv, ...)
-    argvs[#argvs + 1] = argv
-    return real_system(argv, ...)
-  end
-  vim.fn.systemlist = function(argv, ...)
-    argvs[#argvs + 1] = argv
-    return real_systemlist(argv, ...)
-  end
-  local ok, err = pcall(fn)
-  vim.system, vim.fn.systemlist = real_system, real_systemlist
-  assert.is_true(ok, tostring(err))
-  return argvs
-end
-
----Whether `argv` starts `program` with `subcommand`, as `git -C <root> merge-base …` starts git's merge-base.
----@param argv string[]
----@param program string
----@param subcommand string?
----@return boolean
-local function runs(argv, program, subcommand)
-  return argv[1] == program and (subcommand == nil or vim.list_contains(argv, subcommand))
-end
+local recording, runs = spawns.recording, spawns.runs
 
 ---Build the tree, waiting for its diff.
 local function build_and_collect()

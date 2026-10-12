@@ -36,6 +36,9 @@ local ours = {}
 ---@type table<integer, string|false> Buffers with a move in flight, by target; false is the index.
 local moving = {}
 
+---@type table? The `sync` whose measure is in flight; until it lands, `want` is the base of what it left, so nothing moves.
+local syncing
+
 ---@type boolean Whether `on_read` is registered; gitsigns has no way to remove a callback.
 local hears_reads = false
 
@@ -92,6 +95,9 @@ end
 
 ---Move buffers that missed the base, such as ones attached while it changed.
 local function reconcile()
+  if syncing then
+    return
+  end
   for buf, bcache in pairs(require("gitsigns.cache").cache) do
     if bcache.git_obj.revision ~= want and movable(buf, bcache) then
       move(buf, report)
@@ -159,7 +165,24 @@ local function sync(root, branch)
     return
   end
   toplevel, applied, applied_head = root, branch, select(2, Git.head(root))
-  follow(root, branch, (fork_point.get(root, branch)))
+  local token = {}
+  syncing = token
+  fork_point.get_async(root, branch, function(point)
+    if
+      syncing --[[@as table?]]
+      == token
+    then
+      syncing = nil
+      follow(root, branch, point)
+      reconcile()
+    elseif root ~= toplevel and point then
+      -- Another repository's sync replaced this one; its buffers still belong on this base.
+      local current, base = toplevel, want
+      toplevel = root
+      apply(point.base, report)
+      toplevel, want = current, base
+    end
+  end)
 end
 
 ---Follow HEAD moving to `head` on the branch the base is resolved for, as a pull, a commit or a rebase moves it: the
@@ -209,7 +232,7 @@ end
 ---unchanged, since gitsigns sends `GitSignsUpdate` only when the status changes.
 ---@param ctx Gitsigns.ManagerUpdate
 local function on_read(ctx)
-  if ctx.bcache.git_obj.revision ~= want and movable(ctx.bufnr, ctx.bcache) then
+  if not syncing and ctx.bcache.git_obj.revision ~= want and movable(ctx.bufnr, ctx.bcache) then
     move(ctx.bufnr, report)
   end
 end
