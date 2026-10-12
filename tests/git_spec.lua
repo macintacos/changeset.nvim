@@ -245,21 +245,29 @@ describe("changeset.git", function()
       return result
     end
 
+    local real_system, real_notify = vim.system, vim.notify
+
     before_each(function()
       Fixture.init_repo("main", tmp)
     end)
 
+    -- A failing `run` raises before a spec could restore its stubs.
+    after_each(function()
+      vim.system, vim.notify = real_system, real_notify
+    end)
+
     it("spawns its git commands without vim.system, whose spawn blocks Neovim longer", function()
-      local real = vim.system
-      vim.system = function()
-        error("spawned through vim.system")
+      local calls = 0
+      vim.system = function(...)
+        calls = calls + 1
+        return real_system(...)
       end
       local lines = run(function()
         return Git.lines({ "git", "branch", "--show-current" }, tmp)
       end)
-      vim.system = real
 
       assert.same({ "main" }, lines)
+      assert.equals(0, calls)
     end)
 
     it("reads a command that fails to spawn as no lines", function()
@@ -308,18 +316,27 @@ describe("changeset.git", function()
     end)
 
     it("reports an error fn raises after a git command, and calls back with nil", function()
-      local notes, restore = Notify.capture()
+      local notes = Notify.capture()
       local result = run(function()
         Git.lines({ "git", "branch", "--show-current" }, tmp)
         error("measure failed")
       end)
-      restore()
 
       assert.is_nil(result)
       assert.matches(
         "^Changeset: .*measure failed.*stack traceback",
         present(Notify.messages(notes, vim.log.levels.ERROR)[1])
       )
+    end)
+    it("reports an error value fn raises that is not a string, and calls back with nil", function()
+      local notes = Notify.capture()
+      local result = run(function()
+        Git.lines({ "git", "branch", "--show-current" }, tmp)
+        error({ code = 1 })
+      end)
+
+      assert.is_nil(result)
+      assert.matches("^Changeset: table: .*stack traceback", present(Notify.messages(notes, vim.log.levels.ERROR)[1]))
     end)
   end)
 

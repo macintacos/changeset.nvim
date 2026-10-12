@@ -142,7 +142,7 @@ function M.async(fn, on_done)
   local function step(...)
     local ok, value = coroutine.resume(co, ...)
     if not ok then
-      vim.notify("Changeset: " .. debug.traceback(co, value), vim.log.levels.ERROR)
+      vim.notify("Changeset: " .. debug.traceback(co, tostring(value)), vim.log.levels.ERROR)
       return on_done(nil)
     end
     if coroutine.status(co) == "dead" then
