@@ -1,5 +1,5 @@
 ---The git and gh queries that pick the branch changeset diffs against, HEAD read off git's own files, and the process
----runner they and herdr share.
+---runner gh's query, the diff and herdr share.
 local M = {}
 
 ---`vim.system`, calling `on_exit` on the main loop. A failed spawn — a repository removed under a pending
@@ -94,11 +94,11 @@ local async_threads = setmetatable({}, { __mode = "k" })
 
 ---What a command `async` spawned exited with and printed.
 ---@class changeset.git.Spawned
----@field code integer
+---@field code integer -1 when it could not start.
 ---@field stdout string
 
----Start `argv` through `jobstart`, whose spawn blocks Neovim a fraction as long as `vim.system`'s. A failed spawn
----reaches `on_exit` as a failed result instead of raising.
+---Start `argv` through `jobstart`, whose spawn blocks Neovim a fraction as long as `vim.system`'s, calling `on_exit`
+---on the main loop. A failed spawn reaches `on_exit` as a failed result instead of raising.
 ---@param argv string[]
 ---@param on_exit fun(result: changeset.git.Spawned)
 local function spawn(argv, on_exit)
@@ -131,7 +131,8 @@ local function await(args)
 end
 
 ---Run `fn` with every git command `lines` and `is_ancestor` start inside it spawned without blocking Neovim, then
----call `on_done` on the main loop with what `fn` returns, or with nil after reporting the error `fn` raised.
+---call `on_done` on the main loop with what `fn` returns, or with nil after reporting the error `fn` raised. Start it
+---on the main loop: in a fast event `jobstart` can't spawn, and the command reads as failed.
 ---@generic T
 ---@param fn fun(): T
 ---@param on_done fun(result: T?)
