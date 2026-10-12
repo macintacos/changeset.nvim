@@ -22,7 +22,9 @@ local unified_diff = require("changeset.unified_diff")
 local view = require("changeset.view")
 local window = require("changeset.window")
 
--- How long a picker's first ask blocks on the diff before giving up on it.
+-- How long a picker's first ask blocks on the fork point, then on the diff. The measure gets its own budget because
+-- under load it can run for seconds, and its own retries bound it.
+local MEASURE_WAIT_MS = 10000
 local DIFF_WAIT_MS = 2000
 
 -- Capitalised: `:mksession` saves only globals named so, and only with "globals" in 'sessionoptions'.
@@ -496,8 +498,8 @@ end
 
 ---Public API: the file rows under the sidebar's sections, less the kinds it hides, for the current buffer's repository.
 ---
----The first call builds and keeps the tree, loading the changed files and their language servers, and blocks up to
----`DIFF_WAIT_MS` (2 s), keeping the event loop turning, while the fork point is measured and the diff read. `rows` are
+---The first call builds and keeps the tree, loading the changed files and their language servers. Keeping the event loop
+---turning, it blocks up to 10 s while the fork point is measured, then up to 2 s while the diff is read. `rows` are
 ---the file rows, uncompressed, with their symbols under `children`.
 ---@return { rows: changeset.Row[], root: string, ref: string }? tree
 ---@return string? err Why there is no tree yet.
@@ -510,10 +512,10 @@ function M.rows()
     end)
   end
   -- The first ask builds the tree too, and a picker cannot fill in behind it the way the sidebar does.
+  vim.wait(MEASURE_WAIT_MS, function()
+    return outcome ~= nil
+  end, 10)
   vim.wait(DIFF_WAIT_MS, function()
-    if outcome == nil then
-      return false
-    end
     local tree = build.current()
     return outcome ~= "built" or not tree or tree.collected
   end, 10)

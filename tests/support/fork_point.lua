@@ -13,7 +13,7 @@ function M.get(root, branch)
     done, point = true, measured
   end)
   assert.is_true(
-    vim.wait(5000, function()
+    vim.wait(10000, function()
       return done
     end, 10),
     "the fork point was never measured"

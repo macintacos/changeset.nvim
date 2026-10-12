@@ -93,6 +93,25 @@ describe("changeset tree", function()
       })
     end)
 
+    it("hands over the rows on the first ask while the fork point takes seconds to measure", function()
+      local fork_point = require("changeset.fork_point")
+      local get_async = fork_point.get_async
+      fork_point.get_async = function(root, branch, on_done)
+        get_async(root, branch, function(point)
+          vim.defer_fn(function()
+            on_done(point)
+          end, 2500)
+        end)
+      end
+
+      local ok, tree, err = pcall(changeset.rows)
+      fork_point.get_async = get_async
+
+      assert.is_true(ok)
+      assert.is_nil(err)
+      assert.equal(1, #present(tree).rows)
+    end)
+
     it("keeps the tree it already built for the same fork point", function()
       Build.build()
       local tree = build.current()
@@ -113,6 +132,7 @@ describe("changeset tree", function()
 
     it("keeps the tree after the sidebar closes", function()
       changeset.open()
+      Sidebar.await_open()
       local tree = present(build.current())
 
       changeset.close()
@@ -149,7 +169,7 @@ describe("changeset tree", function()
       Fixture.git({ "checkout", "-q", "-b", "feature2" }, tmp)
       vim.api.nvim_exec_autocmds("User", { pattern = "GitSignsUpdate" })
 
-      assert.is_true(vim.wait(2000, function()
+      assert.is_true(vim.wait(10000, function()
         return present(build.current()).branch == "feature2"
       end, 25))
       assert.not_equal(tree, build.current())
@@ -267,7 +287,7 @@ describe("changeset tree", function()
       Fixture.git({ "switch", "-q", "-c", "other" }, tmp)
       vim.api.nvim_exec_autocmds("FocusGained", {})
 
-      local followed = vim.wait(3000, function()
+      local followed = vim.wait(10000, function()
         return present(build.current()).branch == "other"
       end, 25)
       vim.fn.delete(elsewhere, "rf")
@@ -733,7 +753,7 @@ describe("changeset tree", function()
 
       changeset.open()
       assert.is_true(vim.wait(10000, function()
-        return #notes > 0
+        return #Notify.messages(notes, vim.log.levels.WARN) > 0
       end, 10))
       Sidebar.flush()
 
