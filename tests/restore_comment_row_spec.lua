@@ -41,6 +41,7 @@ describe("a restored session", function()
       vim.g.ChangesetPosition = vim.json.encode({ row = { id = case[2], path = case[3] } })
 
       changeset.restore()
+      Sidebar.await_open()
       assert.is_true(vim.wait(10000, function()
         return vim.iter(Sidebar.lines()):any(function(line)
           return line:find("alpha.txt:13", 1, true) ~= nil

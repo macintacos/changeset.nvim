@@ -1232,10 +1232,14 @@ Every fork point measured without blocking reaches both the gutter and the tree,
 it as its own re-measure would, so the two measure once between them where they can and
 never disagree after a push. A measure is taken again when HEAD moves while it runs, so none
 answers for a HEAD left behind, nor lands after a newer one with an older fork point; but
-three times at most, since a blocking measure would freeze Neovim for as long as another
-process kept moving HEAD, and HEAD's next move measures again through the watcher. While
+three times at most, so a measure doesn't spawn git for as long as another process keeps
+moving HEAD, and HEAD's next move measures again through the watcher. While
 gh is still being asked, its answer carries the newest measure rather than the one it was
 asked with.
+A switch of repository or branch holds every gutter move until its measure lands, since
+until then the base in hand is the one of the branch left behind. A switch replaced by
+another repository's before its measure lands still moves its own repository's buffers
+onto that measure's base.
 
 A buffer moves onto a new base only once gitsigns holds its text. gitsigns stores a read's
 text even after a move has replaced its base, so a buffer moved mid-read would name the base
@@ -1369,14 +1373,16 @@ condition, apart from the reach and from a view closed by hand.
 The tree is built the first time something asks for it — `:Changeset`, `:Changeset
 refresh`, the picker (`:Changeset pick`, or `require("changeset.pick").pick()`),
 `:Changeset diff` turning the unified diff on, or a restored session refilling the sidebar
-— for the current buffer's repository: the fork point
-is measured at once,
-the diff and symbols in the background. Reading symbols loads each changed file the cache
+— for the current buffer's repository: the fork point is measured, and the diff and symbols
+read, in the background, so none holds the editor up. Reading symbols loads each changed file the cache
 can't answer, Generated ones aside, so those buffers and their language servers arrive with that first
-ask, and a session that never asks starts none. The picker waits a moment for the diff,
-which it has no way to fill in behind. The sidebar opens at once: a tree still waiting on
-its first diff opens blank rather than claiming nothing changed. Closing the sidebar lets
-go of the window only, and opening it again, or the picker asking again, draws the tree it
+ask, and a session that never asks starts none. The picker waits a moment for the fork
+point and the diff, which it has no way to fill in behind. The sidebar opens once its fork
+point lands, in the tabpage it was asked from; the no-base warning comes before any
+window. A tree still waiting on its first diff opens blank rather than claiming nothing
+changed. Keys pressed while the fork point is measured act on the editor as it is, so a
+second toggle cancels the open it would have closed. Closing the sidebar lets go of the
+window only, and opening it again, or the picker asking again, draws the tree it
 kept while HEAD stays on its branch, and measures its fork point and refreshes its diff in
 the background; a fork point that moved replaces the tree once measured. The tree is rebuilt for a different repository, fork point or branch,
 and a build that finds no fork point keeps the tree it had. The tree knows nothing of the

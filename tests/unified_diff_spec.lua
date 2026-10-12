@@ -1,3 +1,4 @@
+local Build = require("support.build")
 local Fixture = require("support.git")
 local Paths = require("changeset.paths")
 local build = require("changeset.build")
@@ -41,7 +42,7 @@ describe("changeset.unified_diff", function()
     base = Fixture.commit("base", dir)
     Fixture.git({ "switch", "-q", "-c", "feature" }, dir)
     vim.fn.writefile({ "line 1", "line 3", "line 4", "changed 5", "line 6" }, "a.txt")
-    build.build()
+    Build.build()
     assert.is_true(vim.wait(5000, function()
       return present(build.current()).collected
     end, 20))
@@ -206,7 +207,7 @@ describe("changeset.unified_diff", function()
     Fixture.feature_one_file(other)
 
     vim.cmd.split(other .. "/mod.lua")
-    build.build()
+    Build.build()
 
     assert.is_true(vim.wait(5000, function()
       local tree = present(build.current())

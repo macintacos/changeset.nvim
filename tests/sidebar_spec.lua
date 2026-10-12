@@ -401,6 +401,7 @@ describe("changeset sidebar", function()
 
     Fixture.git({ "checkout", "-q", "trunk" }, tmp)
     changeset.open()
+    Sidebar.await_open()
     local buf = present(window.buf())
     assert.is_truthy(
       vim.wait(5000, function()

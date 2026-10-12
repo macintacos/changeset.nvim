@@ -8,7 +8,7 @@ local Fixture = require("support.git")
 local present = require("support.present")
 local Paths = require("changeset.paths")
 local base = require("changeset.base")
-local fork_point = require("changeset.fork_point")
+local measured = require("support.fork_point")
 
 describe("the base pickers with mini.pick", function()
   local root ---@type string
@@ -39,7 +39,7 @@ describe("the base pickers with mini.pick", function()
 
     base.pick("branch")
 
-    assert.equal("other", present((fork_point.get(Paths.root(0), "feature"))).against)
+    assert.equal("other", present((measured.get(Paths.root(0), "feature"))).against)
   end)
 
   it("draws each item under its glyph, with when it was last committed to at the right edge", function()

@@ -14,6 +14,24 @@ function M.text()
   return table.concat(M.lines(), "\n")
 end
 
+---The file `win` shows and its cursor line.
+---@param win integer
+---@return string file, integer line
+function M.shown(win)
+  local buf = vim.api.nvim_win_get_buf(win)
+  return vim.fs.basename(vim.api.nvim_buf_get_name(buf)), vim.api.nvim_win_get_cursor(win)[1]
+end
+
+---Wait for a sidebar opened before its fork point landed to stand.
+function M.await_open()
+  assert.is_true(
+    vim.wait(10000, function()
+      return window.is_visible()
+    end, 10),
+    "the sidebar never opened"
+  )
+end
+
 ---Wait for the tree to hold `other.lua`, its symbols read or not.
 function M.await_diff()
   local arrived = vim.wait(10000, function()

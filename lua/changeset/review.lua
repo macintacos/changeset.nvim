@@ -30,11 +30,22 @@ local want
 ---@type string? Toplevel of the repository the base acts on.
 local toplevel
 
----@type table<string, true> Bases `apply` has set.
+---@type table<string, true> Bases `point_at` has set.
 local ours = {}
 
 ---@type table<integer, string|false> Buffers with a move in flight, by target; false is the index.
 local moving = {}
+
+---The `sync` whose measure is in flight; until it lands, `want` is the base of what it left, so nothing moves.
+---@type table?
+local syncing
+
+---Whether `sync` is waiting on no measure other than `token`'s.
+---@param token table
+---@return boolean
+local function in_flight(token)
+  return syncing == token
+end
 
 ---@type boolean Whether `on_read` is registered; gitsigns has no way to remove a callback.
 local hears_reads = false
@@ -50,28 +61,30 @@ local hears_reads = false
 ---watcher reclaims it. A buffer gitsigns holds no text for may have a read in flight,
 ---and gitsigns stores that read's text even after a move has replaced its base, so the
 ---move waits for the update that publishes the read.
+---@param root string? Toplevel of the repository whose buffers may move.
 ---@param buf integer
 ---@param bcache Gitsigns.CacheEntry
 ---@return boolean
-local function movable(buf, bcache)
+local function movable(root, buf, bcache)
   local git_obj = bcache.git_obj
-  return git_obj.repo.toplevel == toplevel
+  return git_obj.repo.toplevel == root
     and not vim.api.nvim_buf_get_name(buf):match("^%a+://")
     and (git_obj.revision == nil or ours[git_obj.revision] == true)
     and bcache.compare_text ~= nil
 end
 
----Move one buffer onto `want`, unless a move there is already in flight.
+---Move one buffer onto `base`, unless a move there is already in flight.
 ---@param buf integer
+---@param base string? nil is the index.
 ---@param done fun(err: string?)?
-local function move(buf, done)
-  local target = want or false
+local function move(buf, base, done)
+  local target = base or false
   if moving[buf] == target then
     return done and done()
   end
   moving[buf] = target
   vim.api.nvim_buf_call(buf, function()
-    require("gitsigns").change_base(want, false, function(err)
+    require("gitsigns").change_base(base, false, function(err)
       if moving[buf] == target then
         moving[buf] = nil
       end
@@ -92,18 +105,21 @@ end
 
 ---Move buffers that missed the base, such as ones attached while it changed.
 local function reconcile()
+  if syncing then
+    return
+  end
   for buf, bcache in pairs(require("gitsigns.cache").cache) do
-    if bcache.git_obj.revision ~= want and movable(buf, bcache) then
-      move(buf, report)
+    if bcache.git_obj.revision ~= want and movable(toplevel, buf, bcache) then
+      move(buf, want, report)
     end
   end
 end
 
----Point every buffer this file may move now at `base`; the rest move once gitsigns reads them.
+---Point every buffer of `root` this file may move now at `base`; the rest move once gitsigns reads them.
+---@param root string?
 ---@param base string?
 ---@param done fun(err: string?)? Called once every move has landed, with the first error.
-local function apply(base, done)
-  want = base
+local function point_at(root, base, done)
   if base then
     ours[base] = true
   end
@@ -116,16 +132,24 @@ local function apply(base, done)
     end
   end
   for buf, bcache in pairs(require("gitsigns.cache").cache) do
-    if movable(buf, bcache) then
+    if movable(root, buf, bcache) then
       -- The repo watcher's refresh reads this field right after GitSignsUpdate
       -- and writes it back when it lands; setting it now makes that refresh land
       -- on the new base.
       bcache.git_obj.revision = base
       left = left + 1
-      move(buf, landed)
+      move(buf, base, landed)
     end
   end
   landed()
+end
+
+---Make `base` the one every buffer of the repository the base acts on should diff against, and move them onto it.
+---@param base string?
+---@param done fun(err: string?)?
+local function apply(base, done)
+  want = base
+  point_at(toplevel, base, done)
 end
 
 ---Move onto `point`, a fork point measured for `branch` at `root`, while that is still what the base is resolved for;
@@ -151,7 +175,7 @@ local function remeasure(root, branch)
 end
 
 ---Follow a change of repository or branch, re-resolving the base, since the fork point belongs to the branch left
----behind.
+---behind. It measures without blocking; until that lands no buffer moves, since `want` still names the old base.
 ---@param root string
 ---@param branch string
 local function sync(root, branch)
@@ -159,7 +183,18 @@ local function sync(root, branch)
     return
   end
   toplevel, applied, applied_head = root, branch, select(2, Git.head(root))
-  follow(root, branch, (fork_point.get(root, branch)))
+  local token = {}
+  syncing = token
+  fork_point.get_async(root, branch, function(point)
+    if in_flight(token) then
+      syncing = nil
+      follow(root, branch, point)
+      reconcile()
+    elseif root ~= toplevel and point then
+      -- Another repository's sync replaced this one; its buffers still belong on this base.
+      point_at(root, point.base, report)
+    end
+  end)
 end
 
 ---Follow HEAD moving to `head` on the branch the base is resolved for, as a pull, a commit or a rebase moves it: the
@@ -209,8 +244,8 @@ end
 ---unchanged, since gitsigns sends `GitSignsUpdate` only when the status changes.
 ---@param ctx Gitsigns.ManagerUpdate
 local function on_read(ctx)
-  if ctx.bcache.git_obj.revision ~= want and movable(ctx.bufnr, ctx.bcache) then
-    move(ctx.bufnr, report)
+  if not syncing and ctx.bcache.git_obj.revision ~= want and movable(toplevel, ctx.bufnr, ctx.bcache) then
+    move(ctx.bufnr, want, report)
   end
 end
 

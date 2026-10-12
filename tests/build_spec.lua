@@ -1,3 +1,4 @@
+local Build = require("support.build")
 local build = require("changeset.build")
 local resolve = require("changeset.resolve")
 local Changes = require("support.changes")
@@ -6,6 +7,7 @@ local Notify = require("support.notify")
 local symbols = require("support.symbols")
 local gh = require("support.gh") -- a fake gh on PATH: never the real one, never the network
 local present = require("support.present")
+local spawns = require("support.spawns")
 
 ---Every announcement the tree makes, in order; emptied before each case.
 ---@type changeset.TreeEvent[]
@@ -14,39 +16,11 @@ build.subscribe(function(event)
   events[#events + 1] = event
 end)
 
----Runs `fn`, keeping the argv of every process started through `vim.system` or `vim.fn.systemlist`.
----A wait belongs inside `fn`: `check-attr` starts from a scheduled callback, after `build()` returns.
----@param fn fun()
----@return string[][]
-local function recording(fn)
-  local argvs = {}
-  local real_system, real_systemlist = vim.system, vim.fn.systemlist
-  vim.system = function(argv, ...)
-    argvs[#argvs + 1] = argv
-    return real_system(argv, ...)
-  end
-  vim.fn.systemlist = function(argv, ...)
-    argvs[#argvs + 1] = argv
-    return real_systemlist(argv, ...)
-  end
-  local ok, err = pcall(fn)
-  vim.system, vim.fn.systemlist = real_system, real_systemlist
-  assert.is_true(ok, tostring(err))
-  return argvs
-end
-
----Whether `argv` starts `program` with `subcommand`, as `git -C <root> merge-base …` starts git's merge-base.
----@param argv string[]
----@param program string
----@param subcommand string?
----@return boolean
-local function runs(argv, program, subcommand)
-  return argv[1] == program and (subcommand == nil or vim.list_contains(argv, subcommand))
-end
+local recording, runs = spawns.recording, spawns.runs
 
 ---Build the tree, waiting for its diff.
 local function build_and_collect()
-  assert.is_true(build.build())
+  assert.equal("built", Build.build())
   assert.is_true(vim.wait(10000, function()
     return (build.current() or {}).collected
   end, 25))
@@ -114,6 +88,133 @@ describe("changeset.build", function()
     assert.is_true(vim.wait(5000, function()
       return vim.list_contains(events, "diff")
     end, 10))
+  end)
+
+  it("measures the first build's fork point without a blocking git call", function()
+    spawns.measures_unblocked(function()
+      assert.equal("built", Build.build())
+    end)
+  end)
+
+  it("rebuilds for a switched branch without a blocking git call", function()
+    build_and_collect()
+    Fixture.git({ "checkout", "-q", "-b", "feature2" }, tmp)
+
+    local blocked = spawns.blocking(function()
+      build.update()
+      assert.is_true(vim.wait(10000, function()
+        return present(build.current()).branch == "feature2"
+      end, 10))
+    end)
+
+    for _, argv in ipairs(blocked) do
+      assert.is_false(spawns.measuring(argv), table.concat(argv, " "))
+    end
+  end)
+
+  it("an ask for another repository answers the replaced ask with replaced", function()
+    local other = vim.fn.tempname()
+    vim.fn.mkdir(other, "p")
+    Fixture.feature_one_file(other)
+    local heard = { first = {}, second = {} }
+
+    build.build(function(outcome)
+      table.insert(heard.first, { outcome })
+    end)
+    vim.cmd.edit(other .. "/mod.lua")
+    build.build(function(outcome)
+      table.insert(heard.second, { outcome })
+    end)
+    assert.is_true(vim.wait(10000, function()
+      return #heard.second > 0
+    end, 10))
+    -- The replaced ask's measure is still running; give a stray second answer time to arrive.
+    vim.wait(200)
+
+    vim.fn.delete(other, "rf")
+    assert.are.same({ { "replaced" } }, heard.first)
+    assert.are.same({ { "built" } }, heard.second)
+  end)
+
+  it("lands an ask made while a build measures on a fork point measured after the ask", function()
+    local first = Fixture.git({ "rev-parse", "HEAD" }, tmp)
+    vim.fn.writefile({ "return 2" }, tmp .. "/second.lua")
+    Fixture.commit("second", tmp)
+    local fork_point = require("changeset.fork_point")
+    local get_async = fork_point.get_async
+    local held = {} ---@type fun()[]
+    fork_point.get_async = function(root, branch, on_done)
+      get_async(root, branch, function(point)
+        held[#held + 1] = function()
+          on_done(point)
+        end
+      end)
+    end
+    local landed = 0
+    build.build(function()
+      landed = landed + 1
+    end)
+    assert.is_true(vim.wait(10000, function()
+      return #held > 0
+    end, 10))
+    fork_point.get_async = get_async
+
+    Fixture.git({ "update-ref", "refs/heads/trunk", first }, tmp)
+    build.build(function()
+      landed = landed + 1
+    end)
+    present(held[1])()
+
+    assert.is_true(vim.wait(10000, function()
+      return landed == 2
+    end, 10))
+    assert.equal(first, present(build.current()).base)
+  end)
+
+  it("lands a build that asks keep joining while it measures", function()
+    local fork_point = require("changeset.fork_point")
+    local get_async = fork_point.get_async
+    local measures = 0
+    fork_point.get_async = function(root, branch, on_done)
+      measures = measures + 1
+      build.build(function() end)
+      get_async(root, branch, on_done)
+    end
+    local landed
+    build.build(function(outcome)
+      landed = outcome
+    end)
+
+    local ok = vim.wait(10000, function()
+      return landed ~= nil
+    end, 10)
+    fork_point.get_async = get_async
+    assert.is_true(ok, "the build never landed")
+    assert.equal("built", landed)
+    assert.equal(3, measures)
+  end)
+
+  it("builds for the branch HEAD switched to while it measured", function()
+    local fork_point = require("changeset.fork_point")
+    local get_async, held = fork_point.get_async, {}
+    fork_point.get_async = function(root, branch, on_done)
+      held[#held + 1] = { root, branch, on_done }
+    end
+    local landed
+    build.build(function(outcome)
+      landed = outcome
+    end)
+    fork_point.get_async = get_async
+    Fixture.git({ "checkout", "-q", "-b", "feature2" }, tmp)
+    for _, args in ipairs(held) do
+      get_async(args[1], args[2], args[3])
+    end
+
+    assert.is_true(vim.wait(10000, function()
+      return landed ~= nil
+    end, 10))
+    assert.equal("built", landed)
+    assert.equal("feature2", present(build.current()).branch)
   end)
 
   it("names the ref set by hand as its base when that ref forks where the base does", function()
@@ -194,7 +295,7 @@ describe("changeset.build", function()
       Fixture.feature_one_file(other)
       vim.cmd.edit(other .. "/mod.lua")
 
-      build.build()
+      Build.build()
 
       local saved = require("changeset.cache").load(require("changeset.cache").path(root))
       vim.fn.delete(other, "rf")
@@ -477,7 +578,7 @@ describe("changeset.build", function()
     end
 
     it("announces the diff, then a file's symbols as they arrive", function()
-      build.build()
+      Build.build()
       wait_for_asks(1)
       assert.same({ "diff" }, events)
 
@@ -487,7 +588,7 @@ describe("changeset.build", function()
     end)
 
     it("stays silent for an answer to a refresh that a newer one replaced", function()
-      build.build()
+      Build.build()
       wait_for_asks(1)
       build.refresh()
       wait_for_asks(2)
@@ -575,7 +676,7 @@ describe("changeset.build", function()
     end)
 
     it("announces the failure", function()
-      build.build()
+      Build.build()
 
       assert.same({ "failed" }, events)
     end)
@@ -597,7 +698,7 @@ describe("changeset.build on a branch measured against its PR's target", functio
 
   ---Build the tree, waiting for gh's PR to move it onto parent.
   local function build_on_pr()
-    assert.is_true(build.build())
+    assert.equal("built", Build.build())
     assert.is_true(vim.wait(5000, function()
       local tree = build.current()
       return tree ~= nil and tree.pr == 7 and tree.collected

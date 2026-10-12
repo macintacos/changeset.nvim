@@ -135,8 +135,8 @@ local function measure(root, branch, pr)
   return point
 end
 
--- How many measures `settled` takes while HEAD keeps moving under them. Its blocking callers would freeze Neovim for as
--- long as another process kept moving HEAD, and the watcher measures again on HEAD's next move anyway.
+-- How many measures `settled` takes while HEAD keeps moving under them, so another process moving HEAD without end
+-- can't keep it measuring; the watcher measures again on HEAD's next move.
 local SETTLE_TRIES = 3
 
 ---`measure`, taken again until HEAD holds still across one, up to `SETTLE_TRIES` in all, so a point never answers for a
@@ -177,43 +177,41 @@ end
 ---@param branch string
 ---@param point changeset.ForkPoint?
 ---@return changeset.ForkPoint? point
----@return boolean asking
 local function ask(root, branch, point)
   local key = root .. "\n" .. branch
   if not point then
-    return nil, false
+    return nil
   end
   if asking[key] then
-    return carry(root, branch, point), true
+    return carry(root, branch, point)
   end
   if targets[key] then
-    return point, false
+    return point
   end
   asking[key] = point
   Git.pr_target(root, function(target, number)
     local heard = asking[key] ---@type changeset.ForkPoint?
     asking[key] = nil
-    if target and number then
-      targets[key] = { target = target, number = number }
-      -- HEAD can have moved by the time gh answers; subscribers still need a point.
-      heard = settled(root, branch, targets[key]) or heard
-    end
-    if heard then
-      for fn in pairs(subscribers) do
-        fn(root, branch, heard)
+    local function tell(told)
+      if told then
+        for fn in pairs(subscribers) do
+          fn(root, branch, told)
+        end
       end
     end
+    if not (target and number) then
+      return tell(heard)
+    end
+    local pr = { target = target, number = number }
+    targets[key] = pr
+    Git.async(function()
+      return settled(root, branch, pr)
+    end, function(remeasured)
+      -- HEAD can have moved by the time gh answers; subscribers still need a point.
+      tell(remeasured or heard)
+    end)
   end)
-  return point, true
-end
-
----The fork point of `branch` at `root`. Asks gh about its PR unless gh has named a target or is being asked.
----@param root string Repository to measure in.
----@param branch string The branch checked out at `root`.
----@return changeset.ForkPoint? point nil when HEAD shares no fork point with the branch it was created from or the default branch.
----@return boolean asking Whether gh is still being asked, so subscribers will hear its answer.
-function M.get(root, branch)
-  return ask(root, branch, settled(root, branch, targets[root .. "\n" .. branch]))
+  return point
 end
 
 ---Measure `branch`'s fork point at `root` without blocking Neovim, pass it through `settle`, then hand it to `on_done`
@@ -243,15 +241,14 @@ local function measure_async(root, branch, settle, on_done)
   end)
 end
 
----`get`, measuring without blocking Neovim, and calling back on the main loop. Subscribers hear the point after
----`on_done` does.
+---The fork point of `branch` at `root`, measured without blocking Neovim and handed to `on_done` on the main loop, nil
+---when HEAD shares none with the branch it was created from or the default branch. Asks gh about its PR unless gh has
+---named a target or is being asked. Subscribers hear the point after `on_done` does.
 ---@param root string
 ---@param branch string
 ---@param on_done fun(point: changeset.ForkPoint?)
 function M.get_async(root, branch, on_done)
-  measure_async(root, branch, function(...)
-    return (ask(...))
-  end, on_done)
+  measure_async(root, branch, ask, on_done)
 end
 
 ---`get_async` without asking gh, measured from the PR target gh last named: for measuring again as HEAD or a remote

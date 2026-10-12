@@ -2,6 +2,8 @@ local gh = require("support.gh")
 local support = require("support.git")
 local gutter = require("support.gutter")
 local present = require("support.present")
+local spawns = require("support.spawns")
+local fork_point = require("changeset.fork_point")
 
 local await, await_cached, show_and_await, edit, revision, settle, base_text =
   gutter.await,
@@ -14,6 +16,18 @@ local await, await_cached, show_and_await, edit, revision, settle, base_text =
 
 local function moves()
   return gutter.moves
+end
+
+---A repository beside the one under test, with `x.txt` committed on main, and its base.
+---@return string root
+---@return string base
+local function other_repo()
+  local other = vim.fn.resolve(vim.fn.tempname())
+  vim.fn.mkdir(other, "p")
+  support.init_repo("main", other)
+  vim.fn.writefile({ "one" }, other .. "/x.txt")
+  support.commit("base", other)
+  return other, gutter.merge_base(other)
 end
 
 describe("the gutter's base", function()
@@ -78,17 +92,16 @@ describe("the gutter's base", function()
   end)
 
   it("keeps what is applied, asking nothing, while HEAD is detached", function()
-    local fork_point = require("changeset.fork_point")
     local files = { "a.txt" }
     gutter.fixture(dir, "picking", files)
     vim.fn.chdir(dir)
     local bufs = edit(files)
     local base = gutter.merge_base(dir)
     assert.is_true(await(bufs, base, 10000))
-    local get, asked = fork_point.get, {}
-    fork_point.get = function(root, branch)
+    local get_async, asked = fork_point.get_async, {}
+    fork_point.get_async = function(root, branch, on_done)
       asked[#asked + 1] = branch
-      return get(root, branch)
+      return get_async(root, branch, on_done)
     end
 
     support.git({ "switch", "-q", "--detach" }, dir)
@@ -97,7 +110,7 @@ describe("the gutter's base", function()
       return status ~= nil and status.head ~= "picking"
     end, 25)
     settle()
-    fork_point.get = get
+    fork_point.get_async = get_async
 
     assert.is_true(detached, "gitsigns never saw HEAD detach")
     assert.same({}, asked)
@@ -132,12 +145,7 @@ describe("the gutter's base", function()
   end)
 
   it("leaves buffers from another repository alone", function()
-    local other = vim.fn.resolve(vim.fn.tempname())
-    vim.fn.mkdir(other, "p")
-    support.init_repo("main", other)
-    vim.fn.writefile({ "one" }, other .. "/x.txt")
-    support.commit("base", other)
-    local theirs = gutter.merge_base(other)
+    local other, theirs = other_repo()
     gutter.fixture(dir, "scoped", { "a.txt" })
     support.git({ "switch", "-q", "main" }, dir)
     gutter.advance(dir)
@@ -408,5 +416,83 @@ describe("the gutter's base", function()
     local want = gutter.blob_lines(dir, main_tip .. ":b.txt")
     assert.is_true(show_and_await({ b }, main_tip, 10000))
     assert.are.same(want, base_text(b))
+  end)
+
+  it("follows a branch it attaches to without blocking", function()
+    gutter.fixture(dir, "unblocked", { "a.txt" })
+    gutter.advance(dir)
+    local base = gutter.merge_base(dir)
+    vim.fn.chdir(dir)
+
+    local bufs ---@type integer[]
+    spawns.measures_unblocked(function()
+      bufs = edit({ "a.txt" })
+      assert.is_true(await_cached(bufs))
+    end)
+    assert.is_true(await(bufs, base, 5000))
+  end)
+
+  it("never moves a buffer onto the base of the branch it left", function()
+    gutter.fixture(dir, "left", { "a.txt", "c.txt" })
+    local left_base = gutter.merge_base(dir)
+    support.git({ "switch", "-q", "main" }, dir)
+    gutter.advance(dir)
+    support.git({ "switch", "-q", "-c", "right" }, dir)
+    gutter.advance(dir)
+    local right_base = gutter.merge_base(dir)
+    support.git({ "switch", "-q", "left" }, dir)
+    vim.fn.chdir(dir)
+    local a = edit({ "a.txt" })
+    assert.is_true(show_and_await(a, left_base, 5000))
+    assert.is_true(settle())
+    local get_async, held = fork_point.get_async, {}
+    fork_point.get_async = function(root, branch, on_done)
+      held[#held + 1] = { root, branch, on_done }
+    end
+
+    support.git({ "switch", "-q", "right" }, dir)
+    local switched = vim.wait(5000, function()
+      return vim.b[a[1]].gitsigns_head == "right"
+    end, 20)
+    local before = gutter.moves_to[left_base] or 0
+    local c = edit({ "c.txt" })
+    local cached = await_cached(c)
+    settle()
+    fork_point.get_async = get_async
+    for _, args in ipairs(held) do
+      get_async(args[1], args[2], args[3])
+    end
+
+    assert.is_true(switched, "gitsigns never saw the switch")
+    assert.is_true(cached)
+    assert.equal(before, gutter.moves_to[left_base] or 0)
+    assert.is_true(show_and_await(c, right_base, 5000))
+  end)
+
+  it("lands a repository's base on its buffers once another repository's sync replaces it", function()
+    local other, theirs = other_repo()
+    gutter.fixture(dir, "replaced", { "a.txt" })
+    gutter.advance(dir)
+    local base = gutter.merge_base(dir)
+    vim.fn.chdir(dir)
+    local get_async, held = fork_point.get_async, {}
+    fork_point.get_async = function(root, branch, on_done)
+      held[#held + 1] = { root, branch, on_done }
+    end
+
+    local ours = edit({ "a.txt" })
+    local ours_cached = await_cached(ours)
+    local their_bufs = edit({ other .. "/x.txt" })
+    local theirs_cached = await_cached(their_bufs)
+    fork_point.get_async = get_async
+    for _, args in ipairs(held) do
+      get_async(args[1], args[2], args[3])
+    end
+
+    assert.is_true(ours_cached)
+    assert.is_true(theirs_cached)
+    assert.is_true(show_and_await(ours, base, 5000))
+    assert.is_true(await(their_bufs, theirs, 5000))
+    vim.fn.delete(other, "rf")
   end)
 end)

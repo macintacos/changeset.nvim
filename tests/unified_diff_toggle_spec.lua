@@ -25,6 +25,9 @@ describe(":Changeset diff", function()
     vim.fn.chdir(nowhere)
 
     changeset.diff()
+    assert.is_true(vim.wait(10000, function()
+      return #notes > 0
+    end, 10))
 
     vim.fn.chdir(dir)
     assert.equal(1, #notes)
@@ -36,6 +39,9 @@ describe(":Changeset diff", function()
     vim.cmd.edit("mod.lua")
 
     changeset.diff()
+    assert.is_true(vim.wait(10000, function()
+      return #notes > 1
+    end, 10))
 
     assert.same({ "Changeset: unified diff on" }, Notify.messages({ notes[2] }))
     assert.is_true(vim.wait(5000, function()

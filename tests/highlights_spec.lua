@@ -1,3 +1,4 @@
+local Build = require("support.build")
 local changeset = require("changeset")
 local build = require("changeset.build")
 -- The <Plug> maps live in the plugin file, which the spec runner does not load.
@@ -202,7 +203,7 @@ describe("changeset row highlights", function()
 
   it("keeps tracking where you are while the sidebar is closed", function()
     vim.cmd.edit("mod.lua")
-    assert.is_true(build.build())
+    assert.equal("built", Build.build())
 
     vim.cmd.edit("other.lua")
 

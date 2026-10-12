@@ -4,7 +4,7 @@ local Paths = require("changeset.paths")
 local base = require("changeset.base")
 local fixture = require("support.git")
 local present = require("support.present")
-local fork_point = require("changeset.fork_point")
+local measured = require("support.fork_point")
 
 ---Commit a file named `name` at `date`, which orders the branches whose tip it is.
 ---@param root string
@@ -31,7 +31,7 @@ end
 ---What the current branch is compared against now.
 ---@return string
 local function against()
-  return present((fork_point.get(Paths.root(0), "feature"))).against
+  return present((measured.get(Paths.root(0), "feature"))).against
 end
 
 describe(":Changeset base", function()
