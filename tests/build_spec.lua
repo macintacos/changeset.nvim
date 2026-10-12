@@ -118,12 +118,12 @@ describe("changeset.build", function()
     Fixture.feature_one_file(other)
     local heard = { first = {}, second = {} }
 
-    build.build(function(ready)
-      table.insert(heard.first, { ready })
+    build.build(function(outcome)
+      table.insert(heard.first, { outcome })
     end)
     vim.cmd.edit(other .. "/mod.lua")
-    build.build(function(ready)
-      table.insert(heard.second, { ready })
+    build.build(function(outcome)
+      table.insert(heard.second, { outcome })
     end)
     assert.is_true(vim.wait(10000, function()
       return #heard.second > 0
@@ -201,8 +201,8 @@ describe("changeset.build", function()
       held[#held + 1] = { root, branch, on_done }
     end
     local landed
-    build.build(function(ready)
-      landed = ready
+    build.build(function(outcome)
+      landed = outcome
     end)
     fork_point.get_async = get_async
     Fixture.git({ "checkout", "-q", "-b", "feature2" }, tmp)

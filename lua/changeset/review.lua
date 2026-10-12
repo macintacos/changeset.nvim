@@ -43,7 +43,7 @@ local syncing
 ---Whether `sync` is waiting on no measure other than `token`'s.
 ---@param token table
 ---@return boolean
-local function current(token)
+local function in_flight(token)
   return syncing == token
 end
 
@@ -186,7 +186,7 @@ local function sync(root, branch)
   local token = {}
   syncing = token
   fork_point.get_async(root, branch, function(point)
-    if current(token) then
+    if in_flight(token) then
       syncing = nil
       follow(root, branch, point)
       reconcile()
