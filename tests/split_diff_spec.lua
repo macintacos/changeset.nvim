@@ -125,7 +125,7 @@ describe("the side-by-side diff", function()
     vim.cmd.split("b.txt")
     local b = vim.api.nvim_get_current_win()
 
-    assert.is_not_nil(partner(b))
+    present(partner(b))
     assert.is_true(unified(a))
     assert.equal(3, #vim.api.nvim_tabpage_list_wins(0))
   end)
@@ -136,11 +136,11 @@ describe("the side-by-side diff", function()
     local a = vim.api.nvim_get_current_win()
     vim.cmd.split("b.txt")
     local b = vim.api.nvim_get_current_win()
-    assert.is_not_nil(partner(b))
+    present(partner(b))
 
     vim.api.nvim_set_current_win(a)
 
-    assert.is_not_nil(partner(a))
+    present(partner(a))
     assert.is_true(unified(b))
     assert.is_false(vim.wo[b].diff)
   end)
@@ -153,7 +153,7 @@ describe("the side-by-side diff", function()
 
     window.preview(dir .. "/a.txt", 1, BAND)
 
-    assert.is_not_nil(partner(vim.fn.bufwinid(dir .. "/a.txt")))
+    present(partner(vim.fn.bufwinid(dir .. "/a.txt")))
     assert.equal(sidebar, vim.api.nvim_get_current_win())
   end)
 
@@ -187,10 +187,10 @@ describe("the side-by-side diff", function()
     end, 20))
 
     unified_diff.turn_on()
-    vim.wait(500)
 
-    assert.equal(2, #vim.api.nvim_tabpage_list_wins(0))
-    assert.equal(2, #diffing())
+    assert.is_false(vim.wait(500, function()
+      return #vim.api.nvim_tabpage_list_wins(0) ~= 2 or #diffing() ~= 2
+    end, 20))
   end)
 
   it("opens nothing from the base window", function()
@@ -200,16 +200,30 @@ describe("the side-by-side diff", function()
     local base = present(partner(win))
 
     vim.api.nvim_set_current_win(base)
-    vim.wait(500)
 
-    assert.equal(2, #vim.api.nvim_tabpage_list_wins(0))
+    assert.is_false(vim.wait(500, function()
+      return #vim.api.nvim_tabpage_list_wins(0) ~= 2
+    end, 20))
     assert.equal(base, partner(win))
   end)
 
   it("opens unified while the option is unset", function()
     config.setup({})
+    vim.fn.writefile({ "unstaged" }, "a.txt")
     unified_diff.turn_on()
     vim.cmd.edit("a.txt")
+    local ok = unified(vim.api.nvim_get_current_win())
+    local bc = require("gitsigns.cache").cache[vim.api.nvim_get_current_buf()]
+    print(
+      "PROBE",
+      ok,
+      bc and bc.git_obj.revision,
+      bc and vim.inspect(bc.compare_text),
+      #vim.api.nvim_tabpage_list_wins(0),
+      vim.inspect(vim.tbl_map(function(w)
+        return vim.wo[w].diff
+      end, vim.api.nvim_tabpage_list_wins(0)))
+    )
 
     assert.is_true(unified(vim.api.nvim_get_current_win()))
     assert.is_true(no_pair())
@@ -219,7 +233,7 @@ describe("the side-by-side diff", function()
     unified_diff.turn_on()
     vim.cmd.edit("a.txt")
     local win = vim.api.nvim_get_current_win()
-    assert.is_not_nil(partner(win))
+    present(partner(win))
 
     unified_diff.limit("none")
 
@@ -245,14 +259,14 @@ describe("the side-by-side diff", function()
 
     unified_diff.turn_on()
 
-    assert.is_not_nil(partner(win))
+    present(partner(win))
   end)
 
   it("swaps the reading window between its pair and its unified view as the view switches, both ways", function()
     unified_diff.turn_on()
     vim.cmd.edit("a.txt")
     local win = vim.api.nvim_get_current_win()
-    assert.is_not_nil(partner(win))
+    present(partner(win))
 
     unified_diff.switch()
 
@@ -261,8 +275,57 @@ describe("the side-by-side diff", function()
 
     unified_diff.switch()
 
-    assert.is_not_nil(partner(win))
+    present(partner(win))
     assert.is_nil(require("gitsigns.unified").get_view(win))
+  end)
+
+  it("leaves the user's own diff alone on a file it paired before the diff turned off", function()
+    unified_diff.turn_on()
+    vim.cmd.edit("a.txt")
+    local win = vim.api.nvim_get_current_win()
+    present(partner(win))
+    unified_diff.limit("none")
+
+    vim.cmd.diffthis()
+    vim.cmd.vnew()
+    local other = vim.api.nvim_get_current_win()
+    vim.cmd.diffthis()
+    vim.api.nvim_set_current_win(win)
+    vim.api.nvim_set_current_win(other)
+
+    assert.is_true(vim.wo[win].diff)
+    assert.is_true(vim.wo[other].diff)
+  end)
+
+  it("leaves the user's own diff alone on a file it paired before the view switched to unified", function()
+    unified_diff.turn_on()
+    vim.cmd.edit("a.txt")
+    local win = vim.api.nvim_get_current_win()
+    present(partner(win))
+    unified_diff.switch()
+    assert.is_true(unified(win))
+
+    vim.cmd("vertical diffsplit b.txt")
+    local other = vim.api.nvim_get_current_win()
+    vim.api.nvim_set_current_win(win)
+    local kept = not vim.wait(500, function()
+      return not (vim.wo[win].diff and vim.wo[other].diff)
+    end, 20)
+    unified_diff.switch()
+
+    assert.is_true(kept)
+  end)
+
+  it("opens unified while gitsigns compares against the index", function()
+    vim.cmd.edit("a.txt")
+    attached()
+    -- As before changeset.review moves a newly read buffer onto the branch's base.
+    present(require("gitsigns.cache").cache[vim.api.nvim_get_current_buf()]).git_obj.revision = nil
+
+    unified_diff.turn_on()
+
+    assert.is_true(unified(vim.api.nvim_get_current_win()))
+    assert.is_true(no_pair())
   end)
 
   it("closes the pair on a file marked viewed", function()
@@ -273,11 +336,10 @@ describe("the side-by-side diff", function()
       return window.buf() ~= nil and Sidebar.text():find("a.txt", 1, true) ~= nil
     end, 25))
     vim.api.nvim_set_current_win(win)
-    assert.is_not_nil(partner(win))
+    present(partner(win))
 
     Sidebar.cursor_to("a.txt")
     vim.api.nvim_feedkeys("x", "xt", false)
-    unified_diff.refresh_viewed()
 
     assert.is_true(no_pair())
   end)
@@ -289,7 +351,7 @@ describe("the side-by-side diff", function()
     local function sidebar_beside(name)
       unified_diff.turn_on()
       vim.cmd.edit(name)
-      assert.is_not_nil(partner(vim.api.nvim_get_current_win()))
+      present(partner(vim.api.nvim_get_current_win()))
       local sidebar = window.open(vim.api.nvim_create_buf(false, true))
       vim.api.nvim_set_current_win(sidebar)
       return sidebar
@@ -317,7 +379,7 @@ describe("the side-by-side diff", function()
       sidebar_beside("a.txt")
       window.preview(dir .. "/a.txt", 1, BAND)
       local win = vim.fn.bufwinid(dir .. "/a.txt")
-      assert.is_not_nil(partner(win))
+      present(partner(win))
 
       window.preview(dir .. "/b.txt", 1, BAND)
 
@@ -347,7 +409,7 @@ describe("the side-by-side diff", function()
       sidebar_beside("a.txt")
       window.preview(dir .. "/a.txt", 1, BAND)
       local win = vim.fn.bufwinid(dir .. "/a.txt")
-      assert.is_not_nil(partner(win))
+      present(partner(win))
       window.preview(dir .. "/b.txt", 1, BAND)
 
       changeset.close()
@@ -360,9 +422,9 @@ describe("the side-by-side diff", function()
       sidebar_beside("a.txt")
       window.preview(dir .. "/a.txt", 1, BAND)
       local win = vim.fn.bufwinid(dir .. "/a.txt")
-      assert.is_not_nil(partner(win))
+      present(partner(win))
       window.preview(dir .. "/b.txt", 1, BAND)
-      assert.is_not_nil(partner(win))
+      present(partner(win))
       changeset.close()
 
       vim.api.nvim_win_call(win, function()
@@ -380,9 +442,10 @@ describe("the side-by-side diff", function()
       local base = present(partner(win))
 
       vim.cmd("edit!")
-      vim.wait(500)
 
-      assert.is_true(vim.api.nvim_win_is_valid(base))
+      assert.is_false(vim.wait(500, function()
+        return not vim.api.nvim_win_is_valid(base)
+      end, 20))
       assert.equal(base, partner(win))
       unified_diff.limit("none")
       assert.same({ win }, vim.api.nvim_tabpage_list_wins(0))
@@ -408,13 +471,42 @@ describe("the side-by-side diff", function()
       )
     end)
 
+    it("closes the base window with a file window alone with it in a second tabpage", function()
+      unified_diff.turn_on()
+      vim.cmd.tabnew("a.txt")
+      local base = present(partner(vim.api.nvim_get_current_win()))
+
+      vim.cmd.quit()
+
+      assert.is_true(vim.wait(500, function()
+        return not vim.api.nvim_win_is_valid(base)
+      end, 20))
+    end)
+
+    it("closes a file window paired alone in its tabpage while a float is open", function()
+      unified_diff.turn_on()
+      vim.cmd.edit("a.txt")
+      local win = vim.api.nvim_get_current_win()
+      present(partner(win))
+      local float = vim.api.nvim_open_win(
+        vim.api.nvim_create_buf(false, true),
+        false,
+        { relative = "editor", row = 0, col = 0, width = 5, height = 1 }
+      )
+
+      vim.cmd.quit()
+
+      assert.is_false(vim.api.nvim_win_is_valid(win))
+      vim.api.nvim_win_close(float, true)
+    end)
+
     it("leaves one empty window as a lone sidebar closes after a preview", function()
       local sidebar = sidebar_beside("a.txt")
       vim.api.nvim_win_call(sidebar, function()
         vim.cmd("only")
       end)
       window.preview(dir .. "/a.txt", 1, BAND)
-      assert.is_not_nil(partner(vim.fn.bufwinid(dir .. "/a.txt")))
+      present(partner(vim.fn.bufwinid(dir .. "/a.txt")))
 
       changeset.close()
 
@@ -431,11 +523,13 @@ describe("the side-by-side diff", function()
         return window.buf() ~= nil and Sidebar.text():find("a.txt", 1, true) ~= nil
       end, 25))
       window.preview(dir .. "/a.txt", 1, BAND)
-      assert.is_not_nil(partner(vim.fn.bufwinid(dir .. "/a.txt")))
+      present(partner(vim.fn.bufwinid(dir .. "/a.txt")))
       vim.cmd("mksession! " .. vim.fn.fnameescape(session))
 
       vim.cmd("silent! source " .. vim.fn.fnameescape(session))
       vim.fn.delete(session)
+
+      assert.are_not.equal("diff", vim.wo[vim.fn.bufwinid(dir .. "/a.txt")].foldmethod)
 
       assert.is_false(vim.wait(1000, function()
         return vim.iter(vim.api.nvim_list_wins()):any(function(w)

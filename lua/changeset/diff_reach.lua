@@ -1,4 +1,4 @@
----Which files the unified diff reaches: none, the files entered, or all of them, less those closed by hand.
+---Which files the diff reaches: none, the files entered, or all of them, less those closed by hand.
 ---It decides; `changeset.unified_diff` opens and closes the views.
 
 local M = {}

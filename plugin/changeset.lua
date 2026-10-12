@@ -492,20 +492,12 @@ vim.api.nvim_create_autocmd("User", {
 })
 
 -- Fires: after a session is restored, which brings the sidebar's window back
--- without its contents. Refills it rather than leaving an empty window behind.
+-- without its contents, and a side-by-side diff's base window back empty.
+-- Refills the one and closes the other rather than leaving them behind.
 vim.api.nvim_create_autocmd("SessionLoadPost", {
   group = group,
   callback = function()
-    -- A side-by-side diff's base window comes back empty, since gitsigns reads no `gitsigns://` buffer back; the diff
-    -- opens a fresh one.
-    for _, win in ipairs(vim.api.nvim_list_wins()) do
-      if
-        vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win)):find("^gitsigns://")
-        and #vim.api.nvim_list_wins() > 1
-      then
-        vim.api.nvim_win_close(win, true)
-      end
-    end
+    require("changeset.split_diff").drop_restored()
     for _, win in ipairs(vim.api.nvim_list_wins()) do
       -- Keep in sync with NAME in lua/changeset/window.lua.
       if vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win)):find("changeset://", 1, true) then

@@ -824,7 +824,7 @@ function M.open()
   end
 end
 
----Dismiss the sidebar, the unified diff kept on only as far as `unified_diff.keep` says. The tree stays, and keeps
+---Dismiss the sidebar, the diff kept on only as far as `unified_diff.keep` says. The tree stays, and keeps
 ---refreshing.
 function M.close()
   release()
@@ -841,10 +841,11 @@ end
 ---Warn that the diff needs gitsigns when it is missing.
 ---@return boolean available
 local function diff_available()
-  if not unified_diff.available() then
+  local available = unified_diff.available()
+  if not available then
     vim.notify("Changeset: the diff needs gitsigns", vim.log.levels.WARN)
   end
-  return unified_diff.available()
+  return available
 end
 
 ---Turn the diff off everywhere, or on for every file of the tree as the sidebar opening does, building the
@@ -861,14 +862,18 @@ function M.diff()
   vim.notify(("Changeset: %s on"):format(view_name()))
 end
 
----Switch the diff between unified and side by side, turning it on when it is off, building the current buffer's
+---Switch the diff between unified and side by side while it is on, or turn it on side by side when it is off, building the current buffer's
 ---repository's tree when there is none, and say which view is on; warn when gitsigns can't show it.
 function M.diff_split()
   if not (diff_available() and (build.current() or built())) then
     return
   end
-  unified_diff.switch()
-  if not unified_diff.on() then
+  if unified_diff.on() then
+    unified_diff.switch()
+  else
+    if unified_diff.view() ~= "split" then
+      unified_diff.switch()
+    end
     unified_diff.turn_on()
   end
   vim.notify(("Changeset: %s on"):format(view_name()))

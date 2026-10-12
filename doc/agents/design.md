@@ -1356,7 +1356,10 @@ It doesn't run `gitsigns.diffthis()` either. Its no-argument call does diff the 
 changeset set, but takes the current window late, as the unified `diffthis` does, splits a
 conflicted file three ways, and makes a buffer that writes back to the index. The base
 window holds the read-only revision buffer the unified view already uses, opened on the
-file window's left so the pair reads base | file, as GitHub's split does.
+file window's left so the pair reads base | file, as GitHub's split does. That buffer is
+read-only only while the base is a commit: compared against the index, gitsigns makes it
+write back there, so a file stays unified until its base is a commit, rather than put a
+buffer that writes to the index in a window the user can enter.
 
 A file new since the base stays unified: its base text is empty, which gitsigns writes as
 one blank line, and Vim's diff can't show "every line added" against that, while the
@@ -1365,7 +1368,8 @@ unified view already does.
 A preview swap parks the base window for the next listed file rather than closing it, so
 holding `j` in the sidebar doesn't open and close a window per row. Turning the diff off,
 or lowering its reach, closes every base window no view names. Closing a file window takes
-its base window with it, so none is left diffing nothing; closing the base window by hand
+its base window with it, so none is left diffing nothing; when that would empty the base
+window's tabpage mid-close, it closes just after instead; closing the base window by hand
 closes that file's diff as a hand-closed unified view does. A reload keeps the pair, since
 `:e!` takes gitsigns' unified view with the buffer but not a window.
 
@@ -1379,7 +1383,9 @@ view would leave every file without one.
 
 A session restores a base window as an empty `gitsigns://` buffer, since gitsigns reads no
 such buffer back. So on `SessionLoadPost` changeset closes each one, unless it is the last
-window, and the reconciler opens a fresh pair.
+window, and the reconciler opens a fresh pair. `:mksession` also saves a diffed window's
+'foldmethod' `diff` but not its 'diff', so changeset resets a window restored with the one
+and not the other, which would otherwise fold on nothing.
 
 ### The diff follows the sidebar
 
@@ -1399,10 +1405,11 @@ an hour ago keeps its diff after the next close. It records which files, not whe
 nothing reads a time.
 
 Closing one of changeset's views by hand, with gitsigns' toggle or by opening gitsigns' own
-split diff, is about that file. Its views close in every window showing it, so none is left frozen
-there with gitsigns' signs drawn beside it, and they stay closed until the diff next turns
-on, by the sidebar or the toggle, each the user asking for the diff again; nothing writes it
-down. Turning every file off for it would make one stray toggle cost the session's diff.
+split diff, is about that file. Its views close in every window showing it, so none is left
+frozen there with gitsigns' signs drawn beside it, and they stay closed until the diff next
+turns on, by the sidebar or the toggle, each the user asking for the diff again; nothing
+writes it down. Turning every file off for it would make one stray toggle cost the
+session's diff.
 
 A file marked viewed has no diff while its mark holds: the user has read it, so its buffer
 goes back to how gitsigns alone draws it. The diff returns when the file's diff changes,
@@ -1413,7 +1420,7 @@ condition, apart from the reach and from a view closed by hand.
 
 The tree is built the first time something asks for it — `:Changeset`, `:Changeset
 refresh`, the picker (`:Changeset pick`, or `require("changeset.pick").pick()`),
-`:Changeset diff` turning the unified diff on, or a restored session refilling the sidebar
+`:Changeset diff` turning the diff on, or a restored session refilling the sidebar
 — for the current buffer's repository: the fork point
 is measured at once,
 the diff and symbols in the background. Reading symbols loads each changed file the cache

@@ -58,12 +58,26 @@ local covered = {}
 ---@type boolean?
 local untracked_was
 
--- Reaches into gitsigns internals: its buffer cache, its unified views, and the base buffer `diffthis` makes for them.
-
 ---The view the diff draws in now.
 ---@return changeset.DiffView
 function M.view()
   return switched or changeset_config.get().unified_diff.view
+end
+
+-- Reaches into gitsigns internals: its buffer cache, its unified views, and the base buffer `diffthis` makes for them.
+
+---Whether `win` is in the user's own diff mode: one this module didn't pair.
+---@param win integer
+---@return boolean
+local function users_diff(win)
+  return vim.wo[win].diff and not split_diff.owns(win)
+end
+
+---Whether base text `text` is blank, as a file new since the base has.
+---@param text string[]
+---@return boolean
+local function blank(text)
+  return #text <= 1 and (text[1] or "") == ""
 end
 
 ---Whether `win` shows a view, ours or the user's: in the split view, a window in diff mode this module didn't pair is
@@ -73,23 +87,24 @@ end
 local function showing(win)
   return require("gitsigns.unified").get_view(win) ~= nil
     or split_diff.showing(win)
-    or (M.view() == "split" and vim.wo[win].diff and not split_diff.owns(win))
+    or (M.view() == "split" and users_diff(win))
 end
 
----How `win` wants its diff drawn against base text `text`. Only its tabpage's reading window goes side by side, and
----not on a file new since the base, whose blank base Vim's diff can't show as all added, nor beside the user's own diff:
+---How `win` wants its diff drawn against `git_obj`'s base, whose text is `text`. Only its tabpage's reading window, or
+---its current one before any was read, goes side by side. Not on a file new since the base, whose blank base Vim's diff
+---can't show as all added; nor against the index, whose base buffer writes back to it; nor beside the user's own diff:
 ---Vim's diff mode belongs to the tabpage.
 ---@param win integer
+---@param git_obj Gitsigns.GitObj
 ---@param text string[]
 ---@return changeset.DiffView
-local function wanted(win, text)
+local function wanted(win, git_obj, text)
   local tab = vim.api.nvim_win_get_tabpage(win)
   local split = M.view() == "split"
     and (reading[tab] or vim.api.nvim_tabpage_get_win(tab)) == win
-    and table.concat(text, "\n") ~= ""
-    and not vim.iter(vim.api.nvim_tabpage_list_wins(tab)):any(function(w)
-      return vim.wo[w].diff and not split_diff.owns(w)
-    end)
+    and git_obj.revision ~= nil
+    and not blank(text)
+    and not vim.iter(vim.api.nvim_tabpage_list_wins(tab)):any(users_diff)
   return split and "split" or "unified"
 end
 
@@ -254,10 +269,14 @@ local function cover(buf, ns, top, bot, added)
   end
 end
 
----Close `win`'s base window, if it has one.
+---Close `win`'s base window unless the split view this module opened there names it, or it is parked for the file
+---the diff reaches that `win` now shows, so holding `j` in the sidebar doesn't open and close one per row.
 ---@param win integer
-local function close_paired(win)
-  if vim.list_contains(split_diff.paired(), win) then
+local function settle(win)
+  local mine = opened[win]
+  local lives = mine and mine.view == "split"
+    or not mine and vim.api.nvim_win_is_valid(win) and allowed(vim.api.nvim_win_get_buf(win))
+  if not lives then
     split_diff.close(win)
   end
 end
@@ -269,12 +288,12 @@ end
 ---@field path string The file `buf` holds.
 ---@field git_obj Gitsigns.GitObj Names the base.
 ---@field text string[] The base's text.
----@field view changeset.DiffView How to draw it.
 
 ---Show `view`'s buffer's diff in its window, replacing any view there.
 ---
----What `:Gitsigns diffthis unified=true` runs, with the window held: it takes the current window only once the base's
----buffer is made, which can wait on git, by when the sidebar may be current.
+---What `:Gitsigns diffthis unified=true` runs, with the window held, or, for the reading window, hands the base to
+---`split_diff.show`: it takes the current window only once the base's buffer is made, which can wait on git, by when
+---the sidebar may be current. The view is decided again then, since the reading window can move meanwhile.
 ---@param view changeset.unified_diff.View
 local function open(view)
   local win, buf, path, git_obj, text = view.win, view.buf, view.path, view.git_obj, view.text
@@ -293,26 +312,22 @@ local function open(view)
     end
     if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf and reaches(path) then
       -- Asked again: the reading window can have moved while git read the base.
-      local drawn = wanted(win, text)
-      if drawn == "unified" then
-        close_paired(win)
-      end
-      -- Before `show`, which registers the view at once but then waits on its diff.
+      local drawn = wanted(win, git_obj, text)
+      -- Before either draw: gitsigns' `show` registers the view at once but then waits on its diff.
       opened[win] = { buf = buf, path = path, base = base, text = text, view = drawn }
+      settle(win)
       if drawn == "split" then
         split_diff.show(win, buf, base)
         return
       end
-      if table.concat(text, "\n") == "" then
+      if blank(text) then
         -- gitsigns writes a base without the file as one blank line, which the view reads back with its newline.
         vim.bo[base].endofline = false
       end
       paint(win)
       require("gitsigns.unified").show(win, base, created, loaded)
     else
-      if vim.api.nvim_win_is_valid(win) and not opened[win] then
-        close_paired(win)
-      end
+      settle(win)
       if created then
         vim.api.nvim_buf_delete(base, { force = true })
       end
@@ -336,10 +351,13 @@ function M.sync(win)
   if left and left.buf ~= buf then
     opened[win] = nil
     -- A preview swaps the buffer without BufWinLeave, so gitsigns still holds our view, and would hand it back once
-    -- the buffer returns. One showing now is on this buffer, so the user's own. A base window stays for the next file
-    -- the diff reaches, so holding `j` in the sidebar doesn't open and close one per row.
-    if not showing(win) and not (left.view == "split" and reached) then
-      close(win, left)
+    -- the buffer returns. One showing now is on this buffer, so the user's own.
+    if not showing(win) then
+      if left.view == "split" then
+        settle(win)
+      else
+        close(win, left)
+      end
     end
   end
   if not reached then
@@ -353,14 +371,8 @@ function M.sync(win)
     return
   end
   local mine = opened[win]
-  local view = {
-    win = win,
-    buf = buf,
-    path = path,
-    git_obj = bcache.git_obj,
-    text = bcache.compare_text,
-    view = wanted(win, bcache.compare_text),
-  }
+  local view = { win = win, buf = buf, path = path, git_obj = bcache.git_obj, text = bcache.compare_text }
+  local want = wanted(win, bcache.git_obj, bcache.compare_text)
   if not showing(win) then
     -- One of ours gone while its buffer stays was closed by the user, which leaving the window acts on, or is going
     -- with a buffer being deleted, which publishes a last update first.
@@ -368,8 +380,8 @@ function M.sync(win)
       open(view)
     end
   -- A view this module didn't open is the user's own.
-  elseif mine and (mine.text ~= view.text or mine.view ~= view.view) then
-    if mine.view ~= view.view then
+  elseif mine and (mine.text ~= view.text or mine.view ~= want) then
+    if mine.view ~= want then
       opened[win] = nil
       close(win, mine)
     end
@@ -383,17 +395,34 @@ local function sync_all()
   end
 end
 
----Make `win` its tabpage's reading window when it shows a file the diff reaches, then open the diff in the tabpage's
----windows.
+---Make `win` its tabpage's reading window when it shows a file the diff reaches.
 ---@param win integer
-function M.read(win)
+---@return boolean changed Whether the reading window moved.
+local function mark_reading(win)
   local tab = vim.api.nvim_win_get_tabpage(win)
   -- Floating, as the window `nvim_buf_call` borrows is: entering it reads nothing, and it is gone right after.
-  if started and vim.api.nvim_win_get_config(win).relative == "" and allowed(vim.api.nvim_win_get_buf(win)) then
+  if
+    started
+    and reading[tab] ~= win
+    and vim.api.nvim_win_get_config(win).relative == ""
+    and allowed(vim.api.nvim_win_get_buf(win))
+  then
     reading[tab] = win
+    return true
   end
-  for _, w in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
-    M.sync(w)
+  return false
+end
+
+---Make `win` its tabpage's reading window when it shows a file the diff reaches, then open the diff in it, and, as the
+---split view moves, in the rest of its tabpage.
+---@param win integer
+function M.read(win)
+  if mark_reading(win) and M.view() == "split" then
+    for _, w in ipairs(vim.api.nvim_tabpage_list_wins(vim.api.nvim_win_get_tabpage(win))) do
+      M.sync(w)
+    end
+  else
+    M.sync(win)
   end
 end
 
@@ -414,11 +443,8 @@ local function close_unless(keeps)
       end
     end
   end
-  -- One no view names was kept through a preview, or came back with its buffer.
-  for _, win in ipairs(split_diff.paired()) do
-    if not opened[win] then
-      split_diff.close(win)
-    end
+  for _, win in ipairs(split_diff.file_wins()) do
+    settle(win)
   end
 end
 
@@ -454,7 +480,7 @@ local function start()
   vim.api.nvim_create_autocmd("User", {
     group = group,
     pattern = "GitSignsUpdate",
-    desc = "changeset: open gitsigns' unified diff in a buffer's windows once gitsigns has its base",
+    desc = "changeset: open the diff in a buffer's windows once gitsigns has its base",
     callback = function(args)
       local buf = args.data and args.data.buffer
       for _, win in ipairs(buf and vim.fn.win_findbuf(buf) or {}) do
@@ -466,7 +492,7 @@ local function start()
   -- gone by then was closed by the user.
   vim.api.nvim_create_autocmd({ "BufLeave", "WinLeave" }, {
     group = group,
-    desc = "changeset: stop opening gitsigns' unified diff on a file once the user closes its view",
+    desc = "changeset: stop opening the diff on a file once the user closes its view",
     callback = function()
       local win = vim.api.nvim_get_current_win()
       if closed_by_user(win) then
@@ -479,8 +505,9 @@ local function start()
     end,
   })
   -- Fires: a buffer unloaded, a reload by `:e!` among them, which takes the views still on it or on its text as their
-  -- base with it: those go without the user closing them. A view the user closed went first, releasing its base. A base
-  -- window stays through a reload, and its buffer goes as the user closes it.
+  -- base with it: those go without the user closing them. A view the user closed went first, releasing its base. A split
+  -- view survives a reload, and its base unloads only as the user closes the base window, a hand-close this mustn't
+  -- forget.
   vim.api.nvim_create_autocmd("BufUnload", {
     group = group,
     desc = "changeset: reopen gitsigns' unified diff that went with an unloaded buffer",
@@ -499,6 +526,11 @@ local function start()
     callback = function(args)
       local win = tonumber(args.match) --[[@as integer]]
       opened[win], covered[win], opening[win] = nil, nil, nil
+      for tab, w in pairs(reading) do
+        if w == win then
+          reading[tab] = nil
+        end
+      end
       split_diff.forget(win)
     end,
   })
@@ -559,7 +591,7 @@ function M.turn_on()
   if not was_on then
     attach_untracked()
   end
-  M.read(vim.api.nvim_get_current_win())
+  mark_reading(vim.api.nvim_get_current_win())
   sync_all()
 end
 

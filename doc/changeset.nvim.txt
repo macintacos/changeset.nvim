@@ -274,7 +274,8 @@ UNIFIED DIFF
 <Plug>(changeset-diff-split)                    *<Plug>(changeset-diff-split)*
 <C-g>D                                                      *changeset-<C-g>D*
 	Switch the diff between unified and side by side, for every file of
-	the branch, turning it on when it is off. It says which view is on.
+	the branch. When the diff is off, turn it on side by side instead.
+	It says which view is on.
 	Like |:Changeset-diff|, it builds a tree when there is none, and warns
 	that the diff needs gitsigns without it.
 
@@ -684,7 +685,7 @@ keymaps.toggle_viewed                 *changeset-option-keymaps.toggle_viewed*
 	- The word `viewed` sits left of its stat, in |ChangesetMeta|. A long
 	  name is trimmed to make room.
 	- The file folds.
-	Its unified diff closes too (|changeset-unified-diff|).
+	Its diff closes too (|changeset-unified-diff|).
 
 	After marking, the cursor moves to the next file row below that isn't
 	viewed, skipping other copies of the file you marked, and previews it.
@@ -1580,7 +1581,7 @@ nothing, starts no language server and makes no network request.
   cursor row and scroll too when it also contains `globals`.
 - Kept in memory until Neovim exits: folds, which diff each viewed file
   was last folded at, the agent last submitted to, how
-  far the unified diff reaches, the files you entered
+  far the diff reaches, the files you entered
   (|changeset-entered-files|), and the files whose view you closed.
 
  vim:tw=78:ts=8:noet:ft=help:norl:

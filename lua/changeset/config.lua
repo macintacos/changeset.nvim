@@ -46,7 +46,7 @@ local M = {}
 ---@alias changeset.DiffView "unified"|"split"
 
 ---@class changeset.Config.UnifiedDiff
----@field keep? changeset.DiffReach.Keep Which files keep the unified diff once the sidebar closes: none, those entered, or all. Default "none".
+---@field keep? changeset.DiffReach.Keep Which files keep the diff once the sidebar closes: none, those entered, or all. Default "none".
 ---@field view? changeset.DiffView The view the diff starts each session in: inline, or side by side in the window being read. Default "unified".
 
 ---The options in force: every field set.

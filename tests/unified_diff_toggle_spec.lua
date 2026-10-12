@@ -13,6 +13,14 @@ local present = require("support.present")
 describe(":Changeset diff and :Changeset diff split", function()
   local dir, previous = Fixture.enter_tempdir()
   Fixture.feature_two_files(dir)
+  -- The side-by-side view needs a commit to compare against; gitsigns otherwise compares against the index.
+  local based = false
+  require("gitsigns").change_base("trunk", true, function()
+    based = true
+  end)
+  assert.is_true(vim.wait(5000, function()
+    return based
+  end, 20))
   local nowhere = vim.fn.tempname()
   vim.fn.mkdir(nowhere, "p")
   local notes, restore = Notify.capture()
@@ -80,6 +88,14 @@ describe(":Changeset diff and :Changeset diff split", function()
     changeset.diff()
 
     assert.same({ "Changeset: side-by-side diff off" }, Notify.messages({ notes[6] }))
+  end)
+
+  it("turns on side by side from off when the view is already side by side", function()
+    changeset.diff_split()
+
+    assert.same({ "Changeset: side-by-side diff on" }, Notify.messages({ notes[7] }))
+    assert.is_true(paired(vim.api.nvim_get_current_win()))
+    changeset.diff()
   end)
 
   it("reaches no further than the entered files after the sidebar closes under keep = entered", function()
