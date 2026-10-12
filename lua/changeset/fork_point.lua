@@ -243,8 +243,8 @@ end
 
 ---The fork point of `branch` at `root`, measured without blocking Neovim and handed to `on_done` on the main loop, nil
 ---when HEAD shares none with the branch it was created from or the default branch, or when measuring it raised an
----error, which is reported. Asks gh about its PR unless gh has named a target or is being asked.
----Subscribers hear the point after `on_done` does.
+---error, which is reported. Asks gh about its PR unless gh has named a target or is being asked. Subscribers hear the
+---point after `on_done` does.
 ---@param root string
 ---@param branch string
 ---@param on_done fun(point: changeset.ForkPoint?)
