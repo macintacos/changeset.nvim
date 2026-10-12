@@ -52,7 +52,7 @@ describe("changeset tree", function()
     it("builds without opening a window", function()
       local window_count = #vim.api.nvim_list_wins()
 
-      assert.is_true(Build.build())
+      assert.equal("built", Build.build())
 
       assert.is_true(wait_for_file("mod.lua"))
       assert.is_nil(window.win())
@@ -625,13 +625,6 @@ describe("changeset tree", function()
       Sidebar.flush()
     end
 
-    ---@param win integer
-    ---@return string file, integer line
-    local function shown(win)
-      local buf = vim.api.nvim_win_get_buf(win)
-      return vim.fs.basename(vim.api.nvim_buf_get_name(buf)), vim.api.nvim_win_get_cursor(win)[1]
-    end
-
     it("`:Changeset` returns before the fork point lands, then opens the sidebar with its ref", function()
       vim.cmd.edit("mod.lua")
 
@@ -702,32 +695,24 @@ describe("changeset tree", function()
       Sidebar.settle()
       Sidebar.flush()
 
-      assert.same({ "mod.lua", 2 }, { shown(win) })
+      assert.same({ "mod.lua", 2 }, { Sidebar.shown(win) })
     end)
 
-    it(
-      "an `update()` for another repository's switched branch while `:Changeset` waits leaves the next `:Changeset` able to open",
-      function()
-        local other = vim.fn.tempname()
-        vim.fn.mkdir(other, "p")
-        Fixture.feature_one_file(other)
-        vim.cmd.edit(other .. "/mod.lua")
-        assert.is_true(Build.build())
-        vim.cmd.edit(tmp .. "/mod.lua")
-        Fixture.git({ "checkout", "-q", "-b", "feature2" }, other)
+    it("an `update()` for another repository's switched branch while `:Changeset` waits leaves it to open", function()
+      local other = vim.fn.tempname()
+      vim.fn.mkdir(other, "p")
+      Fixture.feature_one_file(other)
+      vim.cmd.edit(other .. "/mod.lua")
+      assert.equal("built", Build.build())
+      vim.cmd.edit(tmp .. "/mod.lua")
+      Fixture.git({ "checkout", "-q", "-b", "feature2" }, other)
 
-        vim.cmd("Changeset")
-        build.update()
-        assert.is_true(vim.wait(10000, function()
-          return present(build.current()).branch == "feature2"
-        end, 10))
-        Sidebar.flush()
-        vim.cmd("Changeset")
-        Sidebar.await_open()
+      vim.cmd("Changeset")
+      build.update()
+      Sidebar.await_open()
 
-        vim.fn.delete(other, "rf")
-      end
-    )
+      vim.fn.delete(other, "rf")
+    end)
   end)
 
   describe("with nothing to diff against", function()
@@ -759,7 +744,7 @@ describe("changeset tree", function()
     it("builds nothing, silently, outside a repository", function()
       local tree = build.current()
 
-      assert.is_false(Build.build())
+      assert.equal("no_base", Build.build())
 
       assert.equal(tree, build.current())
       assert.equal(0, #notes)
@@ -769,7 +754,7 @@ describe("changeset tree", function()
       Fixture.init_repo("work", tmp)
       local tree = build.current()
 
-      assert.is_false(Build.build())
+      assert.equal("no_base", Build.build())
 
       assert.equal(tree, build.current())
       assert.equal(0, #notes)

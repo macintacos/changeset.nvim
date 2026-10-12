@@ -24,7 +24,7 @@ describe(":Changeset diff before the first build lands", function()
     vim.fn.delete(dir, "rf")
   end)
 
-  it("twice leaves the diff off", function()
+  it("twice leaves the diff off, and says so", function()
     vim.cmd("runtime plugin/changeset.lua")
 
     vim.cmd("Changeset diff")
@@ -32,9 +32,8 @@ describe(":Changeset diff before the first build lands", function()
     assert.is_true(vim.wait(10000, function()
       return build.kept() ~= nil
     end, 10))
-    vim.wait(100)
 
     assert.is_false(require("changeset.unified_diff").on())
-    assert.same({}, Notify.messages(notes))
+    assert.same({ "Changeset: unified diff off" }, Notify.messages(notes))
   end)
 end)

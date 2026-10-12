@@ -2,11 +2,12 @@
 local M = {}
 
 ---Build the tree for the current buffer's repository and wait for the build to land.
----@return boolean? ready As `changeset.build.build` answers it.
+---@return changeset.BuildOutcome
 function M.build()
-  local landed, ready = false, nil
+  local landed = false
+  local outcome ---@type changeset.BuildOutcome?
   require("changeset.build").build(function(answer)
-    landed, ready = true, answer
+    landed, outcome = true, answer
   end)
   assert.is_true(
     vim.wait(10000, function()
@@ -14,7 +15,7 @@ function M.build()
     end, 10),
     "the build never landed"
   )
-  return ready
+  return require("support.present")(outcome)
 end
 
 return M

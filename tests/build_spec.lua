@@ -20,7 +20,7 @@ local recording, runs = spawns.recording, spawns.runs
 
 ---Build the tree, waiting for its diff.
 local function build_and_collect()
-  assert.is_true(Build.build())
+  assert.equal("built", Build.build())
   assert.is_true(vim.wait(10000, function()
     return (build.current() or {}).collected
   end, 25))
@@ -91,13 +91,9 @@ describe("changeset.build", function()
   end)
 
   it("measures the first build's fork point without a blocking git call", function()
-    local blocked = spawns.blocking(function()
-      assert.is_true(Build.build())
+    spawns.measures_unblocked(function()
+      assert.equal("built", Build.build())
     end)
-
-    for _, argv in ipairs(blocked) do
-      assert.is_false(spawns.measuring(argv), table.concat(argv, " "))
-    end
   end)
 
   it("rebuilds for a switched branch without a blocking git call", function()
@@ -116,7 +112,7 @@ describe("changeset.build", function()
     end
   end)
 
-  it("an ask for another repository answers the replaced ask with nil", function()
+  it("an ask for another repository answers the replaced ask with replaced", function()
     local other = vim.fn.tempname()
     vim.fn.mkdir(other, "p")
     Fixture.feature_one_file(other)
@@ -132,11 +128,12 @@ describe("changeset.build", function()
     assert.is_true(vim.wait(10000, function()
       return #heard.second > 0
     end, 10))
+    -- The replaced ask's measure is still running; give a stray second answer time to arrive.
     vim.wait(200)
 
     vim.fn.delete(other, "rf")
-    assert.are.same({ { nil } }, heard.first)
-    assert.are.same({ { true } }, heard.second)
+    assert.are.same({ { "replaced" } }, heard.first)
+    assert.are.same({ { "built" } }, heard.second)
   end)
 
   it("lands an ask made while a build measures on a fork point measured after the ask", function()
@@ -174,6 +171,29 @@ describe("changeset.build", function()
     assert.equal(first, present(build.current()).base)
   end)
 
+  it("lands a build that asks keep joining while it measures", function()
+    local fork_point = require("changeset.fork_point")
+    local get_async = fork_point.get_async
+    local measures = 0
+    fork_point.get_async = function(root, branch, on_done)
+      measures = measures + 1
+      build.build(function() end)
+      get_async(root, branch, on_done)
+    end
+    local landed
+    build.build(function(outcome)
+      landed = outcome
+    end)
+
+    local ok = vim.wait(10000, function()
+      return landed ~= nil
+    end, 10)
+    fork_point.get_async = get_async
+    assert.is_true(ok, "the build never landed")
+    assert.equal("built", landed)
+    assert.equal(3, measures)
+  end)
+
   it("builds for the branch HEAD switched to while it measured", function()
     local fork_point = require("changeset.fork_point")
     local get_async, held = fork_point.get_async, {}
@@ -193,7 +213,7 @@ describe("changeset.build", function()
     assert.is_true(vim.wait(10000, function()
       return landed ~= nil
     end, 10))
-    assert.is_true(landed)
+    assert.equal("built", landed)
     assert.equal("feature2", present(build.current()).branch)
   end)
 
@@ -678,7 +698,7 @@ describe("changeset.build on a branch measured against its PR's target", functio
 
   ---Build the tree, waiting for gh's PR to move it onto parent.
   local function build_on_pr()
-    assert.is_true(Build.build())
+    assert.equal("built", Build.build())
     assert.is_true(vim.wait(5000, function()
       local tree = build.current()
       return tree ~= nil and tree.pr == 7 and tree.collected

@@ -203,7 +203,7 @@ describe("changeset row highlights", function()
 
   it("keeps tracking where you are while the sidebar is closed", function()
     vim.cmd.edit("mod.lua")
-    assert.is_true(Build.build())
+    assert.equal("built", Build.build())
 
     vim.cmd.edit("other.lua")
 

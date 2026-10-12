@@ -403,7 +403,7 @@ describe("fork_point", function()
     vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
     local root, _, parent_base = repo()
 
-    local blocked = spawns.blocking(function()
+    spawns.measures_unblocked(function()
       fork_point.get_async(root, "feature", function() end)
       assert.is_true(vim.wait(5000, function()
         return vim.iter(heard_in(root)):any(function(h)
@@ -411,10 +411,6 @@ describe("fork_point", function()
         end)
       end, 10))
     end)
-
-    for _, argv in ipairs(blocked) do
-      assert.is_false(spawns.measuring(argv), table.concat(argv, " "))
-    end
     assert.equal(parent_base, present(heard_in(root)[#heard_in(root)]).point.base)
   end)
 

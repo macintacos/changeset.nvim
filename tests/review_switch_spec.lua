@@ -18,6 +18,18 @@ local function moves()
   return gutter.moves
 end
 
+---A repository beside the one under test, with `x.txt` committed on main, and its base.
+---@return string root
+---@return string base
+local function other_repo()
+  local other = vim.fn.resolve(vim.fn.tempname())
+  vim.fn.mkdir(other, "p")
+  support.init_repo("main", other)
+  vim.fn.writefile({ "one" }, other .. "/x.txt")
+  support.commit("base", other)
+  return other, gutter.merge_base(other)
+end
+
 describe("the gutter's base", function()
   local dir ---@type string
   local cwd ---@type string
@@ -133,12 +145,7 @@ describe("the gutter's base", function()
   end)
 
   it("leaves buffers from another repository alone", function()
-    local other = vim.fn.resolve(vim.fn.tempname())
-    vim.fn.mkdir(other, "p")
-    support.init_repo("main", other)
-    vim.fn.writefile({ "one" }, other .. "/x.txt")
-    support.commit("base", other)
-    local theirs = gutter.merge_base(other)
+    local other, theirs = other_repo()
     gutter.fixture(dir, "scoped", { "a.txt" })
     support.git({ "switch", "-q", "main" }, dir)
     gutter.advance(dir)
@@ -418,14 +425,10 @@ describe("the gutter's base", function()
     vim.fn.chdir(dir)
 
     local bufs ---@type integer[]
-    local blocked = spawns.blocking(function()
+    spawns.measures_unblocked(function()
       bufs = edit({ "a.txt" })
       assert.is_true(await_cached(bufs))
     end)
-
-    for _, argv in ipairs(blocked) do
-      assert.is_false(spawns.measuring(argv), table.concat(argv, " "))
-    end
     assert.is_true(await(bufs, base, 5000))
   end)
 
@@ -464,5 +467,32 @@ describe("the gutter's base", function()
     assert.is_true(cached)
     assert.equal(before, gutter.moves_to[left_base] or 0)
     assert.is_true(show_and_await(c, right_base, 5000))
+  end)
+
+  it("lands a repository's base on its buffers once another repository's sync replaces it", function()
+    local other, theirs = other_repo()
+    gutter.fixture(dir, "replaced", { "a.txt" })
+    gutter.advance(dir)
+    local base = gutter.merge_base(dir)
+    vim.fn.chdir(dir)
+    local get_async, held = fork_point.get_async, {}
+    fork_point.get_async = function(root, branch, on_done)
+      held[#held + 1] = { root, branch, on_done }
+    end
+
+    local ours = edit({ "a.txt" })
+    local ours_cached = await_cached(ours)
+    local their_bufs = edit({ other .. "/x.txt" })
+    local theirs_cached = await_cached(their_bufs)
+    fork_point.get_async = get_async
+    for _, args in ipairs(held) do
+      get_async(args[1], args[2], args[3])
+    end
+
+    assert.is_true(ours_cached)
+    assert.is_true(theirs_cached)
+    assert.is_true(show_and_await(ours, base, 5000))
+    assert.is_true(await(their_bufs, theirs, 5000))
+    vim.fn.delete(other, "rf")
   end)
 end)

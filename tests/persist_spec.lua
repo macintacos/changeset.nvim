@@ -133,7 +133,7 @@ describe("changeset position in a session", function()
     vim.fn.writefile({ "return 1" }, tmp .. "/scratch.lua")
     Fixture.git({ "add", "scratch.lua" }, tmp)
     Fixture.commit("scratch", tmp)
-    assert.is_true(Build.build())
+    assert.equal("built", Build.build())
     Fixture.git({ "checkout", "-q", "feature" }, tmp)
     local session_tab = vim.api.nvim_get_current_tabpage()
 

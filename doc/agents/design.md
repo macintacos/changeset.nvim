@@ -1236,6 +1236,10 @@ three times at most, so a measure doesn't spawn git for as long as another proce
 moving HEAD, and HEAD's next move measures again through the watcher. While
 gh is still being asked, its answer carries the newest measure rather than the one it was
 asked with.
+A switch of repository or branch holds every gutter move until its measure lands, since
+until then the base in hand is the one of the branch left behind. A switch replaced by
+another repository's before its measure lands still moves its own repository's buffers
+onto that measure's base.
 
 A buffer moves onto a new base only once gitsigns holds its text. gitsigns stores a read's
 text even after a move has replaced its base, so a buffer moved mid-read would name the base
@@ -1374,7 +1378,7 @@ read, in the background, so none holds the editor up. Reading symbols loads each
 can't answer, Generated ones aside, so those buffers and their language servers arrive with that first
 ask, and a session that never asks starts none. The picker waits a moment for the fork
 point and the diff, which it has no way to fill in behind. The sidebar opens once its fork
-point lands, in the tabpage it was asked from; the no-base warning still comes before any
+point lands, in the tabpage it was asked from; the no-base warning comes before any
 window. A tree still waiting on its first diff opens blank rather than claiming nothing
 changed. Keys pressed while the fork point is measured act on the editor as it is, so a
 second toggle cancels the open it would have closed. Closing the sidebar lets go of the

@@ -16,6 +16,10 @@ local REFRESH_DEBOUNCE_MS = 250
 -- One write per burst of answers rather than one per file.
 local SAVE_DEBOUNCE_MS = 1000
 
+-- Measures a build makes before landing on the last, so asks joining it or HEAD moving without end can't keep it, and
+-- the open waiting on it, from landing.
+local MEASURE_TRIES = 3
+
 local M = {}
 
 ---The tree as the pipeline keeps it. Only this module writes these fields.
@@ -37,6 +41,10 @@ local M = {}
 ---What happened to the tree: its `diff` read, one file's `symbols` read, only its `pr` number changed, or its
 ---diff `failed` to read.
 ---@alias changeset.TreeEvent "diff"|"symbols"|"pr"|"failed"
+
+---What a build ended in: the tree `built` or kept, `no_base` to measure from, or `replaced` by an ask for another
+---repository.
+---@alias changeset.BuildOutcome "built"|"no_base"|"replaced"
 
 ---@type changeset.Tree?
 local tree
@@ -274,16 +282,30 @@ end
 ---@type fun(root: string, branch: string, commit: string?, point: changeset.ForkPoint?): boolean
 local place
 
----@type { root: string, branch: string, waiters: fun(ready: boolean?)[], again: boolean? }? The first build in flight.
+---A build in flight.
+---@class changeset.build.Request
+---@field root string
+---@field branch string
+---@field waiters fun(outcome: changeset.BuildOutcome)[]
+---@field again boolean? An ask joined it after it started, so it measures once more on landing.
+---@field tries integer Measures made so far.
+
+---@type changeset.build.Request? The build in flight; an ask for another repository replaces it.
 local building
 
----Build the tree for the repository at `root` unless it is already built there, measuring its fork point without
----blocking, then call `on_done` once on the main loop: true when built, false when the repository has no merge base
----with its default branch, nil when an ask for another repository replaced this one. An ask for `root` while one is
----in flight waits on it, and has it measure again once it lands, since a ref can have moved after it started. A
----landing that finds HEAD on another branch measures again for that branch.
+---Whether `request` is still the build in flight.
+---@param request changeset.build.Request
+---@return boolean
+local function in_flight(request)
+  return building == request
+end
+
+---Build the tree for the repository at `root`, keeping the tree when its fork point is the one it was built on,
+---measuring that point without blocking, then call `on_done` once on the main loop with the outcome. An ask for `root`
+---while one is in flight waits on it, and has it measure again once it lands, since a ref can have moved after it
+---started. A landing that finds HEAD on another branch measures again for that branch.
 ---@param root string
----@param on_done fun(ready: boolean?)
+---@param on_done fun(outcome: changeset.BuildOutcome)
 local function build_at(root, on_done)
   if building and building.root == root then
     table.insert(building.waiters, on_done)
@@ -291,34 +313,41 @@ local function build_at(root, on_done)
     return
   end
   local replaced = building
-  local request = { root = root, branch = Git.head(root) or "HEAD", waiters = { on_done } }
+  ---@type changeset.build.Request
+  local request = { root = root, branch = Git.head(root) or "HEAD", waiters = { on_done }, tries = 0 }
   building = request
   if replaced then
     for _, waiter in ipairs(replaced.waiters) do
-      waiter(nil)
+      waiter("replaced")
     end
   end
   local function measure()
+    request.tries = request.tries + 1
     fork_point.get_async(root, request.branch, function(point)
-      if
-        building --[[@as table?]]
-        ~= request
-      then
+      if not in_flight(request) then
         return
       end
       local branch, commit = Git.head(root)
-      if request.again or (branch or "HEAD") ~= request.branch then
+      if request.tries < MEASURE_TRIES and (request.again or (branch or "HEAD") ~= request.branch) then
         request.branch, request.again = branch or "HEAD", nil
         return measure()
       end
       building = nil
-      local ready = place(root, request.branch, commit, point)
+      local outcome = place(root, request.branch, commit, point) and "built" or "no_base"
       for _, waiter in ipairs(request.waiters) do
-        waiter(ready)
+        waiter(outcome)
       end
     end)
   end
   measure()
+end
+
+---Whether a background rebuild for `root` should wait: a build for another repository is in flight, and replaces the
+---tree anyway.
+---@param root string
+---@return boolean
+local function yields(root)
+  return building ~= nil and building.root ~= root
 end
 
 ---Keep the tree when `point` is the one it was built on, else build one there.
@@ -372,7 +401,8 @@ end
 ---
 ---The buffer's repository, not Neovim's directory: with the two different, a base
 ---measured in the wrong one leaves every later `git diff` on a bad object.
----@param on_done fun(ready: boolean?) As `build_at` calls it; false includes a buffer outside any repository.
+---@param on_done fun(outcome: changeset.BuildOutcome) As `build_at` calls it; `no_base` includes a buffer outside any
+---repository.
 function M.build(on_done)
   build_at(Paths.root(0), on_done)
 end
@@ -407,18 +437,21 @@ function M.remeasure(on_no_base, on_kept)
       return
     end
     remeasuring = nil
-    local function finish(ready)
-      if ready == false and on_no_base then
+    ---@param outcome changeset.BuildOutcome
+    local function finish(outcome)
+      if outcome == "no_base" and on_no_base then
         on_no_base()
-      elseif ready and tree == kept and on_kept then
+      elseif outcome == "built" and tree == kept and on_kept then
         on_kept()
       end
     end
     local branch, commit = Git.head(kept.root)
     if (branch or "HEAD") ~= kept.branch then
-      build_at(kept.root, finish)
+      if not yields(kept.root) then
+        build_at(kept.root, finish)
+      end
     else
-      finish(place(kept.root, kept.branch, commit, point))
+      finish(place(kept.root, kept.branch, commit, point) and "built" or "no_base")
     end
   end)
 end
@@ -439,9 +472,12 @@ function M.update()
     -- A refresh before the re-measure lands would diff a rebased branch against its old fork point.
     return M.remeasure(nil, M.refresh)
   end
+  if yields(tree.root) then
+    return
+  end
   local kept = tree
-  build_at(tree.root, function(ready)
-    if ready ~= nil and (not ready or tree == kept) then
+  build_at(tree.root, function(outcome)
+    if outcome == "no_base" or (outcome == "built" and tree == kept) then
       M.refresh()
     end
   end)
@@ -455,7 +491,7 @@ fork_point.subscribe(function(root, branch, point)
   if tree.base == point.base and tree.ref == point.ref and tree.pr == point.pr then
     return
   end
-  -- Placed as a re-measure places its point, since a point measured without blocking is as fresh as a blocking one.
+  -- Placed as a re-measure places its point.
   -- A HEAD gone to another branch is that branch's to build.
   local head, commit = Git.head(root)
   if (head or "HEAD") == branch then

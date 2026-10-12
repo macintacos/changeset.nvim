@@ -12,9 +12,12 @@ function M.get(root, branch)
   fork_point.get_async(root, branch, function(measured)
     done, point = true, measured
   end)
-  assert.is_true(vim.wait(5000, function()
-    return done
-  end, 10))
+  assert.is_true(
+    vim.wait(5000, function()
+      return done
+    end, 10),
+    "the fork point was never measured"
+  )
   return point
 end
 

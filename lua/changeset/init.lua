@@ -99,6 +99,8 @@ local DELETED = "This file was deleted on this branch"
 
 local NO_BASE = "no merge base with the default branch"
 
+local READING = "reading the changes…"
+
 -- snacks.nvim's bigfile size: past it a buffer's synchronous treesitter parse takes noticeable time, on every pass
 -- over the row.
 local PREVIEW_MAX_BYTES = 1.5 * 1024 * 1024
@@ -494,32 +496,32 @@ end
 
 ---Public API: the file rows under the sidebar's sections, less the kinds it hides, for the current buffer's repository.
 ---
----The first call builds and keeps the tree, loading the changed files and their language servers, and
----blocks up to `DIFF_WAIT_MS` (2 s), keeping the event loop turning, while the fork point is measured and the diff read. `rows` are the file rows, uncompressed, with
----their symbols under `children`.
+---The first call builds and keeps the tree, loading the changed files and their language servers, and blocks up to
+---`DIFF_WAIT_MS` (2 s), keeping the event loop turning, while the fork point is measured and the diff read. `rows` are
+---the file rows, uncompressed, with their symbols under `children`.
 ---@return { rows: changeset.Row[], root: string, ref: string }? tree
 ---@return string? err Why there is no tree yet.
 function M.rows()
   local kept = build.kept()
-  local answered = kept and true or nil
+  local outcome = kept and "built" or nil ---@type changeset.BuildOutcome?
   if not kept then
     build.build(function(answer)
-      answered = answer
+      outcome = answer
     end)
   end
   -- The first ask builds the tree too, and a picker cannot fill in behind it the way the sidebar does.
   vim.wait(DIFF_WAIT_MS, function()
-    if answered == nil then
+    if outcome == nil then
       return false
     end
     local tree = build.current()
-    return not answered or not tree or tree.collected
+    return outcome ~= "built" or not tree or tree.collected
   end, 10)
-  if answered == false then
+  if outcome == "no_base" then
     return nil, NO_BASE
   end
   local state = sidebar_state.current()
-  if not (state and state.tree.collected) then
+  if outcome ~= "built" or not (state and state.tree.collected) then
     return nil, "still reading the diff"
   end
   -- A tree whose diff landed before the sidebar loaded announced nothing the sidebar heard.
@@ -557,11 +559,14 @@ function M.setup(opts)
   review_comments.redraw()
 end
 
----@type { afters: fun()[], focus: { win: integer }? }? An open whose fork point is being measured; release() drops it.
-local opening
+---An open whose fork point is being measured.
+---@class changeset.Opening
+---@field afters fun()[] Called once it lands, in the tabpage it was asked from.
+---@field focus { win: integer }? A toggle pressed meanwhile, from `win`; the sidebar takes focus only if `win` is still
+---current.
 
----@type table? A `diff()` waiting on the build to turn the unified diff on; a second `diff()` clears it.
-local diff_pending
+---@type changeset.Opening? release() drops it.
+local opening
 
 ---Drop everything the sidebar set up but its window.
 local function release()
@@ -574,12 +579,12 @@ local function release()
 end
 
 ---Builds the tree for the current buffer's repository, unless it is already built there, warning when it can't.
----@param on_done fun(ready: boolean?)? Called as `build.build` calls back, after the warning.
+---@param on_done fun(outcome: changeset.BuildOutcome)? Called as `build.build` calls back, after the warning.
 local function built(on_done)
   build.build(function(answer)
-    if answer == false then
+    if answer == "no_base" then
       vim.notify("Changeset: " .. NO_BASE, vim.log.levels.WARN)
-    elseif answer then
+    elseif answer == "built" then
       -- The tracker records no cursor before a tree exists.
       track()
     end
@@ -599,9 +604,7 @@ function M.refresh()
 end
 
 ---Open the sidebar's window on the tree just built or kept.
----@param kept changeset.Tree? The kept tree it opens on, re-measured behind it.
----@param previous changeset.Tree? The tree before the build.
-local function show(kept, previous)
+local function show()
   bound_keys = config.get().keymaps
 
   local buf = vim.api.nvim_create_buf(false, true)
@@ -666,7 +669,8 @@ local function show(kept, previous)
     desc = "changeset: let go of the sidebar when its window closes another way",
     callback = function()
       vim.schedule(function()
-        -- A session read over the sidebar opens its own before this runs, and an open made since waits on its own.
+        -- A session read over the sidebar opens its own before this runs; and `close()` would drop an open still
+        -- measuring.
         if not (window.is_visible() or opening) then
           M.close()
         end
@@ -817,26 +821,15 @@ local function show(kept, previous)
   unified_diff.turn_on()
 
   redraw()
-  -- A kept tree misses what nothing announced, such as a file edited outside Neovim while it kept focus. It refreshes
-  -- once re-measured, so a rebased branch is never diffed against its old fork point.
-  if kept then
-    build.remeasure(function()
-      vim.notify("Changeset: " .. NO_BASE, vim.log.levels.WARN)
-      M.close()
-    end, build.refresh)
-  elseif build.current() == previous then
-    build.refresh()
-  end
 end
 
----Open the sidebar on the current buffer's repository, drawing its tree, then call `after` once the open lands,
----whether or not a window opened. A kept tree opens at once. The window opens in the tabpage `open` was called from,
----and none opens if that tabpage is gone by then.
+---What `M.open` does, handing back the open it left measuring.
 ---@param after fun()?
-function M.open(after)
+---@return changeset.Opening? pending The open still measuring; nil when a kept tree opened at once.
+local function open(after)
   if opening then
     table.insert(opening.afters, after)
-    return
+    return opening
   end
   -- `window.buf()`, not `window.win()`: the buffer is wiped with its window, so it is
   -- live exactly while a sidebar stands on some tabpage.
@@ -852,20 +845,24 @@ function M.open(after)
   local kept = build.kept()
   if kept then
     track()
-    show(kept, previous)
+    show()
+    -- A kept tree misses what nothing announced, such as a file edited outside Neovim while it kept focus. It
+    -- refreshes once re-measured, so a rebased branch is never diffed against its old fork point.
+    build.remeasure(function()
+      vim.notify("Changeset: " .. NO_BASE, vim.log.levels.WARN)
+      M.close()
+    end, build.refresh)
     if after then
       after()
     end
     return
   end
-  local pending = { afters = { after } } ---@type { afters: fun()[], focus: { win: integer }? }
+  ---@type changeset.Opening
+  local pending = { afters = { after } }
   opening = pending
   local tab = vim.api.nvim_get_current_tabpage()
   built(function(answer)
-    if
-      opening --[[@as table?]]
-      ~= pending
-    then
+    if opening ~= pending then
       return
     end
     opening = nil
@@ -877,9 +874,13 @@ function M.open(after)
     end
     local here = vim.api.nvim_get_current_tabpage()
     vim.api.nvim_set_current_tabpage(tab)
-    if answer then
-      show(nil, previous)
+    if answer == "built" then
+      show()
+      if build.current() == previous then
+        build.refresh()
+      end
       local focus = pending.focus
+      -- Only from where the toggle was pressed, and not mid-insert: typed text must not land in the sidebar.
       if focus and vim.api.nvim_get_current_win() == focus.win and vim.api.nvim_get_mode().mode == "n" then
         window.focus()
       end
@@ -891,6 +892,15 @@ function M.open(after)
       vim.api.nvim_set_current_tabpage(here)
     end
   end)
+  return pending
+end
+
+---Open the sidebar on the current buffer's repository, drawing its tree, then call `after` once the open lands,
+---whether or not a window opened; an open `release()` drops calls nothing. A kept tree opens at once. The window opens
+---in the tabpage `open` was called from, and none opens if that tabpage is gone by then.
+---@param after fun()?
+function M.open(after)
+  open(after)
 end
 
 ---Dismiss the sidebar, the unified diff kept on only as far as `unified_diff.keep` says. The tree stays, and keeps
@@ -899,6 +909,16 @@ function M.close()
   release()
   window.close()
   unified_diff.limit(config.get().unified_diff.keep)
+end
+
+---@type table? A `diff()` waiting on the build to turn the unified diff on; a second `diff()` clears it.
+local diff_pending
+
+---Whether `token` is still the `diff()` waiting on the build.
+---@param token table
+---@return boolean
+local function diff_wanted(token)
+  return diff_pending == token
 end
 
 ---Turn the unified diff off everywhere, or on for every file of the tree as the sidebar opening does, building the
@@ -918,19 +938,16 @@ function M.diff()
   -- A second ask before the build lands turns back off what the first would have turned on.
   if diff_pending then
     diff_pending = nil
-    return
+    return vim.notify("Changeset: unified diff off")
   end
   local token = {}
   diff_pending = token
   built(function(answer)
-    if
-      diff_pending --[[@as table?]]
-      ~= token
-    then
+    if not diff_wanted(token) then
       return
     end
     diff_pending = nil
-    if answer then
+    if answer == "built" then
       unified_diff.turn_on()
       vim.notify("Changeset: unified diff on")
     end
@@ -1000,8 +1017,7 @@ local function walk(count, kind, take)
   if not window.is_visible() then
     local win = vim.api.nvim_get_current_win()
     local buf = vim.api.nvim_win_get_buf(win)
-    vim.api.nvim_echo({ { "reading the changes…" } }, false, {})
-    return M.open(function()
+    local pending = open(function()
       if not window.is_visible() or vim.api.nvim_get_current_win() ~= win or vim.api.nvim_win_get_buf(win) ~= buf then
         return
       end
@@ -1009,6 +1025,10 @@ local function walk(count, kind, take)
       apply(state.position:entered(draw.view()))
       walk(count, kind, take)
     end)
+    if pending then
+      vim.api.nvim_echo({ { READING } }, false, {})
+    end
+    return
   end
   local tree = build.current()
   if not (tree and ready(tree)) then
@@ -1016,7 +1036,7 @@ local function walk(count, kind, take)
     local buf = vim.api.nvim_win_get_buf(win)
     local before = waiting and waiting.win == win and waiting.buf == buf and waiting.kind == kind and waiting.count or 0
     waiting = { count = before + count, kind = kind, take = take, win = win, buf = buf }
-    return vim.api.nvim_echo({ { "reading the changes…" } }, false, {})
+    return vim.api.nvim_echo({ { READING } }, false, {})
   end
   -- The step walks the drawn rows, and `ready()` judged the tree's; a key pressed is worth drawing now.
   if settling.owed then
@@ -1051,7 +1071,8 @@ end
 ---Open, focus, or dismiss the sidebar, depending on where the cursor is.
 function M.toggle()
   if opening then
-    -- The second press closes what the first opens.
+    -- As if typed once the open landed: after a toggle, a press closes what it opened; after another open, it focuses
+    -- it.
     if opening.focus then
       release()
     else
@@ -1061,8 +1082,7 @@ function M.toggle()
   end
   local action = next_action({ visible = window.is_visible(), focused = window.is_focused() })
   if action == "open" then
-    M.open()
-    local pending = opening --[[@as { focus: { win: integer }? }?]]
+    local pending = open()
     if pending then
       pending.focus = { win = vim.api.nvim_get_current_win() }
     else
@@ -1104,7 +1124,8 @@ vim.api.nvim_create_autocmd({ "WinEnter", "BufWinEnter" }, {
 })
 
 -- Fires: a session starting to load. It lays its windows out from the focused one, and
--- the sidebar's would take a file with the sidebar's window options still on it.
+-- the sidebar's would take a file with the sidebar's window options still on it. Drops an open still measuring too,
+-- which would land on the session's layout beside the placeholder `restore()` fills.
 vim.api.nvim_create_autocmd("SessionLoadPre", {
   group = vim.api.nvim_create_augroup("changeset.session", { clear = true }),
   desc = "changeset: close the sidebar before a session lays out its windows",

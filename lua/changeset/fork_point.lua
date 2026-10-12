@@ -204,10 +204,10 @@ local function ask(root, branch, point)
     end
     local pr = { target = target, number = number }
     targets[key] = pr
-    -- HEAD can have moved by the time gh answers; subscribers still need a point.
     Git.async(function()
       return settled(root, branch, pr)
     end, function(remeasured)
+      -- HEAD can have moved by the time gh answers; subscribers still need a point.
       tell(remeasured or heard)
     end)
   end)
