@@ -14,12 +14,12 @@ describe(":Changeset diff and :Changeset diff split", function()
   local dir, previous = Fixture.enter_tempdir()
   Fixture.feature_two_files(dir)
   -- The side-by-side view needs a commit to compare against; gitsigns otherwise compares against the index.
-  local based = false
+  local base_changed = false
   require("gitsigns").change_base("trunk", true, function()
-    based = true
+    base_changed = true
   end)
   assert.is_true(vim.wait(5000, function()
-    return based
+    return base_changed
   end, 20))
   local nowhere = vim.fn.tempname()
   vim.fn.mkdir(nowhere, "p")

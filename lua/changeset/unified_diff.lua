@@ -274,9 +274,9 @@ end
 ---@param win integer
 local function settle(win)
   local mine = opened[win]
-  local lives = mine and mine.view == "split"
+  local keeps_base = mine and mine.view == "split"
     or not mine and vim.api.nvim_win_is_valid(win) and allowed(vim.api.nvim_win_get_buf(win))
-  if not lives then
+  if not keeps_base then
     split_diff.close(win)
   end
 end
@@ -344,18 +344,18 @@ function M.sync(win)
   end
   split_diff.scrub(win)
   local buf = vim.api.nvim_win_get_buf(win)
-  local left = opened[win]
+  local previous = opened[win]
   local path = tree_file(vim.api.nvim_buf_get_name(buf))
   local reached = path ~= nil and reaches(path)
-  if left and left.buf ~= buf then
+  if previous and previous.buf ~= buf then
     opened[win] = nil
     -- A preview swaps the buffer without BufWinLeave, so gitsigns still holds our view, and would hand it back once
     -- the buffer returns. One showing now is on this buffer, so the user's own.
     if not showing(win) then
-      if left.view == "split" then
+      if previous.view == "split" then
         settle(win)
       else
-        close(win, left)
+        close(win, previous)
       end
     end
   end
@@ -525,8 +525,8 @@ local function start()
     callback = function(args)
       local win = tonumber(args.match) --[[@as integer]]
       opened[win], covered[win], opening[win] = nil, nil, nil
-      for tab, w in pairs(reading) do
-        if w == win then
+      for tab, reader in pairs(reading) do
+        if reader == win then
           reading[tab] = nil
         end
       end
