@@ -311,7 +311,6 @@ local function open(view)
       return
     end
     if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf and reaches(path) then
-      -- Asked again: the reading window can have moved while git read the base.
       local drawn = wanted(win, git_obj, text)
       -- Before either draw: gitsigns' `show` registers the view at once but then waits on its diff.
       opened[win] = { buf = buf, path = path, base = base, text = text, view = drawn }

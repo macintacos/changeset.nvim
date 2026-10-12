@@ -862,8 +862,9 @@ function M.diff()
   vim.notify(("Changeset: %s on"):format(view_name()))
 end
 
----Switch the diff between unified and side by side while it is on, or turn it on side by side when it is off, building the current buffer's
----repository's tree when there is none, and say which view is on; warn when gitsigns can't show it.
+---Switch the diff between unified and side by side while it is on, or turn it on side by side when it is off,
+---building the current buffer's repository's tree when there is none, and say which view is on; warn when gitsigns
+---can't show it.
 function M.diff_split()
   if not (diff_available() and (build.current() or built())) then
     return
