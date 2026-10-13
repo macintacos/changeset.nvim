@@ -3,6 +3,7 @@ local support = require("support.git")
 local gutter = require("support.gutter")
 local Notify = require("support.notify")
 local present = require("support.present")
+local spawns = require("support.spawns")
 
 local await, edit, revision = gutter.await, gutter.edit, gutter.revision
 
@@ -13,6 +14,7 @@ describe("the gutter's base", function()
   local change_base
   ---@type { msg: string, level: integer? }[]
   local notices
+  local held ---@type support.spawns.Held?
 
   ---A repo with `a.txt` changed on `parent`, then again on `child` cut from it.
   ---@param child string
@@ -33,9 +35,12 @@ describe("the gutter's base", function()
   end)
 
   after_each(function()
+    if held then
+      held.stop()
+      held = nil
+    end
     gutter.teardown(dir, cwd)
     vim.env.FAKE_GH_PR = nil
-    vim.env.FAKE_GH_DELAY = nil
     restore_notify()
     require("gitsigns").change_base = change_base
   end)
@@ -170,23 +175,33 @@ describe("the gutter's base", function()
 
   it("drops a PR lookup that a branch switch superseded", function()
     stack("stacked-switched")
-    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent" })
-    vim.env.FAKE_GH_DELAY = "1"
+    -- main moves on past where parent forked, so main's base differs from its fork point with parent.
+    support.git({ "switch", "-q", "main" }, dir)
+    gutter.advance(dir)
+    support.git({ "switch", "-q", "stacked-switched" }, dir)
     vim.fn.chdir(dir)
+    held = spawns.holding(function(argv)
+      return not spawns.runs(argv, "gh")
+    end)
     local bufs = edit({ "a.txt" })
     assert.is_true(await(bufs, gutter.merge_base(dir), 5000))
-    local parent_tip = support.git({ "rev-parse", "parent" }, dir)
+    -- Only the child's lookup stays held; main's runs once the switch asks it, and finds no PR.
+    present(held).stop()
+    assert.equal(1, #present(held).calls)
 
     -- The child's lookup is still in flight when the switch happens. Its answer names the parent, and must
-    -- not move main's buffers onto it.
-    vim.env.FAKE_GH_PR = nil
+    -- not move main's buffers off main's base.
     support.git({ "switch", "-q", "main" }, dir)
-    assert.is_true(vim.wait(10000, function()
-      return vim.b[bufs[1]].gitsigns_head == "main"
-    end, 20))
+    local main_base = gutter.merge_base(dir)
+    -- main's own lookup has started by the time its base lands, so only the child's reads the PR set below.
+    assert.is_true(await(bufs, main_base, 10000))
+    -- gh reads $FAKE_GH_PR as it starts, which a held lookup does only on release.
+    vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent" })
+    present(held).release()
+    vim.env.FAKE_GH_PR = nil
 
     assert.is_false(vim.wait(1500, function()
-      return revision(present(bufs[1])) == parent_tip
+      return revision(present(bufs[1])) ~= main_base
     end, 20))
   end)
 end)

@@ -33,6 +33,7 @@ end
 describe("the gutter's base", function()
   local dir ---@type string
   local cwd ---@type string
+  local held_gh ---@type support.spawns.Held?
 
   before_each(function()
     cwd = vim.fn.getcwd()
@@ -40,8 +41,12 @@ describe("the gutter's base", function()
   end)
 
   after_each(function()
+    if held_gh then
+      held_gh.stop()
+      held_gh = nil
+    end
     gutter.teardown(dir, cwd)
-    vim.env.FAKE_GH_PR, vim.env.FAKE_GH_DELAY, vim.env.FAKE_GH_LOG = nil, nil, nil
+    vim.env.FAKE_GH_PR, vim.env.FAKE_GH_LOG = nil, nil
   end)
 
   it("moves attached buffers to the new merge base after an external branch switch", function()
@@ -273,8 +278,11 @@ describe("the gutter's base", function()
     vim.fn.writefile({ "one" }, dir .. "/a.txt")
     local pushed = support.commit("pushed", dir)
     support.git({ "update-ref", "refs/remotes/origin/main", pushed }, dir)
-    vim.env.FAKE_GH_DELAY = "2"
     vim.fn.chdir(dir)
+    -- Held until HEAD has moved the base, however long that takes under load.
+    held_gh = spawns.holding(function(argv)
+      return not spawns.runs(argv, "gh")
+    end)
     local bufs = edit({ "a.txt" })
     assert.is_true(await(bufs, pushed, 5000))
 
@@ -282,6 +290,7 @@ describe("the gutter's base", function()
     local pulled = support.commit("pulled", dir)
     support.git({ "update-ref", "refs/remotes/origin/main", pulled }, dir)
     assert.is_true(await(bufs, pulled, 10000))
+    present(held_gh).release()
 
     assert.is_false(vim.wait(3000, function()
       return revision(present(bufs[1])) ~= pulled

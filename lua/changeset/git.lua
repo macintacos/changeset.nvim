@@ -1,22 +1,7 @@
----The git and gh queries that pick the branch changeset diffs against, HEAD read off git's own files, and the process
----runner they and herdr share.
-local M = {}
+---The git and gh queries that pick the branch changeset diffs against, and HEAD read off git's own files.
+local process = require("changeset.process")
 
----`vim.system`, calling `on_exit` on the main loop. A failed spawn — a repository removed under a pending
----refresh, a binary gone since its executable check, an argv over the OS's limit — reaches `on_exit` as a failed
----result instead of raising.
----@param argv string[]
----@param opts vim.SystemOpts
----@param on_exit fun(result: vim.SystemCompleted)
-function M.system(argv, opts, on_exit)
-  local ok, err = pcall(vim.system, argv, opts, vim.schedule_wrap(on_exit))
-  if not ok then
-    local result = { code = -1, signal = 0, stdout = "", stderr = tostring(err) }
-    vim.schedule(function()
-      on_exit(result)
-    end)
-  end
-end
+local M = {}
 
 ---The first line of the file at `path`; nil when it can't be read, as a directory can't.
 ---@param path string
@@ -94,31 +79,33 @@ local async_threads = setmetatable({}, { __mode = "k" })
 
 ---In a coroutine `async` runs, `args`' result, waited for without blocking Neovim; nil elsewhere.
 ---@param args string[]
----@return vim.SystemCompleted?
+---@return changeset.process.Completed?
 local function await(args)
   local co = coroutine.running()
   if co and async_threads[co] then
-    return (coroutine.yield --[[@as fun(args: string[]): vim.SystemCompleted]])(args)
+    return (coroutine.yield --[[@as fun(args: string[]): changeset.process.Completed]])(args)
   end
 end
 
 ---Run `fn` with every git command `lines` and `is_ancestor` start inside it spawned without blocking Neovim, then
----call `on_done` on the main loop with what `fn` returns.
+---call `on_done` on the main loop with what `fn` returns, or with nil after reporting the error `fn` raised. Start it
+---on the main loop, as `process.run` needs.
 ---@generic T
 ---@param fn fun(): T
----@param on_done fun(result: T)
+---@param on_done fun(result: T?)
 function M.async(fn, on_done)
   local co = coroutine.create(fn)
   async_threads[co] = true
   local function step(...)
     local ok, value = coroutine.resume(co, ...)
     if not ok then
-      error(debug.traceback(co, value))
+      vim.notify("Changeset: " .. debug.traceback(co, tostring(value)), vim.log.levels.ERROR)
+      return on_done(nil)
     end
     if coroutine.status(co) == "dead" then
       return on_done(value)
     end
-    M.system(value, { text = true }, step)
+    process.run(value, {}, step)
   end
   step()
 end
@@ -137,7 +124,7 @@ function M.lines(args, cwd)
     if result.code ~= 0 then
       return {}
     end
-    local out = vim.split(result.stdout or "", "\n", { plain = true })
+    local out = vim.split(result.stdout, "\n", { plain = true })
     if out[#out] == "" then
       out[#out] = nil
     end
@@ -287,16 +274,12 @@ function M.pr_target(cwd, cb)
       cb(nil, nil, true)
     end)
   end
-  M.system(
-    { "gh", "pr", "view", "--json", "baseRefName,number,state" },
-    { cwd = cwd, text = true, timeout = 5000 },
-    function(res)
-      local ok, pr = pcall(vim.json.decode, res.stdout or "")
-      local answered = res.code == 0 and ok and type(pr) == "table"
-      local open = answered and pr.state == "OPEN"
-      cb(open and pr.baseRefName or nil, open and pr.number or nil, not answered)
-    end
-  )
+  process.run({ "gh", "pr", "view", "--json", "baseRefName,number,state" }, { cwd = cwd, timeout = 5000 }, function(res)
+    local ok, pr = pcall(vim.json.decode, res.stdout)
+    local answered = res.code == 0 and ok and type(pr) == "table"
+    local open = answered and pr.state == "OPEN"
+    cb(open and pr.baseRefName or nil, open and pr.number or nil, not answered)
+  end)
 end
 
 return M

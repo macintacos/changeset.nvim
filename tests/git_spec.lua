@@ -1,5 +1,6 @@
 local Git = require("changeset.git")
 local Fixture = require("support.git")
+local Notify = require("support.notify")
 local present = require("support.present")
 
 describe("changeset.git", function()
@@ -244,8 +245,25 @@ describe("changeset.git", function()
       return result
     end
 
+    local notes ---@type support.notify.Note[]
+    local restore_notify ---@type fun()
+
     before_each(function()
       Fixture.init_repo("main", tmp)
+      notes, restore_notify = Notify.capture()
+    end)
+
+    after_each(function()
+      restore_notify()
+    end)
+
+    it("reads a command that fails to spawn as no lines", function()
+      assert.same(
+        {},
+        run(function()
+          return Git.lines({ "changeset-no-such-program" })
+        end)
+      )
     end)
 
     it("reads a failed command's lines as none", function()
@@ -284,69 +302,38 @@ describe("changeset.git", function()
       )
     end)
 
-    it("raises an error raised inside fn, with its traceback", function()
-      local ok, err = pcall(Git.async, function()
+    it("reports an error fn raises after a git command, and calls back with nil", function()
+      local result = run(function()
+        Git.lines({ "git", "branch", "--show-current" }, tmp)
         error("measure failed")
-      end, function() end)
-
-      assert.is_false(ok)
-      ---@cast err string
-      assert.matches("measure failed.*stack traceback", err)
-    end)
-  end)
-
-  describe("system", function()
-    it("hands a failed spawn to on_exit on the main loop as a failed result", function()
-      local real = vim.system
-      vim.system = function()
-        error("E2BIG")
-      end
-      local got ---@type vim.SystemCompleted?
-      local fast
-      Git.system({ "git", "status" }, {}, function(result)
-        got, fast = result, vim.in_fast_event()
       end)
-      vim.system = real
-      assert.is_nil(got)
-      vim.wait(1000, function()
-        return got ~= nil
-      end)
-      local result = present(got)
-      assert.equal(-1, result.code)
-      assert.matches("E2BIG", present(result.stderr))
-      assert.is_false(fast)
+
+      assert.is_nil(result)
+      assert.matches(
+        "^Changeset: .*measure failed.*stack traceback",
+        present(Notify.messages(notes, vim.log.levels.ERROR)[1])
+      )
     end)
 
-    it("calls on_exit on the main loop with the process's result", function()
-      local got ---@type vim.SystemCompleted?
-      local fast
-      Git.system({ "git", "--version" }, { text = true }, function(result)
-        got, fast = result, vim.in_fast_event()
+    it("reports an error value fn raises that is not a string, and calls back with nil", function()
+      local result = run(function()
+        Git.lines({ "git", "branch", "--show-current" }, tmp)
+        error({ code = 1 })
       end)
-      vim.wait(5000, function()
-        return got ~= nil
-      end)
-      local result = present(got)
-      assert.equal(0, result.code)
-      assert.matches("^git version", present(result.stdout))
-      assert.is_false(fast)
+
+      assert.is_nil(result)
+      assert.matches("^Changeset: table: .*stack traceback", present(Notify.messages(notes, vim.log.levels.ERROR)[1]))
     end)
   end)
 
   describe("pr_target", function()
     it("answers no PR when gh can't be started", function()
       require("support.gh")
-      local real = vim.system
-      vim.system = function()
-        error("E2BIG")
-      end
       local answered = false
       local target = "unset" ---@type string?
-      local ok = pcall(Git.pr_target, tmp, function(t)
+      require("support.spawns").failing(Git.pr_target, tmp, function(t)
         answered, target = true, t
       end)
-      vim.system = real
-      assert.is_true(ok)
       vim.wait(1000, function()
         return answered
       end)
@@ -441,23 +428,23 @@ describe("changeset.git", function()
   end)
 
   describe("detached", function()
-    local real_systemlist, real_system, spawned
+    local real_systemlist, real_jobstart, spawned
 
     before_each(function()
       spawned = 0
-      real_systemlist, real_system = vim.fn.systemlist, vim.system
+      real_systemlist, real_jobstart = vim.fn.systemlist, vim.fn.jobstart
       vim.fn.systemlist = function(...)
         spawned = spawned + 1
         return real_systemlist(...)
       end
-      vim.system = function(...)
+      vim.fn.jobstart = function(...)
         spawned = spawned + 1
-        return real_system(...)
+        return real_jobstart(...)
       end
     end)
 
     after_each(function()
-      vim.fn.systemlist, vim.system = real_systemlist, real_system
+      vim.fn.systemlist, vim.fn.jobstart = real_systemlist, real_jobstart
     end)
 
     it("is false on a branch", function()

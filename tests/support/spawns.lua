@@ -1,4 +1,5 @@
----Records the processes code starts, to tell what it spawned and whether that blocked Neovim.
+---Records, holds or fails the processes code starts, to tell what it spawned, whether that blocked Neovim, what
+---happens before it runs, and what happens when it can't start.
 
 local M = {}
 
@@ -24,12 +25,12 @@ local function spying(targets, fn)
   return argvs
 end
 
----Runs `fn`, keeping the argv of every process started through `vim.system` or `vim.fn.systemlist`.
+---Runs `fn`, keeping the argv of every process started through `vim.system`, `vim.fn.jobstart` or `vim.fn.systemlist`.
 ---A wait belongs inside `fn`: `check-attr` starts from a scheduled callback, after `build()` returns.
 ---@param fn fun()
 ---@return string[][]
 function M.recording(fn)
-  return spying({ { vim, "system" }, { vim.fn, "systemlist" } }, fn)
+  return spying({ { vim, "system" }, { vim.fn, "jobstart" }, { vim.fn, "systemlist" } }, fn)
 end
 
 ---Runs `fn`, keeping the argv of every process started through `vim.fn.systemlist` or `vim.fn.system`, which block
@@ -38,6 +39,63 @@ end
 ---@return string[][]
 function M.blocking(fn)
   return spying({ { vim.fn, "system" }, { vim.fn, "systemlist" } }, fn)
+end
+
+---The calls `holding` keeps unstarted, and what can be done with them.
+---@class support.spawns.Held
+---@field calls fun()[] Each starts its held call.
+---@field stop fun() Stops holding, starting nothing; safe to call twice.
+---@field release fun() Stops holding, then starts every held call in the order it was held.
+
+---Holds every call to `Process.run` unstarted from now on, letting through those `pass` accepts.
+---@param pass (fun(argv: string[]): boolean)?
+---@return support.spawns.Held
+function M.holding(pass)
+  local Process = require("changeset.process")
+  local real = Process.run
+  local held ---@type support.spawns.Held
+  held = {
+    calls = {},
+    stop = function()
+      Process.run = real
+    end,
+    release = function()
+      held.stop()
+      local calls = held.calls
+      held.calls = {}
+      for _, call in ipairs(calls) do
+        call()
+      end
+    end,
+  }
+  Process.run = function(argv, opts, on_result)
+    if pass and pass(argv) then
+      return real(argv, opts, on_result)
+    end
+    table.insert(held.calls, function()
+      real(argv, opts, on_result)
+    end)
+  end
+  return held
+end
+
+---Run `fn(...)` with every process failing to start, as an argv over the OS's limit does. `vim.fn.jobstart` comes
+---back even when `fn` errors.
+---@generic T
+---@param fn fun(...): T
+---@return T
+---@return any ... Any further values `fn` returns.
+function M.failing(fn, ...)
+  local real = vim.fn.jobstart
+  vim.fn.jobstart = function()
+    error("E2BIG")
+  end
+  local res = vim.F.pack_len(pcall(fn, ...))
+  vim.fn.jobstart = real
+  if not res[1] then
+    error(res[2], 0)
+  end
+  return unpack(res, 2, res.n)
 end
 
 ---Whether `argv` starts `program` with `subcommand`, as `git -C <root> merge-base …` starts git's merge-base.

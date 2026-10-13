@@ -1,6 +1,6 @@
 ---Runs the branch's git diff and parses it into files and hunks, and reads a file's text at the base.
 
-local Git = require("changeset.git")
+local Process = require("changeset.process")
 local sections = require("changeset.sections")
 
 local M = {}
@@ -300,11 +300,11 @@ end
 ---Run every command concurrently and hand all results to `on_done` on the main loop.
 ---@param commands table<string, string[]>
 ---@param cwd string
----@param on_done fun(results: table<string, vim.SystemCompleted>)
+---@param on_done fun(results: table<string, changeset.process.Completed>)
 local function run_all(commands, cwd, on_done)
   local results, pending = {}, vim.tbl_count(commands)
   for name, argv in pairs(commands) do
-    Git.system(argv, { cwd = cwd, text = true }, function(result)
+    Process.run(argv, { cwd = cwd }, function(result)
       results[name] = result
       pending = pending - 1
       if pending == 0 then
@@ -314,20 +314,20 @@ local function run_all(commands, cwd, on_done)
   end
 end
 
----@param results table<string, vim.SystemCompleted>
+---@param results table<string, changeset.process.Completed>
 ---@return string? stderr Of a failed command, if any.
 local function first_failure(results)
   for _, result in pairs(results) do
     if result.code ~= 0 then
-      return vim.trim(result.stderr or "")
+      return vim.trim(result.stderr)
     end
   end
 end
 
----@param result vim.SystemCompleted
+---@param result changeset.process.Completed
 ---@return string[]
 local function stdout_lines(result)
-  return vim.split(result.stdout or "", "\n", { trimempty = true })
+  return vim.split(result.stdout, "\n", { trimempty = true })
 end
 
 ---Line count and content digest per readable file; directories (untracked nested repos) and dangling symlinks are skipped.
@@ -372,12 +372,12 @@ local function generated_paths(files, cwd, on_done)
   local paths = vim.tbl_map(function(file)
     return file.path
   end, files)
-  Git.system(
+  Process.run(
     { "git", "check-attr", "-z", "--stdin", "linguist-generated" },
-    { cwd = cwd, text = true, stdin = table.concat(paths, "\0") },
+    { cwd = cwd, stdin = table.concat(paths, "\0") },
     function(result)
       -- A failed read only costs files their Generated section.
-      local marked = result.code == 0 and M._parse_check_attr(result.stdout or "") or {}
+      local marked = result.code == 0 and M._parse_check_attr(result.stdout) or {}
       for _, file in ipairs(files) do
         if
           file.status ~= "deleted"
@@ -406,10 +406,10 @@ function M.collect(base, cwd, callback)
     end
     local hunks, digests = M._parse_hunks(stdout_lines(results.hunks))
     local untracked, untracked_digests =
-      count_lines(vim.split(results.untracked.stdout or "", "\0", { trimempty = true }), cwd)
+      count_lines(vim.split(results.untracked.stdout, "\0", { trimempty = true }), cwd)
     local files = M._assemble({
-      numstat = M._parse_numstat(results.numstat.stdout or ""),
-      statuses = M._parse_name_status(results.name_status.stdout or ""),
+      numstat = M._parse_numstat(results.numstat.stdout),
+      statuses = M._parse_name_status(results.name_status.stdout),
       hunks = hunks,
       untracked = untracked,
       -- A path is both deleted and untracked after `git rm --cached`; the untracked digest wins so both rows share
@@ -431,7 +431,7 @@ end
 ---@param cwd string
 ---@param callback fun(text: string?)
 function M.blob(object, cwd, callback)
-  Git.system({ "git", "cat-file", "blob", object }, { cwd = cwd, text = true }, function(result)
+  Process.run({ "git", "cat-file", "blob", object }, { cwd = cwd }, function(result)
     callback(result.code == 0 and result.stdout or nil)
   end)
 end

@@ -7,9 +7,9 @@ JSON it reads, and what each one can surprise you with.
 
 ## Calls
 
-Each call runs `herdr` from PATH through `vim.system` with a 5-second timeout. A spawn that
-fails, the binary gone since the check or an argv over the OS limit, counts as a refused
-call.
+Each call runs `herdr` from PATH through `Process.run` with a 5-second timeout. A spawn
+that fails, the binary gone since the check or an argv over the OS limit, counts as a
+refused call.
 
 | Command                                | Reads                                                     |
 | -------------------------------------- | --------------------------------------------------------- |

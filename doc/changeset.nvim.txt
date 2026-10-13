@@ -173,7 +173,8 @@ and changeset warns "no merge base with the default branch". Reopened on a
 tree kept from before, the sidebar shows it at once, then warns and closes
 once it measures the base again and finds none. A commit or rebase that leaves
 none keeps the tree as it was. Changeset measures the base without holding up
-the editor, and the sidebar opens once it has.
+the editor, and the sidebar opens once it has. An error inside changeset while
+it measures the base is reported, then treated as finding no base.
 
 ==============================================================================
 5. Commands                                               *changeset-commands*
