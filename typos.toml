@@ -1,3 +1,7 @@
 [default.extend-words]
 enew = "enew" # :enew
 noet = "noet" # vim modeline: noexpandtab
+
+[files]
+# The demo types misspellings on purpose, then corrects them.
+extend-exclude = ["doc/demo/demo.tape"]

@@ -1,8 +1,8 @@
 # The README demo. From the repository root, render it with `vhs doc/demo/demo.tape`.
 #
-# Records your own Neovim config running this checkout's changeset, on a clone of the
-# private changeset-sandbox repository that doc/demo/demo.sh stages. vhs needs ttyd and
-# ffmpeg on $PATH.
+# Records your own Neovim and herdr configs: a review of the private changeset-sandbox
+# repository, submitted to agent.py, a scripted stand-in for Claude Code, whose edits the
+# sidebar then picks up. doc/demo/demo.sh stages it. vhs needs ttyd and ffmpeg on $PATH.
 
 Output doc/demo/demo.gif
 
@@ -15,7 +15,7 @@ Set Width 1920
 Set Height 1080
 Set Padding 20
 Set Theme { "name": "Van Helsing", "black": "#22212c", "red": "#ff9580", "green": "#8aff80", "yellow": "#ffff80", "blue": "#9580ff", "magenta": "#ff80bf", "cyan": "#80ffea", "white": "#f8f8f2", "brightBlack": "#708ca9", "brightRed": "#ffaa99", "brightGreen": "#a2ff99", "brightYellow": "#ffff99", "brightBlue": "#aa99ff", "brightMagenta": "#ff99cc", "brightCyan": "#99ffee", "brightWhite": "#ffffff", "background": "#0b0d0f", "foreground": "#f8f8f2", "selection": "#34404b", "cursor": "#f8f8f2" }
-Set TypingSpeed 140ms
+Set TypingSpeed 70ms
 Set Framerate 24
 
 # Opening the sidebar once off camera lets the language servers fill in its symbols.
@@ -31,129 +31,179 @@ Type "q"
 Sleep 1s
 Show
 
-Sleep 1.5s
+Sleep 800ms
 Ctrl+G
 Type "g"
-Sleep 2.5s
+Sleep 1.4s
 Type "H"
-Sleep 2s
+Sleep 1.2s
 
 # Marking a file viewed moves on to the next one.
 Type "gg"
-Sleep 400ms
-Type "j"
-Sleep 1.6s
-Type "x"
-Sleep 2.8s
-Type "x"
-Sleep 1.6s
-Type "x"
-Sleep 1s
-Type "l"
-Sleep 1.2s
-Type@220ms "jj"
-Sleep 300ms
-Type "j"
-Sleep 2s
-
-Ctrl+G
-Type "cc"
-Sleep 900ms
-Type@75ms "config.toml adds "
-Type@90ms "`session_cache_size`"
-Sleep 300ms
-Type@65ms ", but this still hard-cod"
-Type@60ms "se"
-Sleep 400ms
-Backspace 2
-Type@80ms "es "
-Type@70ms "128."
-Sleep 500ms
-Type@85ms " Pass it in?"
-Sleep 700ms
-Ctrl+S
-Sleep 1.5s
-
-Type@200ms "jjj"
-Sleep 2.2s
-Enter
-Sleep 1.5s
-
-Type "j"
-Sleep 400ms
-Type "V"
 Sleep 200ms
-Type@180ms "jj"
-Sleep 600ms
+Type "j"
+Sleep 900ms
+Type "x"
+Sleep 1.7s
+Type "x"
+Sleep 800ms
+Type "x"
+Sleep 500ms
+Type "l"
+Sleep 450ms
+Type@65ms "jjj"
+Sleep 1.3s
+
 Ctrl+G
 Type "cc"
-Sleep 900ms
-Type@70ms "Nothing caps the lifetime: "
-Sleep 400ms
-Type@65ms "a client refreshing every few minutes "
-Type@75ms "keeps a session forever."
-Sleep 700ms
+Sleep 500ms
+Type@60ms "config"
+Type@95ms ".toml"
+Sleep 140ms
+Type@50ms " adds "
+Sleep 300ms
+Type@110ms "`"
+Type@55ms "session_cahce"
+Sleep 380ms
+Backspace@110ms 3
+Type@75ms "che_size"
+Type@130ms "`"
+Sleep 200ms
+Type@45ms ", but this"
+Sleep 160ms
+Type@60ms " still "
+Sleep 240ms
+Type@70ms "hard-codes "
+Type@120ms "128"
+Type@40ms "."
+Sleep 750ms
+Type@55ms " Pass it"
+Sleep 120ms
+Type@65ms " in?"
+Sleep 450ms
 Ctrl+S
-Sleep 1.8s
+Sleep 900ms
+
+Type@60ms "jjj"
+Sleep 1.1s
+Enter
+Sleep 800ms
+
+Type "j"
+Sleep 250ms
+Type "V"
+Sleep 150ms
+Type@90ms "jj"
+Sleep 350ms
+Ctrl+G
+Type "cc"
+Sleep 500ms
+Type@55ms "This never "
+Sleep 600ms
+Backspace@35ms 6
+Sleep 250ms
+Type@60ms "can live "
+Sleep 450ms
+Backspace@35ms 14
+Sleep 300ms
+Type@50ms "Nothing caps"
+Sleep 180ms
+Type@70ms " the lifetime"
+Type@100ms ": "
+Sleep 420ms
+Type@55ms "a client"
+Sleep 130ms
+Type@65ms " refreshing evry"
+Sleep 200ms
+Backspace@90ms 2
+Type@60ms "ery few minutes "
+Sleep 260ms
+Type@50ms "keeps a session"
+Sleep 150ms
+Type@75ms " forever."
+Sleep 500ms
+Ctrl+S
+Sleep 1s
 
 # The rest of the file, change by change.
 Ctrl+G
 Type "nn"
-Sleep 1.3s
+Sleep 750ms
 Ctrl+G
 Type "nn"
-Sleep 1.3s
+Sleep 750ms
 Ctrl+G
 Type "nn"
-Sleep 2.5s
+Sleep 1.7s
 
 Ctrl+G
 Type "g"
-Sleep 1s
-Type "]]"
-Sleep 1.2s
-Type@250ms "jj"
 Sleep 600ms
-Type "j"
-Sleep 900ms
+Type "]]"
+Sleep 600ms
+Type@80ms "jjj"
+Sleep 350ms
 Type "l"
-Sleep 2.4s
+Sleep 1.4s
 Ctrl+G
 Type "cc"
-Sleep 900ms
-Type@75ms "Add a revoke case: "
+Sleep 500ms
+Type@55ms "Add a "
+Sleep 150ms
+Type@70ms "revoke case"
+Type@90ms ": "
+Sleep 380ms
+Type@120ms "`get`"
+Sleep 140ms
+Type@50ms " reads the cache"
+Type@65ms " first, "
+Sleep 550ms
+Type@55ms "so check a revoekd"
 Sleep 300ms
-Type@70ms "`get` reads the cache first, "
-Sleep 250ms
-Type@65ms "so check a revoked session stays gone."
-Sleep 700ms
+Backspace@95ms 3
+Type@70ms "ked session"
+Sleep 140ms
+Type@60ms " stays gone."
+Sleep 450ms
 Ctrl+S
-Sleep 1.5s
+Sleep 900ms
 
 Type "f"
-Sleep 600ms
-Type@150ms "toml"
-Sleep 900ms
+Sleep 300ms
+Type@95ms "toml"
+Sleep 500ms
 Enter
-Sleep 2.5s
+Sleep 1.6s
 # The prompt opens holding the current filter; an empty one clears it.
 Type "f"
-Sleep 500ms
+Sleep 250ms
 Ctrl+U
-Sleep 300ms
+Sleep 150ms
 Enter
-Sleep 1.2s
+Sleep 800ms
 
+# Submitting pastes the review into the agent's prompt and focuses its tab.
 Ctrl+G
-Type "cq"
-Sleep 2.5s
-Ctrl+G
-Type "y"
-Sleep 3.5s
+Type "s"
+Sleep 2.2s
+Enter
+Sleep 6.5s
 
-# Quit Neovim so demo.sh's cleanup runs.
+# Back in the review, the agent's edits arrive in the tree and the preview.
+Ctrl+B
+Type "1"
+Sleep 900ms
+Type "gg"
+Sleep 200ms
+Type@70ms "jjjj"
+Sleep 10s
+
+# Quit herdr so demo.sh's cleanup runs.
 Hide
 Escape
 Type ":qa!"
 Enter
 Sleep 1s
+Ctrl+B
+Type "q"
+Sleep 3s

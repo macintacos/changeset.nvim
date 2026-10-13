@@ -3,7 +3,7 @@
 A Neovim sidebar that lists the files your branch changed and, under each one, the
 functions, classes and methods those changes touched.
 
-![Reviewing a branch in the changeset sidebar: previewing its changes, marking files viewed, commenting on lines and copying the review](doc/demo/demo.gif)
+![Reviewing a branch in the changeset sidebar: previewing its changes, marking files viewed and commenting on lines, then handing the review to an AI agent and watching its edits arrive](doc/demo/demo.gif)
 
 - **Compares against the branch you created yours from**, so a stacked branch shows only
   its own changes, with or without a PR.
