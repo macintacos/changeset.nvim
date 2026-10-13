@@ -38,7 +38,7 @@ Each example also installs the optional plugins from the table above. Drop any y
 With `vim.pack`:
 
 ```lua
-vim.pack.add({ "https://github.com/macintacos/changeset.nvim" })
+vim.pack.add({ { src = "https://github.com/macintacos/changeset.nvim", version = vim.version.range("*") } })
 
 -- Optional. Call each one's `setup()` somewhere in your config, such as
 -- `require("gitsigns").setup()`.
@@ -55,6 +55,7 @@ With lazy.nvim:
 ```lua
 {
   "macintacos/changeset.nvim",
+  version = "*",
   dependencies = {
     { "lewis6991/gitsigns.nvim", opts = {} },
     { "nvim-mini/mini.icons", opts = {} },
@@ -63,6 +64,8 @@ With lazy.nvim:
   },
 }
 ```
+
+`version` installs the latest release; drop it to track `main`, which gets unreleased changes.
 
 `setup()` is optional. To change an option, call `require("changeset").setup({ … })`, or add
 `opts = { … }` to the lazy.nvim spec. The plugin loads lazily by itself: at startup it

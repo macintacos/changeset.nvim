@@ -5,7 +5,7 @@ import "package://github.com/jdx/hk/releases/download/v2.3.0/hk@2.3.0#/Builtins.
 // Keep the amends/import version in lockstep with the `hk` version in mise.toml.
 //   mise run format -> the `fix` hook   -> `formatters` (write mode)
 //   mise run lint   -> the `check` hook -> `formatters` + `linters` + `typecheck` (read-only)
-// `pre-commit` runs formatters + linters; `pre-push` runs the type check and test suite.
+// `pre-commit` runs formatters + linters; `pre-push` runs the type checks and tests (Lua, scripts/).
 //
 // Step keys use a uniform `Language(Action)  [[builtins.tool]]` scheme,
 // column-aligned on the bracket tag, so hk's per-run output reads consistently.
@@ -13,6 +13,7 @@ import "package://github.com/jdx/hk/releases/download/v2.3.0/hk@2.3.0#/Builtins.
 // Formatters — rewrite files into canonical form.
 local formatters = new Mapping<String, Step> {
   ["Lua(Format)       [[builtins.stylua]]"] = Builtins.stylua
+  ["Python(Format)    [[builtins.ruff_format]]"] = Builtins.ruff_format
 
   // rumdl owns Markdown — one binary, two builtins: `rumdl fmt` here, `rumdl check`
   // under linters. Config: .rumdl.toml.
@@ -53,6 +54,8 @@ local linters = new Mapping<String, Step> {
     check_diff = "selene --config tests/selene.toml {{ files }}"
   }
 
+  ["Python(Lint)      [[builtins.ruff]]"] = Builtins.ruff
+
   ["Shell(Lint)       [[builtins.shellcheck]]"] = Builtins.shellcheck
 
   // Read-only rumdl. Nulling check_diff means undoing the builtin's check_after_diff, which hk rejects without one.
@@ -79,6 +82,14 @@ local linters = new Mapping<String, Step> {
   ["Git(LargeFile)    [[builtins.check_added_large_files]]"] = Builtins.check_added_large_files
 }
 
+// TY_UV=scripts syncs each PEP 723 script's dependencies through uv, which can fetch, so like
+// emmylua_check it runs from `check` and `pre-push` only. --extra-search-path is the only way ty
+// resolves the test's sibling import: it ignores ty.toml's extra-paths for scripts.
+local pythonTypes: Step = (Builtins.ty) {
+  check = "ty check --extra-search-path scripts {{ files }}"
+  env { ["TY_UV"] = "scripts" }
+}
+
 // emmylua_check checks the whole workspace, so a finding in any file would block every Lua
 // commit, and it first syncs the plugins pinned under .tests/deps, which can fetch. It runs
 // from `check` and `pre-push` only.
@@ -87,6 +98,7 @@ local typecheck = new Mapping<String, Step> {
     glob = List("**/*.lua", ".emmyrc.json", "tests/.emmyrc.json")
     check = "mise run typecheck"
   }
+  ["Python(Types)     [[builtins.ty]]"] = pythonTypes
 }
 
 hooks {
@@ -122,6 +134,11 @@ hooks {
         exclude = List("**/*.md")
         check =
           #"out=$(mise run -q typecheck ::: test 2>&1) || { printf '%s\n' "$out" | grep -v 'Success.*||' >&2; exit 1; }"#
+      }
+      ["Python(Types)     [[builtins.ty]]"] = pythonTypes
+      ["Python(Test)      [[unittest]]"] = new Step {
+        glob = List("scripts/**/*.py")
+        check = "scripts/test_release.py"
       }
     }
   }

@@ -25,6 +25,9 @@ Run specs with `mise run test [spec ...]`, never `:PlenaryBustedFile`. That comm
 no options, so its child Neovim skips `tests/minimal_init.lua` and can load another
 checkout of the plugin: from a worktree, silently the main one.
 
+`scripts/test_release.py` tests the release script's version math and runs directly;
+`mise run test` runs only the Lua specs, while pre-push and CI run both.
+
 Specs sit flat in `tests/`, named `<module>_spec.lua` or for a behaviour
 (`sidebar_spec.lua`). Each spec file runs in its own child Neovim under
 `tests/minimal_init.lua`. It drops your config from `rtp`, gives state and cache temporary
@@ -68,8 +71,8 @@ nil; check a value that can be `false` with `assert.is_truthy`.
 ## Before a PR
 
 Run `mise run preflight` and make it pass. The pre-commit hook formats and lints the staged
-files, and pre-push runs the type check and the suite unless the push changes only Markdown.
-Never bypass them with `--no-verify`.
+files. Pre-push runs the Lua type check and specs unless the push changes only Markdown,
+and ty and `scripts/test_release.py` when it changes a script. Never bypass them with `--no-verify`.
 
 ## Routing
 

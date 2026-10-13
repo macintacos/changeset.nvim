@@ -1,0 +1,13 @@
+line-length    = 90
+target-version = "py312" # ruff ignores PEP 723 requires-python: keep in sync with the scripts' header
+
+[lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "D"]
+
+[lint.pydocstyle]
+convention = "google"
+
+[format]
+quote-style           = "double"
+indent-style          = "space"
+docstring-code-format = true

@@ -20,6 +20,13 @@ tree-sitter = "0.26"
 # Windows one.
 "ubi:EmmyLuaLs/emmylua-analyzer-rust" = { version = "latest", matching = "emmylua_check", exe = "emmylua_check" }
 
+# Python toolchain — runner + formatter/linter + type check (config in ruff.toml).
+# Exact pin: every machine and CI resolve the scripts' environments with the same uv.
+# ty's PEP 723 sync needs 0.12.3+.
+uv   = "0.13.0"
+ruff = "latest"
+ty   = "latest" # TY_UV=scripts needs 0.0.75+
+
 # Exact pin: keep in lockstep with hk.pkl's amends/import version.
 hk = "2.3.0"
 # Runs the Pkl(Format) / Pkl(Lint) steps that lint hk.pkl itself.
