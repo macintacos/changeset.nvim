@@ -863,11 +863,14 @@ statusline can name it, and no write can save it to disk.
                    keys with |changeset-option-review_comment.save|.
   <C-g>cc          Save and close, with the default keys mapped.
   <S-Esc>          Close, keeping the text as a draft, in Insert and
-                   Normal mode. Then select the comment's block while
-                   blocks show.
+                   Normal mode.
   q  <Esc>         The same, in Normal mode. In Insert mode, <Esc>
                    only leaves Insert mode.
   ?                List the window's keys.
+
+While blocks show, closing with these keys, `comment new` or `comment draft`
+(|changeset-window-commands|) selects the comment's block
+(|changeset-blocks|).
 
 Any other way of leaving keeps the text as a draft too: `:q`, `:e!`, focus
 moving to another window, scrolling the comment's line out of view, closing
