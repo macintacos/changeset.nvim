@@ -7,13 +7,20 @@ set -euo pipefail
 rm -rf .tests/luacov
 mkdir -p .tests/luacov
 
+# A spec nvim signalled inside vim.fn.system() hangs in exit teardown, deaf to SIGTERM,
+# and outlives the run. || true: under set -e a no-match would become the exit status.
+trap 'pkill -KILL -g 0 -f "PlenaryBustedDirectory|plenary[.]busted" || true' EXIT
+trap 'exit 1' HUP INT TERM
+
 # LUACOV is set from -c, after init, so only the spec processes, which inherit the
 # environment, start luacov.
 # sequential: every spec merges into one luacov stats file.
+# Backgrounded: bash runs a trap only after its foreground child exits.
 status=0
 nvim --headless --noplugin -u tests/minimal_init.lua \
 	-c "lua vim.env.LUACOV = '1'" \
-	-c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua', sequential = true}" || status=1
+	-c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua', sequential = true}" &
+wait $! || status=1
 
 nvim -l tests/support/coverage.lua
 # The report's Summary table is sized for absolute paths; reprint it repo-relative.
