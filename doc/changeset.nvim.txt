@@ -114,11 +114,19 @@ Each optional integration adds one feature:
 3. Setup                                                     *changeset-setup*
 
 With |vim.pack|: >lua
-    vim.pack.add({ "https://github.com/macintacos/changeset.nvim" })
+    vim.pack.add({
+      {
+        src = "https://github.com/macintacos/changeset.nvim",
+        version = vim.version.range("*"),
+      },
+    })
 <
 With lazy.nvim: >lua
-    { "macintacos/changeset.nvim" }
+    { "macintacos/changeset.nvim", version = "*" }
 <
+`version` installs the latest release; drop it to track `main`, which gets
+unreleased changes.
+
 `setup()` is optional. Without it, changeset runs with the defaults in
 |changeset-options|. With lazy.nvim, `opts = { … }` in the spec calls
 `setup()` for you. The plugin loads its modules only when used, so it needs no
