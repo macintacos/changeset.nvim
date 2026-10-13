@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-#MISE description="Run lint + test before pushing / opening a PR"
-#MISE depends=["lint", "test"]
+#MISE description="Install missing or stale parsers, then run lint + test before pushing / opening a PR"
+#MISE depends=["parsers", "lint", "test"]
 
 set -euo pipefail
 

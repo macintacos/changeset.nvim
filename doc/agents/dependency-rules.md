@@ -13,9 +13,8 @@ To bump a pin:
 
 1. Edit its SHA in `pins`.
 2. Run `mise run deps`.
-3. After bumping `nvim-treesitter`, run `mise run parsers`. It rebuilds every parser whose
-   recorded revision differs from the new pin's.
-4. Run the suite.
+3. Run `mise run preflight`. Before the suite runs, it rebuilds every parser whose recorded
+   revision differs from the `nvim-treesitter` pin.
 
 ## Adding a plugin
 
@@ -41,5 +40,6 @@ compiles them into `.tests/data/nvim/site/parser` with the `nvim-treesitter` pin
 `tree-sitter` CLI that `mise.toml` pins, so it needs a C compiler. The suite reads only
 those parsers, never the ones under your own `stdpath("data")`.
 
-`mise run test` does not depend on `parsers`, so a missing parser fails the suite instead
-of compiling during pre-push.
+`mise run setup` and `mise run preflight` run it first. `mise run test` only waits for it
+when both run together, so a missing parser fails the suite instead of compiling during
+pre-push.
