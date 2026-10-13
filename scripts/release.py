@@ -76,12 +76,12 @@ def latest_tag(tags: Iterable[str]) -> str | None:
     Args:
         tags: Tag names, without the `refs/tags/` prefix.
     """
-    versions = {
+    version_by_tag = {
         tag: semver.Version.parse(tag[1:])
         for tag in tags
         if tag.startswith("v") and semver.Version.is_valid(tag[1:])
     }
-    return max(versions, key=versions.__getitem__, default=None)
+    return max(version_by_tag, key=version_by_tag.__getitem__, default=None)
 
 
 def next_version(previous_tag: str | None, bump: Bump) -> semver.Version:
@@ -199,25 +199,25 @@ class Snapshot:
     ci_run: CiRun | None
 
 
-def require_releasable(snap: Snapshot, tag: str) -> None:
+def require_releasable(snapshot: Snapshot, tag: str) -> None:
     """Refuse unless there are commits, `tag` is free, and CI passed on the SHA.
 
     Args:
-        snap: The snapshot to release.
+        snapshot: The snapshot to release.
         tag: The tag the release would create.
 
     Raises:
         Refusal: When a gate fails.
     """
-    if not snap.commits:
-        raise Refusal(ErrorCode.NO_COMMITS, f"no commits follow {snap.previous_tag}")
-    if tag in snap.remote_tags:
+    if not snapshot.commits:
+        raise Refusal(ErrorCode.NO_COMMITS, f"no commits follow {snapshot.previous_tag}")
+    if tag in snapshot.remote_tags:
         raise Refusal(ErrorCode.TAG_EXISTS, f"{tag} already exists on origin")
-    run = snap.ci_run
+    run = snapshot.ci_run
     if run is None:
         raise Refusal(
             ErrorCode.CI_NO_RUN,
-            f"no {CI_WORKFLOW} push run on {RELEASE_BRANCH} for {snap.sha}",
+            f"no {CI_WORKFLOW} push run on {RELEASE_BRANCH} for {snapshot.sha}",
         )
     if run.status != "completed":
         raise Refusal(ErrorCode.CI_RUNNING, f"CI is {run.status}: {run.url}")
@@ -290,9 +290,9 @@ def read_snapshot() -> Snapshot:
     )
     sha = _run("git", "rev-parse", f"origin/{RELEASE_BRANCH}").strip()
     tags = remote_tags(_run("git", "ls-remote", "--tags", "origin", "refs/tags/v*"))
-    previous = latest_tag(tags)
-    span = f"{tags[previous]}..{sha}" if previous else sha
-    return Snapshot(sha, previous, _log_commits(span), tags, _ci_run(sha))
+    previous_tag = latest_tag(tags)
+    span = f"{tags[previous_tag]}..{sha}" if previous_tag else sha
+    return Snapshot(sha, previous_tag, _log_commits(span), tags, _ci_run(sha))
 
 
 app = App(
@@ -311,17 +311,17 @@ def compute(bump: Bump, /) -> int:
     Args:
         bump: Which component to bump.
     """
-    snap = read_snapshot()
-    version = str(next_version(snap.previous_tag, bump))
+    snapshot = read_snapshot()
+    version = str(next_version(snapshot.previous_tag, bump))
     tag = f"v{version}"
-    require_releasable(snap, tag)
+    require_releasable(snapshot, tag)
     computed = Computed(
         bump=bump,
         version=version,
         tag=tag,
-        sha=snap.sha,
-        previous_tag=snap.previous_tag,
-        commits=snap.commits,
+        sha=snapshot.sha,
+        previous_tag=snapshot.previous_tag,
+        commits=snapshot.commits,
     )
     print(computed.model_dump_json())
     return 0
@@ -342,15 +342,15 @@ def release(*, version: str, sha: str, notes_file: str, yes: bool = False) -> in
     except ValidationError as error:
         raise Refusal(ErrorCode.BAD_INPUT, str(error)) from error
     tag = f"v{inputs.version}"
-    snap = read_snapshot()
-    versions = candidates(snap.previous_tag)
-    if inputs.sha != snap.sha or inputs.version not in versions:
+    snapshot = read_snapshot()
+    allowed_versions = candidates(snapshot.previous_tag)
+    if inputs.sha != snapshot.sha or inputs.version not in allowed_versions:
         raise Refusal(
             ErrorCode.STALE,
-            f"compute now gives {', '.join(sorted(versions))} at {snap.sha}; "
+            f"compute now gives {', '.join(sorted(allowed_versions))} at {snapshot.sha}; "
             "rerun compute",
         )
-    require_releasable(snap, tag)
+    require_releasable(snapshot, tag)
     url = None
     if yes:
         url = _run(
@@ -359,7 +359,7 @@ def release(*, version: str, sha: str, notes_file: str, yes: bool = False) -> in
             "create",
             tag,
             "--target",
-            snap.sha,
+            snapshot.sha,
             "--title",
             tag,
             "--notes-file",
@@ -369,7 +369,7 @@ def release(*, version: str, sha: str, notes_file: str, yes: bool = False) -> in
         dry_run=not yes,
         version=inputs.version,
         tag=tag,
-        sha=snap.sha,
+        sha=snapshot.sha,
         notes_file=inputs.notes_file,
         url=url,
     )

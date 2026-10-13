@@ -103,10 +103,10 @@ class RemoteTagsTest(unittest.TestCase):
 class RequireReleasableTest(unittest.TestCase):
     """require_releasable refuses a snapshot that must not be released."""
 
-    def assert_refuses(self, code: ErrorCode, snap: Snapshot, tag: str = "v0.2.0"):
-        """Assert the gate refuses `snap` with `code`."""
+    def assert_refuses(self, code: ErrorCode, snapshot: Snapshot, tag: str = "v0.2.0"):
+        """Assert the gate refuses `snapshot` with `code`."""
         with self.assertRaises(Refusal) as raised:
-            require_releasable(snap, tag)
+            require_releasable(snapshot, tag)
         self.assertIs(raised.exception.code, code)
 
     def test_passes_with_commits_a_free_tag_and_green_ci(self):
