@@ -1,5 +1,5 @@
----Records or holds the processes code starts, to tell what it spawned, whether that blocked Neovim, and what happens
----before it runs.
+---Records, holds or fails the processes code starts, to tell what it spawned, whether that blocked Neovim, what
+---happens before it runs, and what happens when it can't start.
 
 local M = {}
 
@@ -77,6 +77,25 @@ function M.holding(pass)
     end)
   end
   return held
+end
+
+---Run `fn(...)` with every process failing to start, as an argv over the OS's limit does. `vim.fn.jobstart` comes
+---back even when `fn` errors.
+---@generic T
+---@param fn fun(...): T
+---@return T
+---@return any ... Any further values `fn` returns.
+function M.failing(fn, ...)
+  local real = vim.fn.jobstart
+  vim.fn.jobstart = function()
+    error("E2BIG")
+  end
+  local res = vim.F.pack_len(pcall(fn, ...))
+  vim.fn.jobstart = real
+  if not res[1] then
+    error(res[2], 0)
+  end
+  return unpack(res, 2, res.n)
 end
 
 ---Whether `argv` starts `program` with `subcommand`, as `git -C <root> merge-base …` starts git's merge-base.

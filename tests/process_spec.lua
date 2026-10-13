@@ -37,16 +37,11 @@ describe("changeset.process", function()
     end)
 
     it("hands a failed spawn to its callback on the main loop as a failed result", function()
-      local real = vim.fn.jobstart
-      vim.fn.jobstart = function()
-        error("E2BIG")
-      end
       local got ---@type changeset.process.Completed?
       local fast
-      Process.run({ "git", "status" }, {}, function(result)
+      require("support.spawns").failing(Process.run, { "git", "status" }, {}, function(result)
         got, fast = result, vim.in_fast_event()
       end)
-      vim.fn.jobstart = real
       assert.is_nil(got)
       vim.wait(1000, function()
         return got ~= nil

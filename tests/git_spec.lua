@@ -329,17 +329,11 @@ describe("changeset.git", function()
   describe("pr_target", function()
     it("answers no PR when gh can't be started", function()
       require("support.gh")
-      local real = vim.fn.jobstart
-      vim.fn.jobstart = function()
-        error("E2BIG")
-      end
       local answered = false
       local target = "unset" ---@type string?
-      local ok = pcall(Git.pr_target, tmp, function(t)
+      require("support.spawns").failing(Git.pr_target, tmp, function(t)
         answered, target = true, t
       end)
-      vim.fn.jobstart = real
-      assert.is_true(ok)
       vim.wait(1000, function()
         return answered
       end)
