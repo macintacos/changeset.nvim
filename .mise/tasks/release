@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Cut a release: compute <bump>, then release (drive via /release-changeset)"
+#MISE raw_args=true
+
+set -euo pipefail
+
+exec scripts/release.py "$@"

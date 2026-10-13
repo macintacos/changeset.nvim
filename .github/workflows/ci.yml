@@ -1,3 +1,4 @@
+# scripts/release.py's CI gate finds this workflow by its name and its `push` runs on main.
 name: CI
 on:
   push:
@@ -23,3 +24,4 @@ jobs:
           persist-credentials: false
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
       - run: mise run parsers && mise run test
+      - run: scripts/test_release.py

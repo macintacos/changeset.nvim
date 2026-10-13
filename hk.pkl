@@ -136,6 +136,10 @@ hooks {
           #"out=$(mise run -q typecheck ::: test 2>&1) || { printf '%s\n' "$out" | grep -v 'Success.*||' >&2; exit 1; }"#
       }
       ["Python(Types)     [[builtins.ty]]"] = pythonTypes
+      ["Python(Test)      [[unittest]]"] = new Step {
+        glob = List("scripts/**/*.py")
+        check = "scripts/test_release.py"
+      }
     }
   }
 }
