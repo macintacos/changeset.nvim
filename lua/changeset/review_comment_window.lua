@@ -34,7 +34,7 @@ end
 ---@field close_desc string The `desc` of the keys that close without saving, which `?` lists.
 ---@field save fun(body: string, done: fun(err: string?)) Called with the buffer's lines joined by "\n", never only whitespace; the window closes once `done` gets no error.
 ---@field keep fun(body: string, draft: true?) Called with the buffer's lines joined by "\n", empty included, whenever the buffer goes (a close, an :e in the float, quitting) except after a taken save; `draft` is true after the window's `draft()`, to keep the text as a draft even when unchanged.
----@field back fun() Called once a key that closes without saving has closed it, after `keep`.
+---@field land fun() Called once a save, a draft or a key that closes without saving has closed it, after `keep`.
 ---@field blank fun(window: changeset.ReviewCommentWindow)? Called, the window still open, on a save of blank text; without it, the window closes, handing the text to `keep`.
 ---@field body string? The text it opens with.
 ---@field comment changeset.ReviewComment The comment it is about, as `current` reports it and its buffer is named; a new one's body is "".
@@ -471,7 +471,7 @@ function M.open(opts)
         return resume_typing()
       end
       saved = true
-      close()
+      close(opts.land)
     end)
   end
 
@@ -482,7 +482,7 @@ function M.open(opts)
     map(lhs, save, opts.save_desc)
   end
   local function back()
-    close(opts.back)
+    close(opts.land)
   end
   local back_typed = LEAVE_INSERT .. ("<Cmd>lua require('changeset.review_comment_window').back(%d)<CR>"):format(win)
   vim.keymap.set("i", "<S-Esc>", back_typed, { buffer = buf, desc = opts.close_desc })
@@ -536,7 +536,7 @@ function M.open(opts)
     end,
     draft = function()
       drafting = true
-      close()
+      close(opts.land)
     end,
     resume = resume_typing,
     hold = function(opens)

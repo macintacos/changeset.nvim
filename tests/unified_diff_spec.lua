@@ -441,7 +441,7 @@ describe("changeset.unified_diff", function()
         keys = { "<C-s>" },
         save = function() end,
         keep = function() end,
-        back = function() end,
+        land = function() end,
         comment = { path = "a.txt", line = 1, body = "" },
       })
       vim.cmd.redraw()

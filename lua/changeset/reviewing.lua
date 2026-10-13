@@ -197,7 +197,7 @@ local function open_window(repository, comment, opts)
     save = function(body, done)
       done(keep(repository, with_body(comment, body)))
     end,
-    back = function()
+    land = function()
       review_comment_blocks.select(comment)
     end,
   })

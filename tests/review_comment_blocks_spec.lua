@@ -168,7 +168,7 @@ describe("review comment blocks", function()
       keys = { "<C-s>" },
       save = function() end,
       keep = function() end,
-      back = function() end,
+      land = function() end,
       comment = { path = "alpha.txt", line = 10, body = "" },
     })
     local width = vim.api.nvim_win_get_width(win)
@@ -475,6 +475,42 @@ describe("review comment blocks", function()
       end))
     end)
   end
+
+  for _, case in ipairs({
+    { keys = "<C-s>", draft = false },
+    { keys = "<Esc><C-s>", draft = false },
+    { keys = "<Esc>:lua require('changeset.review_comment_window').current().draft()<CR>", draft = true },
+  }) do
+    local keys, draft = case.keys, case.draft
+    it(("parks on the comment's own block when %s ends its window"):format(keys), function()
+      keep({ path = "alpha.txt", start_line = 2, line = 3, body = "range" })
+      keep({ path = "alpha.txt", line = 3, body = "short" })
+      local alpha = vim.api.nvim_get_current_buf()
+      go(3)
+      press("jj<CR>")
+
+      press("A more" .. keys)
+      vim.wait(1000, function()
+        return parked() ~= nil
+      end)
+      assert.are.equal(alpha, vim.api.nvim_get_current_buf())
+      assert.are.same({ 3, "short" }, { parked() })
+      assert.truthy(vim.iter(comment_store.list(Paths.root(0))):find(function(comment)
+        return comment.body == "short more" and (comment.draft or false) == draft
+      end))
+    end)
+  end
+
+  it("parks on a new comment's block once it is saved", function()
+    go(3)
+    press(":lua require('changeset.reviewing').comment_here()<CR>")
+
+    press("Afresh<C-s>")
+    vim.wait(1000, function()
+      return parked() ~= nil
+    end)
+    assert.are.same({ 3, "fresh" }, { parked() })
+  end)
 
   describe("stepping up onto a wrapped line", function()
     before_each(function()
