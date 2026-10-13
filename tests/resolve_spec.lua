@@ -966,4 +966,103 @@ describe("changeset.resolve", function()
       assert.same({}, got)
     end)
   end)
+
+  describe("start, on a file changed outside Neovim", function()
+    local root ---@type string
+
+    before_each(function()
+      root = vim.fn.tempname()
+      vim.fn.mkdir(root, "p")
+      vim.fn.writefile({ "local one" }, root .. "/mod.lua")
+    end)
+
+    after_each(function()
+      for _, client in ipairs(vim.lsp.get_clients()) do
+        client:stop(true)
+      end
+      vim.lsp.enable("texts", false)
+      vim.cmd("silent! %bwipeout!")
+      vim.fn.delete(root, "rf")
+    end)
+
+    ---Enable an in-process server whose one symbol is named after the last word of the first line it holds.
+    ---@param keeps_reopened boolean Keeps its text through a reopen at a version it has had, as vtsls does.
+    local function enable(keeps_reopened)
+      vim.lsp.config("texts", {
+        filetypes = { "lua" },
+        root_dir = root,
+        cmd = function(dispatchers)
+          local text, version, id = "", -1, 0
+          return {
+            request = function(method, _, callback)
+              id = id + 1
+              vim.schedule(function()
+                if method == "initialize" then
+                  local sync = { openClose = true, change = 1 }
+                  callback(nil, { capabilities = { documentSymbolProvider = true, textDocumentSync = sync } })
+                elseif method == "textDocument/documentSymbol" then
+                  local range = { start = { line = 0, character = 0 }, ["end"] = { line = 0, character = 1 } }
+                  callback(nil, { { name = text:match("(%w+)\n"), kind = 12, range = range, selectionRange = range } })
+                else
+                  callback(nil, nil)
+                end
+              end)
+              return true, id
+            end,
+            notify = function(method, params)
+              local document = params and params.textDocument
+              if method == "textDocument/didOpen" and not (keeps_reopened and document.version <= version) then
+                text, version = document.text, document.version
+              elseif method == "textDocument/didChange" then
+                text, version = params.contentChanges[1].text, document.version
+              elseif method == "exit" then
+                dispatchers.on_exit(0, 15)
+              end
+              return true
+            end,
+            is_closing = function()
+              return false
+            end,
+            terminate = function()
+              dispatchers.on_exit(0, 15)
+            end,
+          }
+        end,
+      })
+      vim.lsp.enable("texts")
+    end
+
+    ---The name of the one symbol a walk over the file reports.
+    ---@return string
+    local function read()
+      local report ---@type { items: changeset.Symbol[]? }?
+      resolve.start({ root = root, base = "HEAD" }, { new_file({ path = "mod.lua" }) }, function(_, items)
+        report = { items = items }
+      end)
+      assert.is_true(vim.wait(3000, function()
+        return report ~= nil
+      end, 20))
+      return present(present(present(report).items)[1]).name
+    end
+
+    it("reads a file no window shows as it now stands on disk", function()
+      enable(false)
+      assert.are.equal("one", read())
+
+      vim.fn.writefile({ "local three" }, root .. "/mod.lua")
+
+      assert.are.equal("three", read())
+    end)
+
+    it("hands a reloaded file's text to a server that keeps a reopened file's", function()
+      vim.cmd("runtime plugin/changeset.lua")
+      enable(true)
+      assert.are.equal("one", read())
+
+      vim.fn.writefile({ "local three" }, root .. "/mod.lua")
+      vim.cmd.checktime(vim.fn.bufnr(root .. "/mod.lua"))
+
+      assert.are.equal("three", read())
+    end)
+  end)
 end)

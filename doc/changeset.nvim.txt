@@ -90,7 +90,9 @@ Each optional integration adds one feature:
   waits up to 2 seconds for a server enabled for the file's filetype to
   attach, and up to 10 seconds for its answer; one slower than that is asked
   again on the next refresh. With two such servers, the first that lists any
-  symbols is shown, else the first that answers without an error.
+  symbols is shown, else the first that answers without an error. When a file
+  is reloaded after changing outside Neovim, changeset sends these servers its
+  new text again: some, vtsls among them, would keep answering for the old.
 - Treesitter parsers: comment-only changes move to the Docs section, for any
   language whose parser is installed. The `rust`, `typescript` and `tsx`
   parsers also find tests by their syntax (|changeset-sections|).

@@ -1700,6 +1700,14 @@ repository's deliberate choice is none of that save's business.
   it wrong — across restarts, until the file next moves. A file no server answers for,
   with unwritten edits in its buffer, has its comment lines left out the same way until it
   is written.
+- **A file is read as it stands on disk, from a server that has its text.** `:checktime`
+  passes over buffers no window shows, so a file the walk loaded keeps its old text after an
+  outside edit, and its symbols would be filed under the new stamp; reading it reloads it
+  first, unless unwritten edits or 'noautoread' would make the reload ask. A reload reopens
+  the file with each server at the version Neovim last sent, which only an edit made in
+  Neovim moves, and vtsls keeps its text for a reopen at a version it has seen. So every
+  reload sends the symbol servers the whole text under its current version, from startup
+  on, since a stale server answers the first build as wrongly as any later one.
 - **No answer is remembered, but only in memory.** A file no server answers for — `go.sum`,
   a `Makefile` — is not asked about again on every refresh, each of which would wait out
   the attach timeout under a `reading symbols` row, and every write refreshes the tree.

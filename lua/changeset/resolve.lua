@@ -212,6 +212,11 @@ local function resolve_one(repo, file, on_done)
       if not vim.api.nvim_buf_is_valid(bufnr) then
         return on_done(nil)
       end
+      -- `:checktime` passes over a buffer no window shows, so one loaded only to be read keeps its file's old text. With
+      -- unwritten edits or 'noautoread' a reload would ask first, which a read never may.
+      if not vim.bo[bufnr].modified and vim.fn.getbufvar(bufnr, "&autoread") == 1 then
+        pcall(vim.cmd.checktime, bufnr)
+      end
       -- One snapshot for both readers: symbol lines and comment lines have to agree, and an
       -- unwritten edit would move either away from the file on disk. The server is asked now,
       -- not once the parse ends, for the same reason: it reads the buffer as it stands.
@@ -288,6 +293,27 @@ function M._walk(queue, run, on_file)
 
   return function()
     cancelled = true
+  end
+end
+
+local LINE_ENDINGS = { unix = "\n", dos = "\r\n", mac = "\r" }
+
+---Hand the servers that list `bufnr`'s symbols its whole text again, under its current version. A reload reopens the
+---file at the version Neovim last sent, which only an edit made in Neovim moves, and vtsls keeps the text it had for a
+---reopen at a version it has seen, answering for it until the next edit.
+---@param bufnr integer
+function M.resync(bufnr)
+  local ending = LINE_ENDINGS[vim.bo[bufnr].fileformat] or "\n"
+  local text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), ending)
+  local params = {
+    textDocument = { uri = vim.uri_from_bufnr(bufnr), version = vim.b[bufnr].changedtick },
+    contentChanges = { { text = vim.bo[bufnr].eol and text .. ending or text } },
+  }
+  local none = vim.lsp.protocol.TextDocumentSyncKind.None
+  for _, client in ipairs(vim.lsp.get_clients({ bufnr = bufnr, method = "textDocument/documentSymbol" })) do
+    if (vim.tbl_get(client, "server_capabilities", "textDocumentSync", "change") or none) ~= none then
+      client:notify("textDocument/didChange", params)
+    end
   end
 end
 

@@ -496,6 +496,16 @@ vim.api.nvim_create_autocmd("SessionLoadPost", {
   end,
 })
 
+-- Fires: a buffer reloaded after its file changed outside Neovim, from startup on, since a server left answering for
+-- the old text answers the tree's first build as wrongly as any later one.
+vim.api.nvim_create_autocmd("FileChangedShellPost", {
+  group = group,
+  desc = "changeset: hand the symbol servers a reloaded file's new text",
+  callback = function(args)
+    require("changeset.resolve").resync(args.buf)
+  end,
+})
+
 local function register_picker()
   local pick = MiniPick
   if pick then
