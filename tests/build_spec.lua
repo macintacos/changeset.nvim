@@ -229,22 +229,28 @@ describe("changeset.build", function()
   end)
 
   describe("while gh is slow to answer", function()
-    before_each(function()
-      vim.env.FAKE_GH_DELAY = "1"
-    end)
+    local held ---@type support.spawns.Held?
 
     after_each(function()
-      vim.env.FAKE_GH_DELAY = nil
+      if held then
+        held.stop()
+        held = nil
+      end
     end)
 
     it("asks gh once when HEAD's fork point moves before it answers no PR", function()
       local argvs = recording(function()
+        -- Held until HEAD's fork point has moved, however long moving it takes under load.
+        held = spawns.holding(function(argv)
+          return not runs(argv, "gh")
+        end)
         build_and_collect()
         Fixture.git({ "checkout", "-q", "trunk" }, tmp)
         Fixture.git({ "commit", "-q", "--allow-empty", "-m", "trunk work" }, tmp)
         Fixture.git({ "checkout", "-q", "feature" }, tmp)
         Fixture.git({ "rebase", "-q", "trunk" }, tmp)
         build_and_collect()
+        present(held).release()
         -- Long enough for the first answer to land and anything it starts to ask gh again.
         vim.wait(3000, function()
           return false
