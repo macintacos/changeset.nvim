@@ -797,21 +797,23 @@ describe("changeset.diff.collect", function()
 
   it("calls back when the repository vanishes before the generated-file read", function()
     local base = seed_edited_file(tmp)
-    local system = vim.system
+    local jobstart = vim.fn.jobstart
     local check_attr_ran = false
-    vim.system = function(argv, ...)
-      if vim.tbl_contains(argv, "check-attr") then
+    vim.fn.jobstart = function(argv, ...)
+      if
+        vim.tbl_contains(argv --[[@as string[] ]], "check-attr")
+      then
         check_attr_ran = true
         vim.fn.delete(tmp, "rf")
       end
-      return system(argv, ...)
+      return jobstart(argv, ...)
     end
     local files ---@type changeset.File[]?
     local err
     local ok, raised = pcall(function()
       files, err = await_collect(base, tmp)
     end)
-    vim.system = system
+    vim.fn.jobstart = jobstart
     ---@cast raised string?
     assert.is_true(ok, raised)
     assert.is_true(check_attr_ran)
@@ -822,7 +824,7 @@ describe("changeset.diff.collect", function()
   end)
 
   it("reports a missing repository as an error", function()
-    assert.matches("ENOENT", present((select(2, await_collect("HEAD", tmp .. "/gone")))))
+    assert.matches("expected valid directory", present((select(2, await_collect("HEAD", tmp .. "/gone")))))
   end)
 end)
 

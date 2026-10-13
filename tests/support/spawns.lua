@@ -40,6 +40,44 @@ function M.blocking(fn)
   return spying({ { vim.fn, "system" }, { vim.fn, "systemlist" } }, fn)
 end
 
+---The calls `holding` keeps unstarted, and what can be done with them.
+---@class changeset.test.Held
+---@field calls fun()[] Each starts its held call.
+---@field stop fun() Stops holding, starting nothing; safe to call twice.
+---@field release fun() Stops holding, then starts every held call in the order it was held.
+
+---Holds every call to `Git.system` unstarted from now on, letting through those `pass` accepts.
+---@param pass (fun(argv: string[]): boolean)?
+---@return changeset.test.Held
+function M.holding(pass)
+  local Git = require("changeset.git")
+  local real = Git.system
+  local held ---@type changeset.test.Held
+  held = {
+    calls = {},
+    stop = function()
+      Git.system = real
+    end,
+    release = function()
+      held.stop()
+      local calls = held.calls
+      held.calls = {}
+      for _, call in ipairs(calls) do
+        call()
+      end
+    end,
+  }
+  Git.system = function(argv, opts, on_result)
+    if pass and pass(argv) then
+      return real(argv, opts, on_result)
+    end
+    table.insert(held.calls, function()
+      real(argv, opts, on_result)
+    end)
+  end
+  return held
+end
+
 ---Whether `argv` starts `program` with `subcommand`, as `git -C <root> merge-base …` starts git's merge-base.
 ---@param argv string[]
 ---@param program string

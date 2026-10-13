@@ -267,7 +267,7 @@ describe("changeset.git", function()
       end)
 
       assert.same({ "main" }, lines)
-      assert.equals(0, calls)
+      assert.equal(0, calls)
     end)
 
     it("reads a command that fails to spawn as no lines", function()
@@ -328,6 +328,7 @@ describe("changeset.git", function()
         present(Notify.messages(notes, vim.log.levels.ERROR)[1])
       )
     end)
+
     it("reports an error value fn raises that is not a string, and calls back with nil", function()
       local notes = Notify.capture()
       local result = run(function()
@@ -341,17 +342,32 @@ describe("changeset.git", function()
   end)
 
   describe("system", function()
-    it("hands a failed spawn to on_exit on the main loop as a failed result", function()
-      local real = vim.system
-      vim.system = function()
+    ---Run `argv` through `Git.system`, waiting for its result.
+    ---@param argv string[]
+    ---@param opts changeset.git.SystemOpts
+    ---@return changeset.git.Completed
+    local function run(argv, opts)
+      local got ---@type changeset.git.Completed?
+      Git.system(argv, opts, function(result)
+        got = result
+      end)
+      assert.is_true(vim.wait(5000, function()
+        return got ~= nil
+      end, 10))
+      return present(got)
+    end
+
+    it("hands a failed spawn to its callback on the main loop as a failed result", function()
+      local real = vim.fn.jobstart
+      vim.fn.jobstart = function()
         error("E2BIG")
       end
-      local got ---@type vim.SystemCompleted?
+      local got ---@type changeset.git.Completed?
       local fast
       Git.system({ "git", "status" }, {}, function(result)
         got, fast = result, vim.in_fast_event()
       end)
-      vim.system = real
+      vim.fn.jobstart = real
       assert.is_nil(got)
       vim.wait(1000, function()
         return got ~= nil
@@ -362,10 +378,10 @@ describe("changeset.git", function()
       assert.is_false(fast)
     end)
 
-    it("calls on_exit on the main loop with the process's result", function()
-      local got ---@type vim.SystemCompleted?
+    it("calls back on the main loop with the process's result", function()
+      local got ---@type changeset.git.Completed?
       local fast
-      Git.system({ "git", "--version" }, { text = true }, function(result)
+      Git.system({ "git", "--version" }, {}, function(result)
         got, fast = result, vim.in_fast_event()
       end)
       vim.wait(5000, function()
@@ -376,13 +392,37 @@ describe("changeset.git", function()
       assert.matches("^git version", present(result.stdout))
       assert.is_false(fast)
     end)
+
+    it("keeps NUL bytes in stdout", function()
+      assert.equal("a\0b\n", run({ "printf", "a\\0b\\n" }, {}).stdout)
+    end)
+
+    it("reads CRLF output as LF", function()
+      assert.equal("a\nb\n", run({ "printf", "a\\r\\nb\\r\\n" }, {}).stdout)
+    end)
+
+    it("writes stdin to the process with its NUL bytes", function()
+      assert.equal("x\0y\nz", run({ "cat" }, { stdin = "x\0y\nz" }).stdout)
+    end)
+
+    it("captures a failing command's stderr", function()
+      local result = run({ "sh", "-c", "echo oops >&2; exit 3" }, {})
+      assert.equal(3, result.code)
+      assert.equal("oops\n", result.stderr)
+    end)
+
+    it("stops a command that outlives its timeout and reports code 124", function()
+      local start = vim.uv.now()
+      assert.equal(124, run({ "sleep", "5" }, { timeout = 50 }).code)
+      assert.is_true(vim.uv.now() - start < 2000)
+    end)
   end)
 
   describe("pr_target", function()
     it("answers no PR when gh can't be started", function()
       require("support.gh")
-      local real = vim.system
-      vim.system = function()
+      local real = vim.fn.jobstart
+      vim.fn.jobstart = function()
         error("E2BIG")
       end
       local answered = false
@@ -390,7 +430,7 @@ describe("changeset.git", function()
       local ok = pcall(Git.pr_target, tmp, function(t)
         answered, target = true, t
       end)
-      vim.system = real
+      vim.fn.jobstart = real
       assert.is_true(ok)
       vim.wait(1000, function()
         return answered
@@ -486,23 +526,23 @@ describe("changeset.git", function()
   end)
 
   describe("detached", function()
-    local real_systemlist, real_system, spawned
+    local real_systemlist, real_jobstart, spawned
 
     before_each(function()
       spawned = 0
-      real_systemlist, real_system = vim.fn.systemlist, vim.system
+      real_systemlist, real_jobstart = vim.fn.systemlist, vim.fn.jobstart
       vim.fn.systemlist = function(...)
         spawned = spawned + 1
         return real_systemlist(...)
       end
-      vim.system = function(...)
+      vim.fn.jobstart = function(...)
         spawned = spawned + 1
-        return real_system(...)
+        return real_jobstart(...)
       end
     end)
 
     after_each(function()
-      vim.fn.systemlist, vim.system = real_systemlist, real_system
+      vim.fn.systemlist, vim.fn.jobstart = real_systemlist, real_jobstart
     end)
 
     it("is false on a branch", function()

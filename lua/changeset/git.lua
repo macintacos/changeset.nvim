@@ -1,20 +1,79 @@
 ---The git and gh queries that pick the branch changeset diffs against, HEAD read off git's own files, and the process
----runner gh's query, the diff and herdr share.
+---runner that starts every process changeset runs, async git included.
 local M = {}
 
----`vim.system`, calling `on_exit` on the main loop. A failed spawn — a repository removed under a pending
----refresh, a binary gone since its executable check, an argv over the OS's limit — reaches `on_exit` as a failed
----result instead of raising.
+---What `system` hands `argv` and how long it lets it run.
+---@class changeset.git.SystemOpts
+---@field cwd string?
+---@field stdin string?
+---@field timeout integer? Milliseconds.
+
+---What a command `system` started exited with and printed.
+---@class changeset.git.Completed
+---@field code integer -1 when it could not start; 124 when it ran out of time.
+---@field stdout string
+---@field stderr string
+
+---A buffered `jobstart` stream's bytes: its list carries each NUL as "\n" inside an item. CRLF reads as LF.
+---@param data string[]
+---@return string
+local function joined(data)
+  return (
+    table
+      .concat(
+        vim.tbl_map(function(item)
+          return (item:gsub("\n", "\0"))
+        end, data),
+        "\n"
+      )
+      :gsub("\r\n", "\n")
+  )
+end
+
+---Start `argv` through `jobstart`, whose spawn blocks Neovim a fraction as long as `vim.system`'s, calling
+---`on_result` on the main loop. Start it on the main loop: in a fast event `jobstart` can't spawn, and the command
+---reads as failed. A failed spawn — a repository removed under a pending refresh, a binary gone since its executable
+---check, an argv over the OS's limit — reaches `on_result` as a failed result instead of raising.
 ---@param argv string[]
----@param opts vim.SystemOpts
----@param on_exit fun(result: vim.SystemCompleted)
-function M.system(argv, opts, on_exit)
-  local ok, err = pcall(vim.system, argv, opts, vim.schedule_wrap(on_exit))
-  if not ok then
-    local result = { code = -1, signal = 0, stdout = "", stderr = tostring(err) }
+---@param opts changeset.git.SystemOpts
+---@param on_result fun(result: changeset.git.Completed)
+function M.system(argv, opts, on_result)
+  local stdout, stderr = {}, {} ---@type string[], string[]
+  local exited, timed_out = false, false
+  local ok, job = pcall(vim.fn.jobstart, argv, {
+    cwd = opts.cwd,
+    stdin = opts.stdin and "pipe" or "null",
+    stdout_buffered = true,
+    stderr_buffered = true,
+    on_stdout = function(_, data)
+      stdout = data
+    end,
+    on_stderr = function(_, data)
+      stderr = data
+    end,
+    on_exit = function(_, code)
+      exited = true
+      on_result({ code = timed_out and 124 or code, stdout = joined(stdout), stderr = joined(stderr) })
+    end,
+  })
+  if not ok or job <= 0 then
+    local reason = ok and ("could not start " .. argv[1]) or tostring(job)
     vim.schedule(function()
-      on_exit(result)
+      on_result({ code = -1, stdout = "", stderr = reason })
     end)
+    return
+  end
+  if opts.stdin then
+    vim.fn.chansend(job, opts.stdin)
+    vim.fn.chanclose(job, "stdin")
+  end
+  if opts.timeout then
+    vim.defer_fn(function()
+      if not exited then
+        timed_out = true
+        vim.fn.jobstop(job)
+      end
+    end, opts.timeout)
   end
 end
 
@@ -92,41 +151,13 @@ end
 ---@type table<thread, true>
 local async_threads = setmetatable({}, { __mode = "k" })
 
----What a command `async` spawned exited with and printed.
----@class changeset.git.Spawned
----@field code integer -1 when it could not start.
----@field stdout string
-
----Start `argv` through `jobstart`, whose spawn blocks Neovim a fraction as long as `vim.system`'s, calling `on_exit`
----on the main loop. A failed spawn reaches `on_exit` as a failed result instead of raising.
----@param argv string[]
----@param on_exit fun(result: changeset.git.Spawned)
-local function spawn(argv, on_exit)
-  local lines = {} ---@type string[]
-  local ok, job = pcall(vim.fn.jobstart, argv, {
-    stdin = "null",
-    stdout_buffered = true,
-    on_stdout = function(_, data)
-      lines = data
-    end,
-    on_exit = function(_, code)
-      on_exit({ code = code, stdout = table.concat(lines, "\n") })
-    end,
-  })
-  if not ok or job <= 0 then
-    vim.schedule(function()
-      on_exit({ code = -1, stdout = "" })
-    end)
-  end
-end
-
 ---In a coroutine `async` runs, `args`' result, waited for without blocking Neovim; nil elsewhere.
 ---@param args string[]
----@return changeset.git.Spawned?
+---@return changeset.git.Completed?
 local function await(args)
   local co = coroutine.running()
   if co and async_threads[co] then
-    return (coroutine.yield --[[@as fun(args: string[]): changeset.git.Spawned]])(args)
+    return (coroutine.yield --[[@as fun(args: string[]): changeset.git.Completed]])(args)
   end
 end
 
@@ -148,7 +179,7 @@ function M.async(fn, on_done)
     if coroutine.status(co) == "dead" then
       return on_done(value)
     end
-    spawn(value, step)
+    M.system(value, {}, step)
   end
   step()
 end
@@ -167,7 +198,7 @@ function M.lines(args, cwd)
     if result.code ~= 0 then
       return {}
     end
-    local out = vim.split(result.stdout or "", "\n", { plain = true })
+    local out = vim.split(result.stdout, "\n", { plain = true })
     if out[#out] == "" then
       out[#out] = nil
     end
@@ -317,16 +348,12 @@ function M.pr_target(cwd, cb)
       cb(nil, nil, true)
     end)
   end
-  M.system(
-    { "gh", "pr", "view", "--json", "baseRefName,number,state" },
-    { cwd = cwd, text = true, timeout = 5000 },
-    function(res)
-      local ok, pr = pcall(vim.json.decode, res.stdout or "")
-      local answered = res.code == 0 and ok and type(pr) == "table"
-      local open = answered and pr.state == "OPEN"
-      cb(open and pr.baseRefName or nil, open and pr.number or nil, not answered)
-    end
-  )
+  M.system({ "gh", "pr", "view", "--json", "baseRefName,number,state" }, { cwd = cwd, timeout = 5000 }, function(res)
+    local ok, pr = pcall(vim.json.decode, res.stdout)
+    local answered = res.code == 0 and ok and type(pr) == "table"
+    local open = answered and pr.state == "OPEN"
+    cb(open and pr.baseRefName or nil, open and pr.number or nil, not answered)
+  end)
 end
 
 return M

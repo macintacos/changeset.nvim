@@ -294,12 +294,12 @@ describe("changeset.herdr", function()
   end)
 
   it("refuses when herdr can't be started", function()
-    local system = vim.system
-    vim.system = function()
+    local jobstart = vim.fn.jobstart
+    vim.fn.jobstart = function()
       error("E2BIG")
     end
     local err, _, called = send("hi")
-    vim.system = system
+    vim.fn.jobstart = jobstart
     assert.is_true(called)
     assert.truthy(err)
   end)

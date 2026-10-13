@@ -329,23 +329,18 @@ describe("fork_point", function()
       measures = measures + 1
       return real_get_async(...)
     end
-    local real_jobstart, held = vim.fn.jobstart, {}
-    vim.fn.jobstart = function(argv, opts)
-      held[#held + 1] = { argv, opts }
-      return 1
-    end
+    local held = spawns.holding(function(argv)
+      return spawns.runs(argv, "gh")
+    end)
     local done = false
     fork_point.get_async(root, "feature", function()
       done = true
     end)
     fork_point.recheck(root, "feature")
     local answered = vim.wait(5000, function()
-      return asks == 2 and #held > 1
+      return asks == 2 and #held.calls > 1
     end, 10)
-    vim.fn.jobstart = real_jobstart
-    for _, process in ipairs(held) do
-      real_jobstart(unpack(process))
-    end
+    held.release()
     assert.is_true(answered)
 
     assert.is_true(vim.wait(5000, function()
@@ -368,14 +363,9 @@ describe("fork_point", function()
       end)
     end
     get(root, "feature")
-    local real_jobstart, held = vim.fn.jobstart, {}
-    vim.fn.jobstart = function(argv, opts)
-      if answered then
-        return real_jobstart(argv, opts)
-      end
-      held[#held + 1] = { argv, opts }
-      return 1
-    end
+    local held = spawns.holding(function(argv)
+      return answered or spawns.runs(argv, "gh")
+    end)
     local point ---@type changeset.ForkPoint?
     fork_point.get_async(root, "feature", function(landed)
       point = landed
@@ -383,10 +373,7 @@ describe("fork_point", function()
     local done = vim.wait(5000, function()
       return answered
     end, 10)
-    vim.fn.jobstart = real_jobstart
-    for _, process in ipairs(held) do
-      real_jobstart(unpack(process))
-    end
+    held.release()
     assert.is_true(done)
 
     assert.is_true(vim.wait(5000, function()
