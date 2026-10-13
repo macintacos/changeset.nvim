@@ -3,3 +3,6 @@
 	email = test@example.com
 [commit]
 	gpgsign = false
+[maintenance]
+	# Each commit would start it detached, and its lock file can vanish mid-copy of a fixture repo.
+	auto = false
