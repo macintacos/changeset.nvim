@@ -346,7 +346,7 @@ describe("changeset tree", function()
         end
       end
 
-      ---Hold every `Git.system` process unstarted, and count the git processes Neovim waits on.
+      ---Hold every `Process.run` process unstarted, and count the git processes Neovim waits on.
       local function hold()
         held, waited = spawns.holding(), 0
         vim.fn.systemlist = function(...)

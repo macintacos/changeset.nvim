@@ -47,17 +47,17 @@ end
 ---@field stop fun() Stops holding, starting nothing; safe to call twice.
 ---@field release fun() Stops holding, then starts every held call in the order it was held.
 
----Holds every call to `Git.system` unstarted from now on, letting through those `pass` accepts.
+---Holds every call to `Process.run` unstarted from now on, letting through those `pass` accepts.
 ---@param pass (fun(argv: string[]): boolean)?
 ---@return support.spawns.Held
 function M.holding(pass)
-  local Git = require("changeset.git")
-  local real = Git.system
+  local Process = require("changeset.process")
+  local real = Process.run
   local held ---@type support.spawns.Held
   held = {
     calls = {},
     stop = function()
-      Git.system = real
+      Process.run = real
     end,
     release = function()
       held.stop()
@@ -68,7 +68,7 @@ function M.holding(pass)
       end
     end,
   }
-  Git.system = function(argv, opts, on_result)
+  Process.run = function(argv, opts, on_result)
     if pass and pass(argv) then
       return real(argv, opts, on_result)
     end

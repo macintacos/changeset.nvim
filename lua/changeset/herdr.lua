@@ -3,6 +3,7 @@ local comment_store = require("changeset.comment_store")
 local dialog = require("changeset.dialog")
 local git = require("changeset.git")
 local highlights = require("changeset.highlights")
+local process = require("changeset.process")
 
 local M = {}
 
@@ -186,7 +187,7 @@ end
 ---@param args string[]
 ---@param cb fun(result: table?, code: string?)
 local function herdr(args, cb)
-  git.system(vim.list_extend({ "herdr" }, args), { timeout = TIMEOUT }, function(res)
+  process.run(vim.list_extend({ "herdr" }, args), { timeout = TIMEOUT }, function(res)
     if res.code ~= 0 then
       local ok, env = pcall(vim.json.decode, res.stderr)
       cb(nil, ok and type(env) == "table" and type(env.error) == "table" and env.error.code or "")

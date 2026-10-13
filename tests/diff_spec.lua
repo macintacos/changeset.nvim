@@ -2,7 +2,7 @@ local diff = require("changeset.diff")
 local Fixture = require("support.git")
 local present = require("support.present")
 local spawns = require("support.spawns")
-local Git = require("changeset.git")
+local Process = require("changeset.process")
 
 -- Real `git diff --numstat -M -z <base>` output. A rename's two paths follow an empty path field;
 -- binary files report `-` for both counts.
@@ -799,9 +799,9 @@ describe("changeset.diff.collect", function()
 
   it("calls back when the repository vanishes before the generated-file read", function()
     local base = seed_edited_file(tmp)
-    local real = Git.system
+    local real = Process.run
     local check_attr_ran = false
-    Git.system = function(argv, ...)
+    Process.run = function(argv, ...)
       if spawns.runs(argv, "git", "check-attr") then
         check_attr_ran = true
         vim.fn.delete(tmp, "rf")
@@ -813,7 +813,7 @@ describe("changeset.diff.collect", function()
     local ok, raised = pcall(function()
       files, err = await_collect(base, tmp)
     end)
-    Git.system = real
+    Process.run = real
     ---@cast raised string?
     assert.is_true(ok, raised)
     assert.is_true(check_attr_ran)

@@ -1,6 +1,6 @@
 ---Runs the branch's git diff and parses it into files and hunks, and reads a file's text at the base.
 
-local Git = require("changeset.git")
+local Process = require("changeset.process")
 local sections = require("changeset.sections")
 
 local M = {}
@@ -300,11 +300,11 @@ end
 ---Run every command concurrently and hand all results to `on_done` on the main loop.
 ---@param commands table<string, string[]>
 ---@param cwd string
----@param on_done fun(results: table<string, changeset.git.Completed>)
+---@param on_done fun(results: table<string, changeset.process.Completed>)
 local function run_all(commands, cwd, on_done)
   local results, pending = {}, vim.tbl_count(commands)
   for name, argv in pairs(commands) do
-    Git.system(argv, { cwd = cwd }, function(result)
+    Process.run(argv, { cwd = cwd }, function(result)
       results[name] = result
       pending = pending - 1
       if pending == 0 then
@@ -314,7 +314,7 @@ local function run_all(commands, cwd, on_done)
   end
 end
 
----@param results table<string, changeset.git.Completed>
+---@param results table<string, changeset.process.Completed>
 ---@return string? stderr Of a failed command, if any.
 local function first_failure(results)
   for _, result in pairs(results) do
@@ -324,7 +324,7 @@ local function first_failure(results)
   end
 end
 
----@param result changeset.git.Completed
+---@param result changeset.process.Completed
 ---@return string[]
 local function stdout_lines(result)
   return vim.split(result.stdout, "\n", { trimempty = true })
@@ -372,7 +372,7 @@ local function generated_paths(files, cwd, on_done)
   local paths = vim.tbl_map(function(file)
     return file.path
   end, files)
-  Git.system(
+  Process.run(
     { "git", "check-attr", "-z", "--stdin", "linguist-generated" },
     { cwd = cwd, stdin = table.concat(paths, "\0") },
     function(result)
@@ -431,7 +431,7 @@ end
 ---@param cwd string
 ---@param callback fun(text: string?)
 function M.blob(object, cwd, callback)
-  Git.system({ "git", "cat-file", "blob", object }, { cwd = cwd }, function(result)
+  Process.run({ "git", "cat-file", "blob", object }, { cwd = cwd }, function(result)
     callback(result.code == 0 and result.stdout or nil)
   end)
 end
