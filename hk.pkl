@@ -5,7 +5,7 @@ import "package://github.com/jdx/hk/releases/download/v2.3.0/hk@2.3.0#/Builtins.
 // Keep the amends/import version in lockstep with the `hk` version in mise.toml.
 //   mise run format -> the `fix` hook   -> `formatters` (write mode)
 //   mise run lint   -> the `check` hook -> `formatters` + `linters` + `typecheck` (read-only)
-// `pre-commit` runs formatters + linters; `pre-push` runs the type check and test suite.
+// `pre-commit` runs formatters + linters; `pre-push` runs the type checks and tests (Lua, scripts/).
 //
 // Step keys use a uniform `Language(Action)  [[builtins.tool]]` scheme,
 // column-aligned on the bracket tag, so hk's per-run output reads consistently.

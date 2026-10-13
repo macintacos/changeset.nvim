@@ -4,4 +4,6 @@
 
 set -euo pipefail
 
+scripts/test_release.py
+
 echo "preflight: lint + test passed"

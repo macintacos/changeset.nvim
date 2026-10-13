@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Cut a release: compute <bump>, then release (drive via /release-changeset)"
 #MISE raw_args=true
+# raw_args: so --help and --version reach the script instead of mise.
 
 set -euo pipefail
 

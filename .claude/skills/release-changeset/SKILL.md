@@ -9,6 +9,8 @@ argument-hint: "[patch|minor|major] [dry run]"
 `mise run release` runs `scripts/release.py`, which owns the version math, the gates, and
 the one `gh release create` call. You own only the release notes and one confirmation.
 Every call prints one JSON object on stdout; parse it, never scrape it.
+A non-zero exit, or stdout that does not parse as JSON, also means stop: show stderr and
+change nothing.
 
 1. The arguments are a bump level and an optional "dry run". With no bump, ask for one
    with `AskUserQuestion`: patch, minor or major.
@@ -31,7 +33,7 @@ Every call prints one JSON object on stdout; parse it, never scrape it.
 5. Otherwise, ask one `AskUserQuestion`. The question names the version, the tag and the
    short SHA. The options are Release and Cancel, and the Release option's `preview`
    holds the full notes verbatim. Edits come back as a free-text answer: revise the notes
-   file and ask again.
+   file and ask again. If the user cancels, stop.
 6. Run the same `release` call with `--yes`. On `ok: false`, stop and show `message`. On
    success, report the Release URL.
 
