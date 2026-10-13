@@ -75,6 +75,7 @@ end
 describe("fork_point", function()
   local real_pr_target, asks
   local roots = {}
+  local held_gh ---@type support.spawns.Held?
 
   before_each(function()
     asks = 0
@@ -86,9 +87,12 @@ describe("fork_point", function()
   end)
 
   after_each(function()
+    if held_gh then
+      held_gh.stop()
+      held_gh = nil
+    end
     Git.pr_target = real_pr_target
     vim.env.FAKE_GH_PR = nil
-    vim.env.FAKE_GH_DELAY = nil
     for _, root in ipairs(roots) do
       vim.fn.delete(root, "rf")
     end
@@ -310,7 +314,6 @@ describe("fork_point", function()
     local root = repo()
     get(root, "feature")
     assert.is_true(await_heard(root, 1))
-    vim.env.FAKE_GH_DELAY = "0.3"
 
     fork_point.recheck(root, "feature")
     fork_point.recheck(root, "feature")
@@ -352,7 +355,6 @@ describe("fork_point", function()
 
   it("measures again in the background when gh names a target while it measures", function()
     vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "parent", number = 7 })
-    vim.env.FAKE_GH_DELAY = "0.5"
     local root, _, parent_base = repo()
     local answered = false
     local pr_target = Git.pr_target
@@ -434,13 +436,17 @@ describe("fork_point", function()
   end)
 
   it("asks gh once while an answer is in flight, and again after an answer of no PR", function()
-    vim.env.FAKE_GH_DELAY = "0.2"
     local root = repo()
+    -- Held until the second measure has landed, however long measuring takes under load.
+    held_gh = spawns.holding(function(argv)
+      return not spawns.runs(argv, "gh")
+    end)
 
     get(root, "feature")
     get(root, "feature")
     assert.equal(1, asks)
 
+    present(held_gh).release()
     assert.is_true(await_heard(root, 1))
     get(root, "feature")
     assert.equal(2, asks)

@@ -607,11 +607,17 @@ describe("changeset.build", function()
   end)
 
   describe("once gh names a PR onto the branch already compared against", function()
+    local held ---@type support.spawns.Held?
+
     before_each(function()
       vim.env.FAKE_GH_PR = gh.pr_view({ baseRefName = "trunk", number = 7 })
     end)
 
     after_each(function()
+      if held then
+        held.stop()
+        held = nil
+      end
       vim.env.FAKE_GH_PR = nil
     end)
 
@@ -626,18 +632,21 @@ describe("changeset.build", function()
     end)
 
     it("hears the PR while the current buffer is outside the tree's repository", function()
-      vim.env.FAKE_GH_DELAY = "1"
       local elsewhere = vim.fn.tempname()
       vim.fn.mkdir(elsewhere, "p")
+      -- Held until the current buffer has left the tree's repository.
+      held = spawns.holding(function(argv)
+        return not runs(argv, "gh")
+      end)
       build_and_collect()
       vim.fn.chdir(elsewhere)
       vim.cmd("enew")
       vim.bo.buftype = "nofile"
+      present(held).release()
 
       local heard = vim.wait(5000, function()
         return vim.list_contains(events, "pr")
       end, 25)
-      vim.env.FAKE_GH_DELAY = nil
       vim.fn.delete(elsewhere, "rf")
       assert.is_true(heard)
       assert.equal(7, present(build.current()).pr)
@@ -694,6 +703,7 @@ describe("changeset.build on a branch measured against its PR's target", functio
   local previous_dir ---@type string
   local source ---@type support.symbols.Source
   local parent_base ---@type string
+  local held ---@type support.spawns.Held?
 
   ---@param name string
   ---@return string
@@ -730,8 +740,11 @@ describe("changeset.build on a branch measured against its PR's target", functio
   end)
 
   after_each(function()
+    if held then
+      held.stop()
+      held = nil
+    end
     vim.env.FAKE_GH_PR = nil
-    vim.env.FAKE_GH_DELAY = nil
     source.restore()
     vim.cmd("silent! %bwipeout!")
     vim.fn.chdir(previous_dir)
@@ -741,11 +754,16 @@ describe("changeset.build on a branch measured against its PR's target", functio
   it("keeps the tree on the PR's target across a commit", function()
     build_on_pr()
     local kept = present(build.current())
-    vim.env.FAKE_GH_DELAY = "0.5"
-    commit_file("more.txt")
+    -- Held, so the re-measure lands while gh is still being asked again.
+    held = spawns.holding(function(argv)
+      return not runs(argv, "gh")
+    end)
+    local head = commit_file("more.txt")
 
     build.update()
-    vim.wait(400)
+    assert.is_true(vim.wait(5000, function()
+      return (build.current() or {}).head == head
+    end, 10))
 
     assert.equal(kept, build.current())
     assert.equal(parent_base, kept.base)
@@ -769,14 +787,22 @@ describe("changeset.build on a branch measured against its PR's target", functio
 
   it("measures against the PR's target at once when switching back to the branch", function()
     build_on_pr()
+    -- Held, so the switch back can measure only from the target gh named before.
+    held = spawns.holding(function(argv)
+      return not runs(argv, "gh")
+    end)
     Fixture.git({ "switch", "-q", "parent" }, root)
     build.update()
-    vim.env.FAKE_GH_DELAY = "0.5"
+    assert.is_true(vim.wait(5000, function()
+      return (build.current() or {}).branch == "parent"
+    end, 10))
     Fixture.git({ "switch", "-q", "feature" }, root)
 
     build.update()
+    assert.is_true(vim.wait(5000, function()
+      return (build.current() or {}).branch == "feature"
+    end, 10))
 
-    assert.equal("feature", present(build.current()).branch)
     assert.equal(parent_base, present(build.current()).base)
   end)
 

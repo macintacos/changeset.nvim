@@ -1,13 +1,12 @@
----A fake `gh` on PATH, so no spec asks GitHub about its fixture branch: it prints
----$FAKE_GH_PR after $FAKE_GH_DELAY seconds, and fails as if there were no PR when
----that is empty. Each call appends a line to $FAKE_GH_LOG when that is set. Requiring it is what installs it; PATH is never restored, since
----each spec runs in its own nvim. `without` hides it, for a case where gh is not installed.
+---A fake `gh` on PATH, so no spec asks GitHub about its fixture branch: it prints $FAKE_GH_PR, and fails as if there
+---were no PR when that is empty. Each call appends a line to $FAKE_GH_LOG when that is set. Requiring it is what
+---installs it; PATH is never restored, since each spec runs in its own nvim. `without` hides it, for a case where gh is
+---not installed.
 local bin = vim.fn.tempname()
 vim.fn.mkdir(bin, "p")
 vim.fn.writefile({
   "#!/bin/sh",
   '[ -z "$FAKE_GH_LOG" ] || echo "$*" >> "$FAKE_GH_LOG"',
-  'sleep "${FAKE_GH_DELAY:-0}"',
   '[ -n "$FAKE_GH_PR" ] || exit 1',
   'printf "%s" "$FAKE_GH_PR"',
 }, bin .. "/gh")
