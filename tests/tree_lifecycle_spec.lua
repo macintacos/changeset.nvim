@@ -335,7 +335,7 @@ describe("changeset tree", function()
 
     describe("reopened on a kept tree", function()
       local real_systemlist ---@type function
-      local held ---@type changeset.test.Held?
+      local held ---@type support.spawns.Held?
       local waited
 
       ---Put back every spawner `hold` replaced.
@@ -357,12 +357,12 @@ describe("changeset tree", function()
 
       ---Start every held process, now.
       local function release()
-        vim.fn.systemlist = real_systemlist
+        unhold()
         present(held).release()
       end
 
       before_each(function()
-        real_systemlist = vim.fn.systemlist
+        real_systemlist, held = vim.fn.systemlist, nil
         Build.build()
         assert.is_true(wait_for_file("mod.lua"))
       end)

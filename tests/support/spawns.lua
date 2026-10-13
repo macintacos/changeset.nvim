@@ -1,4 +1,5 @@
----Records the processes code starts, to tell what it spawned and whether that blocked Neovim.
+---Records or holds the processes code starts, to tell what it spawned, whether that blocked Neovim, and what happens
+---before it runs.
 
 local M = {}
 
@@ -41,18 +42,18 @@ function M.blocking(fn)
 end
 
 ---The calls `holding` keeps unstarted, and what can be done with them.
----@class changeset.test.Held
+---@class support.spawns.Held
 ---@field calls fun()[] Each starts its held call.
 ---@field stop fun() Stops holding, starting nothing; safe to call twice.
 ---@field release fun() Stops holding, then starts every held call in the order it was held.
 
 ---Holds every call to `Git.system` unstarted from now on, letting through those `pass` accepts.
 ---@param pass (fun(argv: string[]): boolean)?
----@return changeset.test.Held
+---@return support.spawns.Held
 function M.holding(pass)
   local Git = require("changeset.git")
   local real = Git.system
-  local held ---@type changeset.test.Held
+  local held ---@type support.spawns.Held
   held = {
     calls = {},
     stop = function()

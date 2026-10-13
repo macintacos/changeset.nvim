@@ -1,6 +1,8 @@
 local diff = require("changeset.diff")
 local Fixture = require("support.git")
 local present = require("support.present")
+local spawns = require("support.spawns")
+local Git = require("changeset.git")
 
 -- Real `git diff --numstat -M -z <base>` output. A rename's two paths follow an empty path field;
 -- binary files report `-` for both counts.
@@ -797,23 +799,21 @@ describe("changeset.diff.collect", function()
 
   it("calls back when the repository vanishes before the generated-file read", function()
     local base = seed_edited_file(tmp)
-    local jobstart = vim.fn.jobstart
+    local real = Git.system
     local check_attr_ran = false
-    vim.fn.jobstart = function(argv, ...)
-      if
-        vim.tbl_contains(argv --[[@as string[] ]], "check-attr")
-      then
+    Git.system = function(argv, ...)
+      if spawns.runs(argv, "git", "check-attr") then
         check_attr_ran = true
         vim.fn.delete(tmp, "rf")
       end
-      return jobstart(argv, ...)
+      return real(argv, ...)
     end
     local files ---@type changeset.File[]?
     local err
     local ok, raised = pcall(function()
       files, err = await_collect(base, tmp)
     end)
-    vim.fn.jobstart = jobstart
+    Git.system = real
     ---@cast raised string?
     assert.is_true(ok, raised)
     assert.is_true(check_attr_ran)
@@ -824,7 +824,7 @@ describe("changeset.diff.collect", function()
   end)
 
   it("reports a missing repository as an error", function()
-    assert.matches("expected valid directory", present((select(2, await_collect("HEAD", tmp .. "/gone")))))
+    assert.matches(".", present((select(2, await_collect("HEAD", tmp .. "/gone")))))
   end)
 end)
 

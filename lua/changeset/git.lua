@@ -1,33 +1,31 @@
 ---The git and gh queries that pick the branch changeset diffs against, HEAD read off git's own files, and the process
----runner that starts every process changeset runs, async git included.
+---runner that starts every process changeset doesn't wait on, async git's included.
 local M = {}
 
 ---What `system` hands `argv` and how long it lets it run.
 ---@class changeset.git.SystemOpts
 ---@field cwd string?
----@field stdin string?
+---@field stdin string? Written to the process, then closed; without it, the process's stdin is null.
 ---@field timeout integer? Milliseconds.
 
 ---What a command `system` started exited with and printed.
 ---@class changeset.git.Completed
 ---@field code integer -1 when it could not start; 124 when it ran out of time.
 ---@field stdout string
----@field stderr string
+---@field stderr string What it printed to stderr; the reason when it could not start.
 
----A buffered `jobstart` stream's bytes: its list carries each NUL as "\n" inside an item. CRLF reads as LF.
+---A buffered `jobstart` stream's bytes, taking over `data`: its list carries each NUL as "\n" inside an item. CRLF
+---reads as LF, so a CRLF file's base text shows and parses without a "\r" on every line.
 ---@param data string[]
 ---@return string
 local function joined(data)
-  return (
-    table
-      .concat(
-        vim.tbl_map(function(item)
-          return (item:gsub("\n", "\0"))
-        end, data),
-        "\n"
-      )
-      :gsub("\r\n", "\n")
-  )
+  for i, item in ipairs(data) do
+    if item:find("\n", 1, true) then
+      data[i] = item:gsub("\n", "\0")
+    end
+  end
+  local text = table.concat(data, "\n")
+  return text:find("\r\n", 1, true) and (text:gsub("\r\n", "\n")) or text
 end
 
 ---Start `argv` through `jobstart`, whose spawn blocks Neovim a fraction as long as `vim.system`'s, calling
@@ -39,7 +37,7 @@ end
 ---@param on_result fun(result: changeset.git.Completed)
 function M.system(argv, opts, on_result)
   local stdout, stderr = {}, {} ---@type string[], string[]
-  local exited, timed_out = false, false
+  local timed_out = false
   local ok, job = pcall(vim.fn.jobstart, argv, {
     cwd = opts.cwd,
     stdin = opts.stdin and "pipe" or "null",
@@ -52,7 +50,6 @@ function M.system(argv, opts, on_result)
       stderr = data
     end,
     on_exit = function(_, code)
-      exited = true
       on_result({ code = timed_out and 124 or code, stdout = joined(stdout), stderr = joined(stderr) })
     end,
   })
@@ -69,10 +66,7 @@ function M.system(argv, opts, on_result)
   end
   if opts.timeout then
     vim.defer_fn(function()
-      if not exited then
-        timed_out = true
-        vim.fn.jobstop(job)
-      end
+      timed_out = vim.fn.jobstop(job) == 1
     end, opts.timeout)
   end
 end
@@ -163,7 +157,7 @@ end
 
 ---Run `fn` with every git command `lines` and `is_ancestor` start inside it spawned without blocking Neovim, then
 ---call `on_done` on the main loop with what `fn` returns, or with nil after reporting the error `fn` raised. Start it
----on the main loop: in a fast event `jobstart` can't spawn, and the command reads as failed.
+---on the main loop, as `system` needs.
 ---@generic T
 ---@param fn fun(): T
 ---@param on_done fun(result: T?)

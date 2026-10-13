@@ -245,29 +245,16 @@ describe("changeset.git", function()
       return result
     end
 
-    local real_system, real_notify = vim.system, vim.notify
+    local notes ---@type support.notify.Note[]
+    local restore_notify ---@type fun()
 
     before_each(function()
       Fixture.init_repo("main", tmp)
+      notes, restore_notify = Notify.capture()
     end)
 
-    -- A failing `run` raises before a spec could restore its stubs.
     after_each(function()
-      vim.system, vim.notify = real_system, real_notify
-    end)
-
-    it("spawns its git commands without vim.system, whose spawn blocks Neovim longer", function()
-      local calls = 0
-      vim.system = function(...)
-        calls = calls + 1
-        return real_system(...)
-      end
-      local lines = run(function()
-        return Git.lines({ "git", "branch", "--show-current" }, tmp)
-      end)
-
-      assert.same({ "main" }, lines)
-      assert.equal(0, calls)
+      restore_notify()
     end)
 
     it("reads a command that fails to spawn as no lines", function()
@@ -316,7 +303,6 @@ describe("changeset.git", function()
     end)
 
     it("reports an error fn raises after a git command, and calls back with nil", function()
-      local notes = Notify.capture()
       local result = run(function()
         Git.lines({ "git", "branch", "--show-current" }, tmp)
         error("measure failed")
@@ -330,7 +316,6 @@ describe("changeset.git", function()
     end)
 
     it("reports an error value fn raises that is not a string, and calls back with nil", function()
-      local notes = Notify.capture()
       local result = run(function()
         Git.lines({ "git", "branch", "--show-current" }, tmp)
         error({ code = 1 })
@@ -356,6 +341,24 @@ describe("changeset.git", function()
       end, 10))
       return present(got)
     end
+
+    local real_system = vim.system
+
+    -- A failing `run` raises before a spec could restore its stub.
+    after_each(function()
+      vim.system = real_system
+    end)
+
+    it("starts its process without vim.system, whose spawn blocks Neovim longer", function()
+      local calls = 0
+      vim.system = function(...)
+        calls = calls + 1
+        return real_system(...)
+      end
+
+      assert.equal(0, run({ "git", "--version" }, {}).code)
+      assert.equal(0, calls)
+    end)
 
     it("hands a failed spawn to its callback on the main loop as a failed result", function()
       local real = vim.fn.jobstart
@@ -415,6 +418,27 @@ describe("changeset.git", function()
       local start = vim.uv.now()
       assert.equal(124, run({ "sleep", "5" }, { timeout = 50 }).code)
       assert.is_true(vim.uv.now() - start < 2000)
+    end)
+
+    it("reports the exit code of a command that exits as its timeout fires", function()
+      local real_jobstart, real_defer = vim.fn.jobstart, vim.defer_fn
+      local timeout ---@type fun()?
+      vim.defer_fn = function(fn)
+        timeout = fn
+        return present(vim.uv.new_timer())
+      end
+      vim.fn.jobstart = function(argv, opts)
+        local on_exit = present(opts).on_exit
+        present(opts).on_exit = function(...)
+          present(timeout)()
+          return on_exit(...)
+        end
+        return real_jobstart(argv, opts)
+      end
+      local ok, result = pcall(run, { "true" }, { timeout = 5000 })
+      vim.fn.jobstart, vim.defer_fn = real_jobstart, real_defer
+      assert.is_true(ok, tostring(result))
+      assert.equal(0, result.code)
     end)
   end)
 
