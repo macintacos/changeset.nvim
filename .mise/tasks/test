@@ -15,9 +15,15 @@ set -euo pipefail
 # on a loaded machine.
 specs=("$@")
 (($#)) || specs=(tests/)
+# A spec nvim signalled inside vim.fn.system() hangs in exit teardown, deaf to SIGTERM,
+# and outlives the run. || true: under set -e a no-match would become the exit status.
+trap 'pkill -KILL -g 0 -f "PlenaryBustedDirectory|plenary[.]busted" || true' EXIT
+trap 'exit 1' HUP INT TERM
 status=0
 for spec in "${specs[@]}"; do
+	# Backgrounded: bash runs a trap only after its foreground child exits.
 	nvim --headless --noplugin -u tests/minimal_init.lua \
-		-c "PlenaryBustedDirectory $spec {minimal_init = 'tests/minimal_init.lua', timeout = 120000}" || status=1
+		-c "PlenaryBustedDirectory $spec {minimal_init = 'tests/minimal_init.lua', timeout = 120000}" &
+	wait $! || status=1
 done
 exit "$status"
