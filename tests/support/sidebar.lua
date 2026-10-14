@@ -161,10 +161,11 @@ function M.point_through_maps(text)
   error("no sidebar line contains " .. text)
 end
 
----Click the first sidebar line containing `text`. A UI-less Neovim takes no mouse input, so this presses the button
----where `getmousepos` says, answering as a terminal would for a click there.
+---Press `key`, a mouse button, on the first sidebar line containing `text`. A UI-less Neovim takes no mouse input, so
+---this presses it where `getmousepos` says, answering as a terminal would for a press there.
 ---@param text string
-function M.click(text)
+---@param key string
+local function press(text, key)
   local win = present(window.win())
   for lnum, line in ipairs(M.lines()) do
     local col = line:find(text, 1, true)
@@ -173,7 +174,7 @@ function M.click(text)
       vim.fn.getmousepos = function()
         return { winid = win, line = lnum, column = col }
       end
-      local ok, err = pcall(vim.api.nvim_feedkeys, vim.keycode("<LeftMouse>"), "x", false)
+      local ok, err = pcall(vim.api.nvim_feedkeys, vim.keycode(key), "x", false)
       vim.fn.getmousepos = getmousepos
       ---@cast err string?
       assert.is_true(ok, err)
@@ -182,6 +183,19 @@ function M.click(text)
     end
   end
   error("no sidebar line contains " .. text)
+end
+
+---Click the first sidebar line containing `text`.
+---@param text string
+function M.click(text)
+  press(text, "<LeftMouse>")
+end
+
+---Double-click the first sidebar line containing `text`: a click, then the press Neovim counts as the second.
+---@param text string
+function M.double_click(text)
+  M.click(text)
+  press(text, "<2-LeftMouse>")
 end
 
 ---The text of the line the sidebar's cursor is on.

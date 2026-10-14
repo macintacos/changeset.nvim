@@ -82,6 +82,39 @@ describe("changeset sidebar focus", function()
     assert.truthy((Sidebar.cursor_line():find("other.lua", 1, true)))
   end)
 
+  it("opens the row double-clicked from another window, as <CR> on it would", function()
+    vim.cmd.edit("mod.lua")
+    vim.api.nvim_win_set_cursor(0, { 8, 0 })
+    local file_win = vim.api.nvim_get_current_win()
+    changeset.open()
+    Sidebar.settle()
+
+    Sidebar.double_click("other.lua")
+
+    assert.equal(file_win, vim.api.nvim_get_current_win())
+    assert.equal("other.lua", vim.fs.basename(vim.api.nvim_buf_get_name(0)))
+    assert.are.same({ 3, 0 }, vim.api.nvim_win_get_cursor(0))
+  end)
+
+  it("stays in the sidebar on a double-click on its status line", function()
+    changeset.open()
+    Sidebar.settle()
+    local win = present(window.win())
+    vim.api.nvim_set_current_win(win)
+    local getmousepos = vim.fn.getmousepos
+    vim.fn.getmousepos = function()
+      return { winid = win, line = 0, column = 0 }
+    end
+    -- A map's error is reported, not raised, from fed keys.
+    vim.v.errmsg = ""
+
+    vim.api.nvim_feedkeys(vim.keycode("<2-LeftMouse>"), "x", false)
+    vim.fn.getmousepos = getmousepos
+
+    assert.equal("", vim.v.errmsg)
+    assert.equal(win, vim.api.nvim_get_current_win())
+  end)
+
   it("keeps the cursor on a landed row that you expand", function()
     vim.cmd.edit("mod.lua")
     vim.api.nvim_win_set_cursor(0, { 8, 0 })

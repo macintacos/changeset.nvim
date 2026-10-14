@@ -404,6 +404,14 @@ function M.set_keymaps(buf, keys, hooks)
   map(keys.jump, function()
     jump("reuse", hooks)
   end, "Go to this change")
+  -- From another window, the first click only focused the sidebar, leaving its cursor off the row clicked.
+  map(keys.jump and "<2-LeftMouse>", function()
+    local pos = vim.fn.getmousepos()
+    if pos.winid == window.win() and pos.line > 0 then
+      move(pos.line)
+      jump("reuse", hooks)
+    end
+  end, "Go to the change double-clicked")
   -- The commit leaves the cursor in the window it jumped to, and `close` keeps
   -- focus where it already is, so the sidebar goes without taking the jump back.
   map(keys.jump_close, function()
