@@ -606,12 +606,15 @@ Each key is a `keymaps` option (|changeset-option-keymaps|); set one to
 any other motion move and preview, and `/` searches the tree.
 
 <CR>                                                  *changeset-sidebar-<CR>*
+<2-LeftMouse>                                *changeset-sidebar-<2-LeftMouse>*
 keymaps.jump                                   *changeset-option-keymaps.jump*
 	Open the row in the window you were last in and focus it, at the row's
 	line. A file row opens at its first change. On a Comments row, then
 	open the review comment to edit; a whole file's comment opens under
 	the row without opening the file. On a section header it does nothing,
 	and on a deleted file it says the file was deleted.
+	A double-click on a row opens it the same way, from another window
+	too. Setting this key to `false` unbinds the double-click with it.
 
 <S-CR>                                              *changeset-sidebar-<S-CR>*
 keymaps.jump_close                       *changeset-option-keymaps.jump_close*

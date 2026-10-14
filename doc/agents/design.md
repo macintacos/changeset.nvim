@@ -309,7 +309,8 @@ row, and previews it the way moving onto it would. A click from another window o
 focuses, landing there too rather than on the row clicked, which would take your row's
 place; once the sidebar has focus, a click moves to the row clicked. With
 `'mousemoveevent'` on, a click from another window lands on the row clicked, as the
-pointer's tint has already named it. Focused before your
+pointer's tint has already named it. A double-click opens the row double-clicked, as `<CR>`
+would, from another window too, so its second click moves to that row first. Focused before your
 file's symbols are in, it lands on the file row and follows you into your symbol when
 they arrive, unless you have moved the cursor or left the sidebar by then. From a file outside the
 changeset the cursor stays where you left it. Closing the kind menu is not a new arrival:

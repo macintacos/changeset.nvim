@@ -153,7 +153,7 @@ has a `<Plug>(changeset-…)` map named after its words, and these default keys:
 
 | Key                         | `keymaps` option                          | Does                                                                    |
 | --------------------------- | ----------------------------------------- | ----------------------------------------------------------------------- |
-| `<CR>`                      | `jump`                                    | Open the row's change and focus it                                      |
+| `<CR>` / double-click       | `jump`                                    | Open the row's change and focus it                                      |
 | `<S-CR>`                    | `jump_close`                              | Open it and close the sidebar                                           |
 | `<C-v>` / `<C-x>` / `<C-t>` | `jump_vsplit` / `jump_split` / `jump_tab` | Open it in a vertical split / split / tab                               |
 | `q`                         | `close`                                   | Close the sidebar                                                       |
