@@ -6,6 +6,7 @@ local dialog = require("support.dialog")
 local Fixture = require("support.git")
 local Paths = require("changeset.paths")
 local present = require("support.present")
+local Sidebar = require("support.sidebar")
 
 describe("review comment blocks", function()
   local tmp ---@type string
@@ -28,6 +29,7 @@ describe("review comment blocks", function()
     vim.cmd("silent! nunmap j")
     vim.cmd("silent! nunmap Q")
     vim.o.cursorline = false
+    vim.o.winbar = ""
     vim.o.columns = columns
     if not review_comments.shown() then
       review_comments.show(true)
@@ -814,6 +816,80 @@ describe("review comment blocks", function()
       press("<CR>")
       local win = vim.api.nvim_get_current_win()
       assert.are.equal("short", vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false)[1])
+      vim.cmd("stopinsert")
+    end)
+  end)
+
+  describe("clicking", function()
+    before_each(function()
+      keep({ path = "alpha.txt", line = 3, body = "short" })
+    end)
+
+    ---Press mouse `key` on row `row` of the window, a winbar's included, which Neovim counts with line `line`, then let
+    ---what it scheduled run. A UI-less Neovim takes no mouse input, so this presses it where `getmousepos` says.
+    ---@param key string
+    ---@param row integer
+    ---@param line integer
+    local function mouse(key, row, line)
+      local getmousepos = vim.fn.getmousepos
+      local win = vim.api.nvim_get_current_win()
+      vim.fn.getmousepos = function()
+        return { winid = win, winrow = row, line = line, column = 1 }
+      end
+      press(key)
+      vim.fn.getmousepos = getmousepos
+      Sidebar.flush()
+    end
+
+    -- Lines 1 to 3 take rows 1 to 3, line 3's block rows 4 to 6, which Neovim counts with line 4.
+
+    it("parks on the block clicked, and stays parked as the button lets go", function()
+      mouse("<LeftMouse>", 5, 4)
+      assert.are.equal(3, parked())
+      assert.truthy(cursor.hidden())
+
+      mouse("<LeftRelease>", 5, 4)
+      assert.are.equal(3, parked())
+    end)
+
+    it("parks on the block of a stack clicked", function()
+      keep({ path = "alpha.txt", line = 3, start_line = 2, body = "second" })
+
+      mouse("<LeftMouse>", 8, 4)
+      assert.are.same({ 3, "second" }, { parked() })
+    end)
+
+    it("parks on a block under the last line clicked", function()
+      keep({ path = "alpha.txt", line = 40, body = "bottom" })
+      go(40)
+      vim.cmd("normal! zt")
+
+      mouse("<LeftMouse>", 3, 40)
+      assert.are.same({ 40, "bottom" }, { parked() })
+    end)
+
+    it("counts a winbar above the window's text", function()
+      vim.wo.winbar = "bar"
+
+      mouse("<LeftMouse>", 7, 4)
+      assert.are.equal(3, parked())
+    end)
+
+    it("lets go on a click off the block", function()
+      go(3)
+      press("j")
+
+      mouse("<LeftMouse>", 2, 2)
+      assert.is_nil(parked())
+    end)
+
+    it("opens the block double-clicked for editing", function()
+      mouse("<LeftMouse>", 5, 4)
+      mouse("<LeftRelease>", 5, 4)
+      mouse("<2-LeftMouse>", 5, 4)
+      mouse("<2-LeftRelease>", 5, 4)
+
+      assert.are.equal("short", vim.api.nvim_buf_get_lines(0, 0, -1, false)[1])
       vim.cmd("stopinsert")
     end)
   end)

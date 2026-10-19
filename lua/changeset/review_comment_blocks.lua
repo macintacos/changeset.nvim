@@ -1,5 +1,5 @@
 ---Draws each review comment's whole text as a block under its last line, and parks the cursor on a block a one-line
----move reaches, as if it were a line of the file.
+---move reaches or a click lands on, as if it were a line of the file.
 local cells = require("changeset.cells")
 local dialog = require("changeset.dialog")
 local highlights = require("changeset.highlights")
@@ -255,27 +255,29 @@ local function unpark()
   end
 end
 
----Screen rows, from the top of the current window, of the first and last row of the parked block in `state`; 0
----for both while it is above the window.
----@param state changeset.ParkedBlock
+---Screen rows, from the top of the current window, of the first and last row of block `index` of extmark `id`'s
+---stack in `buf`; 0 for both while it is above the window.
+---@param buf integer
+---@param id integer
+---@param index integer
 ---@param view vim.fn.winsaveview.ret
 ---@return integer first
 ---@return integer last
-local function block_rows(state, view)
-  local line = anchor_line(state.buf, state.id)
-  local blocks = drawn[state.buf]
+local function block_rows(buf, id, index, view)
+  local line = anchor_line(buf, id)
+  local blocks = drawn[buf]
   local above, height = 0, 0
-  for i, comment in ipairs(blocks.anchors[state.id]) do
-    local rows = #box(state.buf, comment, blocks.widest, false)
-    if i < state.index then
+  for i, comment in ipairs(blocks.anchors[id]) do
+    local rows = #box(buf, comment, blocks.widest, false)
+    if i < index then
       above = above + rows
-    elseif i == state.index then
+    elseif i == index then
       height = rows
     end
   end
   local next_line = line + 1
   local last
-  if next_line > vim.api.nvim_buf_line_count(state.buf) and line >= view.topline then
+  if next_line > vim.api.nvim_buf_line_count(buf) and line >= view.topline then
     last = review_comment_window.rows_through(0, view, line) + above + height
   elseif next_line >= view.topline then
     -- The stack heads the filler above the next line, ahead of other marks' virtual lines there, such as gitsigns'
@@ -300,7 +302,7 @@ local function reveal(state)
     local at = vim.api.nvim_win_get_cursor(0)[1]
     for _ = 1, win_height do
       local view = vim.fn.winsaveview()
-      local first, last = block_rows(state, view)
+      local first, last = block_rows(state.buf, state.id, state.index, view)
       local cursor_last = review_comment_window.rows_through(0, view, at)
       local cursor_first = cursor_last - review_comment_window.rows(0, at) + 1
       if last > win_height and first > 1 and cursor_first > 1 then
@@ -360,6 +362,8 @@ local function park(win, buf, id, index, pos, curswant)
   local keys = {
     { "<CR>", act(edit), PARKED_DESCS[1] },
     { "c", act(edit), PARKED_DESCS[1] },
+    -- The first click parked the block, so the second's map is the parked one.
+    { "<2-LeftMouse>", act(edit), PARKED_DESCS[1] },
     {
       "d",
       act(function(reviewing)
@@ -782,22 +786,109 @@ vim.api.nvim_create_autocmd("BufUnload", {
   end,
 })
 
----The keys a parked block lets through: its own and the movement keys, `g` only as the start of `gj` or `gk`.
+---Where a click landed: its window, the line Neovim counts it with, the row of the window's text, and the window's
+---view before the click.
+---@class changeset.BlockClick
+---@field win integer
+---@field line integer
+---@field row integer
+---@field view vim.fn.winsaveview.ret
+
+---The click `getmousepos` reports, read before Neovim moves the cursor for it, which can scroll the window under it;
+---nil off every window's text.
+---@return changeset.BlockClick?
+local function read_click()
+  local pos = vim.fn.getmousepos()
+  if pos.line == 0 then
+    return nil
+  end
+  local info = assert(vim.fn.getwininfo(pos.winid)[1], "changeset: the clicked window is gone")
+  return {
+    win = pos.winid,
+    line = pos.line,
+    -- ponytail: takes off a winbar but not a float's top border, so a bordered float reads its clicks a row low.
+    row = pos.winrow - info.winbar,
+    view = vim.api.nvim_win_call(pos.winid, vim.fn.winsaveview),
+  }
+end
+
+---The block of `buf` that `click` landed on, in the current window, as its extmark and place in its stack.
+---@param buf integer
+---@param click changeset.BlockClick
+---@return integer? id
+---@return integer? index
+local function clicked_block(buf, click)
+  -- Neovim counts a block's rows with the line under it, or with the last line for a block under that.
+  for _, line in ipairs({ click.line - 1, click.line }) do
+    local id = anchor_at(buf, line)
+    if id then
+      for index in ipairs(drawn[buf].anchors[id]) do
+        local first, last = block_rows(buf, id, index, click.view)
+        if first <= click.row and click.row <= last then
+          return id, index
+        end
+      end
+    end
+  end
+end
+
+---Parks on the block `click` landed on, else lets go.
+---@param click changeset.BlockClick?
+local function park_clicked(click)
+  local win = vim.api.nvim_get_current_win()
+  local buf = vim.api.nvim_win_get_buf(win)
+  local id, index
+  -- A click in Insert mode stays in it, where the block's keys don't reach.
+  if click and click.win == win and vim.api.nvim_get_mode().mode == "n" then
+    id, index = clicked_block(buf, click)
+  end
+  if id and index then
+    park(win, buf, id, index, vim.api.nvim_win_get_cursor(win))
+  else
+    unpark()
+  end
+end
+
+---The keys a parked block lets through: its own, the movement keys and a click's release, `g` only as the start of
+---`gj` or `gk`.
 local KEEPS = {}
-for _, lhs in ipairs({ "j", "k", "gj", "gk", "<Down>", "<Up>", "<CR>", "c", "d", "<Esc>" }) do
+for _, lhs in ipairs({
+  "j",
+  "k",
+  "gj",
+  "gk",
+  "<Down>",
+  "<Up>",
+  "<CR>",
+  "c",
+  "d",
+  "<Esc>",
+  "<2-LeftMouse>",
+  "<LeftRelease>",
+  "<2-LeftRelease>",
+}) do
   KEEPS[vim.keycode(lhs)] = true
 end
 local MOUSE_MOVE = vim.keycode("<MouseMove>")
+local LEFT_MOUSE = vim.keycode("<LeftMouse>")
 local after_g = false
 
--- Records what was typed for the key a movement map ran for, which tells a typed key from one a mapping sent. Any other typed key
--- lets go of a parked block, `zz` and `<C-e>` included, which change neither mode nor text.
+-- Records what was typed for the key a movement map ran for, which tells a typed key from one a mapping sent. A click
+-- parks on the block it lands on once Neovim has moved the cursor for it, else lets go. Any other typed key lets go
+-- of a parked block, `zz` and `<C-e>` included, which change neither mode nor text.
 vim.on_key(function(_, typed_key)
   if typed_key == MOUSE_MOVE then
     return
   end
   if pending and pending.typed == nil then
     pending.typed = typed_key or ""
+  end
+  if typed_key == LEFT_MOUSE then
+    local click = read_click()
+    vim.schedule(function()
+      park_clicked(click)
+    end)
+    return
   end
   if not parked or not typed_key or typed_key == "" then
     return
