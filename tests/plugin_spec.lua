@@ -120,6 +120,7 @@ describe("plugin/changeset.lua", function()
     assert.same({ "abandon", "restore", "submit", "yank" }, vim.fn.getcompletion("Changeset review ", "cmdline"))
     assert.same({ "file", "symbol" }, vim.fn.getcompletion("Changeset next ", "cmdline"))
     assert.same({ "next", "prev" }, vim.fn.getcompletion("Changeset preview ", "cmdline"))
+    assert.same({ "file" }, vim.fn.getcompletion("Changeset pick ", "cmdline"))
     assert.same({ "commit", "reset", "tag" }, vim.fn.getcompletion("Changeset base ", "cmdline"))
     assert.same({}, vim.fn.getcompletion("Changeset toggle ", "cmdline"))
   end)
@@ -157,15 +158,21 @@ describe("plugin/changeset.lua", function()
     assert.equal(2, calls.diff)
   end)
 
-  it("routes pick and its <Plug> map to the picker", function()
-    local calls = {}
-    package.loaded["changeset.pick"] = { pick = counter(calls, "pick") }
+  it("routes pick, pick file and their <Plug> maps to the picker", function()
+    local units = {}
+    package.loaded["changeset.pick"] = {
+      pick = function(unit)
+        table.insert(units, unit or "change")
+      end,
+    }
 
     vim.cmd("Changeset pick")
+    vim.cmd("Changeset pick file")
     vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-pick)"), "x", false)
+    vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-pick-file)"), "x", false)
 
     package.loaded["changeset.pick"] = nil
-    assert.equal(2, calls.pick)
+    assert.same({ "change", "file", "change", "file" }, units)
   end)
 
   it(
@@ -466,7 +473,7 @@ describe("plugin/changeset.lua", function()
   end)
 
   it("maps the default keys once startup is done", function()
-    local probe = "for _, lhs in ipairs({ 'cc', 'cd', 'cq', 'd', 'l', 's', 'n', 'nn', 'np', 'ns', 'nS', 'nf', 'nF', 'g', 'j', 'bb', 'bt', 'bc', 'br', 't' }) do"
+    local probe = "for _, lhs in ipairs({ 'cc', 'cd', 'cq', 'd', 'l', 's', 'n', 'nn', 'np', 'ns', 'nS', 'nf', 'nF', 'g', 'j', 'J', 'bb', 'bt', 'bc', 'br', 't' }) do"
       .. " io.write(vim.fn.maparg('<C-g>' .. lhs, 'n'), ' ') end"
       .. " io.write(vim.fn.maparg('<C-g>cc', 'x'), ' ', vim.fn.maparg(']g', 'n'), ' ', vim.fn.maparg('[g', 'n'))"
 
@@ -474,7 +481,8 @@ describe("plugin/changeset.lua", function()
       "<Plug>(changeset-comment-new) <Plug>(changeset-comment-del) <Plug>(changeset-comment-list) <Plug>(changeset-diff)  "
         .. "<Plug>(changeset-review-submit)  <Plug>(changeset-next) <Plug>(changeset-prev) "
         .. "<Plug>(changeset-next-symbol) <Plug>(changeset-prev-symbol) <Plug>(changeset-next-file) "
-        .. "<Plug>(changeset-prev-file) <Plug>(changeset-toggle) <Plug>(changeset-pick) <Plug>(changeset-base) "
+        .. "<Plug>(changeset-prev-file) <Plug>(changeset-toggle) <Plug>(changeset-pick) <Plug>(changeset-pick-file) "
+        .. "<Plug>(changeset-base) "
         .. "<Plug>(changeset-base-tag) <Plug>(changeset-base-commit) <Plug>(changeset-base-reset)  "
         .. "<Plug>(changeset-comment-new) "
         .. "<Plug>(changeset-preview-next) <Plug>(changeset-preview-prev)",

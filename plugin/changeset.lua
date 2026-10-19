@@ -18,6 +18,9 @@ local subcommands = {
   pick = function()
     require("changeset.pick").pick()
   end,
+  ["pick file"] = function()
+    require("changeset.pick").pick("file")
+  end,
   diff = function()
     require("changeset").diff()
   end,
@@ -178,7 +181,7 @@ end, {
   nargs = "*",
   range = true,
   bar = true,
-  desc = "Toggle the changeset sidebar, rebuild it, pick a change from a list, set the base it compares against, turn the unified diff on or off, step through its changes, symbols or files, open or preview them, submit, restore, copy or abandon the review, or write, delete, draft, walk, reopen, list or show review comments",
+  desc = "Toggle the changeset sidebar, rebuild it, pick a change or a file from a list, set the base it compares against, turn the unified diff on or off, step through its changes, symbols or files, open or preview them, submit, restore, copy or abandon the review, or write, delete, draft, walk, reopen, list or show review comments",
   complete = function(lead, line)
     -- The words between `Changeset`, with any range before it, and `lead`.
     local typed = vim.trim(line:match("^%S+%s+(.-)%S*$") or "")
@@ -334,6 +337,12 @@ local keys = {
     name = "pick",
     desc = "Pick a change to open from a list",
     icon = { cat = "filetype", name = "diff" },
+  },
+  {
+    lhs = "<C-g>J",
+    name = "pick file",
+    desc = "Pick a changed file to open from a list",
+    icon = { cat = "default", name = "file" },
   },
   -- mini.icons has no branch, tag or commit; these are the glyphs a git key of the user's config wears.
   {

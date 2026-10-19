@@ -141,6 +141,28 @@ describe("changeset.pick", function()
     end)
   end)
 
+  describe("_files", function()
+    it("lists each file once with its whole stat, leaving out symbols and deleted files", function()
+      local function copy(added)
+        local symbol = row({ kind = "symbol", path = "a.lua", name = "f", lnum = 3 })
+        return row({ kind = "file", path = "a.lua", name = "a.lua", lnum = 3, added = added, children = { symbol } })
+      end
+      local rows = {
+        copy(5),
+        row({ kind = "file", path = "b.lua", name = "b.lua", lnum = 1 }),
+        copy(2),
+        row({ kind = "file", path = "gone.lua", name = "gone.lua", status = "deleted" }),
+      }
+
+      local items = pick._files(rows, "/repo")
+
+      assert.same({ "a.lua", "b.lua" }, texts(items))
+      local first = present(items[1])
+      assert.same({ "", "/repo/a.lua", 3 }, { first.trail, first.path, first.lnum })
+      assert.same({ 7, 0 }, { first.row.added, first.row.removed })
+    end)
+  end)
+
   describe("_show", function()
     it("heads each run of items sharing a trail once, and a trail-less item not at all", function()
       local sym = row({ kind = "symbol", path = "a.lua", name = "x", symbol_kind = "Function" })
@@ -245,6 +267,23 @@ describe("changeset.pick", function()
       returned = true
 
       assert.are.equal("Changeset (vs trunk)", name)
+    end)
+
+    it("lists the changed files alone when asked for files", function()
+      local shown ---@type table?
+      local function step()
+        if not present(MiniPick).is_picker_active() then
+          return vim.defer_fn(step, 20)
+        end
+        local mini = present(MiniPick)
+        shown = { name = mini.get_picker_opts().source.name, items = texts(mini.get_picker_items()) }
+        mini.stop()
+      end
+      vim.defer_fn(step, 20)
+
+      pick.pick("file")
+
+      assert.same({ name = "Changeset files (vs trunk)", items = { "mod.lua" } }, shown)
     end)
 
     it("warns rather than opening the picker when there is no changeset", function()

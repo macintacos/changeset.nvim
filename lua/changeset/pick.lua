@@ -52,6 +52,29 @@ local function items(rows, root)
   return out
 end
 
+---Each file once, though it shows under several sections, with the stat its copies' shares sum to.
+---@param rows changeset.Row[] File rows, as `changeset.rows()` hands them over.
+---@param root string Repository the rows' paths are relative to.
+---@return changeset.PickItem[]
+local function files(rows, root)
+  local out, by_path = {}, {}
+  for _, row in ipairs(rows) do
+    local item = by_path[row.path]
+    if item then
+      -- A copy: builds share their rows, so the tree's are never written.
+      item.row = vim.tbl_extend("force", item.row, {
+        added = (item.row.added or 0) + (row.added or 0),
+        removed = (item.row.removed or 0) + (row.removed or 0),
+      })
+    elseif row.status ~= "deleted" then
+      item = { text = row.path, trail = "", path = root .. "/" .. row.path, lnum = row.lnum, row = row }
+      by_path[row.path] = item
+      out[#out + 1] = item
+    end
+  end
+  return out
+end
+
 ---Reserve (or release) a display row above the window's first line.
 ---
 ---Neovim clips a `virt_lines_above` mark on the topline: the line is part of
@@ -153,22 +176,24 @@ end
 
 -- Exposed for tests: which rows become items, and how their trails are drawn.
 M._items = items
+M._files = files
 M._show = show
 
 ---Open the picker on the changeset of the current buffer's repository, with mini.pick when it is set up and
 ---`vim.ui.select` otherwise. With mini.pick, blocks until the picker closes and returns the item chosen. With
 ---`vim.ui.select`, returns nil at once and opens the choice when it is made, since a UI may answer later.
 ---Warns and returns nil when there is no changeset.
+---@param unit "file"? What to list: the changed files alone, else every change.
 ---@return changeset.PickItem? chosen
-function M.pick()
+function M.pick(unit)
   local tree, err = require("changeset").rows()
   if not tree then
     return vim.notify("Changeset: " .. err, vim.log.levels.WARN)
   end
   -- Taken before the picker takes focus: where a sidebar's `<CR>` would open the file, else the picker's own window.
   local from = window.pick_target(vim.api.nvim_get_current_win())
-  local list = items(tree.rows, tree.root)
-  local title = "Changeset (vs " .. tree.ref .. ")"
+  local list = (unit == "file" and files or items)(tree.rows, tree.root)
+  local title = (unit == "file" and "Changeset files" or "Changeset") .. " (vs " .. tree.ref .. ")"
 
   -- `require` first so a lazy-loading manager can load and set mini.pick up; then
   -- `MiniPick`, which only `setup()` creates.
