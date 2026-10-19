@@ -664,6 +664,15 @@ describe("review_comment_window", function()
       assert.is_false(vim.api.nvim_win_get_config(win).hide)
     end)
 
+    it("stays in view when the source's cursor waits below its line, which the room pushes down", function()
+      vim.api.nvim_win_set_cursor(source, { 20, 0 })
+      local win = open({ line = 5 })
+      -- Scrolls the source back to its cursor, as Neovim's next redraw would.
+      vim.cmd.redraw()
+      notify()
+      assert.is_false(vim.api.nvim_win_get_config(win).hide)
+    end)
+
     it("moves with its line as the source scrolls", function()
       local win = open({ line = 10 })
       scroll_to(4)

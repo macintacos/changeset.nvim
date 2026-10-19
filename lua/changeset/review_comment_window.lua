@@ -170,13 +170,14 @@ local function under_in_view(win, line)
   return M.rows_through(win, view, line) + GAP < vim.api.nvim_win_get_height(win)
 end
 
----Scroll `win` the least that shows `line` with the box under it, moving its cursor to `line` if it must scroll.
+---Scroll `win` the least that shows `line` with the box under it, moving its cursor to `line` if it must scroll or is
+---below it.
 ---@param win integer
 ---@param line integer
 local function reveal(win, line)
   vim.api.nvim_win_call(win, function()
-    local topline = vim.fn.winsaveview().topline
-    local top = math.min(topline, line)
+    local view = vim.fn.winsaveview()
+    local top = math.min(view.topline, line)
     local height = vim.api.nvim_win_get_height(0)
     while
       top < line
@@ -184,9 +185,11 @@ local function reveal(win, line)
     do
       top = top + 1
     end
-    if top ~= topline then
-      -- Neovim scrolls any window back to its cursor, current or not.
+    -- Neovim scrolls any window back to its cursor, current or not, and the room would push one below `line` down.
+    if top ~= view.topline then
       vim.fn.winrestview({ topline = top, topfill = 0, lnum = line })
+    elseif view.lnum > line then
+      vim.fn.winrestview({ lnum = line })
     end
   end)
 end
