@@ -113,6 +113,7 @@ has a `<Plug>(changeset-…)` map named after its words, and these default keys:
 | --------------------- | ------------------------------- | ------------------------------------------------------- |
 | `<C-g>g`              | `toggle`                        | Open, focus or close the sidebar                        |
 | `<C-g>j`              | `pick`                          | Pick a change to open from a list                       |
+| `<C-g>J`              | `pick file`                     | Pick a changed file to open from a list                 |
 | `<C-g>bb`             | `base [{ref}]`                  | Pick a branch to compare against, or name any ref       |
 | `<C-g>bt`             | `base tag`                      | Pick a tag to compare against                           |
 | `<C-g>bc`             | `base commit`                   | Pick a commit to compare against                        |

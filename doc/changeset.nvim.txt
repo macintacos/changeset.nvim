@@ -227,6 +227,11 @@ PICKER
 	Open the picker of |changeset-picker| on the changes of the current
 	buffer's repository.
 
+:Changeset pick file                                    *:Changeset-pick-file*
+<Plug>(changeset-pick-file)                      *<Plug>(changeset-pick-file)*
+<C-g>J                                                      *changeset-<C-g>J*
+	Open the picker of |changeset-picker| on the changed files alone.
+
 BASE
 
 :Changeset base [{ref}]                                      *:Changeset-base*
@@ -422,6 +427,7 @@ its subcommand:
 Key       Mode            Runs ~
 <C-g>g    Normal          |:Changeset-toggle|
 <C-g>j    Normal          |:Changeset-pick|
+<C-g>J    Normal          |:Changeset-pick-file|
 <C-g>bb   Normal          |:Changeset-base|
 <C-g>bt   Normal          |:Changeset-base-tag|
 <C-g>bc   Normal          |:Changeset-base-commit|
@@ -1226,6 +1232,10 @@ the sidebar: changed symbols, changes outside them, and files with nothing
 under them. It leaves out deleted files and review comments, and the symbol
 kinds the sidebar hides.
 
+Asked for files alone, as `<C-g>J` does, it lists each changed file once,
+with the file's whole stat, though the sidebar may show it under several
+sections. Choosing one opens it at its first change.
+
 Without mini.pick, |vim.ui.select()| offers the same changes, each shown by
 its trail and name, under the same title. Choosing one opens its file at its
 line; cancelling opens nothing. Because |vim.ui.select()| may answer later,
@@ -1532,9 +1542,10 @@ require("changeset").bubble({buf}, {lnum})                *changeset.bubble()*
 	'statuscolumn' to call on every screen line, whatever
 	`review_comment.sign` is.
 
-require("changeset.pick").pick()                       *changeset.pick.pick()*
+require("changeset.pick").pick({unit})                 *changeset.pick.pick()*
 	Open the picker on the changes of the current buffer's repository
-	(|changeset-picker|), with mini.pick when it is set up and
+	(|changeset-picker|), or on its changed files alone when {unit} is
+	`"file"`, with mini.pick when it is set up and
 	|vim.ui.select()| otherwise. With mini.pick, blocks until the picker
 	closes and returns the item chosen, or nil. With |vim.ui.select()|,
 	returns nil at once; the choice opens its file when it is made. Warns
