@@ -405,8 +405,10 @@ as the float and its border, plus a blank row either side so no text butts again
 border, make the room, and the float lies on them, a column in from the text for the same
 reason. It is attached to the window (`relative = "win"`, `bufpos`), so it moves with its
 line as the source scrolls, and `row` counts past every screen row of a wrapped line.
-Opening scrolls the source the least that shows the line with the box under it. A floating
-source has nothing to scroll past, so it grows by the room instead and shrinks back afterwards. While the row the box starts on is scrolled out of the source the float hides, or, with focus in it, as a mouse wheel over the source leaves it, closes, keeping a draft, since a hidden float still takes keys.
+Opening scrolls the source the least that shows the line with the box under it, and brings
+a cursor waiting below the line, as one parked on a block from under it does, up to the
+line: the room would push it down, and Neovim would scroll the line out of view after it.
+A floating source has nothing to scroll past, so it grows by the room instead and shrinks back afterwards. While the row the box starts on is scrolled out of the source the float hides, or, with focus in it, as a mouse wheel over the source leaves it, closes, keeping a draft, since a hidden float still takes keys.
 Focus never returns to it from the source: leaving it closes it, keeping a draft. Edits to the source never move the room
 off the line: it stays on the line number, as the float does.
 
@@ -807,6 +809,11 @@ any other key lets go. In a modified buffer `<CR>`, `c` and `d` refuse, as the l
 do. The cursor is hidden through the dialogs' own `'guicursor'` entry and the window's
 local `'cursorline'` dropped, since the block is what the cursor is on and the line it
 waits on would otherwise read as focused. Each block of a stack is a stop.
+
+A click parks on the block clicked, leaving the cursor where Neovim puts a click on virtual
+lines, on the line under them. A double-click opens it to edit as `<CR>` does, the way a
+double-click opens a sidebar row. Where the click landed is read before Neovim moves the
+cursor for it, which under `'scrolloff'` can scroll the block out from under the pointer.
 
 ### Hover answers with the review comments on a line
 

@@ -979,6 +979,9 @@ border and lists its keys:
   d            Ask, then delete it.
   <Esc>        Step off it. Any other key steps off and does what it does.
 
+A click on a block stops on it too, and a double-click edits it as `<CR>`
+does.
+
 A line's blocks step aside while the review comment window is open on it.
 
 HOVER                                                        *changeset-hover*
