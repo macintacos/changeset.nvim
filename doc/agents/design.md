@@ -587,6 +587,11 @@ comment-only units, Tests its test lines less any Docs units inside them, and th
 copy the rest. Removed lines have no position in the new file to split on, so a hunk's
 `-N` goes wholly to the first symbol it reaches.
 
+A change to whitespace alone, a reindent or a blank line, counts nowhere: the diff runs with
+`--ignore-all-space` and `--ignore-blank-lines`, and a file with nothing else changed is
+left out. Such a sweep moves no logic, and listing it would bury the changes a review is
+for. gitsigns' gutter keeps the user's own `diff_opts`.
+
 ### Header
 
 ```text

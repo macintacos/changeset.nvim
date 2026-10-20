@@ -138,8 +138,12 @@ unreleased changes.
 4. Which changes it shows                                     *changeset-base*
 
 The tree lists what changed between your working tree and its base, untracked
-files included. Unsaved edits don't count until you write them. The base is
-the merge base with the first of these that shares history with your branch:
+files included. Unsaved edits don't count until you write them, and neither
+does a change to whitespace alone, such as a reindented line or an added
+blank one: a file with nothing else changed is left out. gitsigns' gutter and
+unified diff still show such changes unless its `diff_opts` sets
+`ignore_whitespace` and `ignore_blank_lines`. The base is the merge base with
+the first of these that shares history with your branch:
 
 1. The ref you set for the branch with |:Changeset-base|.
 2. The branch's parent: the branch the command named, as in
