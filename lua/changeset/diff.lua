@@ -286,7 +286,17 @@ local function git_commands(base)
     return vim.list_extend(vim.list_slice(git), { ... })
   end
   local function diff_cmd(...)
-    return cmd("diff", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/", "-M", ...)
+    return cmd(
+      "diff",
+      "--no-color",
+      "--no-ext-diff",
+      "--src-prefix=a/",
+      "--dst-prefix=b/",
+      "-M",
+      "--ignore-all-space",
+      "--ignore-blank-lines",
+      ...
+    )
   end
   return {
     numstat = diff_cmd("--numstat", "-z", base),

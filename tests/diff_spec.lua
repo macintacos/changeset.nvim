@@ -546,6 +546,29 @@ describe("changeset.diff.collect", function()
     }, undigested(collect(base, tmp)))
   end)
 
+  it("leaves out changes that only touch whitespace or blank lines", function()
+    Fixture.init_repo("trunk", tmp)
+    write("notes.txt", TWELVE_LINES)
+    write("spaced.txt", { "a", "b" })
+    local base = Fixture.commit("seed", tmp)
+    local edited = vim.list_slice(TWELVE_LINES)
+    edited[2], edited[8] = "  two ", "EIGHT"
+    table.insert(edited, 5, "")
+    write("notes.txt", edited)
+    write("spaced.txt", { "a", "", "\tb" })
+
+    assert.same({
+      {
+        path = "notes.txt",
+        status = "modified",
+        section = "implementation",
+        added = 1,
+        removed = 1,
+        hunks = { { lnum = 9, count = 1, added = 1, removed = 1, old_lnum = 8 } },
+      },
+    }, undigested(collect(base, tmp)))
+  end)
+
   it("lists a file removed from the index but left on disk as both deleted and untracked", function()
     Fixture.init_repo("trunk", tmp)
     write("foo", { "a" })
