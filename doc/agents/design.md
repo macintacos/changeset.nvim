@@ -1003,7 +1003,7 @@ leaving the last preview standing.
 ### Footer
 
 ```text
- Changeset   feature   origin/trunk  file 3 of 12  󰈲 sess      <CR> open  f filter  F kinds  ? all keys
+ Changeset   feature  origin/trunk  file 3 of 12  󰈲 sess      <CR> open  f filter  F kinds  ? all keys
 ```
 
 The sidebar's own `statusline`. With `laststatus=3` a window's own statusline is drawn
