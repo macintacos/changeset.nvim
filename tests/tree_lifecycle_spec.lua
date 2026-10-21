@@ -646,7 +646,7 @@ describe("changeset tree", function()
       Sidebar.flush()
     end
 
-    it("`:Changeset` returns before the fork point lands, then opens the sidebar with its ref", function()
+    it("`:Changeset` returns before the fork point lands, then opens the sidebar on the branch", function()
       vim.cmd.edit("mod.lua")
 
       vim.cmd("Changeset")
@@ -654,7 +654,7 @@ describe("changeset tree", function()
       assert.is_false(window.is_visible())
       Sidebar.await_open()
       local winbar = vim.api.nvim_get_option_value("winbar", { win = present(window.win()) })
-      assert.truthy(winbar:find("trunk", 1, true))
+      assert.truthy(winbar:find("feature", 1, true))
     end)
 
     it("a second toggle before it lands opens nothing", function()

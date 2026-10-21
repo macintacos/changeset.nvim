@@ -10,7 +10,6 @@ local M = {}
 ---@class changeset.ForkPoint
 ---@field base string Commit HEAD forked at.
 ---@field ref string Ref whose history holds `base`, e.g. "origin/trunk".
----@field kind changeset.RefKind What `ref` names; only a ref set by hand is ever not a branch.
 ---@field against string What `base` was measured against: the ref set by hand, the branch the branch was created from, the open PR's target, or the default branch.
 ---@field default_branch string The repository's default branch, whatever `against` is.
 ---@field pr integer? The open PR's number, while `base` is measured against its target.
@@ -90,7 +89,6 @@ local function measure(root, branch, pr)
       return {
         base = pinned_base,
         ref = pinned_ref,
-        kind = Git.ref_kind(root, by_hand),
         against = by_hand,
         default_branch = default_branch,
         pr = number,
@@ -113,7 +111,6 @@ local function measure(root, branch, pr)
       return {
         base = parent_base,
         ref = parent_ref,
-        kind = "branch",
         against = parent,
         default_branch = default_branch,
         pr = number,
@@ -123,7 +120,7 @@ local function measure(root, branch, pr)
   if not (base and ref) then
     return
   end
-  local point = { base = base, ref = ref, kind = "branch", against = default_branch, default_branch = default_branch }
+  local point = { base = base, ref = ref, against = default_branch, default_branch = default_branch }
   if pr then
     local stacked, stacked_ref = Git.merge_base(root, pr.target)
     if stacked and stacked_ref then

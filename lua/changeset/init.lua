@@ -288,9 +288,9 @@ local function decided(path)
   end)
 end
 
----What the sidebar last drew beyond its rows: the header draws the tree's commits and PR, and an empty tree reads
----differently once its diff is in.
----@type { state: changeset.SidebarState, collected: boolean, commits: integer?, pr: integer? }?
+---What the sidebar last drew beyond its rows: the header draws the tree's commits, PR and stack position, and an empty
+---tree reads differently once its diff is in.
+---@type { state: changeset.SidebarState, collected: boolean, commits: integer?, pr: integer?, stack: changeset.StackPosition? }?
 local built_from
 
 ---Build the sidebar's rows afresh from the tree.
@@ -301,13 +301,20 @@ local function rebuild()
   local lines = captions(state.tree.root)
   lines.comments = state.tree.comments
   local rows = Rows.build(state.tree.files, state.tree.symbols, lines)
-  local from = { state = state, collected = state.tree.collected, commits = state.tree.commits, pr = state.tree.pr }
+  local from = {
+    state = state,
+    collected = state.tree.collected,
+    commits = state.tree.commits,
+    pr = state.tree.pr,
+    stack = state.tree.stack,
+  }
   local last = built_from or {}
   if
     last.state == state
     and last.collected == from.collected
     and last.commits == from.commits
     and last.pr == from.pr
+    and last.stack == from.stack
     and Rows.same(state.rows, rows)
   then
     return false
@@ -491,7 +498,6 @@ function M.footer()
     files = files,
     query = state.view:query(),
     keys = open_keys(),
-    branch = state.tree.branch,
     ref = state.tree.ref,
   })
 end

@@ -256,9 +256,9 @@ local function summary(state)
     end
   end
   return {
-    ref = state.tree.ref,
-    kind = state.tree.kind,
+    branch = state.tree.branch,
     pr = state.tree.pr,
+    stack = state.tree.stack,
     files = #state.tree.files,
     commits = state.tree.commits,
     added = added,

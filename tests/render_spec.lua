@@ -805,78 +805,65 @@ describe("changeset.render", function()
   end)
 
   describe("header", function()
-    local LONG = "origin/jt/exc-1200-stacked-parent-branch-with-a-long-name"
+    local LONG = "jt/exc-1200-stacked-parent-branch-with-a-long-name"
 
     ---@param summary table
     ---@param width integer?
-    ---@param with_highlights boolean?
-    ---@return { str: string, highlights: table[]? }
-    local function eval(summary, width, with_highlights)
+    ---@return string
+    local function eval(summary, width)
       width = width or 44
-      return vim.api.nvim_eval_statusline(
-        render.header(summary, width),
-        { use_winbar = true, maxwidth = width, highlights = with_highlights }
-      )
+      return vim.api.nvim_eval_statusline(render.header(summary, width), { use_winbar = true, maxwidth = width }).str
     end
 
-    ---The group drawing the first byte of `needle` in an evaluated statusline.
-    ---@param shown { str: string, highlights: table[]? }
-    ---@param needle string
-    ---@return string?
-    local function group_at(shown, needle)
-      local at = present((shown.str:find(needle, 1, true))) - 1
-      local found
-      for _, mark in ipairs(present(shown.highlights)) do
-        if mark.start <= at then
-          found = mark.group
-        end
-      end
-      return found
-    end
-
-    it("names what the tree is compared against", function()
-      assert.truthy((eval({ ref = "origin/trunk" }).str:find("origin/trunk", 1, true)))
+    it("names the branch checked out", function()
+      assert.truthy((eval({ branch = "feature" }):find("feature", 1, true)))
     end)
 
-    it("keeps the head of a ref too long to fit, marking the cut at its end", function()
-      local text = eval({ ref = LONG }, 30).str
+    it("keeps the head of a branch name too long to fit, marking the cut at its end", function()
+      local text = eval({ branch = LONG }, 30)
 
-      assert.truthy((text:find("origin/jt/exc-1200", 1, true)))
+      assert.truthy((text:find("jt/exc-1200", 1, true)))
       assert.truthy(vim.endswith(vim.trim(text), "…"))
       -- The statusline marks a cut of its own with `<`, and keeps the tail.
       assert.falsy((text:find("<", 1, true)))
     end)
 
     it("names the branch's open PR at the right edge, a blank cell clear of it", function()
-      assert.equal(" #412 ", eval({ ref = "origin/trunk", pr = 412 }).str:sub(-6))
+      assert.equal(" #412 ", eval({ branch = "feature", pr = 412 }):sub(-6))
     end)
 
-    it("gives up the ref's tail rather than the PR number", function()
-      local text = eval({ ref = LONG, pr = 412 }, 30).str
+    it("gives up the branch name's tail rather than the PR number", function()
+      local text = eval({ branch = LONG, pr = 412 }, 30)
 
       assert.equal(" #412 ", text:sub(-6))
-      assert.truthy((text:find("origin/jt", 1, true)))
+      assert.truthy((text:find("jt/exc", 1, true)))
       assert.truthy((text:find("…", 1, true)))
       assert.falsy((text:find("<", 1, true)))
     end)
 
-    it("escapes % in the ref so the statusline does not read it as an item", function()
-      assert.truthy((eval({ ref = "origin/50%off" }).str:find("origin/50%off", 1, true)))
+    it("names the branch's layer of its stack after the PR, at the right edge", function()
+      assert.truthy(
+        (eval({ branch = "feature", pr = 412, stack = { at = 3, of = 5 } }):find(" #412  [\128-\255]+ 3/5 $"))
+      )
     end)
 
-    it("dims the remote so the branch name leads", function()
-      highlights.define_highlights()
-      local shown = eval({ ref = "origin/trunk" }, 44, true)
+    it("names the branch's layer of its stack without a PR", function()
+      local text = eval({ branch = "feature", stack = { at = 1, of = 2 } })
 
-      assert.equal(highlights.HEADER_DIM_HL, group_at(shown, "origin/"))
-      assert.equal(highlights.HEADER_REF_HL, group_at(shown, "trunk"))
+      assert.truthy((text:find("^ [\128-\255]+ feature +[\128-\255]+ 1/2 $")))
+      assert.falsy((text:find("#", 1, true)))
     end)
 
-    it("reads a local ref whole, with nothing dimmed", function()
-      highlights.define_highlights()
-      local shown = eval({ ref = "jt/parent" }, 44, true)
+    it("gives up the branch name's tail rather than its place in the stack", function()
+      local text = eval({ branch = LONG, pr = 412, stack = { at = 3, of = 5 } }, 34)
 
-      assert.equal(highlights.HEADER_REF_HL, group_at(shown, "jt/parent"))
+      assert.truthy((text:find(" #412  [\128-\255]+ 3/5 $")))
+      assert.truthy((text:find("jt/exc", 1, true)))
+      assert.truthy((text:find("…", 1, true)))
+    end)
+
+    it("escapes % in the branch name so the statusline does not read it as an item", function()
+      assert.truthy((eval({ branch = "jt/50%off" }):find("jt/50%off", 1, true)))
     end)
   end)
 
@@ -971,8 +958,7 @@ describe("changeset.render", function()
     ---@return string
     local function shown(info)
       local keys = { jump = "<CR>", filter = "f", filter_kinds = "F", help = "?" }
-      local full =
-        vim.tbl_extend("force", { files = 12, query = "", keys = keys, branch = "feature", ref = "origin/trunk" }, info) --[[@as changeset.Footer]]
+      local full = vim.tbl_extend("force", { files = 12, query = "", keys = keys, ref = "origin/trunk" }, info) --[[@as changeset.Footer]]
       return vim.api.nvim_eval_statusline(render.footer(full), { maxwidth = 120 }).str
     end
 
@@ -980,25 +966,16 @@ describe("changeset.render", function()
       assert.truthy((shown({ file = 3 }):find("file 3 of 12", 1, true)))
     end)
 
-    it("names the branch and the ref it is compared against, right after the badge", function()
+    it("says what the tree is compared against, between the badge and the position", function()
       local footer = shown({ file = 3 })
-      local branch_at = present((footer:find(" feature", 1, true)))
-      local ref_at = present((footer:find(" origin/trunk", 1, true)))
+      local ref_at = present((footer:find("comparing to origin/trunk", 1, true)))
 
-      assert.truthy(footer:find("Changeset", 1, true) < branch_at)
-      assert.truthy(branch_at < ref_at)
+      assert.truthy(footer:find("Changeset", 1, true) < ref_at)
       assert.truthy((ref_at < footer:find("file 3 of 12", 1, true)))
     end)
 
-    it("spaces the compare glyph evenly between the branch and the ref", function()
-      local before, after = shown({}):match("feature( +)[^ ]+( +)origin/trunk")
-
-      assert.are.same(" ", before)
-      assert.are.same(" ", after)
-    end)
-
-    it("escapes % in the branch so the statusline does not read it as an item", function()
-      assert.truthy((shown({ branch = "50%-off" }):find("50%-off", 1, true)))
+    it("escapes % in the ref so the statusline does not read it as an item", function()
+      assert.truthy((shown({ ref = "origin/50%-off" }):find("50%-off", 1, true)))
     end)
 
     it("leaves the position out when the cursor is in no file", function()

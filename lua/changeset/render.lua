@@ -33,9 +33,9 @@ local symbols = require("changeset.symbols")
 ---@field viewed? fun(row: changeset.Row): boolean     Whether a file row is marked viewed.
 
 ---@class changeset.Summary
----@field ref string        What the branch is compared against, e.g. "origin/trunk".
----@field kind? changeset.RefKind What `ref` names; a branch when absent.
----@field pr integer?       Number of the branch's open PR, when it merges into `ref`.
+---@field branch string     Branch checked out; "HEAD" when detached.
+---@field pr integer?       Number of the branch's open PR, when it merges into what the tree is compared against.
+---@field stack changeset.StackPosition? Where the branch sits in the stack gh-stack keeps for it.
 ---@field files integer
 ---@field commits integer?  Commits on the branch since it forked from `ref`.
 ---@field added integer
@@ -47,7 +47,6 @@ local symbols = require("changeset.symbols")
 ---@field files integer  Files shown.
 ---@field query string   Filter in force; empty for none.
 ---@field keys changeset.Options.Keymaps The keys the sidebar bound.
----@field branch string Branch checked out; "HEAD" when detached.
 ---@field ref string Ref the tree is compared against, e.g. "origin/trunk".
 
 ---@class changeset.Band The strip over a window the sidebar is previewing into.
@@ -131,6 +130,7 @@ local MARGIN = " "
 local BRANCH_ICON = ""
 local COMPARE_ICON = ""
 local PR_ICON = ""
+local STACK_ICON = ""
 local FILES_ICON = ""
 local COMMIT_ICON = ""
 local TAG_ICON = ""
@@ -616,27 +616,31 @@ function M.hidden_note(kinds, width, key)
   return ("Hiding %d kinds of symbol.%s"):format(#kinds, hint)
 end
 
----The header's first row, for the sidebar's winbar: the ref the tree is compared
----against, and the branch's PR at the right edge.
+---The header's first row, for the sidebar's winbar: the branch checked out, and
+---its PR and place in its stack at the right edge.
 ---
----A ref too long for the width loses its tail, not its head: a stacked branch is
----told apart by the start of its name. The statusline's own `%<` would cut the
----other way.
----@param summary { ref: string, kind: changeset.RefKind?, pr: integer? }
+---A branch name too long for the width loses its tail, not its head: a stacked
+---branch is told apart by the start of its name. The statusline's own `%<` would
+---cut the other way.
+---@param summary { branch: string, pr: integer?, stack: changeset.StackPosition? }
 ---@param width integer Cells the winbar spans.
 ---@return string
 function M.header(summary, width)
-  local pr = summary.pr and ("%s #%d"):format(PR_ICON, summary.pr)
-  local glyph = M.REF_ICONS[summary.kind or "branch"]
-  local room = width - vim.fn.strdisplaywidth((" %s "):format(glyph)) - (pr and vim.fn.strdisplaywidth(pr) + 2 or 0)
-  local ref = cells.clip(summary.ref, room)
-  local remote = ref:match("^origin/") or ""
+  local edge = {}
+  if summary.pr then
+    edge[#edge + 1] = ("%s #%d"):format(PR_ICON, summary.pr)
+  end
+  if summary.stack then
+    edge[#edge + 1] = ("%s %d/%d"):format(STACK_ICON, summary.stack.at, summary.stack.of)
+  end
+  local right = table.concat(edge, "  ")
+  local lead = (" %s "):format(BRANCH_ICON)
+  local room = width - cells.width(lead) - (right ~= "" and cells.width(right) + 2 or 0)
   return table.concat({
-    ("%%#%s# %s "):format(highlights.HEADER_ICON_HL, glyph),
-    ("%%#%s#%s"):format(highlights.HEADER_DIM_HL, remote),
-    ("%%#%s#%s"):format(highlights.HEADER_REF_HL, escaped(ref:sub(#remote + 1))),
+    ("%%#%s#%s"):format(highlights.HEADER_ICON_HL, lead),
+    ("%%#%s#%s"):format(highlights.HEADER_REF_HL, escaped(cells.clip(summary.branch, room))),
     ("%%#%s#%%="):format(highlights.HEADER_HL),
-    pr and ("%%#%s#%s "):format(highlights.HEADER_DIM_HL, pr) or "",
+    right ~= "" and ("%%#%s#%s "):format(highlights.HEADER_DIM_HL, right) or "",
   })
 end
 
@@ -721,8 +725,7 @@ function M.footer(info)
   local remote = info.ref:match("^origin/") or ""
   local parts = {
     ("%%#%s# Changeset "):format(highlights.BADGE_HL),
-    ("%%#%s# %s %%#%s#%s"):format(highlights.FOOTER_HL, BRANCH_ICON, highlights.FOOTER_KEY_HL, escaped(info.branch)),
-    ("%%#%s# %s %s%%#%s#%s"):format(
+    ("%%#%s# %s comparing to %s%%#%s#%s"):format(
       highlights.FOOTER_HL,
       COMPARE_ICON,
       remote,

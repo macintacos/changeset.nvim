@@ -340,6 +340,44 @@ describe("changeset.git", function()
       assert.is_nil(target)
     end)
   end)
+
+  describe("stack_position", function()
+    after_each(function()
+      vim.env.FAKE_GH_STACK = nil
+    end)
+
+    ---What `stack_position` answers for `branch`.
+    ---@param branch string
+    ---@return changeset.StackPosition?
+    local function position(branch)
+      require("support.gh")
+      local answered, stack = false, nil
+      Git.stack_position(tmp, branch, function(s)
+        answered, stack = true, s
+      end)
+      assert.is_true(vim.wait(5000, function()
+        return answered
+      end))
+      return stack
+    end
+
+    it("counts the branch's layer from the bottom of its stack, merged layers included", function()
+      vim.env.FAKE_GH_STACK = require("support.gh").stack_view({ "base", "middle", "feature", "next", "top" }, 2)
+
+      assert.are.same({ at = 3, of = 5 }, position("feature"))
+    end)
+
+    it("answers no position for a branch the stack doesn't hold", function()
+      vim.env.FAKE_GH_STACK = require("support.gh").stack_view({ "base", "top" })
+
+      assert.is_nil(position("feature"))
+    end)
+
+    it("answers no position for a branch gh-stack keeps in no stack", function()
+      assert.is_nil(position("feature"))
+    end)
+  end)
+
   describe("head", function()
     local real_systemlist ---@type fun(...): string[]
     local spawned ---@type integer

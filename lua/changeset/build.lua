@@ -27,19 +27,19 @@ local M = {}
 ---@field root string
 ---@field base string
 ---@field ref string Ref the fork point was measured against, e.g. "origin/trunk".
----@field kind changeset.RefKind What `ref` names.
 ---@field branch string
 ---@field head string? HEAD's commit when the tree was built.
 ---@field default_branch string
 ---@field pr integer? The branch's open PR, while the tree is measured against its target.
+---@field stack changeset.StackPosition? Where the branch sits in the stack gh-stack keeps for it.
 ---@field files changeset.File[]
 ---@field commits integer? Commits on the branch since `base`, once the diff has been read.
 ---@field collected boolean Whether the diff has been read yet.
 ---@field symbols table<string, changeset.Symbol[]> Absent key: still reading, or never read (`Rows.read_status`).
 ---@field comments table<string, changeset.Comments> Absent key means none read or parsed for the file.
 
----What happened to the tree: its `diff` read, one file's `symbols` read, only its `pr` number changed, or its
----diff `failed` to read.
+---What happened to the tree: its `diff` read, one file's `symbols` read, only its `pr` number or `stack` position
+---changed, or its diff `failed` to read.
 ---@alias changeset.TreeEvent "diff"|"symbols"|"pr"|"failed"
 
 ---What a build ended in: the tree `built` or kept, `no_base` to measure from, or `replaced` by an ask for another
@@ -279,6 +279,31 @@ local function drop()
   tree = nil
 end
 
+---gh-stack's answer for one branch, kept for every tree built on it. Asked again only once HEAD lands on another
+---branch, so a stack restructured while on the branch shows from the next switch.
+---@type { root: string, branch: string, position: changeset.StackPosition? }?
+local stack_asked
+
+---Ask gh-stack where `branch` sits, and announce the answer to the tree while it is still on that branch.
+---@param root string
+---@param branch string
+---@return { root: string, branch: string, position: changeset.StackPosition? } asked Holds the answer once it lands.
+local function ask_stack(root, branch)
+  local asked = { root = root, branch = branch }
+  stack_asked = asked
+  Git.stack_position(root, branch, function(position)
+    if stack_asked ~= asked or not position then
+      return
+    end
+    asked.position = position
+    if tree and tree.root == root and tree.branch == branch then
+      tree.stack = position
+      announce("pr")
+    end
+  end)
+  return asked
+end
+
 ---@type fun(root: string, branch: string, commit: string?, point: changeset.ForkPoint?): boolean
 local place
 
@@ -379,15 +404,19 @@ place = function(root, branch, commit, point)
     memo = { root = root, entries = cache.load(cache.path(root)) }
   end
 
+  local asked = stack_asked
+  if not (asked and asked.root == root and asked.branch == branch) then
+    asked = ask_stack(root, branch)
+  end
   tree = {
     root = root,
     base = base,
     ref = point.ref,
-    kind = point.kind,
     branch = branch,
     head = commit,
     default_branch = point.default_branch,
     pr = point.pr,
+    stack = asked.position,
     files = {},
     collected = false,
     symbols = {},

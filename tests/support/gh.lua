@@ -1,5 +1,5 @@
 ---A fake `gh` on PATH, so no spec asks GitHub about its fixture branch: it prints $FAKE_GH_PR, and fails as if there
----were no PR when that is empty. Each call appends a line to $FAKE_GH_LOG when that is set. Requiring it is what
+---were no PR when that is empty; `gh stack` prints $FAKE_GH_STACK the same way. Each call appends a line to $FAKE_GH_LOG when that is set. Requiring it is what
 ---installs it; PATH is never restored, since each spec runs in its own nvim. `without` hides it, for a case where gh is
 ---not installed.
 local bin = vim.fn.tempname()
@@ -7,6 +7,7 @@ vim.fn.mkdir(bin, "p")
 vim.fn.writefile({
   "#!/bin/sh",
   '[ -z "$FAKE_GH_LOG" ] || echo "$*" >> "$FAKE_GH_LOG"',
+  'if [ "$1" = stack ]; then [ -n "$FAKE_GH_STACK" ] || exit 1; printf "%s" "$FAKE_GH_STACK"; exit; fi',
   '[ -n "$FAKE_GH_PR" ] || exit 1',
   'printf "%s" "$FAKE_GH_PR"',
 }, bin .. "/gh")
@@ -20,6 +21,18 @@ local M = {}
 ---@return string
 function M.pr_view(fields)
   return vim.json.encode(vim.tbl_extend("force", { state = "OPEN", number = 1 }, fields))
+end
+
+---A `gh stack view --json` body for a stack of `branches`, bottom to top, the first `merged` of them merged.
+---@param branches string[]
+---@param merged integer?
+---@return string
+function M.stack_view(branches, merged)
+  local layers = {}
+  for i, name in ipairs(branches) do
+    layers[i] = { name = name, isMerged = i <= (merged or 0) }
+  end
+  return vim.json.encode({ trunk = "trunk", branches = layers })
 end
 
 ---How many times gh was called since $FAKE_GH_LOG was set.

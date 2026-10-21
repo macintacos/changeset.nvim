@@ -67,12 +67,54 @@ describe("changeset.build", function()
     end
   end)
 
-  it("a build asks gh once", function()
+  it("a build asks gh once about its PR", function()
     local argvs = recording(build_and_collect)
 
     assert.equal(1, #vim.tbl_filter(function(argv)
-      return runs(argv, "gh")
+      return runs(argv, "gh", "pr")
     end, argvs))
+  end)
+
+  describe("in a stack gh-stack keeps", function()
+    before_each(function()
+      vim.env.FAKE_GH_STACK = gh.stack_view({ "base", "feature", "top" })
+    end)
+
+    after_each(function()
+      vim.env.FAKE_GH_STACK = nil
+    end)
+
+    it("announces where the branch sits in it", function()
+      build_and_collect()
+
+      assert.is_true(vim.wait(5000, function()
+        return vim.list_contains(events, "pr")
+      end, 25))
+      assert.are.same({ at = 2, of = 3 }, present(build.current()).stack)
+    end)
+
+    it("keeps the branch's place, asking gh-stack nothing, as a tree is built anew on the same branch", function()
+      local fork_point = require("changeset.fork_point")
+      build_and_collect()
+      assert.is_true(vim.wait(5000, function()
+        return present(build.current()).stack ~= nil
+      end, 25))
+      local kept = present(build.current())
+
+      local argvs = recording(function()
+        -- Measured against itself, the branch forks at HEAD, a base no tree was built on.
+        fork_point.pin(kept.root, "feature", "feature")
+        assert.is_true(vim.wait(5000, function()
+          return build.current() ~= kept
+        end, 25))
+      end)
+      fork_point.pin(kept.root, "feature", nil)
+
+      assert.equal(0, #vim.tbl_filter(function(argv)
+        return runs(argv, "gh", "stack")
+      end, argvs))
+      assert.are.same({ at = 2, of = 3 }, present(build.current()).stack)
+    end)
   end)
 
   it("keeps and refreshes the tree after a switch to a branch with no fork point", function()
@@ -258,7 +300,7 @@ describe("changeset.build", function()
       end)
 
       local gh_asks = vim.tbl_filter(function(argv)
-        return runs(argv, "gh")
+        return runs(argv, "gh", "pr")
       end, argvs)
       assert.equal(1, #gh_asks)
       assert.equal(Fixture.git({ "rev-parse", "trunk" }, tmp), present(build.current()).base)

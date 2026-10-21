@@ -64,7 +64,7 @@ local function landed(head, files, commits, width)
     added, removed = added + (file.added or 0), removed + (file.removed or 0)
   end
   local totals = render.header_totals({
-    ref = "",
+    branch = "",
     files = #files,
     commits = #commits,
     added = added,

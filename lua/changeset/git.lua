@@ -157,18 +157,6 @@ function M.default_base(cwd)
   return "main"
 end
 
----What `ref` names at `cwd`: a tag, a branch, local or remote, or else a commit.
----@param cwd string
----@param ref string
----@return changeset.RefKind
-function M.ref_kind(cwd, ref)
-  local full = M.lines({ "git", "rev-parse", "--symbolic-full-name", ref }, cwd)[1] or ""
-  if vim.startswith(full, "refs/tags/") then
-    return "tag"
-  end
-  return (vim.startswith(full, "refs/heads/") or vim.startswith(full, "refs/remotes/")) and "branch" or "commit"
-end
-
 ---What HEAD moved from when it moved to `branch` at `commit`, as this worktree's HEAD reflog records it.
 ---@param cwd string?
 ---@param branch string
@@ -279,6 +267,32 @@ function M.pr_target(cwd, cb)
     local answered = res.code == 0 and ok and type(pr) == "table"
     local open = answered and pr.state == "OPEN"
     cb(open and pr.baseRefName or nil, open and pr.number or nil, not answered)
+  end)
+end
+
+---@class changeset.StackPosition
+---@field at integer The branch's layer, counted from the bottom, merged layers included.
+---@field of integer Layers in the stack.
+
+---Ask gh-stack where `branch` sits in the stack it keeps for the current branch.
+---@param cwd string? Repository to ask about; Neovim's own directory when absent.
+---@param branch string
+---@param cb fun(stack: changeset.StackPosition?) nil when gh-stack keeps no stack holding `branch`, or fails.
+function M.stack_position(cwd, branch, cb)
+  if vim.fn.executable("gh") == 0 then
+    return vim.schedule(function()
+      cb(nil)
+    end)
+  end
+  process.run({ "gh", "stack", "view", "--json" }, { cwd = cwd, timeout = 5000 }, function(res)
+    local ok, stack = pcall(vim.json.decode, res.stdout)
+    local layers = res.code == 0 and ok and type(stack) == "table" and stack.branches
+    for i, layer in ipairs(type(layers) == "table" and layers or {}) do
+      if type(layer) == "table" and layer.name == branch then
+        return cb({ at = i, of = #layers })
+      end
+    end
+    cb(nil)
   end)
 end
 
