@@ -124,7 +124,9 @@ describe("changeset.pick_preview", function()
       local seen = {}
       drive({ source = { items = { a, b } }, window = preview.window() }, {
         {
-          ready = preview_open,
+          ready = function()
+            return (previewed() or "") ~= ""
+          end,
           run = function()
             local floats = side_floats()
             seen.count = #floats
