@@ -595,7 +595,7 @@ for. gitsigns' gutter keeps the user's own `diff_opts`.
 ### Header
 
 ```text
-  origin/jt/exc-1200-stacked-parent…     #412
+  jt/exc-1201-stacked-child…   #412  3/5
   4 files            2 commits  +142 -38
 
  󰴉  Implementation      2 files      +12 -3
@@ -605,14 +605,18 @@ for. gitsigns' gutter keeps the user's own `diff_opts`.
 Two rows on one strip, the strip `TabLine`'s background: what a colorscheme paints its own
 chrome with, so the header reads as the panel's frame.
 
-The first row states the ref the tree is compared against, because "changed relative to
-what" is the one question the rows themselves cannot answer. It leads with a glyph in
-`Directory`'s colour for what the ref is: mini.statusline's own branch glyph, or for a tag
-or a commit set by hand, its octicon sibling. It dims `origin/` so the branch name reads first.
-A ref too long for the width loses its tail, never its head: stacked branches are told apart
-by how their names start, which is why the cut is made here rather than by the statusline's
-`%<`, which keeps the tail. The branch's open PR sits at the right edge, one blank cell in,
-while the tree is measured against the branch that PR merges into.
+The first row names the branch checked out, after mini.statusline's own branch glyph in
+`Directory`'s colour: the panel is about that branch, and once the global statusline gives
+way to the sidebar's own, nothing else on screen names it. What the tree is compared against
+is the footer's to say. A branch name too long for the width loses its tail, never its head:
+stacked branches are told apart by how their names start, which is why the cut is made here
+rather than by the statusline's `%<`, which keeps the tail. The branch's open PR sits at the
+right edge, one blank cell in, while the tree is measured against the branch that PR merges
+into. Beside it, when gh-stack keeps a stack holding the branch, is its layer, `3/5` after the
+octicon stack glyph, the PR glyph's sibling, dimmed as the PR is. The count runs from the
+bottom and takes in merged layers, so it reads as `gh stack view` lists the stack. gh-stack is
+asked once per switch to a branch, not on every move of HEAD, as its answer only changes when
+the stack is restructured, which mostly comes with a switch.
 
 The second row counts what the branch holds, the numbers lit and their nouns dimmed: files
 on the left, commits at the right beside the line totals, which end in the column the
@@ -1003,14 +1007,17 @@ leaving the last preview standing.
 ### Footer
 
 ```text
- Changeset   feature  origin/trunk  file 3 of 12  󰈲 sess      <CR> open  f filter  F kinds  ? all keys
+ Changeset   comparing to origin/trunk  file 3 of 12  󰈲 sess      <CR> open  f filter  F kinds  ? all keys
 ```
 
 The sidebar's own `statusline`. With `laststatus=3` a window's own statusline is drawn
 only while that window has focus, so it takes the global bar's place exactly when the
 sidebar's keys are worth naming, and hands it back the moment you leave. The badge is the
 header glyph's `Directory` colour, reversed, standing where the mode badge would.
-Right after it come the branch you are on and the ref the tree is compared against: nothing else on screen names the branch, and repeating the header's ref makes the pair read as one comparison. Both sit left of `%<`, so a bar too narrow gives up the keys before them. The
+Right after it, `comparing to` and the ref the tree is compared against, the one question
+the rows themselves cannot answer; the header names the branch, so the footer leaves it out.
+It sits left of `%<`, so a bar too narrow gives up the keys before it. With focus elsewhere
+the bar is the global one, and nothing names the ref: it matters while you read the tree. The
 position counts the files on screen — a folded section's files are not — and names no file
 while the cursor is on a section header or a comment row. A file shown in more than one section counts
 once, at its first row. The filter in force is named, since once its prompt closes the lit
@@ -1217,19 +1224,20 @@ and `measure` reads it, so the tree and the gutter take it from where they take 
 and can't disagree. A ref that stops sharing history with HEAD, as a deleted branch does, is
 skipped rather than forgotten, so fetching it back brings it back. A tree is kept only while
 both its fork point and its ref match the point measured, since a ref set by hand can fork
-where the guess does and the header must name the one chosen.
+where the guess does and the footer must name the one chosen.
 
 The base pickers, a branch's, a tag's and a commit's, preview the consequence rather than
 the ref. `git log` or `git show` of the ref under the cursor, as a git picker usually shows,
 answers what the ref is; the question being asked is what the sidebar would hold against it.
-So the preview opens with the sidebar's own header strip, its ref row and its totals row
-in the same groups, then the commits that would count, then the files with their stats:
-picking a base should read as turning the sidebar to it. The ref row is drawn at once and
+So the preview opens with the sidebar's own header strip and its totals row in the same
+groups, the first row naming the ref under the cursor where the sidebar names the branch,
+then the commits that would count, then the files with their stats: picking a base should
+read as turning the sidebar to it. The ref row is drawn at once and
 the rest once `diff.collect`, the sidebar's own diff, lands, so the numbers are the ones the
 sidebar would show. Commits stop at five with a count of the rest, since the files are the
 sidebar's content and a base far back would push them out of view. The list leads each item
-with its kind's glyph from the header's family, dims a remote or a hash as the header dims
-`origin/`, and drops a date that would cover the name. Branches and tags are read before
+with its kind's glyph from the header's family, dims a remote or a hash as the preview's ref
+row dims `origin/`, and drops a date that would cover the name. Branches and tags are read before
 the picker opens, so one with nothing to offer says so instead of opening empty; commits
 stream in as git prints them, since they are HEAD's whole history.
 

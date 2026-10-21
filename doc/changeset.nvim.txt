@@ -102,7 +102,8 @@ Each optional integration adds one feature:
   `:Changeset review submit` pastes the review into an agent's prompt. Neovim
   must run in a herdr pane.
 - `gh`: a branch with no parent is compared against its open PR's target, and
-  the header shows the PR's number.
+  the header shows the PR's number. With the gh-stack extension, the header
+  also shows the branch's place in its stack.
 - mini.icons, set up, or nvim-web-devicons: icons. nvim-web-devicons draws
   file icons only.
 - which-key.nvim: `?` opens its popup instead of a float. Version 3 also names
@@ -169,11 +170,10 @@ It also has none once the parent is deleted or its reflog entry expires.
 changeset skips a parent that the default branch has moved past, as when you
 rebased onto the default branch after the parent was squash-merged.
 
-The header names the ref the tree is compared against, after a glyph for
-what it is: a branch, a tag or a commit. It prefers `origin/<branch>` to the
-local branch, and shows the open PR's number when the PR targets the same
-base. When `gh` names a PR after the tree was built, the tree is built again
-against it.
+The sidebar's footer names the ref the tree is compared against, preferring
+`origin/<branch>` to the local branch. The header shows the open PR's number
+when the PR targets the same base. When `gh` names a PR after the tree was
+built, the tree is built again against it.
 
 The tree rebuilds by itself when you write a file, when Neovim notices that a
 file you have open changed outside it (|FileChangedShellPost|), when Neovim
@@ -500,15 +500,19 @@ picker or a jump to a definition, opens in the window you were last in
 instead, with the cursor where the command put it. The tree stays, and the
 cursor moves to that window.
 
-The header over the tree names the ref the tree is compared against, the PR's
-number when there is one, the number of files and commits, and the `+N -N`
-lines added and removed. While symbols are read it shows
-`⋯ reading symbols 3/10` instead.
+The header over the tree names the branch you are on (`HEAD` when detached),
+the PR's number when there is one, the number of files and commits, and the
+`+N -N` lines added and removed. While symbols are read it shows
+`⋯ reading symbols 3/10` instead. When gh-stack keeps a stack holding the
+branch, the header shows its layer beside the PR, as `3/5`: counted from the
+bottom, merged layers included. gh-stack is asked once each time you switch
+to a branch, so a stack restructured while you stay on it shows from your next
+switch.
 
-The footer names the branch you are on (`HEAD` when detached) and the ref it
-is compared against, then which file of how many the cursor is in, the filter
-(|changeset-filter|), and the keys `<CR>`, `f`, `F` and `?`, under the names
-you bound them to.
+The footer says what the tree is compared against, as
+`comparing to origin/trunk`, then which file of how many the cursor is in,
+the filter (|changeset-filter|), and the keys `<CR>`, `f`, `F` and `?`, under
+the names you bound them to.
 
 SECTIONS                                                  *changeset-sections*
 
@@ -1408,10 +1412,11 @@ ChangesetHeaderIcon                                      *ChangesetHeaderIcon*
 	The branch glyph. `Directory`'s colour.
 
 ChangesetHeaderDim                                        *ChangesetHeaderDim*
-	The remote, nouns and PR. `Comment`'s colour.
+	The remote, nouns, PR and stack layer. `Comment`'s colour.
 
 ChangesetHeaderRef                                        *ChangesetHeaderRef*
-	The ref compared against. `Normal`'s colour, bold.
+	The branch, or the ref a base picker's preview names. `Normal`'s
+	colour, bold.
 
 ChangesetBadge                                                *ChangesetBadge*
 	The footer's badge. `Directory`'s colour, reversed, bold.

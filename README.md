@@ -24,7 +24,7 @@ Neovim 0.12 or newer, and `git`. Everything else is optional:
 | Treesitter parsers                                                         | Comment-only changes listed under Docs, and Rust and TypeScript tests found by their syntax.          |
 | [gitsigns.nvim](https://github.com/lewis6991/gitsigns.nvim)                | The gutter's base, which marks the whole branch in the gutter, the unified diff, and the change colours. |
 | [herdr](https://herdr.dev), a terminal multiplexer for coding agents       | `:Changeset review submit`, which pastes your review into an agent's prompt.                          |
-| `gh`                                                                       | The open PR's target as the base, for a branch with no parent.                                        |
+| `gh`                                                                       | The open PR's target as the base, for a branch with no parent. With the [gh-stack](https://github.com/github/gh-stack) extension, the branch's place in its stack. |
 | [mini.icons](https://github.com/nvim-mini/mini.icons) or nvim-web-devicons | Icons.                                                                                                |
 | [mini.pick](https://github.com/nvim-mini/mini.pick)                        | `:Pick changeset`, and the base pickers' preview. Without it, the pickers use `vim.ui.select`.        |
 | [which-key.nvim](https://github.com/folke/which-key.nvim)                  | `?` opens its popup; version 3 also names the default keys' groups.                                   |
@@ -177,8 +177,8 @@ a folded one. `/` searches the tree.
 
 The tree shows what changed since your branch left the branch you created it from, else
 its open PR's target (found with `gh`), else the default branch. On the default branch it
-shows what you haven't pushed. The header names that base; `:help changeset-base` has the
-full rules.
+shows what you haven't pushed. The sidebar's footer names that base; `:help changeset-base` has
+the full rules.
 
 When that guess is wrong, pick what to compare against instead: a branch with `<C-g>bb`, a tag
 with `<C-g>bt`, or one of your commits with `<C-g>bc`. With mini.pick, a preview beside the
