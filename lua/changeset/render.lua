@@ -722,7 +722,7 @@ function M.footer(info)
   local parts = {
     ("%%#%s# Changeset "):format(highlights.BADGE_HL),
     ("%%#%s# %s %%#%s#%s"):format(highlights.FOOTER_HL, BRANCH_ICON, highlights.FOOTER_KEY_HL, escaped(info.branch)),
-    ("%%#%s#  %s %s%%#%s#%s"):format(
+    ("%%#%s# %s %s%%#%s#%s"):format(
       highlights.FOOTER_HL,
       COMPARE_ICON,
       remote,

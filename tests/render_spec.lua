@@ -990,6 +990,13 @@ describe("changeset.render", function()
       assert.truthy((ref_at < footer:find("file 3 of 12", 1, true)))
     end)
 
+    it("spaces the compare glyph evenly between the branch and the ref", function()
+      local before, after = shown({}):match("feature( +)[^ ]+( +)origin/trunk")
+
+      assert.are.same(" ", before)
+      assert.are.same(" ", after)
+    end)
+
     it("escapes % in the branch so the statusline does not read it as an item", function()
       assert.truthy((shown({ branch = "50%-off" }):find("50%-off", 1, true)))
     end)
