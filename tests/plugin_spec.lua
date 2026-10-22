@@ -438,10 +438,16 @@ describe("plugin/changeset.lua", function()
       }, steps)
     end)
 
-    it("preview the next and previous row", function()
-      vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-preview-next)<Plug>(changeset-preview-prev)"), "x", false)
+    it("preview by their count, and . repeats them", function()
+      vim.api.nvim_feedkeys(vim.keycode("<Plug>(changeset-preview-next)") .. ".", "x", false)
+      vim.api.nvim_feedkeys("2" .. vim.keycode("<Plug>(changeset-preview-prev)") .. ".", "x", false)
 
-      assert.same({ { "preview_step", 1 }, { "preview_step", -1 } }, steps)
+      assert.same({
+        { "preview_step", 1 },
+        { "preview_step", 1 },
+        { "preview_step", -2 },
+        { "preview_step", -2 },
+      }, steps)
     end)
 
     it("leave the buffer alone", function()

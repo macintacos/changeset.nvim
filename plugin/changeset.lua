@@ -305,12 +305,14 @@ local keys = {
     name = "preview next",
     desc = "Preview the next change",
     icon = { cat = "filetype", name = "diff" },
+    operatorfunc = "v:lua.require'changeset'.preview_step(%d)",
   },
   {
     lhs = "[g",
     name = "preview prev",
     desc = "Preview the previous change",
     icon = { cat = "filetype", name = "diff" },
+    operatorfunc = "v:lua.require'changeset'.preview_step(-%d)",
   },
   { lhs = "<C-g>y", name = "review yank", desc = "Copy the review as text", icon = { cat = "lsp", name = "Text" } },
   {
