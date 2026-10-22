@@ -146,7 +146,7 @@ has a `<Plug>(changeset-…)` map named after its words, and these default keys:
   vim.keymap.set({ "n", "x" }, "<leader>c", "<Plug>(changeset-comment-new)")
   ```
 
-- The `<C-g>n` keys, `<C-g>cn` and `<C-g>cp` take a count and repeat with `.`.
+- The `<C-g>n` keys, `]g`, `[g`, `<C-g>cn` and `<C-g>cp` take a count and repeat with `.`.
 - With the default keys mapped, Neovim's own `<C-g>` (file info) waits `'timeoutlen'` for a
   second key.
 

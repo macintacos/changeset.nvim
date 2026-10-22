@@ -1123,7 +1123,7 @@ which would put a band over the opened line. A one-shot skip of each, rather tha
 `'eventignore'`, lets the file window's leave events and other plugins' handlers fire as
 usual.
 
-The walking keys, every `<C-g>n` key with `<C-g>cn` and `<C-g>cp`, are dot-repeatable
+The walking keys, every `<C-g>n` key with `]g`, `[g`, `<C-g>cn` and `<C-g>cp`, are dot-repeatable
 because they are exactly the motion you press
 again and again. `.` after them repeats the step and not your last edit, which only works
 because they leave nothing for `.` to repeat otherwise. The operator is `g@l` after an

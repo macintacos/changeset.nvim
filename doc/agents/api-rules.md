@@ -16,9 +16,10 @@ base: it hears gitsigns' updates, each repository's gitdir watcher for HEAD's mo
 `FocusGained`. It is what puts the gutter on the branch's base from startup, with or without
 `setup()` and the sidebar, and it is why a session without gitsigns loads nothing. Its maps run `<Cmd>Changeset …<CR>`, so a map and the command take
 one route through `:Changeset`, with its range. The exceptions are the walking maps,
-`next`, `prev`, `next symbol`, `prev symbol`, `next file`, `prev file`, `comment next` and
-`comment prev`. They are `g@` operators so that `.` repeats them, and their
-`'operatorfunc'` calls `step()` in `lua/changeset/init.lua` and
+`next`, `prev`, `next symbol`, `prev symbol`, `next file`, `prev file`, `preview next`,
+`preview prev`, `comment next` and `comment prev`. They are `g@` operators so that `.`
+repeats them, and their `'operatorfunc'` calls `step()` and `preview_step()` in
+`lua/changeset/init.lua` and
 `next_comment()` / `prev_comment()` in `lua/changeset/reviewing.lua` with the count. So
 those functions stay public, and the expr map's callback requires nothing. From the review
 comment window the expr map returns `<Cmd>Changeset …<CR>` instead, so it takes the

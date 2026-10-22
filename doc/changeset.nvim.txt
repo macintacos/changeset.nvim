@@ -328,13 +328,13 @@ says how they move.
 
 :Changeset preview next                              *:Changeset-preview-next*
 <Plug>(changeset-preview-next)                *<Plug>(changeset-preview-next)*
-]g                                                              *changeset-]g*
+[count]]g                                                       *changeset-]g*
 	Move the sidebar's selection to the next row and preview it, leaving
 	your cursor where it is.
 
 :Changeset preview prev                              *:Changeset-preview-prev*
 <Plug>(changeset-preview-prev)                *<Plug>(changeset-preview-prev)*
-[g                                                              *changeset-[g*
+[count][g                                                       *changeset-[g*
 	Move the sidebar's selection to the previous row and preview it.
 
 REVIEW COMMENTS
@@ -477,11 +477,11 @@ key. which-key names the `<C-g>c` group "comment", the `<C-g>n` group
 "navigation" and the `<C-g>b` group "base".
 
                                                         *changeset-dot-repeat*
-The `<C-g>n` keys, `<C-g>cn` and `<C-g>cp` take a [count] and repeat with |.|:
-`<C-g>nn...` steps four times, and `3<C-g>ns.` steps three symbols, then three
-more. A count given to `.` itself is ignored. Like any |g@| operator, they set
-'operatorfunc' and the |'[| and |']| marks. `]g`, `[g` and the commands
-themselves take no count.
+The `<C-g>n` keys, `]g`, `[g`, `<C-g>cn` and `<C-g>cp` take a [count] and
+repeat with |.|: `<C-g>nn...` steps four times, and `3<C-g>ns.` steps three
+symbols, then three more. A count given to `.` itself is ignored. Like any
+|g@| operator, they set 'operatorfunc' and the |'[| and |']| marks. The
+commands themselves take no count.
 
 ==============================================================================
 7. The sidebar                                             *changeset-sidebar*
@@ -818,8 +818,8 @@ When no place is left that way, a step stays put and says so, such as "no next
 change". It doesn't wrap.
 
 `:Changeset preview next` and `:Changeset preview prev` (`]g`, `[g`) move the
-selection one row, skipping section headers, and preview it without opening
-it, so you can read a branch without focusing the sidebar.
+selection one row, or [count] rows, skipping section headers, and preview it
+without opening it, so you can read a branch without focusing the sidebar.
 
 ==============================================================================
 9. Review comments                                 *changeset-review-comments*
