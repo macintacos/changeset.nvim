@@ -225,6 +225,43 @@ describe("changeset position in a session", function()
     assert.equal(autocmds, #vim.api.nvim_get_autocmds({ group = "changeset" }))
   end)
 
+  describe("read from a file", function()
+    local session ---@type string
+
+    before_each(function()
+      vim.cmd("runtime plugin/changeset.lua")
+      session = tmp .. "/Session.vim"
+      local sessionoptions = vim.o.sessionoptions
+      vim.o.sessionoptions = "blank,buffers,curdir,winsize"
+      vim.cmd.edit("mod.lua")
+      changeset.open()
+      Sidebar.settle()
+      vim.cmd("mksession! " .. vim.fn.fnameescape(session))
+      vim.o.sessionoptions = sessionoptions
+    end)
+
+    it("reads over the sidebar it was saved from", function()
+      local ok, err = pcall(vim.cmd.source, session)
+
+      assert.is_true(ok, tostring(err))
+      Sidebar.await_open()
+    end)
+
+    it("reads twice before the first read's sidebar opens", function()
+      changeset.close()
+      Sidebar.flush()
+      -- Off the tree's branch, so the first read's open waits on a fork point as a fresh Neovim's does.
+      Fixture.git({ "checkout", "-q", "-b", "other" }, tmp)
+
+      -- As `:restart` does under a config that reads its own session at VimEnter.
+      vim.cmd.source(session)
+      local ok, err = pcall(vim.cmd.source, session)
+
+      assert.is_true(ok, tostring(err))
+      Sidebar.await_open()
+    end)
+  end)
+
   it("hides the cursor when a session reopens the sidebar with focus in it", function()
     vim.cmd.edit("mod.lua")
 

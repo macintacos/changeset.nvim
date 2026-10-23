@@ -965,6 +965,8 @@ end
 ---Fill `placeholder`, in the current tabpage, with the tree, or let go of it when there is no tree to fill it with.
 ---@param placeholder integer
 local function fill(placeholder)
+  -- Gone with its window: a session read before the open lands drops the open, and names its own placeholder the same.
+  vim.bo[vim.api.nvim_win_get_buf(placeholder)].bufhidden = "wipe"
   -- Read now: the tracker can record over it before the open lands.
   local ok, recorded = pcall(vim.json.decode, vim.g[POSITION_GLOBAL])
   M.open(function()
@@ -1138,8 +1140,12 @@ vim.api.nvim_create_autocmd("SessionLoadPre", {
   group = vim.api.nvim_create_augroup("changeset.session", { clear = true }),
   desc = "changeset: close the sidebar before a session lays out its windows",
   callback = function()
-    if window.buf() then
+    local tree = window.buf()
+    if tree then
       M.close()
+      -- Its wipe waits a tick, past where the session names its placeholder, maybe as the tree was named. Not wiped
+      -- here: `doautoall` stops at a buffer its autocommand deletes.
+      vim.api.nvim_buf_set_name(tree, "")
     elseif opening then
       release()
     end
