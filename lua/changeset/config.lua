@@ -22,6 +22,8 @@ local M = {}
 ---@field expand_all? string|false Expand every file. Default `L`.
 ---@field next_section? string|false Next section. Default `]]`.
 ---@field prev_section? string|false Previous section. Default `[[`.
+---@field scroll_preview_down? string|false Scroll the preview down a line. Default `J`.
+---@field scroll_preview_up? string|false Scroll the preview up a line. Default `K`.
 ---@field refresh? string|false Rebuild the tree. Default `R`.
 ---@field yank? string|false Yank path:line. Default `y`.
 ---@field toggle_viewed? string|false Mark the file viewed, or not. Default `x`.
@@ -67,6 +69,8 @@ local M = {}
 ---@field expand_all string|false
 ---@field next_section string|false
 ---@field prev_section string|false
+---@field scroll_preview_down string|false
+---@field scroll_preview_up string|false
 ---@field refresh string|false
 ---@field yank string|false
 ---@field toggle_viewed string|false
@@ -106,6 +110,8 @@ local DEFAULTS = {
     expand_all = "L",
     next_section = "]]",
     prev_section = "[[",
+    scroll_preview_down = "J",
+    scroll_preview_up = "K",
     refresh = "R",
     yank = "y",
     toggle_viewed = "x",

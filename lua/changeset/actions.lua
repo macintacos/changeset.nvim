@@ -267,6 +267,17 @@ local function walk(count)
   move(lnum)
 end
 
+---Scrolls the window previews go to `count` lines, down for positive, as `<C-e>` and `<C-y>` do there.
+---@param count integer
+local function scroll_preview(count)
+  local win = window.peek_target()
+  if win then
+    vim.api.nvim_win_call(win, function()
+      vim.cmd.normal({ math.abs(count) .. vim.keycode(count > 0 and "<C-e>" or "<C-y>"), bang = true })
+    end)
+  end
+end
+
 ---Open the symbol-kind filter menu, redrawing as kinds are toggled.
 ---@param state changeset.SidebarState
 ---@param redraw fun() Redraw the tree.
@@ -491,6 +502,12 @@ function M.set_keymaps(buf, keys, hooks)
       walk(-vim.v.count1)
     end, "Previous row")
   end
+  map(keys.scroll_preview_down, function()
+    scroll_preview(vim.v.count1)
+  end, "Scroll the preview down")
+  map(keys.scroll_preview_up, function()
+    scroll_preview(-vim.v.count1)
+  end, "Scroll the preview up")
   map(keys.refresh, build.update, "Rebuild the tree")
   map(keys.yank, function()
     local row = draw.row_at_cursor()
