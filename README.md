@@ -152,23 +152,24 @@ has a `<Plug>(changeset-…)` map named after its words, and these default keys:
 
 ## Sidebar keys
 
-| Key                         | `keymaps` option                          | Does                                                                    |
-| --------------------------- | ----------------------------------------- | ----------------------------------------------------------------------- |
-| `<CR>` / double-click       | `jump`                                    | Open the row's change and focus it                                      |
-| `<S-CR>`                    | `jump_close`                              | Open it and close the sidebar                                           |
-| `<C-v>` / `<C-x>` / `<C-t>` | `jump_vsplit` / `jump_split` / `jump_tab` | Open it in a vertical split / split / tab                               |
-| `q`                         | `close`                                   | Close the sidebar                                                       |
-| `l` / `h`                   | `expand` / `collapse`                     | Expand / collapse the row, or step out to its parent                    |
-| `L` / `H`                   | `expand_all` / `collapse_all`             | Expand / collapse every file                                            |
-| `]]` / `[[`                 | `next_section` / `prev_section`           | Move to the next / previous section                                     |
-| `f`                         | `filter`                                  | Filter the tree as you type                                             |
-| `F`                         | `filter_kinds`                            | Hide symbol kinds, remembered for this branch, repository or everywhere |
-| `y`                         | `yank`                                    | Copy the row's `path:line`, or a ranged comment's `path:first-last`     |
-| `x`                         | `toggle_viewed`                           | Mark the file viewed, or not, until its diff changes                    |
-| `X`                         | `toggle_viewed_all`                       | Mark every file viewed, or none                                         |
-| `d`                         | `delete_comment`                          | Delete the review comment on a Comments row                             |
-| `R`                         | `refresh`                                 | Rebuild the tree                                                        |
-| `?`                         | `help`                                    | List the sidebar's keys                                                 |
+| Key                         | `keymaps` option                            | Does                                                                    |
+| --------------------------- | ------------------------------------------- | ----------------------------------------------------------------------- |
+| `<CR>` / double-click       | `jump`                                      | Open the row's change and focus it                                      |
+| `<S-CR>`                    | `jump_close`                                | Open it and close the sidebar                                           |
+| `<C-v>` / `<C-x>` / `<C-t>` | `jump_vsplit` / `jump_split` / `jump_tab`   | Open it in a vertical split / split / tab                               |
+| `q`                         | `close`                                     | Close the sidebar                                                       |
+| `l` / `h`                   | `expand` / `collapse`                       | Expand / collapse the row, or step out to its parent                    |
+| `L` / `H`                   | `expand_all` / `collapse_all`               | Expand / collapse every file                                            |
+| `]]` / `[[`                 | `next_section` / `prev_section`             | Move to the next / previous section                                     |
+| `J` / `K`                   | `scroll_preview_down` / `scroll_preview_up` | Scroll the preview down / up a line, staying in the sidebar             |
+| `f`                         | `filter`                                    | Filter the tree as you type                                             |
+| `F`                         | `filter_kinds`                              | Hide symbol kinds, remembered for this branch, repository or everywhere |
+| `y`                         | `yank`                                      | Copy the row's `path:line`, or a ranged comment's `path:first-last`     |
+| `x`                         | `toggle_viewed`                             | Mark the file viewed, or not, until its diff changes                    |
+| `X`                         | `toggle_viewed_all`                         | Mark every file viewed, or none                                         |
+| `d`                         | `delete_comment`                            | Delete the review comment on a Comments row                             |
+| `R`                         | `refresh`                                   | Rebuild the tree                                                        |
+| `?`                         | `help`                                      | List the sidebar's keys                                                 |
 
 Set a key to `false` to leave it unbound. `j` and `k` step over section headers, stopping only on
 a folded one. `/` searches the tree.
@@ -223,6 +224,8 @@ require("changeset").setup({
     expand_all = "L",
     next_section = "]]",
     prev_section = "[[",
+    scroll_preview_down = "J",
+    scroll_preview_up = "K",
     refresh = "R",
     yank = "y",
     toggle_viewed = "x",

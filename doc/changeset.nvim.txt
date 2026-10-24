@@ -678,6 +678,16 @@ keymaps.next_section                   *changeset-option-keymaps.next_section*
 keymaps.prev_section                   *changeset-option-keymaps.prev_section*
 	Move to the previous section header.
 
+J                                                        *changeset-sidebar-J*
+keymaps.scroll_preview_down     *changeset-option-keymaps.scroll_preview_down*
+	Scroll the window the sidebar previews in down a line, or [count]
+	lines, as |CTRL-E| does there, without leaving the sidebar: entering
+	the window would open the preview (|changeset-preview|).
+
+K                                                        *changeset-sidebar-K*
+keymaps.scroll_preview_up         *changeset-option-keymaps.scroll_preview_up*
+	As `J`, up, as |CTRL-Y| does.
+
 R                                                        *changeset-sidebar-R*
 keymaps.refresh                             *changeset-option-keymaps.refresh*
 	Rebuild the tree now.
