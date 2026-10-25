@@ -3,8 +3,9 @@
 A Neovim sidebar mapping what the current branch changed: its files, and the symbols each
 hunk touched. `README.md` introduces it to users, and `doc/changeset.nvim.txt`, which
 `:help changeset.nvim` opens, is their complete reference. `doc/agents/design.md` records
-why the sidebar looks and behaves as it does. Each file under `lua/changeset/` opens with a
-one-line summary of what it owns.
+why the sidebar looks and behaves as it does, and `design/` the visual direction it follows,
+such as borrowing every colour from the user's colorscheme. Each file under `lua/changeset/`
+opens with a one-line summary of what it owns.
 
 ## Setup
 
@@ -88,6 +89,7 @@ digraph rules_router {
 
     "Changing the repo" -> "What does the change touch?";
     "What does the change touch?" -> "Load doc/agents/design.md" [label="anything a user can see the sidebar do: its look, keys, previews, rebuilds, caching, windows"];
+    "What does the change touch?" -> "Load design/README.md" [label="colours, glyphs or emphasis: a highlight group, how one is derived from the colorscheme, a new visual device"];
     "What does the change touch?" -> "Load doc/agents/api-rules.md" [label="what users call or configure: options, :Changeset, <Plug> maps, highlight groups, public functions"];
     "What does the change touch?" -> "Load doc/agents/dependency-rules.md" [label="test dependencies: pins, treesitter parsers, the .emmyrc.json libraries"];
     "What does the change touch?" -> "Load doc/agents/herdr.md" [label="handing a review to an AI agent through herdr: the herdr calls, their JSON and error envelope"];
