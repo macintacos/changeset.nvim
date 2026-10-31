@@ -1062,8 +1062,8 @@ is not on loan. The window the cursor is in never wears it at all: a `]g` presse
 previews without a band, and one that came along with a buffer or a split comes off the
 moment that window takes focus or a buffer.
 
-`J` and `K` scroll the borrowed window from the sidebar, a line at a time as `<C-e>` and
-`<C-y>` do, because entering it to read past its edge would take the file.
+`J` and `K` scroll the borrowed window from the sidebar, `preview.scroll` lines at a time as
+`<C-e>` and `<C-y>` do, because entering it to read past its edge would take the file.
 
 A row that stands for a span marks the span in the window too. A symbol's body, or a
 single hunk outside every symbol, is drawn as a bar down the sign column from its first

@@ -161,7 +161,7 @@ has a `<Plug>(changeset-…)` map named after its words, and these default keys:
 | `l` / `h`                   | `expand` / `collapse`                       | Expand / collapse the row, or step out to its parent                    |
 | `L` / `H`                   | `expand_all` / `collapse_all`               | Expand / collapse every file                                            |
 | `]]` / `[[`                 | `next_section` / `prev_section`             | Move to the next / previous section                                     |
-| `J` / `K`                   | `scroll_preview_down` / `scroll_preview_up` | Scroll the preview down / up a line, staying in the sidebar             |
+| `J` / `K`                   | `scroll_preview_down` / `scroll_preview_up` | Scroll the preview down / up 5 lines, staying in the sidebar            |
 | `f`                         | `filter`                                    | Filter the tree as you type                                             |
 | `F`                         | `filter_kinds`                              | Hide symbol kinds, remembered for this branch, repository or everywhere |
 | `y`                         | `yank`                                      | Copy the row's `path:line`, or a ranged comment's `path:first-last`     |
@@ -238,6 +238,10 @@ require("changeset").setup({
   layout = {
     -- Below this many columns left for the files, the sidebar opens along the bottom.
     min_file_width = 80,
+  },
+  preview = {
+    -- The lines J and K scroll the preview without a count.
+    scroll = 5,
   },
   review = {
     -- Text pasted above the review, such as a skill to invoke.

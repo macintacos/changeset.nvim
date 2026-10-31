@@ -680,9 +680,10 @@ keymaps.prev_section                   *changeset-option-keymaps.prev_section*
 
 J                                                        *changeset-sidebar-J*
 keymaps.scroll_preview_down     *changeset-option-keymaps.scroll_preview_down*
-	Scroll the window the sidebar previews in down a line, or [count]
-	lines, as |CTRL-E| does there, without leaving the sidebar: entering
-	the window would open the preview (|changeset-preview|).
+	Scroll the window the sidebar previews in down `preview.scroll` lines
+	(|changeset-option-preview.scroll|), or [count] lines, as |CTRL-E|
+	does there, without leaving the sidebar: entering the window would
+	open the preview (|changeset-preview|).
 
 K                                                        *changeset-sidebar-K*
 keymaps.scroll_preview_up         *changeset-option-keymaps.scroll_preview_up*
@@ -1299,6 +1300,7 @@ Pass |changeset.setup()| the options you change. These are the defaults: >lua
         filter = "f",
       },
       layout = { min_file_width = 80 },
+      preview = { scroll = 5 },
       review = { header = "", footer = "" },
       review_comment = {
         save = { "<C-CR>", "<C-s>" },
@@ -1322,6 +1324,10 @@ layout.min_file_width                 *changeset-option-layout.min_file_width*
 	Number. Default `80`. The fewest columns the files get beside the
 	sidebar; narrower, and the sidebar opens along the bottom
 	(|changeset-layout|).
+
+preview.scroll                               *changeset-option-preview.scroll*
+	Positive integer. Default `5`. The lines `J` and `K` scroll the
+	preview when you type no count (|changeset-sidebar-J|).
 
 review.header                                 *changeset-option-review.header*
 	String. Default `""`. Text pasted above the review, trimmed, a blank
