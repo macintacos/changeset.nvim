@@ -5,6 +5,7 @@ local M = {}
 ---@class changeset.Config
 ---@field keymaps? changeset.Config.Keymaps The sidebar's keys, each a key or `false` to leave it unbound.
 ---@field layout? changeset.Config.Layout
+---@field preview? changeset.Config.Preview
 ---@field review? changeset.Config.Review
 ---@field review_comment? changeset.Config.ReviewComment
 ---@field unified_diff? changeset.Config.UnifiedDiff
@@ -22,8 +23,8 @@ local M = {}
 ---@field expand_all? string|false Expand every file. Default `L`.
 ---@field next_section? string|false Next section. Default `]]`.
 ---@field prev_section? string|false Previous section. Default `[[`.
----@field scroll_preview_down? string|false Scroll the preview down a line. Default `J`.
----@field scroll_preview_up? string|false Scroll the preview up a line. Default `K`.
+---@field scroll_preview_down? string|false Scroll the preview down `preview.scroll` lines. Default `J`.
+---@field scroll_preview_up? string|false Scroll the preview up `preview.scroll` lines. Default `K`.
 ---@field refresh? string|false Rebuild the tree. Default `R`.
 ---@field yank? string|false Yank path:line. Default `y`.
 ---@field toggle_viewed? string|false Mark the file viewed, or not. Default `x`.
@@ -35,6 +36,9 @@ local M = {}
 
 ---@class changeset.Config.Layout
 ---@field min_file_width? number Narrower than this beside the sidebar, the files get the width and the tree moves below them. Default 80.
+
+---@class changeset.Config.Preview
+---@field scroll? integer Lines `J` and `K` scroll the preview without a count. Default 5.
 
 ---@class changeset.Config.Review
 ---@field header? string Text pasted above the review, trimmed, a blank line apart; a blank one adds nothing. Default "".
@@ -52,6 +56,7 @@ local M = {}
 ---@class changeset.Options : changeset.Config
 ---@field keymaps changeset.Options.Keymaps
 ---@field layout changeset.Options.Layout
+---@field preview changeset.Options.Preview
 ---@field review changeset.Options.Review
 ---@field review_comment changeset.Options.ReviewComment
 ---@field unified_diff changeset.Options.UnifiedDiff
@@ -82,6 +87,9 @@ local M = {}
 
 ---@class changeset.Options.Layout : changeset.Config.Layout
 ---@field min_file_width number
+
+---@class changeset.Options.Preview : changeset.Config.Preview
+---@field scroll integer
 
 ---@class changeset.Options.Review : changeset.Config.Review
 ---@field header string
@@ -122,6 +130,7 @@ local DEFAULTS = {
     filter = "f",
   },
   layout = { min_file_width = 80 },
+  preview = { scroll = 5 },
   review = { header = "", footer = "" },
   review_comment = { save = { "<C-CR>", "<C-s>" }, sign = true, blocks = false },
   unified_diff = { keep = "none" },
@@ -135,6 +144,7 @@ local ignored = {}
 local function validate(options)
   vim.validate("keymaps", options.keymaps, "table")
   vim.validate("layout", options.layout, "table")
+  vim.validate("preview", options.preview, "table")
   vim.validate("review", options.review, "table")
   vim.validate("review_comment", options.review_comment, "table")
   vim.validate("unified_diff", options.unified_diff, "table")
@@ -144,6 +154,9 @@ local function validate(options)
     end, "non-empty string or false")
   end
   vim.validate("layout.min_file_width", options.layout.min_file_width, "number")
+  vim.validate("preview.scroll", options.preview.scroll, function(v)
+    return type(v) == "number" and v >= 1 and v % 1 == 0
+  end, "positive integer")
   vim.validate("review.header", options.review.header, "string")
   vim.validate("review.footer", options.review.footer, "string")
   vim.validate("review_comment.save", options.review_comment.save, function(v)

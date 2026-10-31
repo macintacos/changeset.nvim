@@ -51,6 +51,10 @@ describe("changeset.config", function()
       { { unified_diff = false }, "unified_diff" },
       { { unified_diff = { keep = "some" } }, "unified_diff.keep" },
       { { unified_diff = { keep = false } }, "unified_diff.keep" },
+      { { preview = false }, "preview" },
+      { { preview = { scroll = 0 } }, "preview.scroll" },
+      { { preview = { scroll = 2.5 } }, "preview.scroll" },
+      { { preview = { scroll = "5" } }, "preview.scroll" },
     }
     for _, case in ipairs(cases) do
       local ok, err = pcall(config.setup, case[1])

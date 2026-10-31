@@ -4,6 +4,7 @@
 
 local Paths = require("changeset.paths")
 local build = require("changeset.build")
+local config = require("changeset.config")
 local draw = require("changeset.draw")
 local help = require("changeset.help")
 local icons = require("changeset.icons")
@@ -267,6 +268,12 @@ local function walk(count)
   move(lnum)
 end
 
+---The lines `J` and `K` scroll: the count typed, else `preview.scroll`.
+---@return integer
+local function scroll_count()
+  return vim.v.count > 0 and vim.v.count or config.get().preview.scroll
+end
+
 ---Scrolls the window previews go to `count` lines, down for positive, as `<C-e>` and `<C-y>` do there.
 ---@param count integer
 local function scroll_preview(count)
@@ -503,10 +510,10 @@ function M.set_keymaps(buf, keys, hooks)
     end, "Previous row")
   end
   map(keys.scroll_preview_down, function()
-    scroll_preview(vim.v.count1)
+    scroll_preview(scroll_count())
   end, "Scroll the preview down")
   map(keys.scroll_preview_up, function()
-    scroll_preview(-vim.v.count1)
+    scroll_preview(-scroll_count())
   end, "Scroll the preview up")
   map(keys.refresh, build.update, "Rebuild the tree")
   map(keys.yank, function()
