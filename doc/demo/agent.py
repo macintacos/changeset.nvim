@@ -3,10 +3,10 @@
 # requires-python = ">=3.12"
 # dependencies = []
 # ///
-"""A scripted stand-in for Claude Code that doc/demo/demo.tape submits a review to.
+"""A scripted stand-in for Claude Code that doc/demo/demo.py submits a review to.
 
-It tells herdr it is a claude agent, shows what is pasted as its prompt, and on Enter
-plays a turn that makes the review's changes to the sandbox, showing each as a diff.
+It tells Rex it is Claude Code, shows what is pasted as its prompt, and on Enter plays a
+turn that makes the review's changes to the sandbox, showing each as a diff.
 """
 
 import codecs
@@ -14,7 +14,6 @@ import difflib
 import os
 import select
 import shutil
-import subprocess
 import sys
 import termios
 import textwrap
@@ -35,7 +34,6 @@ REMOVED_BG: Final = "68;30;34"
 SPINNER: Final = "·✢✳✶✻✽"
 PASTE_START: Final = "\x1b[200~"
 PASTE_END: Final = "\x1b[201~"
-HERDR_SOURCE: Final = ["--source", "changeset-demo", "--agent", "claude"]
 
 type AgentState = Literal["idle", "working"]
 
@@ -81,19 +79,10 @@ def _welcome() -> list[str]:
     ]
 
 
-def _herdr(*args: str) -> None:
-    """Run a herdr pane command on this pane; changeset submits to the agent it names."""
-    pane = os.environ.get("HERDR_PANE_ID")
-    if pane:
-        subprocess.run(
-            ["herdr", "pane", *args, *HERDR_SOURCE, pane],
-            capture_output=True,
-            check=False,
-        )
-
-
 def _report(state: AgentState) -> None:
-    _herdr("report-agent", "--state", state)
+    """Report `state` through OSC 7501, which is how changeset finds an agent in Rex."""
+    sys.stdout.write(f"\x1b]7501;state={state}:app=claude-code\x1b\\")
+    sys.stdout.flush()
 
 
 def _diff(before: str, after: str) -> list[str]:
@@ -375,7 +364,6 @@ def main() -> None:
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, attrs)
         sys.stdout.write("\x1b[?2004l\x1b[?1049l")
         sys.stdout.flush()
-        _herdr("release-agent")
 
 
 if __name__ == "__main__":
