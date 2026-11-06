@@ -22,7 +22,7 @@ local M = {}
 ---@field nvim_012 boolean
 ---@field git boolean
 ---@field gh boolean
----@field herdr boolean Inside a herdr pane, with `herdr` executable.
+---@field rex boolean Inside a Rex pane, with `rex` executable.
 ---@field icons "mini.icons"|"nvim-web-devicons"|"installed"|false|nil "installed": `mini.icons`, never set up.
 ---@field which_key boolean
 ---@field mini_pick false|"installed"|"set up"
@@ -69,7 +69,7 @@ local function probe()
     nvim_012 = vim.fn.has("nvim-0.12") == 1,
     git = vim.fn.executable("git") == 1,
     gh = vim.fn.executable("gh") == 1,
-    herdr = (vim.env.HERDR_WORKSPACE_ID or "") ~= "" and vim.fn.executable("herdr") == 1,
+    rex = (vim.env.REX_SESSION or "") ~= "" and vim.fn.executable("rex") == 1,
     icons = icons.source() or (loads("mini.icons") and "installed"),
     which_key = loads("which-key"),
     mini_pick = mini_pick,
@@ -109,16 +109,13 @@ local function gh(facts)
 end
 
 ---@param facts changeset.health.Facts
-local function herdr(facts)
-  if facts.herdr then
-    return finding(
-      "ok",
-      "running inside herdr: `:Changeset review submit` can paste the review into its agents' prompts"
-    )
+local function rex(facts)
+  if facts.rex then
+    return finding("ok", "running inside Rex: `:Changeset review submit` can paste the review into its agents' prompts")
   end
   return finding(
     "warn",
-    "not inside a herdr pane: `:Changeset review submit` has no agent prompt to paste the review into"
+    "not inside a Rex pane: `:Changeset review submit` has no agent prompt to paste the review into"
   )
 end
 
@@ -221,7 +218,7 @@ function M._report(facts)
       name = "Optional integrations",
       findings = vim.list_extend({
         gh(facts),
-        herdr(facts),
+        rex(facts),
         icon_provider(facts),
         which_key(facts),
         mini_pick(facts),

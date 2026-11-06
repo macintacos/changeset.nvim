@@ -88,7 +88,7 @@ function M.abandon()
   end)
 end
 
--- How long a submit counts as in flight with no answer: past herdr's round trips, for a picker closed under
+-- How long a submit counts as in flight with no answer: past Rex's round trips, for a picker closed under
 -- `noautocmd`, whose callback never comes.
 local SUBMIT_TIMEOUT = 20000
 
@@ -124,7 +124,7 @@ local function saved_review(repository, verb)
   return comments, drafts, review_text.text(repository, comments, config.get().review)
 end
 
----Pastes the repository's saved review comments into an agent's prompt through herdr, then takes the ones pasted out
+---Pastes the repository's saved review comments into an agent's prompt through Rex, then takes the ones pasted out
 ---of the store, where `restore` can bring them back. Drafts stay.
 function M.submit()
   local repository = root()
@@ -142,7 +142,7 @@ function M.submit()
   vim.defer_fn(function()
     release(this)
   end, SUBMIT_TIMEOUT)
-  require("changeset.herdr").send(text, { title = "Submit " .. count, root = repository }, function(err, agent)
+  require("changeset.agent").send(text, { title = "Submit " .. count, root = repository }, function(err, agent)
     release(this)
     if err then
       return say(vim.log.levels.WARN, "can't submit the review: %s", err)

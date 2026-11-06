@@ -19,9 +19,10 @@ vim.env.XDG_CACHE_HOME = vim.fn.tempname()
 vim.fn.mkdir(vim.env.XDG_CACHE_HOME, "p")
 -- Git hooks export GIT_DIR and friends, and those override cwd-based repo
 -- discovery — under `pre-push` a spec's fixture repo would otherwise operate on
--- the repo being pushed. No restore: each spec runs in its own child nvim.
+-- the repo being pushed. Rex's would let a spec that reaches the real `rex` paste into one of your panes. No restore:
+-- each spec runs in its own child nvim.
 for name in pairs(vim.fn.environ()) do
-  if name:match("^GIT_") then
+  if name:match("^GIT_") or name:match("^REX_") then
     vim.env[name] = nil
   end
 end

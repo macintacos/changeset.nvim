@@ -232,7 +232,7 @@ local function open(lines, frame, answer)
   if active and not vim.api.nvim_win_is_valid(active.win) then
     active = nil
   end
-  -- A second dialog, opened from the first by a global key or arriving late from herdr, would take focus, and the
+  -- A second dialog, opened from the first by a global key or arriving late from Rex, would take focus, and the
   -- first's leave would then cancel both.
   if active then
     vim.schedule(function()

@@ -53,7 +53,7 @@ describe("changeset.review_handoff", function()
       package.loaded[name] = nil
     end
     package.loaded["changeset.origin"] = nil
-    package.loaded["changeset.herdr"] = nil
+    package.loaded["changeset.agent"] = nil
   end)
 
   ---Opens `a.lua`, ten lines long, in a fresh repository.
@@ -148,7 +148,7 @@ describe("changeset.review_handoff", function()
 
     before_each(function()
       sent, opts, answer = {}, nil, {}
-      package.loaded["changeset.herdr"] = {
+      package.loaded["changeset.agent"] = {
         send = function(text, o, cb)
           table.insert(sent, text)
           opts = o
@@ -168,7 +168,7 @@ describe("changeset.review_handoff", function()
 
     it("refuses a second submit while the first is being delivered, saying so", function()
       local held = {}
-      package.loaded["changeset.herdr"] = {
+      package.loaded["changeset.agent"] = {
         send = function(text, _, cb)
           table.insert(sent, text)
           table.insert(held, cb)
@@ -188,8 +188,8 @@ describe("changeset.review_handoff", function()
       assert.equal(1, #present(comment_store.submitted(dir)))
     end)
 
-    it("lets a submit through once one herdr never answered has timed out", function()
-      package.loaded["changeset.herdr"] = {
+    it("lets a submit through once one Rex never answered has timed out", function()
+      package.loaded["changeset.agent"] = {
         send = function(text)
           table.insert(sent, text)
         end,
@@ -226,7 +226,7 @@ describe("changeset.review_handoff", function()
     it("warns that the sent comments are still listed when they can't be removed", function()
       edit_file()
       comment_store.keep(dir, comment())
-      package.loaded["changeset.herdr"] = {
+      package.loaded["changeset.agent"] = {
         send = function(_, _, cb)
           vim.fn.writefile({ "[1,2]" }, comment_store.path())
           cb(nil, "claude")
@@ -266,7 +266,7 @@ describe("changeset.review_handoff", function()
       edit_file()
       comment_store.keep(dir, comment())
       comment_store.keep(dir, comment({ line = 9, body = "as sent" }))
-      package.loaded["changeset.herdr"] = {
+      package.loaded["changeset.agent"] = {
         send = function(_, _, cb)
           comment_store.keep(dir, comment({ line = 7, body = "written meanwhile" }))
           comment_store.keep(dir, comment({ line = 9, body = "edited meanwhile" }))
@@ -336,7 +336,7 @@ describe("changeset.review_handoff", function()
     local time = os.time
 
     before_each(function()
-      package.loaded["changeset.herdr"] = {
+      package.loaded["changeset.agent"] = {
         send = function(_, _, cb)
           cb(nil, "claude")
         end,

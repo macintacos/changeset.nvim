@@ -8,7 +8,7 @@ describe("changeset.health", function()
     nvim_012 = true,
     git = true,
     gh = true,
-    herdr = true,
+    rex = true,
     icons = "mini.icons",
     which_key = true,
     mini_pick = "set up",
@@ -107,18 +107,18 @@ describe("changeset.health", function()
     assert.equal("warn", level({ gh = false }, "`gh` not found"))
   end)
 
-  it("says whether :Changeset submit has herdr agents to paste into", function()
-    assert.equal("ok", level({}, "running inside herdr"))
-    assert.equal("warn", level({ herdr = false }, "not inside a herdr pane"))
+  it("says whether :Changeset submit has Rex agents to paste into", function()
+    assert.equal("ok", level({}, "running inside Rex"))
+    assert.equal("warn", level({ rex = false }, "not inside a Rex pane"))
   end)
 
-  it("probes herdr from its workspace variable and executable", function()
-    local saved = vim.env.HERDR_WORKSPACE_ID
-    vim.env.HERDR_WORKSPACE_ID = nil
-    local outside = checked_level("herdr")
-    vim.env.HERDR_WORKSPACE_ID = ""
-    local empty = checked_level("herdr")
-    vim.env.HERDR_WORKSPACE_ID = saved
+  it("probes Rex from its session variable and executable", function()
+    local saved = vim.env.REX_SESSION
+    vim.env.REX_SESSION = nil
+    local outside = checked_level("Rex")
+    vim.env.REX_SESSION = ""
+    local empty = checked_level("Rex")
+    vim.env.REX_SESSION = saved
     assert.equal("warn", outside)
     assert.equal("warn", empty)
   end)

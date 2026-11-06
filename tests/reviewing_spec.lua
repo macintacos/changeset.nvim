@@ -59,7 +59,7 @@ describe("changeset.reviewing", function()
       package.loaded[name] = nil
     end
     package.loaded["changeset.origin"] = nil
-    package.loaded["changeset.herdr"] = nil
+    package.loaded["changeset.agent"] = nil
   end)
 
   ---Opens `a.lua`, ten lines long, in a fresh repository.
