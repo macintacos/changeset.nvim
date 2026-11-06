@@ -115,8 +115,8 @@ Every review comment of a repository. The first one written starts it, and submi
 _Avoid_: pending review
 
 **Submit**:
-Pasting the review into an AI agent's prompt in another herdr pane, unsent, then deleting
-the review comments that went.
+Pasting the review into an AI agent's prompt in another pane of the Rex session, unsent, then
+deleting the review comments that went.
 _Avoid_: send, post; "submit" never means GitHub here
 
 **Review text**:

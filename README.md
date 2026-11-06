@@ -23,7 +23,7 @@ Neovim 0.12 or newer, and `git`. Everything else is optional:
 | A language server for the file's language                                  | The symbol rows under each file. Without one, a file lists only its changes.                          |
 | Treesitter parsers                                                         | Comment-only changes listed under Docs, and Rust and TypeScript tests found by their syntax.          |
 | [gitsigns.nvim](https://github.com/lewis6991/gitsigns.nvim)                | The gutter's base, which marks the whole branch in the gutter, the unified diff, and the change colours. |
-| [herdr](https://herdr.dev), a terminal multiplexer for coding agents       | `:Changeset review submit`, which pastes your review into an agent's prompt.                          |
+| [Rex](https://www.superlogical.com/rex), a terminal multiplexer          | `:Changeset review submit`, which pastes your review into an agent's prompt.                          |
 | `gh`                                                                       | The open PR's target as the base, for a branch with no parent. With the [gh-stack](https://github.com/github/gh-stack) extension, the branch's place in its stack. |
 | [mini.icons](https://github.com/nvim-mini/mini.icons) or nvim-web-devicons | Icons.                                                                                                |
 | [mini.pick](https://github.com/nvim-mini/mini.pick)                        | `:Pick changeset`, and the base pickers' preview. Without it, the pickers use `vim.ui.select`.        |
@@ -95,8 +95,8 @@ branch's base, running `git` and `gh`, to point gitsigns' gutter at it.
 3. Walk your comments with `<C-g>cn` and `<C-g>cp`, or list them with `<C-g>cq`.
 4. When you're done, `<C-g>s` pastes the saved comments into an AI agent's prompt and takes
    them out of the review; drafts stay. Submit as often as you like: each submit sends only
-   what you saved since the last one. This needs Neovim running in a herdr pane. Without
-   herdr, `<C-g>y` copies the comments as text and keeps them.
+   what you saved since the last one. This needs Neovim running in a Rex pane. Without
+   Rex, `<C-g>y` copies the comments as text and keeps them.
 5. If a paste gets lost, `:Changeset review restore` brings a submitted batch back. The branch
    keeps its last 10. `<C-g>a` abandons the review.
 

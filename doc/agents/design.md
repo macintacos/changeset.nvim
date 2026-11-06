@@ -532,13 +532,15 @@ comment unseen, skipping the look the quote exists for.
 The picker lines its rows up in columns, a row's last cell running free and cut at the
 editor's edge. Each row leads with its number, which a digit presses, and a `●` in its
 status's colour: idle and done in `DiagnosticOk`, working in `DiagnosticWarn`, blocked in
-`DiagnosticError`, anything else in the meta colour. After its name and status a row says
-where the agent works, its directory's last component and its branch, so two agents in
-different worktrees of one repository read apart; herdr's tab label, which mostly repeats
-the title, is left out. The focused row wears the sidebar's selection tint, mixed over the
+`DiagnosticError`, anything else in the meta colour. A row names the agent by its program,
+such as `claude-code`. After its name and status it says where the agent works, its
+directory's last component and its branch, so two agents in different worktrees of one
+repository read apart, and it ends with its pane's label, which Claude Code sets to its
+conversation's title, so two of its sessions read apart too; the label goes last, where a
+long one runs free. The focused row wears the sidebar's selection tint, mixed over the
 float's background rather than Normal's, since no colorscheme checked paints the two alike,
 and a `▌` in the accent at its left edge, where a list is read from. An agent at a
-permission prompt is listed dimmed, saying why, and can't be picked.
+prompt is listed dimmed, saying why, and can't be picked.
 
 The cursor is hidden while a dialog has focus: the focus is drawn, and the cursor would only
 cover it. It hides through a `'guicursor'` entry of its own, `n:ChangesetNoCursor`, apart
@@ -886,7 +888,9 @@ Attaching is visible to the rest of Neovim:
 ### Submitting hands the review to an agent
 
 `:Changeset review submit` turns the review into text and pastes it into an AI agent's prompt in
-another pane of the same herdr workspace, through `changeset.herdr`. Each review comment
+another pane of the same Rex session, through `changeset.agent`. An agent is a pane whose
+foreground program reports its status to Rex, as Claude Code does; once that program exits
+the pane is no agent, though Rex keeps its last status. Each review comment
 becomes a block: its backticked `path:Lfirst-Llast`, `path:Lline` for one line or the bare
 path for a whole file, then `Feedback:` and its body. The path is absolute, because the
 agent's pane can run in another directory or worktree than the repository's. The block
@@ -898,26 +902,26 @@ needs is still typed after the paste. A blank one leaves no blank line behind.
 
 The paste is left unsent and the agent's pane focused. The review is the start of a
 conversation, not all of it: the user adds what the comments don't say, such as what to
-fix first, and presses Enter. With one agent in the workspace it goes there; with several,
+fix first, and presses Enter. With one agent in the session it goes there; with several,
 the agent picker of § Dialogs asks, so the user never routes a review to an agent they can't
 see. Its title counts what goes, "Submit 3 review comments".
 
 The picker ranks its rows so the likely target is the one focused, since a reflexive `<CR>`
-takes it, and herdr's own order can put an agent working in another repository first. The
+takes it, and Rex's own order can put an agent working in another repository first. The
 agent this branch's review last went to in this Neovim leads while its pane still works in
 the directory it did then, since a pane outlives its agent. Then come agents working in the
 repository, inside one of its worktrees, then the rest. A branch name is no evidence:
 `main` and `trunk` repeat across repositories. Within each group ready agents lead and
 blocked ones trail. Focus starts on the first that can be picked only in the first two
 groups; otherwise no row is focused and `<CR>` does nothing until a move or a digit, so a
-reflexive `<CR>` never pastes into another repository's agent. `doc/agents/herdr.md` has
+reflexive `<CR>` never pastes into another repository's agent. `doc/agents/rex.md` has
 the fields and the git call behind it.
 
 The review comments are taken out of the review once the paste lands, because the agent now
 holds them and a later submit would paste them twice. Only the ones pasted go: one written,
 or edited, while the picker was open stays for the next review. A refusal keeps them all. An
-agent at a permission prompt refuses, since herdr would drop the paste there without a
-word, and a review that vanished into a prompt would read as delivered. The picker lists one
+agent at a prompt, such as a permission prompt, refuses, since the prompt would drop the
+paste without a word, and a review that vanished into a prompt would read as delivered. The picker lists one
 but won't pick it, and delivery checks again, since a pick can be minutes old. A cancelled
 pick says nothing.
 

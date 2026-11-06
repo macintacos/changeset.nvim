@@ -98,9 +98,8 @@ Each optional integration adds one feature:
   parsers also find tests by their syntax (|changeset-sections|).
 - gitsigns.nvim: the gutter's base, the unified diff, and the colours of the
   status rail and the `+N -N` counts.
-- herdr, the terminal multiplexer for coding agents:
-  `:Changeset review submit` pastes the review into an agent's prompt. Neovim
-  must run in a herdr pane.
+- Rex, the terminal multiplexer: `:Changeset review submit` pastes the review
+  into an agent's prompt. Neovim must run in a Rex pane.
 - `gh`: a branch with no parent is compared against its open PR's target, and
   the header shows the PR's number. With the gh-stack extension, the header
   also shows the branch's place in its stack.
@@ -405,7 +404,7 @@ REVIEW
 <Plug>(changeset-review-submit)              *<Plug>(changeset-review-submit)*
 <C-g>s                                                      *changeset-<C-g>s*
 	Paste the saved review comments into an AI agent's prompt through
-	herdr.
+	Rex.
 
 :Changeset review restore                          *:Changeset-review-restore*
 <Plug>(changeset-review-restore)            *<Plug>(changeset-review-restore)*
@@ -1070,9 +1069,10 @@ SUBMIT                                                      *changeset-submit*
 
 `:Changeset review submit` (`<C-g>s`) pastes the branch's saved review
 comments into an AI agent's prompt, without pressing Enter, so you can add
-context first, then focuses the agent. It needs Neovim running in a herdr
-pane. With one agent in the herdr workspace, the review goes straight there;
-with several, changeset asks which (|changeset-agent-picker|).
+context first, then focuses the agent. It needs Neovim running in a Rex
+pane. An agent is another pane of the Rex session whose program reports its
+status to Rex, as Claude Code does. With one agent, the review goes straight
+there; with several, changeset asks which (|changeset-agent-picker|).
 
 Once the paste lands, the comments pasted leave the review, so the next
 submit sends only what you write after it. They become one of the branch's
@@ -1082,15 +1082,17 @@ notice names the agent and what stays, as in "submitted 3 review comments to
 claude; :Changeset review restore brings them back; 1 draft stays". A second
 submit while one is still on its way is refused with a notice.
 
-An agent waiting at a permission prompt can't take the paste: the picker lists
-it dimmed, saying "answer its prompt first", and one that reaches a prompt
-after you pick it refuses until you answer it. The comments stay.
+An agent waiting at a prompt, such as a permission prompt, can't take the
+paste: the picker lists it dimmed, saying "answer its prompt first", and one
+that reaches a prompt after you pick it refuses until you answer it. The
+comments stay.
 
 THE AGENT PICKER                                      *changeset-agent-picker*
 
 The picker, titled with what it sends, such as `Submit 3 review comments`,
-lists each agent with its status, the directory it works in, its branch and
-its title. It ranks them:
+lists each agent by its program, such as `claude-code`, with its status, the
+directory it works in, its branch and its pane's label, which Claude Code sets
+to its conversation's title. It ranks them:
 
 1. the agent this branch submitted to last in this Neovim, while it still
    works in the same directory;
@@ -1098,9 +1100,9 @@ its title. It ranks them:
 3. the rest.
 
 Within each group come agents that are ready (idle or done), then working,
-then in any other state, then blocked at a permission prompt. Focus starts on
-the first agent in groups 1 or 2 that can be picked. When there is none, no
-row is focused, so `<CR>` sends nothing until you move.
+then in any other state, then blocked at a prompt. Focus starts on the first
+agent in groups 1 or 2 that can be picked. When there is none, no row is
+focused, so `<CR>` sends nothing until you move.
 
   j  k         Move, skipping agents that can't be picked. <Down> and
                <Up> too.
@@ -1583,7 +1585,7 @@ require("changeset.pick").pick({unit})                 *changeset.pick.pick()*
 17. Health                                                  *changeset-health*
 
 `:checkhealth changeset` reports the requirements, each optional integration
-and whether it found it, whether Neovim runs in a herdr pane, and the options
+and whether it found it, whether Neovim runs in a Rex pane, and the options
 in force, warning about any it ignored as unknown. It loads plugins the way
 changeset does, so it may load one your plugin manager deferred. It installs
 nothing, starts no language server and makes no network request.

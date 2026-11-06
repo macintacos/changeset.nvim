@@ -32,8 +32,9 @@ checkout of the plugin: from a worktree, silently the main one.
 Specs sit flat in `tests/`, named `<module>_spec.lua` or for a behaviour
 (`sidebar_spec.lua`). Each spec file runs in its own child Neovim under
 `tests/minimal_init.lua`. It drops your config from `rtp`, gives state and cache temporary
-directories, makes `.tests/data` the data directory, and hides your git environment. It
-swaps your global git config for `tests/support/gitconfig`, which names who commits.
+directories, makes `.tests/data` the data directory, and hides your git and Rex
+environments. It swaps your global git config for `tests/support/gitconfig`, which names who
+commits.
 
 A spec creates its temporary files and repositories and removes them after. Build them with
 the fixtures in `tests/support/`, such as `require("support.git")`, rather than shelling
@@ -92,7 +93,7 @@ digraph rules_router {
     "What does the change touch?" -> "Load design/README.md" [label="colours, glyphs or emphasis: a highlight group, how one is derived from the colorscheme, a new visual device"];
     "What does the change touch?" -> "Load doc/agents/api-rules.md" [label="what users call or configure: options, :Changeset, <Plug> maps, highlight groups, public functions"];
     "What does the change touch?" -> "Load doc/agents/dependency-rules.md" [label="test dependencies: pins, treesitter parsers, the .emmyrc.json libraries"];
-    "What does the change touch?" -> "Load doc/agents/herdr.md" [label="handing a review to an AI agent through herdr: the herdr calls, their JSON and error envelope"];
+    "What does the change touch?" -> "Load doc/agents/rex.md" [label="handing a review to an AI agent through Rex: the rex calls, the panes that count as agents, their JSON and exit statuses"];
 }
 ```
 
